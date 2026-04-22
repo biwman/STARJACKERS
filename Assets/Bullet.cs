@@ -16,9 +16,14 @@ public class Bullet : MonoBehaviourPun
 
     Vector2 spawnPosition;
     float maxTravelDistance;
+    float visualScaleMultiplier = 1f;
+    Color visualColor = Color.white;
 
     void Start()
     {
+        ApplyPhotonConfig();
+        ApplyVisualConfig();
+
         spawnPosition = transform.position;
         maxTravelDistance = GetOwnerLength() * rangeMultiplier;
 
@@ -170,6 +175,35 @@ public class Bullet : MonoBehaviourPun
         {
             ActiveBulletColliders.Remove(collider2D);
         }
+    }
+
+    void ApplyPhotonConfig()
+    {
+        object[] data = photonView != null ? photonView.InstantiationData : null;
+        if (data == null || data.Length < 7)
+            return;
+
+        ownerViewID = data[0] is int ownerId ? ownerId : ownerViewID;
+        damage = data[1] is int configuredDamage ? configuredDamage : damage;
+        visualScaleMultiplier = data[2] is float scale ? scale : visualScaleMultiplier;
+
+        float r = data[3] is float colorR ? colorR : visualColor.r;
+        float g = data[4] is float colorG ? colorG : visualColor.g;
+        float b = data[5] is float colorB ? colorB : visualColor.b;
+        float a = data[6] is float colorA ? colorA : visualColor.a;
+        visualColor = new Color(r, g, b, a);
+
+        if (data.Length >= 8 && data[7] is float configuredRangeMultiplier)
+            rangeMultiplier = Mathf.Max(0.1f, configuredRangeMultiplier);
+    }
+
+    void ApplyVisualConfig()
+    {
+        transform.localScale *= Mathf.Max(0.2f, visualScaleMultiplier);
+
+        SpriteRenderer spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer != null)
+            spriteRenderer.color = visualColor;
     }
 
     float GetOwnerLength()

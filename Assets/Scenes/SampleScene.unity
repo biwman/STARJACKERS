@@ -672,7 +672,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 920, y: 1248}
+  m_SizeDelta: {x: 2100, y: 1520}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &290314944
 MonoBehaviour:
@@ -741,8 +741,10 @@ MonoBehaviour:
   deathTimerSettingText: {fileID: 0}
   movingObjectsSettingText: {fileID: 0}
   enemyBotsSettingText: {fileID: 0}
-  pirateBattleshipSettingText: {fileID: 0}
-  pirateBattleshipTimeSettingText: {fileID: 0}
+  corsairSettingText: {fileID: 0}
+  corsairTimeSettingText: {fileID: 0}
+  corsairHpSettingText: {fileID: 0}
+  bulletPushSettingText: {fileID: 0}
   obstacleWeightSettingText: {fileID: 0}
   treasureWeightSettingText: {fileID: 0}
   roundSettingButton: {fileID: 0}
@@ -758,9 +760,7 @@ MonoBehaviour:
   shipDriftSettingButton: {fileID: 0}
   deathTimerSettingButton: {fileID: 0}
   movingObjectsSettingButton: {fileID: 0}
-  enemyBotsSettingButton: {fileID: 0}
-  pirateBattleshipSettingButton: {fileID: 0}
-  pirateBattleshipTimeSettingButton: {fileID: 0}
+  bulletPushSettingButton: {fileID: 0}
   obstacleWeightSettingButton: {fileID: 0}
   treasureWeightSettingButton: {fileID: 0}
 --- !u!114 &290314947
@@ -1751,7 +1751,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 2013503663}
+  m_Material: {fileID: 1870336292}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -1898,7 +1898,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: -434}
+  m_AnchoredPosition: {x: 0, y: -460}
   m_SizeDelta: {x: 220, y: 62}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &922154094
@@ -2062,7 +2062,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 2013503663}
+  m_Material: {fileID: 1870336292}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -2919,7 +2919,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 2013503663}
+  m_Material: {fileID: 1870336292}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -4189,6 +4189,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1780500627}
   m_CullTransparentMesh: 1
+--- !u!62 &1870336292
+PhysicsMaterial2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: MovingSpaceObjectBouncy
+  serializedVersion: 2
+  friction: 0
+  bounciness: 1
+  m_FrictionCombine: 1
+  m_BounceCombine: 4
 --- !u!1 &1904454186
 GameObject:
   m_ObjectHideFlags: 0
@@ -4354,7 +4366,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 2013503663}
+  m_Material: {fileID: 1870336292}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -4543,18 +4555,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!62 &2013503663
-PhysicsMaterial2D:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: MovingSpaceObjectBouncy
-  serializedVersion: 2
-  friction: 0
-  bounciness: 1
-  m_FrictionCombine: 1
-  m_BounceCombine: 4
 --- !u!1 &2091593305
 GameObject:
   m_ObjectHideFlags: 0

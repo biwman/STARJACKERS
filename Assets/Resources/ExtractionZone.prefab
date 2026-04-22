@@ -165,4 +165,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ExtractionZone
   activationTime: 3
+  transitionDuration: 10
   activeDuration: 15
+  evacuationAnimationDuration: 4

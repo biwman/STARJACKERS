@@ -9,6 +9,9 @@ using UnityEngine.UI;
 
 public class TreasureCollector : MonoBehaviourPun
 {
+    static readonly System.Collections.Generic.Dictionary<int, int> ReservedWreckLoot = new System.Collections.Generic.Dictionary<int, int>();
+    static readonly System.Collections.Generic.Dictionary<int, int> ReservedDroppedCargoLoot = new System.Collections.Generic.Dictionary<int, int>();
+
     const float TreasureScanInterval = 0.08f;
     const float BeamWidth = 0.24f;
     const float BeamJitterAmplitude = 0.08f;
@@ -714,13 +717,16 @@ public class TreasureCollector : MonoBehaviourPun
         if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner))
             return;
 
+        if (ReservedWreckLoot.TryGetValue(viewID, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
+            return;
+
         int lootIndex = wreck.GetFirstLootIndex();
         string itemId = wreck.GetLootItemAt(lootIndex);
         if (lootIndex < 0 || string.IsNullOrWhiteSpace(itemId))
             return;
 
-        wreckView.RPC(nameof(ShipWreck.RemoveLootAtIndexRpc), RpcTarget.All, lootIndex);
-        photonView.RPC(nameof(ReceiveLootedItemRpc), photonView.Owner, itemId);
+        ReservedWreckLoot[viewID] = photonView.OwnerActorNr;
+        photonView.RPC(nameof(ReceivePendingWreckLootRpc), photonView.Owner, viewID, lootIndex, itemId);
     }
 
     [PunRPC]
@@ -740,13 +746,15 @@ public class TreasureCollector : MonoBehaviourPun
         if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner))
             return;
 
+        if (ReservedDroppedCargoLoot.TryGetValue(viewID, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
+            return;
+
         string itemId = crate.StoredItemId;
         if (string.IsNullOrWhiteSpace(itemId))
             return;
 
-        crateView.RPC(nameof(DroppedCargoCrate.ClearStoredItemRpc), RpcTarget.All);
-        photonView.RPC(nameof(ReceiveLootedItemRpc), photonView.Owner, itemId);
-        PhotonNetwork.Destroy(crateView.gameObject);
+        ReservedDroppedCargoLoot[viewID] = photonView.OwnerActorNr;
+        photonView.RPC(nameof(ReceivePendingDroppedCargoLootRpc), photonView.Owner, viewID, itemId);
     }
 
     public void AddScore(int amount)
@@ -799,6 +807,7 @@ public class TreasureCollector : MonoBehaviourPun
         if (drillingAudioSource == null || drillingAudioSource.clip == null)
             return;
 
+        drillingAudioSource.loop = true;
         if (!drillingAudioSource.isPlaying)
             drillingAudioSource.Play();
     }
@@ -830,6 +839,8 @@ public class TreasureCollector : MonoBehaviourPun
         drillingAudioSource.playOnAwake = false;
         drillingAudioSource.volume = 0.455f;
         AudioManager.Instance.ConfigureSpatialSource(drillingAudioSource, 0.455f);
+        drillingAudioSource.loop = true;
+        drillingAudioSource.playOnAwake = false;
     }
 
     void StopLocalDrillingLoop()
@@ -876,6 +887,101 @@ public class TreasureCollector : MonoBehaviourPun
         {
             Debug.LogError("Failed to receive wreck loot item: " + ex);
         }
+    }
+
+    [PunRPC]
+    async void ReceivePendingWreckLootRpc(int wreckViewId, int lootIndex, string itemId)
+    {
+        bool stored = false;
+        try
+        {
+            stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+            if (stored)
+                ShowPickupToast(itemId);
+            else
+                Debug.Log("No free ship slot for reserved wreck loot item.");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to store reserved wreck loot item: " + ex);
+        }
+
+        if (photonView != null)
+            photonView.RPC(nameof(ResolveReservedWreckLoot), RpcTarget.MasterClient, wreckViewId, lootIndex, itemId, stored);
+    }
+
+    [PunRPC]
+    async void ReceivePendingDroppedCargoLootRpc(int crateViewId, string itemId)
+    {
+        bool stored = false;
+        try
+        {
+            stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+            if (stored)
+                ShowPickupToast(itemId);
+            else
+                Debug.Log("No free ship slot for reserved dropped cargo item.");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to store reserved dropped cargo item: " + ex);
+        }
+
+        if (photonView != null)
+            photonView.RPC(nameof(ResolveReservedDroppedCargoLoot), RpcTarget.MasterClient, crateViewId, itemId, stored);
+    }
+
+    [PunRPC]
+    void ResolveReservedWreckLoot(int wreckViewId, int lootIndex, string itemId, bool stored)
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        if (!ReservedWreckLoot.TryGetValue(wreckViewId, out int reservedActor) || reservedActor != photonView.OwnerActorNr)
+            return;
+
+        ReservedWreckLoot.Remove(wreckViewId);
+        if (!stored)
+            return;
+
+        PhotonView wreckView = PhotonView.Find(wreckViewId);
+        if (wreckView == null)
+            return;
+
+        ShipWreck wreck = wreckView.GetComponent<ShipWreck>();
+        if (wreck == null || !wreck.HasLoot)
+            return;
+
+        string currentItemId = wreck.GetLootItemAt(lootIndex);
+        if (!string.Equals(currentItemId, itemId, System.StringComparison.Ordinal))
+            return;
+
+        wreckView.RPC(nameof(ShipWreck.RemoveLootAtIndexRpc), RpcTarget.All, lootIndex);
+    }
+
+    [PunRPC]
+    void ResolveReservedDroppedCargoLoot(int crateViewId, string itemId, bool stored)
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        if (!ReservedDroppedCargoLoot.TryGetValue(crateViewId, out int reservedActor) || reservedActor != photonView.OwnerActorNr)
+            return;
+
+        ReservedDroppedCargoLoot.Remove(crateViewId);
+        if (!stored)
+            return;
+
+        PhotonView crateView = PhotonView.Find(crateViewId);
+        if (crateView == null)
+            return;
+
+        DroppedCargoCrate crate = crateView.GetComponent<DroppedCargoCrate>();
+        if (crate == null || !crate.HasLoot || !string.Equals(crate.StoredItemId, itemId, System.StringComparison.Ordinal))
+            return;
+
+        crateView.RPC(nameof(DroppedCargoCrate.ClearStoredItemRpc), RpcTarget.All);
+        PhotonNetwork.Destroy(crateView.gameObject);
     }
 
     async void StoreCollectedItem(string itemId)

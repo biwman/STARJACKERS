@@ -17,6 +17,7 @@ public class ShipWreck : MonoBehaviourPun
     Color baseColor = new Color(0.46f, 0.48f, 0.52f, 0.96f);
     int sourceShipSkinIndex;
     bool isHighlighted;
+    bool destroyWhenEmpty = true;
 
     public bool isBeingCollected;
     public bool HasLoot => lootItems.Count > 0;
@@ -70,6 +71,11 @@ public class ShipWreck : MonoBehaviourPun
         RefreshVisualState();
     }
 
+    public void SetDestroyWhenEmpty(bool value)
+    {
+        destroyWhenEmpty = value;
+    }
+
     public void Unhighlight()
     {
         isHighlighted = false;
@@ -103,7 +109,7 @@ public class ShipWreck : MonoBehaviourPun
         isBeingCollected = false;
         isHighlighted = false;
 
-        if (!HasLoot && sourceShipSkinIndex < 0)
+        if (!HasLoot && sourceShipSkinIndex < 0 && destroyWhenEmpty)
         {
             Destroy(gameObject);
             return;

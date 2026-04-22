@@ -81,6 +81,19 @@ MonoBehaviour:
   - SyncVitals
   - BecomeBotWreck
   - PlayHpHitEffect
+  - BecomeCorsairWreck
+  - BecomeEnemyWreck
+  - PlayEvacBuzzerBurst
+  - PlayHpHitAudio
+  - PlayShieldHitAudio
+  - TakeEnvironmentalDamage
+  - BeginTransitionStage
+  - BeginEvacuationSequence
+  - PlayMineDetonationEffects
+  - ReceivePendingDroppedCargoLootRpc
+  - ReceivePendingWreckLootRpc
+  - ResolveReservedDroppedCargoLoot
+  - ResolveReservedWreckLoot
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

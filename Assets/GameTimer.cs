@@ -10,6 +10,8 @@ public class GameTimer : MonoBehaviourPun
     const string NebulaLayoutKey = "nebulaLayout";
     const string MapSeedKey = "mapSeed";
     const string LoneShipModeStartTimeKey = "loneShipModeStartTime";
+    public const string EvacuationPauseUntilKey = "evacPauseUntil";
+    public const string EvacuationPauseRemainingKey = "evacPauseRemaining";
 
     public float roundTime = 180f;
 
@@ -17,6 +19,7 @@ public class GameTimer : MonoBehaviourPun
     private double startTime;
     bool isEndingRound;
     bool hasSeenMultipleActivePlayers;
+    float pausedTimeRemaining;
 
     void Start()
     {
@@ -37,6 +40,7 @@ public class GameTimer : MonoBehaviourPun
         if (!IsGameStarted())
         {
             hasSeenMultipleActivePlayers = false;
+            pausedTimeRemaining = 0f;
             return;
         }
 
@@ -48,6 +52,13 @@ public class GameTimer : MonoBehaviourPun
         }
         else
         {
+            return;
+        }
+
+        if (TryGetPausedRemaining(out float pausedRemaining))
+        {
+            pausedTimeRemaining = pausedRemaining;
+            UpdateTimerUI(pausedTimeRemaining);
             return;
         }
 
@@ -113,7 +124,7 @@ public class GameTimer : MonoBehaviourPun
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         foreach (PlayerHealth p in players)
         {
-            if (p == null || p.IsWreck)
+            if (p == null || p.IsWreck || p.IsEvacuationAnimating)
                 continue;
 
             PhotonView pv = p.photonView;
@@ -153,6 +164,8 @@ public class GameTimer : MonoBehaviourPun
         props["gameStarted"] = true;
         props["startTime"] = PhotonNetwork.Time;
         props[LoneShipModeStartTimeKey] = -1d;
+        props[EvacuationPauseUntilKey] = -1d;
+        props[EvacuationPauseRemainingKey] = -1f;
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
@@ -233,5 +246,55 @@ public class GameTimer : MonoBehaviourPun
     float GetConfiguredRoundTime()
     {
         return RoomSettings.GetRoundDuration();
+    }
+
+    bool TryGetPausedRemaining(out float remaining)
+    {
+        remaining = 0f;
+        if (PhotonNetwork.CurrentRoom == null)
+            return false;
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(EvacuationPauseUntilKey, out object untilValue) ||
+            untilValue is not double pauseUntil ||
+            pauseUntil < 0d ||
+            PhotonNetwork.Time >= pauseUntil)
+        {
+            return false;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(EvacuationPauseRemainingKey, out object remainingValue))
+            return false;
+
+        remaining = remainingValue switch
+        {
+            float asFloat => asFloat,
+            double asDouble => (float)asDouble,
+            int asInt => asInt,
+            _ => 0f
+        };
+
+        return remaining > 0f;
+    }
+
+    public float GetCurrentRemainingTime()
+    {
+        if (!IsGameStarted())
+            return roundTime;
+
+        double elapsed = GetElapsedRoundTime();
+        return Mathf.Max(0f, roundTime - (float)elapsed);
+    }
+
+    public static void SetExtractionPause(float remainingTime, float durationSeconds)
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable
+        {
+            [EvacuationPauseUntilKey] = PhotonNetwork.Time + durationSeconds,
+            [EvacuationPauseRemainingKey] = remainingTime
+        };
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
     }
 }

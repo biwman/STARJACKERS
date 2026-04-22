@@ -8,8 +8,8 @@ public class EnemyBotManager : MonoBehaviour
     static EnemyBotManager instance;
 
     double lastHandledStartTime = double.MinValue;
-    bool spawnedForCurrentRound;
     float nextScanTime;
+    readonly System.Collections.Generic.Dictionary<EnemyBotKind, int> spawnedThisRound = new System.Collections.Generic.Dictionary<EnemyBotKind, int>();
 
     public static void EnsureExists()
     {
@@ -88,15 +88,8 @@ public class EnemyBotManager : MonoBehaviour
 
         if (!gameStarted)
         {
-            spawnedForCurrentRound = false;
             lastHandledStartTime = double.MinValue;
-            return;
-        }
-
-        if (!RoomSettings.AreEnemyBotsEnabled())
-        {
-            DestroyExistingBots();
-            spawnedForCurrentRound = true;
+            spawnedThisRound.Clear();
             return;
         }
 
@@ -107,42 +100,54 @@ public class EnemyBotManager : MonoBehaviour
         if (currentStartTime != lastHandledStartTime)
         {
             lastHandledStartTime = currentStartTime;
-            spawnedForCurrentRound = false;
+            spawnedThisRound.Clear();
         }
 
-        if (spawnedForCurrentRound)
-            return;
-
-        if (FindAnyObjectByType<EnemyBot>() != null)
+        for (int i = 0; i < EnemyBotCatalog.AllDefinitions.Count; i++)
         {
-            spawnedForCurrentRound = true;
-            return;
+            EnemyBotDefinition definition = EnemyBotCatalog.AllDefinitions[i];
+            HandleEnemySpawn(definition, currentStartTime);
         }
-
-        SpawnEnemyBot();
-        spawnedForCurrentRound = true;
     }
 
-    void DestroyExistingBots()
+    void HandleEnemySpawn(EnemyBotDefinition definition, double currentStartTime)
     {
-        EnemyBot[] bots = FindObjectsByType<EnemyBot>(FindObjectsInactive.Exclude);
-        for (int i = 0; i < bots.Length; i++)
-        {
-            EnemyBot bot = bots[i];
-            if (bot == null || bot.GetComponent<PhotonView>() == null)
-                continue;
+        if (definition == null)
+            return;
 
-            PhotonView view = bot.GetComponent<PhotonView>();
-            if (view.IsMine)
-                PhotonNetwork.Destroy(bot.gameObject);
+        if (!RoomSettings.GetEnemyEnabled(definition.Kind))
+        {
+            DestroyExistingBots(definition.Kind);
+            spawnedThisRound[definition.Kind] = 0;
+            return;
+        }
+
+        if (currentStartTime > 0d)
+        {
+            double elapsed = PhotonNetwork.Time - currentStartTime;
+            if (elapsed < RoomSettings.GetEnemySpawnSecond(definition.Kind))
+                return;
+        }
+        else if (RoomSettings.GetEnemySpawnSecond(definition.Kind) > 0)
+        {
+            return;
+        }
+
+        int desiredCount = RoomSettings.GetEnemyCount(definition.Kind);
+        int spawnedCount = GetSpawnedCount(definition.Kind);
+
+        for (int i = spawnedCount; i < desiredCount; i++)
+        {
+            SpawnEnemy(definition, i);
+            spawnedThisRound[definition.Kind] = i + 1;
         }
     }
 
-    void SpawnEnemyBot()
+    void SpawnEnemy(EnemyBotDefinition definition, int spawnOrdinal)
     {
         Vector2 mapSize = RoomSettings.GetMapDimensions();
-        Vector2 spawn = GetSafeBotSpawnPosition(mapSize);
-        GameObject botObject = PhotonNetwork.Instantiate("Player", spawn, Quaternion.identity, 0, new object[] { EnemyBot.BotInstantiationMarker });
+        Vector2 spawn = GetSafeSpawnPosition(definition, mapSize, spawnOrdinal);
+        GameObject botObject = PhotonNetwork.Instantiate("Player", spawn, Quaternion.identity, 0, new object[] { definition.InstantiationMarker });
         if (botObject != null)
         {
             EnemyBot bot = botObject.GetComponent<EnemyBot>();
@@ -153,19 +158,32 @@ public class EnemyBotManager : MonoBehaviour
         }
     }
 
-    Vector2 GetSafeBotSpawnPosition(Vector2 mapSize)
+    int GetSpawnedCount(EnemyBotKind kind)
     {
-        Vector2[] candidates =
+        return spawnedThisRound.TryGetValue(kind, out int count) ? count : 0;
+    }
+
+    void DestroyExistingBots(EnemyBotKind kind)
+    {
+        EnemyBot[] bots = FindObjectsByType<EnemyBot>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < bots.Length; i++)
         {
-            new Vector2(-mapSize.x * 0.34f, mapSize.y * 0.34f),
-            new Vector2(mapSize.x * 0.34f, mapSize.y * 0.34f),
-            new Vector2(-mapSize.x * 0.34f, -mapSize.y * 0.34f),
-            new Vector2(mapSize.x * 0.34f, -mapSize.y * 0.34f),
-            new Vector2(0f, mapSize.y * 0.38f),
-            new Vector2(0f, -mapSize.y * 0.38f)
-        };
+            EnemyBot bot = bots[i];
+            if (bot == null || bot.Kind != kind)
+                continue;
+
+            PhotonView view = bot.GetComponent<PhotonView>();
+            if (view != null && view.IsMine)
+                PhotonNetwork.Destroy(bot.gameObject);
+        }
+    }
+
+    Vector2 GetSafeSpawnPosition(EnemyBotDefinition definition, Vector2 mapSize, int spawnOrdinal)
+    {
+        Vector2[] candidates = BuildSpawnCandidates(definition, mapSize, spawnOrdinal);
 
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        EnemyBot[] bots = FindObjectsByType<EnemyBot>(FindObjectsInactive.Exclude);
         float bestScore = float.MinValue;
         Vector2 bestCandidate = candidates[0];
 
@@ -182,6 +200,16 @@ public class EnemyBotManager : MonoBehaviour
                 nearestDistance = Mathf.Min(nearestDistance, distance);
             }
 
+            for (int j = 0; j < bots.Length; j++)
+            {
+                EnemyBot existingBot = bots[j];
+                if (existingBot == null)
+                    continue;
+
+                float botDistance = Vector2.Distance(candidates[i], existingBot.transform.position);
+                nearestDistance = Mathf.Min(nearestDistance, botDistance * 0.9f);
+            }
+
             if (nearestDistance > bestScore)
             {
                 bestScore = nearestDistance;
@@ -190,5 +218,26 @@ public class EnemyBotManager : MonoBehaviour
         }
 
         return bestCandidate;
+    }
+
+    Vector2[] BuildSpawnCandidates(EnemyBotDefinition definition, Vector2 mapSize, int spawnOrdinal)
+    {
+        const int candidateCount = 12;
+        Vector2[] candidates = new Vector2[candidateCount];
+        float baseRadiusFactor = definition.Movement != null && definition.Movement.SpawnPattern == EnemySpawnPattern.WideCorners ? 0.32f : 0.4f;
+        float xRadius = mapSize.x * baseRadiusFactor;
+        float yRadius = mapSize.y * baseRadiusFactor;
+        float phaseOffset = (spawnOrdinal * 137.50776f + (int)definition.Kind * 23.5f) * Mathf.Deg2Rad;
+
+        for (int i = 0; i < candidateCount; i++)
+        {
+            float angle = phaseOffset + ((Mathf.PI * 2f) / candidateCount) * i;
+            float radialJitter = 0.88f + 0.08f * Mathf.Sin(angle * 3f + spawnOrdinal);
+            candidates[i] = new Vector2(
+                Mathf.Cos(angle) * xRadius * radialJitter,
+                Mathf.Sin(angle) * yRadius * radialJitter);
+        }
+
+        return candidates;
     }
 }

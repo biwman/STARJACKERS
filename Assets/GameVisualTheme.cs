@@ -25,6 +25,7 @@ public class GameVisualTheme : MonoBehaviour
     Sprite[] shipSprites;
     Sprite[] wreckSprites;
     Sprite enemyBotSprite;
+    Sprite corsairSprite;
     Sprite astronautSprite;
     Sprite treasureSprite;
     Sprite goldTreasureSprite;
@@ -143,6 +144,7 @@ public class GameVisualTheme : MonoBehaviour
             return;
 
         lastRuntimeSignature = currentSignature;
+        LoadAssets();
         ApplyTheme();
     }
 
@@ -187,6 +189,7 @@ public class GameVisualTheme : MonoBehaviour
             null
         };
         enemyBotSprite = LoadSpriteFromResourcesOrEditor("droid1_resource", "Assets/Resources/droid1_resource.png", "Assets/droid1.png");
+        corsairSprite = LoadSpriteFromResourcesOrEditor("statek_duzy_resource", "Assets/Resources/statek_duzy_resource.png", "Assets/statek_duzy.png");
         astronautSprite = LoadSpriteFromResourcesOrEditor("kosmonauta_resource", "Assets/Resources/kosmonauta_resource.png", "Assets/kosmonauta.png");
 
         treasureSprite = LoadSpriteFromResourcesOrEditor("Visuals/Treasures/asteroid_treasure_resource", "Assets/Resources/Visuals/Treasures/asteroid_treasure_resource.png", "Assets/asteroida_treasure.png");
@@ -201,11 +204,13 @@ public class GameVisualTheme : MonoBehaviour
             LoadObstacleSprite("asteroida_podluzna_2_clean_resource", "Assets/Resources/asteroida_podluzna_2_clean_resource.png", "Assets/asteroida_podluzna_2_clean.png")
         };
         extractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/base1_resource", "Assets/Resources/Visuals/Bases/base1_resource.png", "Assets/baza1.png");
+        backgroundSprite = LoadBackgroundSprite(RoomSettings.GetMapBackgroundIndex());
         backgroundSprite = LoadSpriteFromResourcesOrEditor("Visuals/Backgrounds/background5_resource", "Assets/Resources/Visuals/Backgrounds/background5_resource.png", "Assets/tło5.png");
         if (backgroundSprite == null)
         {
             backgroundSprite = LoadSpriteFromProjectOrResources("tło5.png", "Visuals/Backgrounds/background5_resource");
         }
+        backgroundSprite = LoadBackgroundSprite(RoomSettings.GetMapBackgroundIndex());
     }
 
     void ApplyTheme()
@@ -294,23 +299,55 @@ public class GameVisualTheme : MonoBehaviour
             if (view == null || renderer == null || view.Owner == null)
                 continue;
 
+            EnemyBot enemyBot = player.GetComponent<EnemyBot>();
             bool isEnemyBot = player.IsBotControlled || EnemyBot.IsBotInstantiationData(view.InstantiationData);
             bool isAstronaut = player.GetComponent<AstronautSurvivor>() != null || AstronautSurvivor.IsAstronautInstantiationData(view.InstantiationData);
 
             Sprite sprite;
+            float targetSize = PlayerTargetSize;
             if (player.IsWreck)
             {
                 ShipWreck wreck = player.GetComponent<ShipWreck>();
-                int wreckSkinIndex = wreck != null ? wreck.SourceShipSkinIndex : RoomSettings.GetPlayerShipSkin(view.Owner, 0);
-                sprite = GetMappedWreckSprite(wreckSkinIndex, renderer.sprite);
+                bool isEnemyWreck = wreck != null && wreck.SourceShipSkinIndex < 0 && isEnemyBot;
+                if (isEnemyWreck)
+                {
+                    EnemyBotKind botKind = enemyBot != null ? enemyBot.Kind : EnemyBot.GetKindFromInstantiationData(view.InstantiationData);
+                    EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(botKind);
+                    Sprite wreckSprite = definition != null && definition.Wreck != null ? definition.Wreck.GetVisualSprite() : null;
+                    sprite = renderer.sprite != null
+                        ? renderer.sprite
+                        : wreckSprite != null
+                            ? wreckSprite
+                        : enemyBot != null
+                            ? enemyBot.GetVisualSprite()
+                            : definition != null
+                                ? definition.GetVisualSprite()
+                                : botKind == EnemyBotKind.Corsair ? corsairSprite : enemyBotSprite;
+                    targetSize = enemyBot != null
+                        ? enemyBot.VisualTargetSize
+                        : definition != null ? definition.TargetSize : botKind == EnemyBotKind.Corsair ? 5.2f : PlayerTargetSize;
+                }
+                else
+                {
+                    int wreckSkinIndex = wreck != null ? wreck.SourceShipSkinIndex : RoomSettings.GetPlayerShipSkin(view.Owner, 0);
+                    sprite = GetMappedWreckSprite(wreckSkinIndex, renderer.sprite);
+                }
             }
             else if (isAstronaut && astronautSprite != null)
             {
                 sprite = astronautSprite;
+                targetSize = AstronautTargetSize;
             }
-            else if (isEnemyBot && enemyBotSprite != null)
+            else if (isEnemyBot)
             {
-                sprite = enemyBotSprite;
+                EnemyBotKind botKind = enemyBot != null ? enemyBot.Kind : EnemyBot.GetKindFromInstantiationData(view.InstantiationData);
+                EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(botKind);
+                sprite = enemyBot != null
+                    ? enemyBot.GetVisualSprite()
+                    : definition != null ? definition.GetVisualSprite() : botKind == EnemyBotKind.Corsair ? corsairSprite : enemyBotSprite;
+                targetSize = enemyBot != null
+                    ? enemyBot.VisualTargetSize
+                    : definition != null ? definition.TargetSize : botKind == EnemyBotKind.Corsair ? 5.2f : PlayerTargetSize;
             }
             else
             {
@@ -331,7 +368,7 @@ public class GameVisualTheme : MonoBehaviour
             }
             if (!player.IsWreck)
                 renderer.color = Color.white;
-            FitSpriteToTargetSize(renderer, isAstronaut ? AstronautTargetSize : PlayerTargetSize);
+            FitSpriteToTargetSize(renderer, targetSize);
 
             Vector2 spriteWorldSize = GetSpriteWorldSize(renderer);
             SetWorldBoxSize(bodyCollider, new Vector2(
@@ -593,6 +630,8 @@ public class GameVisualTheme : MonoBehaviour
             signature = signature * 31 + extractionZones.Length;
             signature = signature * 31 + wrecks.Length;
             signature = signature * 31 + droppedCrates.Length;
+            signature = signature * 31 + RoomSettings.GetMapBackgroundIndex();
+            signature = signature * 31 + RoomSettings.GetMapSizeMode().GetHashCode();
 
             for (int i = 0; i < players.Length; i++)
             {
@@ -672,6 +711,25 @@ public class GameVisualTheme : MonoBehaviour
         return LoadSpriteFromResourcesOrEditor("Visuals/Obstacles/asteroid_obstacle_resource", "Assets/Resources/Visuals/Obstacles/asteroid_obstacle_resource.png", "Assets/asteroida_obstacle.png");
     }
 
+    Sprite LoadBackgroundSprite(int backgroundIndex)
+    {
+        int clampedIndex = Mathf.Clamp(backgroundIndex, 1, 6);
+        string resourcesPath = "Visuals/Backgrounds/background" + clampedIndex + "_resource";
+        Texture2D texture = Resources.Load<Texture2D>(resourcesPath);
+        Sprite sprite = texture != null ? CreateSpriteFromTexture(texture) : null;
+        if (sprite != null)
+            return sprite;
+
+#if UNITY_EDITOR
+        sprite = LoadEditorSprite("Assets/tło" + clampedIndex + ".png");
+        if (sprite != null)
+            return sprite;
+#endif
+
+        Texture2D fallbackTexture = Resources.Load<Texture2D>("Visuals/Backgrounds/background5_resource");
+        return fallbackTexture != null ? CreateSpriteFromTexture(fallbackTexture) : LoadSpriteFromResources("Visuals/Backgrounds/background5_resource");
+    }
+
     Sprite LoadSpriteFromResourcesOrEditor(string resourcesPath, string editorPreferredPath, string editorFallbackPath = null)
     {
         Sprite sprite = LoadSpriteFromResources(resourcesPath);
@@ -708,7 +766,15 @@ public class GameVisualTheme : MonoBehaviour
         if (texture == null)
             return null;
 
-        float pixelsPerUnit = Mathf.Max(100f, Mathf.Max(texture.width, texture.height));
+        return CreateSpriteFromTexture(texture);
+    }
+
+    Sprite CreateSpriteFromTexture(Texture2D texture)
+    {
+        if (texture == null)
+            return null;
+
+        float pixelsPerUnit = Mathf.Max(1f, texture.width / BackgroundTileWorldSize);
         return Sprite.Create(
             texture,
             new Rect(0f, 0f, texture.width, texture.height),

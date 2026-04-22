@@ -136,7 +136,7 @@ public class HideInNebulaTarget : MonoBehaviour
                 continue;
             }
 
-            playerHealth.photonView.RPC("TakeDamage", RpcTarget.MasterClient, 1, -1);
+            playerHealth.photonView.RPC("TakeEnvironmentalDamage", RpcTarget.MasterClient, 1);
         }
 
         damageRoutine = null;

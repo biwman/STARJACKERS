@@ -18,8 +18,12 @@ public static class RoomSettings
     public const string DeathRetainPercentKey = "deathRetainPercent";
     public const string TimeUpRetainPercentKey = "timeUpRetainPercent";
     public const string MapSizeKey = "mapSize";
+    public const string MapBackgroundKey = "mapBackground";
     public const string MovingObjectsEnabledKey = "movingObjectsEnabled";
     public const string EnemyBotsEnabledKey = "enemyBotsEnabled";
+    public const string CorsairEnabledKey = "corsairEnabled";
+    public const string CorsairSpawnSecondKey = "corsairSpawnSecond";
+    public const string CorsairHpKey = "corsairHp";
     public const string BulletPushMultiplierKey = "bulletPushMultiplier";
     public const string ObstacleWeightFactorKey = "obstacleWeightFactor";
     public const string TreasureWeightFactorKey = "treasureWeightFactor";
@@ -27,6 +31,7 @@ public static class RoomSettings
     public const string RoundEndReasonKey = "roundEndReason";
     public const string ShipSkinKey = "shipSkinIndex";
     public const string ShipInventoryStateKey = "shipInventoryState";
+    public const string EquipmentStateKey = "equipmentState";
     public const string ScoreKey = "score";
 
     public const float DefaultRoundDuration = 180f;
@@ -42,8 +47,12 @@ public static class RoomSettings
     public const int DefaultDeathRetainPercent = 25;
     public const int DefaultTimeUpRetainPercent = 25;
     public const string DefaultMapSize = "medium";
+    public const int DefaultMapBackground = 5;
     public const bool DefaultMovingObjectsEnabled = true;
     public const bool DefaultEnemyBotsEnabled = true;
+    public const bool DefaultCorsairEnabled = true;
+    public const int DefaultCorsairSpawnSecond = 0;
+    public const int DefaultCorsairHp = 200;
     public const int DefaultBulletPushMultiplier = 1;
     public const int DefaultObstacleWeightFactor = 6;
     public const int DefaultTreasureWeightFactor = 6;
@@ -133,6 +142,11 @@ public static class RoomSettings
         return DefaultMapSize;
     }
 
+    public static int GetMapBackgroundIndex()
+    {
+        return GetInt(MapBackgroundKey, DefaultMapBackground, 1, 6);
+    }
+
     public static bool AreMovingObjectsEnabled()
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -155,16 +169,109 @@ public static class RoomSettings
         return GetInt(TreasureWeightFactorKey, DefaultTreasureWeightFactor, 1, 12);
     }
 
-    public static bool AreEnemyBotsEnabled()
+    public static bool GetEnemyEnabled(EnemyBotKind kind)
     {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return true;
+
         if (PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(EnemyBotsEnabledKey, out object value) &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(definition.EnabledRoomKey, out object value) &&
             value is bool enabled)
         {
             return enabled;
         }
 
-        return DefaultEnemyBotsEnabled;
+        if (kind == EnemyBotKind.Drone &&
+            PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(EnemyBotsEnabledKey, out object legacyValue) &&
+            legacyValue is bool legacyEnabled)
+        {
+            return legacyEnabled;
+        }
+
+        if (kind == EnemyBotKind.Corsair &&
+            PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(CorsairEnabledKey, out object legacyCorsairValue) &&
+            legacyCorsairValue is bool legacyCorsairEnabled)
+        {
+            return legacyCorsairEnabled;
+        }
+
+        return definition.DefaultEnabled;
+    }
+
+    public static int GetEnemyCount(EnemyBotKind kind)
+    {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return 1;
+
+        return GetInt(definition.CountRoomKey, definition.DefaultCount, 1, 5);
+    }
+
+    public static int GetEnemyHp(EnemyBotKind kind)
+    {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return 100;
+
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.HpRoomKey))
+        {
+            return GetInt(definition.HpRoomKey, definition.DefaultHp, 20, 200);
+        }
+
+        if (kind == EnemyBotKind.Corsair &&
+            PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(CorsairHpKey, out object legacyValue))
+        {
+            return Mathf.Clamp(ConvertToInt(legacyValue, definition.DefaultHp), 20, 200);
+        }
+
+        return Mathf.Clamp(definition.DefaultHp, 20, 200);
+    }
+
+    public static int GetEnemySpawnSecond(EnemyBotKind kind)
+    {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return 0;
+
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.SpawnSecondRoomKey))
+        {
+            return GetInt(definition.SpawnSecondRoomKey, definition.DefaultSpawnSecond, 0, 120);
+        }
+
+        if (kind == EnemyBotKind.Corsair &&
+            PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(CorsairSpawnSecondKey, out object legacyValue))
+        {
+            return Mathf.Clamp(ConvertToInt(legacyValue, definition.DefaultSpawnSecond), 0, 120);
+        }
+
+        return Mathf.Clamp(definition.DefaultSpawnSecond, 0, 120);
+    }
+
+    public static bool AreEnemyBotsEnabled()
+    {
+        return GetEnemyEnabled(EnemyBotKind.Drone);
+    }
+
+    public static bool AreCorsairsEnabled()
+    {
+        return GetEnemyEnabled(EnemyBotKind.Corsair);
+    }
+
+    public static int GetCorsairSpawnSecond()
+    {
+        return GetEnemySpawnSecond(EnemyBotKind.Corsair);
+    }
+
+    public static int GetCorsairHp()
+    {
+        return GetEnemyHp(EnemyBotKind.Corsair);
     }
 
     public static int GetBulletPushMultiplier()

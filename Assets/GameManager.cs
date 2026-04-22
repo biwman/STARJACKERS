@@ -23,6 +23,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props["gameStarted"] = true;
         props["startTime"] = PhotonNetwork.Time;
         props[LoneShipModeStartTimeKey] = -1d;
+        props[GameTimer.EvacuationPauseUntilKey] = -1d;
+        props[GameTimer.EvacuationPauseRemainingKey] = -1f;
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
 
@@ -74,6 +76,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[NebulaLayoutKey] = string.Empty;
         props[MapSeedKey] = -1;
         props[LoneShipModeStartTimeKey] = -1d;
+        props[GameTimer.EvacuationPauseUntilKey] = -1d;
+        props[GameTimer.EvacuationPauseRemainingKey] = -1f;
         props[RoomSettings.RoundResultsKey] = RoundResultsTracker.SerializeSnapshot(snapshot);
         props[RoomSettings.RoundEndReasonKey] = snapshot != null ? snapshot.endReason : endReason;
 
@@ -128,6 +132,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[NebulaLayoutKey] = string.Empty;
         props[MapSeedKey] = -1;
         props[LoneShipModeStartTimeKey] = -1d;
+        props[GameTimer.EvacuationPauseUntilKey] = -1d;
+        props[GameTimer.EvacuationPauseRemainingKey] = -1f;
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
 

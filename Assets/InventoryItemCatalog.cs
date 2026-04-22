@@ -36,6 +36,7 @@ public class InventoryItemDefinition
     public int SellValueAstrons;
     public string IconResourcePath;
     public string ProjectFileName;
+    public string[] SalvageOutputs;
 
     Sprite cachedIcon;
 
@@ -125,6 +126,9 @@ public static class InventoryItemCatalog
     public const string AsteroidGoldId = "asteroid_gold_resource";
     public const string AsteroidRareId = "asteroid_rare_resource";
     public const string DroidScrapId = "droid_scrap";
+    public const string CorsairSalvageId = "corsair_salvage";
+    public const string SpaceMineWreckId = "space_mine_wreck";
+    public const string PlasmaGunId = "plasma_gun";
 
     static readonly Dictionary<string, InventoryItemDefinition> Definitions = BuildDefinitions();
 
@@ -184,6 +188,17 @@ public static class InventoryItemCatalog
         return definition != null ? Mathf.Max(0, definition.SellValueAstrons) : 0;
     }
 
+    public static string[] GetSalvageOutputs(string itemId)
+    {
+        InventoryItemDefinition definition = GetDefinition(itemId);
+        if (definition?.SalvageOutputs == null || definition.SalvageOutputs.Length == 0)
+            return Array.Empty<string>();
+
+        string[] outputs = new string[definition.SalvageOutputs.Length];
+        Array.Copy(definition.SalvageOutputs, outputs, outputs.Length);
+        return outputs;
+    }
+
     public static Color GetRarityColor(string itemId)
     {
         return GetRarityColor(GetRarity(itemId));
@@ -216,7 +231,8 @@ public static class InventoryItemCatalog
                 Rarity = InventoryItemRarity.Common,
                 SellValueAstrons = 10,
                 IconResourcePath = "Visuals/Treasures/asteroid_treasure_resource",
-                ProjectFileName = "asteroida_treasure.png"
+                ProjectFileName = "asteroida_treasure.png",
+                SalvageOutputs = new[] { AsteroidResourceId }
             },
             [AsteroidGoldId] = new InventoryItemDefinition
             {
@@ -228,7 +244,8 @@ public static class InventoryItemCatalog
                 Rarity = InventoryItemRarity.Legendary,
                 SellValueAstrons = 30,
                 IconResourcePath = "asteroida_zloto_clean_resource",
-                ProjectFileName = "asteroida_zloto_clean.png"
+                ProjectFileName = "asteroida_zloto_clean.png",
+                SalvageOutputs = new[] { AsteroidResourceId, AsteroidResourceId }
             },
             [AsteroidRareId] = new InventoryItemDefinition
             {
@@ -240,7 +257,8 @@ public static class InventoryItemCatalog
                 Rarity = InventoryItemRarity.VeryRare,
                 SellValueAstrons = 60,
                 IconResourcePath = "asteroida_rare_clean_resource",
-                ProjectFileName = "asteroida_rare_clean.png"
+                ProjectFileName = "asteroida_rare_clean.png",
+                SalvageOutputs = new[] { AsteroidGoldId, AsteroidGoldId }
             },
             [DroidScrapId] = new InventoryItemDefinition
             {
@@ -252,7 +270,46 @@ public static class InventoryItemCatalog
                 Rarity = InventoryItemRarity.Uncommon,
                 SellValueAstrons = 40,
                 IconResourcePath = "droid1_resource",
-                ProjectFileName = "droid1.png"
+                ProjectFileName = "droid1.png",
+                SalvageOutputs = new[] { AsteroidGoldId }
+            },
+            [CorsairSalvageId] = new InventoryItemDefinition
+            {
+                Id = CorsairSalvageId,
+                DisplayName = "Corsair Salvage",
+                ShortLabel = "CRS",
+                Description = "Rare salvage recovered from a destroyed Corsair.",
+                ItemType = InventoryItemType.Resource,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 150,
+                IconResourcePath = "statek_duzy_resource",
+                ProjectFileName = "statek_duzy.png",
+                SalvageOutputs = new[] { AsteroidRareId, AsteroidRareId }
+            },
+            [SpaceMineWreckId] = new InventoryItemDefinition
+            {
+                Id = SpaceMineWreckId,
+                DisplayName = "Mine Wreck",
+                ShortLabel = "MIN",
+                Description = "A disabled space mine hull recovered before detonation.",
+                ItemType = InventoryItemType.Resource,
+                Rarity = InventoryItemRarity.Uncommon,
+                SellValueAstrons = 55,
+                IconResourcePath = "wrak_miny_resource",
+                ProjectFileName = "wrak_miny.png",
+                SalvageOutputs = new[] { AsteroidGoldId }
+            },
+            [PlasmaGunId] = new InventoryItemDefinition
+            {
+                Id = PlasmaGunId,
+                DisplayName = "Plasma Gun",
+                ShortLabel = "PLS",
+                Description = "A salvaged Corsair plasma cannon adapted for player ships.",
+                ItemType = InventoryItemType.Equipment,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 260,
+                IconResourcePath = "plasma_gun_resource",
+                ProjectFileName = "plasma_gun.png"
             }
         };
     }

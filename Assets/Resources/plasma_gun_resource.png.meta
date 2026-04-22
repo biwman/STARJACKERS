@@ -1,0 +1,715 @@
+fileFormatVersion: 2
+guid: 8238c021d8ad6a64ba73a3a726c280e6
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -1304748589472762652
+    second: plasma_gun_resource_0
+  - first:
+      213: -1428390375695413460
+    second: plasma_gun_resource_1
+  - first:
+      213: -5989682453955866472
+    second: plasma_gun_resource_2
+  - first:
+      213: -5552093434279879343
+    second: plasma_gun_resource_3
+  - first:
+      213: 960601047110836388
+    second: plasma_gun_resource_4
+  - first:
+      213: -628890676915588785
+    second: plasma_gun_resource_5
+  - first:
+      213: 6661456611240469070
+    second: plasma_gun_resource_6
+  - first:
+      213: -2569061216273579267
+    second: plasma_gun_resource_7
+  - first:
+      213: -7541648409923805623
+    second: plasma_gun_resource_8
+  - first:
+      213: -2885299172739548221
+    second: plasma_gun_resource_9
+  - first:
+      213: -4882862197952287204
+    second: plasma_gun_resource_10
+  - first:
+      213: -91104150912082122
+    second: plasma_gun_resource_11
+  - first:
+      213: 99959203044665762
+    second: plasma_gun_resource_12
+  - first:
+      213: 7223803400913213598
+    second: plasma_gun_resource_13
+  - first:
+      213: 5236536808719629298
+    second: plasma_gun_resource_14
+  - first:
+      213: 4769375983523956967
+    second: plasma_gun_resource_15
+  - first:
+      213: -6319618238796633607
+    second: plasma_gun_resource_16
+  - first:
+      213: -3111337658916011976
+    second: plasma_gun_resource_17
+  - first:
+      213: 5840468546467893828
+    second: plasma_gun_resource_18
+  - first:
+      213: 4708432795608574717
+    second: plasma_gun_resource_19
+  - first:
+      213: 2868047349495107422
+    second: plasma_gun_resource_20
+  - first:
+      213: -5406637362273357964
+    second: plasma_gun_resource_21
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: plasma_gun_resource_0
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 0
+        width: 1024
+        height: 1531
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4e4b84b121a94ede0800000000000000
+      internalID: -1304748589472762652
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_1
+      rect:
+        serializedVersion: 2
+        x: 880
+        y: 1211
+        width: 6
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c2f861075865d2ce0800000000000000
+      internalID: -1428390375695413460
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_2
+      rect:
+        serializedVersion: 2
+        x: 881
+        y: 1159
+        width: 6
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8901296fa8f50eca0800000000000000
+      internalID: -5989682453955866472
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_3
+      rect:
+        serializedVersion: 2
+        x: 890
+        y: 1160
+        width: 6
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 15d18f1107003f2b0800000000000000
+      internalID: -5552093434279879343
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_4
+      rect:
+        serializedVersion: 2
+        x: 265
+        y: 415
+        width: 6
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4a0e8e7109db45d00800000000000000
+      internalID: 960601047110836388
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_5
+      rect:
+        serializedVersion: 2
+        x: 288
+        y: 415
+        width: 7
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f4134e7e24bb547f0800000000000000
+      internalID: -628890676915588785
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_6
+      rect:
+        serializedVersion: 2
+        x: 361
+        y: 415
+        width: 6
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e426aa77e7f327c50800000000000000
+      internalID: 6661456611240469070
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_7
+      rect:
+        serializedVersion: 2
+        x: 414
+        y: 415
+        width: 11
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: df2c7cd6f6cd85cd0800000000000000
+      internalID: -2569061216273579267
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_8
+      rect:
+        serializedVersion: 2
+        x: 425
+        y: 415
+        width: 9
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 94e1a918abea65790800000000000000
+      internalID: -7541648409923805623
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_9
+      rect:
+        serializedVersion: 2
+        x: 441
+        y: 415
+        width: 6
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3cb712a70bb55f7d0800000000000000
+      internalID: -2885299172739548221
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_10
+      rect:
+        serializedVersion: 2
+        x: 453
+        y: 415
+        width: 13
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c1eeed393b69c3cb0800000000000000
+      internalID: -4882862197952287204
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_11
+      rect:
+        serializedVersion: 2
+        x: 465
+        y: 415
+        width: 6
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 63f5257e1455cbef0800000000000000
+      internalID: -91104150912082122
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_12
+      rect:
+        serializedVersion: 2
+        x: 468
+        y: 418
+        width: 6
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2a922859d50236100800000000000000
+      internalID: 99959203044665762
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_13
+      rect:
+        serializedVersion: 2
+        x: 473
+        y: 402
+        width: 25
+        height: 23
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e98d0b67bea104460800000000000000
+      internalID: 7223803400913213598
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_14
+      rect:
+        serializedVersion: 2
+        x: 473
+        y: 415
+        width: 8
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2fbbdf0bb7aeba840800000000000000
+      internalID: 5236536808719629298
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_15
+      rect:
+        serializedVersion: 2
+        x: 478
+        y: 416
+        width: 8
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7e88932103a303240800000000000000
+      internalID: 4769375983523956967
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_16
+      rect:
+        serializedVersion: 2
+        x: 492
+        y: 415
+        width: 14
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9f96270d1b43c48a0800000000000000
+      internalID: -6319618238796633607
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_17
+      rect:
+        serializedVersion: 2
+        x: 500
+        y: 415
+        width: 11
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 830040042ee42d4d0800000000000000
+      internalID: -3111337658916011976
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_18
+      rect:
+        serializedVersion: 2
+        x: 502
+        y: 402
+        width: 20
+        height: 23
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4429f0ae2338d0150800000000000000
+      internalID: 5840468546467893828
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_19
+      rect:
+        serializedVersion: 2
+        x: 516
+        y: 415
+        width: 22
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dfa6c076ea6b75140800000000000000
+      internalID: 4708432795608574717
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_20
+      rect:
+        serializedVersion: 2
+        x: 537
+        y: 415
+        width: 9
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e5f08a96ed95dc720800000000000000
+      internalID: 2868047349495107422
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: plasma_gun_resource_21
+      rect:
+        serializedVersion: 2
+        x: 545
+        y: 415
+        width: 10
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 47f6750f6f3c7f4b0800000000000000
+      internalID: -5406637362273357964
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      plasma_gun_resource_0: -1304748589472762652
+      plasma_gun_resource_1: -1428390375695413460
+      plasma_gun_resource_10: -4882862197952287204
+      plasma_gun_resource_11: -91104150912082122
+      plasma_gun_resource_12: 99959203044665762
+      plasma_gun_resource_13: 7223803400913213598
+      plasma_gun_resource_14: 5236536808719629298
+      plasma_gun_resource_15: 4769375983523956967
+      plasma_gun_resource_16: -6319618238796633607
+      plasma_gun_resource_17: -3111337658916011976
+      plasma_gun_resource_18: 5840468546467893828
+      plasma_gun_resource_19: 4708432795608574717
+      plasma_gun_resource_2: -5989682453955866472
+      plasma_gun_resource_20: 2868047349495107422
+      plasma_gun_resource_21: -5406637362273357964
+      plasma_gun_resource_3: -5552093434279879343
+      plasma_gun_resource_4: 960601047110836388
+      plasma_gun_resource_5: -628890676915588785
+      plasma_gun_resource_6: 6661456611240469070
+      plasma_gun_resource_7: -2569061216273579267
+      plasma_gun_resource_8: -7541648409923805623
+      plasma_gun_resource_9: -2885299172739548221
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

@@ -7,6 +7,7 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
 {
     const byte SnapshotEventCode = 71;
     const byte ImpulseRequestEventCode = 72;
+    const byte SpaceMineDetonationEventCode = 73;
 
     static SpaceObjectMotionSync instance;
 
@@ -83,6 +84,19 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         PhotonNetwork.RaiseEvent(ImpulseRequestEventCode, payload, options, SendOptions.SendReliable);
     }
 
+    public static void BroadcastSpaceMineDetonation(int sourceViewId, Vector3 worldPosition)
+    {
+        if (!PhotonNetwork.IsConnected)
+        {
+            EnemyBot.SpawnSpaceMineDetonationEffects(worldPosition);
+            return;
+        }
+
+        object[] payload = { sourceViewId, worldPosition.x, worldPosition.y, worldPosition.z };
+        RaiseEventOptions options = new RaiseEventOptions { Receivers = ReceiverGroup.All };
+        PhotonNetwork.RaiseEvent(SpaceMineDetonationEventCode, payload, options, SendOptions.SendReliable);
+    }
+
     public void OnEvent(EventData photonEvent)
     {
         switch (photonEvent.Code)
@@ -92,6 +106,9 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
                 break;
             case ImpulseRequestEventCode:
                 ApplyImpulseRequest(photonEvent.CustomData as object[]);
+                break;
+            case SpaceMineDetonationEventCode:
+                ApplySpaceMineDetonation(photonEvent.CustomData as object[]);
                 break;
         }
     }
@@ -133,6 +150,21 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         target.ApplyImpulse(impulse);
     }
 
+    void ApplySpaceMineDetonation(object[] payload)
+    {
+        if (payload == null || payload.Length < 4)
+            return;
+
+        int sourceViewId = ConvertToInt(payload[0]);
+        Vector3 fallbackWorldPosition = new Vector3(
+            ConvertToFloat(payload[1]),
+            ConvertToFloat(payload[2]),
+            ConvertToFloat(payload[3]));
+
+        Vector3 resolvedWorldPosition = EnemyBot.ResolveSpaceMineDetonationPosition(sourceViewId, fallbackWorldPosition);
+        EnemyBot.SpawnSpaceMineDetonationEffects(resolvedWorldPosition);
+    }
+
     static float ConvertToFloat(object value)
     {
         if (value is float floatValue)
@@ -145,5 +177,25 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
             return intValue;
 
         return 0f;
+    }
+
+    static int ConvertToInt(object value)
+    {
+        if (value is int intValue)
+            return intValue;
+
+        if (value is short shortValue)
+            return shortValue;
+
+        if (value is byte byteValue)
+            return byteValue;
+
+        if (value is float floatValue)
+            return Mathf.RoundToInt(floatValue);
+
+        if (value is double doubleValue)
+            return Mathf.RoundToInt((float)doubleValue);
+
+        return 0;
     }
 }

@@ -454,6 +454,7 @@ public class EngineThrusterVFX : MonoBehaviour
     bool isEnemyBot;
     bool isAstronaut;
     bool isViper;
+    EnemyTrailProfile enemyTrailProfile;
 
     void Start()
     {
@@ -468,7 +469,9 @@ public class EngineThrusterVFX : MonoBehaviour
 
     public void RefreshMode()
     {
-        isEnemyBot = GetComponent<EnemyBot>() != null;
+        EnemyBot enemyBot = GetComponent<EnemyBot>();
+        isEnemyBot = enemyBot != null;
+        enemyTrailProfile = enemyBot != null && enemyBot.Definition != null ? enemyBot.Definition.Trails : null;
         isAstronaut = GetComponent<AstronautSurvivor>() != null;
 
         PhotonView view = GetComponent<PhotonView>();
@@ -498,16 +501,22 @@ public class EngineThrusterVFX : MonoBehaviour
 
         float shipHeight = shipRenderer != null ? shipRenderer.bounds.size.y : 1f;
         float shipWidth = shipRenderer != null ? shipRenderer.bounds.size.x : 1f;
-        rootObject.transform.localPosition = isEnemyBot
-            ? new Vector3(0f, shipHeight * 0.44f, 0f)
+        rootObject.transform.localPosition = enemyTrailProfile != null
+            ? new Vector3(enemyTrailProfile.RootOffsetFactors.x * shipWidth, enemyTrailProfile.RootOffsetFactors.y * shipHeight, 0f)
+            : isEnemyBot
+                ? new Vector3(0f, shipHeight * 0.44f, 0f)
             : isAstronaut
                 ? new Vector3(0f, -shipHeight * 0.34f, 0f)
                 : new Vector3(0f, -shipHeight * 0.46f, 0f);
-        rootObject.transform.localRotation = isEnemyBot
-            ? Quaternion.identity
-            : Quaternion.Euler(0f, 0f, 180f);
+        rootObject.transform.localRotation = enemyTrailProfile != null
+            ? Quaternion.Euler(0f, 0f, enemyTrailProfile.RootRotationZ)
+            : isEnemyBot
+                ? Quaternion.identity
+                : Quaternion.Euler(0f, 0f, 180f);
 
-        Vector3[] offsets = isViper
+        Vector3[] offsets = enemyTrailProfile != null
+            ? BuildEnemyTrailOffsets(enemyTrailProfile, shipWidth, shipHeight)
+            : isViper
             ? new[]
             {
                 new Vector3(-shipWidth * 0.60f, 0.34f, 0f),
@@ -528,9 +537,9 @@ public class EngineThrusterVFX : MonoBehaviour
 
     void ConfigureTrail(TrailRenderer trail)
     {
-        trail.time = isAstronaut ? 0.24f : 0.42f;
+        trail.time = isAstronaut ? 0.24f : enemyTrailProfile != null ? enemyTrailProfile.MaxTrailTime : 0.42f;
         trail.minVertexDistance = 0.01f;
-        trail.widthMultiplier = isAstronaut ? 0.04f : 0.08f;
+        trail.widthMultiplier = isAstronaut ? 0.04f : enemyTrailProfile != null ? enemyTrailProfile.MaxTrailWidth : 0.08f;
         trail.shadowCastingMode = ShadowCastingMode.Off;
         trail.receiveShadows = false;
         trail.alignment = LineAlignment.View;
@@ -556,6 +565,24 @@ public class EngineThrusterVFX : MonoBehaviour
                     new GradientAlphaKey(0.78f, 0f),
                     new GradientAlphaKey(0.44f, 0.26f),
                     new GradientAlphaKey(0.18f, 0.7f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+        }
+        else if (enemyTrailProfile != null && enemyTrailProfile.VisualStyle == EnemyTrailVisualStyle.RedLarge)
+        {
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(1f, 0.94f, 0.9f), 0f),
+                    new GradientColorKey(new Color(1f, 0.32f, 0.22f), 0.18f),
+                    new GradientColorKey(new Color(0.9f, 0.04f, 0.04f), 0.58f),
+                    new GradientColorKey(new Color(0.34f, 0.01f, 0.01f), 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0.96f, 0f),
+                    new GradientAlphaKey(0.72f, 0.24f),
+                    new GradientAlphaKey(0.28f, 0.7f),
                     new GradientAlphaKey(0f, 1f)
                 });
         }
@@ -656,6 +683,12 @@ public class EngineThrusterVFX : MonoBehaviour
                 trailRenderer.widthMultiplier = Mathf.Lerp(0.015f, 0.055f, intensity);
                 trailRenderer.emitting = clamped > 0.08f;
             }
+            else if (enemyTrailProfile != null)
+            {
+                trailRenderer.time = Mathf.Lerp(enemyTrailProfile.MinTrailTime, enemyTrailProfile.MaxTrailTime, intensity);
+                trailRenderer.widthMultiplier = Mathf.Lerp(enemyTrailProfile.MinTrailWidth, enemyTrailProfile.MaxTrailWidth, intensity);
+                trailRenderer.emitting = clamped > enemyTrailProfile.EmissionThreshold;
+            }
             else
             {
                 trailRenderer.time = Mathf.Lerp(0.22f, 0.82f, intensity);
@@ -663,6 +696,26 @@ public class EngineThrusterVFX : MonoBehaviour
                 trailRenderer.emitting = clamped > 0.04f;
             }
         }
+    }
+
+    Vector3[] BuildEnemyTrailOffsets(EnemyTrailProfile profile, float shipWidth, float shipHeight)
+    {
+        if (profile != null && profile.TrailOffsetFactors != null && profile.TrailOffsetFactors.Length == 0)
+            return System.Array.Empty<Vector3>();
+
+        if (profile == null || profile.TrailOffsetFactors == null)
+            return new[] { Vector3.zero };
+
+        Vector3[] offsets = new Vector3[profile.TrailOffsetFactors.Length];
+        for (int i = 0; i < offsets.Length; i++)
+        {
+            offsets[i] = new Vector3(
+                profile.TrailOffsetFactors[i].x * shipWidth,
+                profile.TrailOffsetFactors[i].y * shipHeight,
+                0f);
+        }
+
+        return offsets;
     }
 
     void DisableEmission()

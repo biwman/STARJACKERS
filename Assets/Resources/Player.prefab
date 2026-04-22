@@ -138,6 +138,13 @@ MonoBehaviour:
   fireRate: 0.3
   maxAmmo: 10
   reloadDuration: 4
+  bulletDamage: 10
+  bulletScaleMultiplier: 1
+  bulletColor: {r: 1, g: 1, b: 1, a: 1}
+  muzzleOffsetDistance: 0.5
+  bulletRangeMultiplier: 15
+  infiniteAmmo: 0
+  shotSoundId: 
 --- !u!61 &660211924584630926
 BoxCollider2D:
   m_ObjectHideFlags: 0

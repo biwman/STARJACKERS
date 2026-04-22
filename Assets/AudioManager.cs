@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using Photon.Pun;
 using UnityEngine;
@@ -12,16 +13,23 @@ public class AudioManager : MonoBehaviour
     static AudioManager instance;
 
     AudioClip laserClip;
+    AudioClip corsairLaserClip;
     AudioClip drillingClip;
     AudioClip clickClip;
     AudioClip engineClip;
     AudioClip alarmClip;
     AudioClip explosionClip;
     AudioClip reloadClip;
+    AudioClip shieldHitClip;
+    AudioClip hpHitClip;
+    AudioClip evacBuzzerClip;
+    AudioClip extractionSequenceClip;
+    AudioClip spaceMineBoomClip;
 
     AudioSource oneShotSource;
     AudioSource drillingLoopSource;
     AudioSource alarmLoopSource;
+    Coroutine evacBuzzerRoutine;
     readonly HashSet<int> hookedButtons = new HashSet<int>();
 
     public static AudioManager Instance
@@ -36,6 +44,7 @@ public class AudioManager : MonoBehaviour
     public AudioClip EngineClip => engineClip;
     public AudioClip DrillingClip => drillingClip;
     public AudioClip AlarmClip => alarmClip;
+    public AudioClip CorsairLaserClip => corsairLaserClip;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -91,12 +100,18 @@ public class AudioManager : MonoBehaviour
     void LoadClips()
     {
         laserClip = Resources.Load<AudioClip>("Audio/strzal_pistol_cut");
+        corsairLaserClip = Resources.Load<AudioClip>("Audio/laser_classic_corsair");
         drillingClip = Resources.Load<AudioClip>("Audio/drilling");
         clickClip = Resources.Load<AudioClip>("Audio/click");
         engineClip = Resources.Load<AudioClip>("Audio/silnik");
         alarmClip = Resources.Load<AudioClip>("Audio/alarm");
         explosionClip = Resources.Load<AudioClip>("Audio/explosion");
         reloadClip = Resources.Load<AudioClip>("Audio/gun_reload");
+        shieldHitClip = Resources.Load<AudioClip>("Audio/trafienie_w_tarcze");
+        hpHitClip = Resources.Load<AudioClip>("Audio/trafienie_w_HP");
+        evacBuzzerClip = Resources.Load<AudioClip>("Audio/evac_buzzer_sound");
+        extractionSequenceClip = Resources.Load<AudioClip>("Audio/extraction_4sekundy");
+        spaceMineBoomClip = Resources.Load<AudioClip>("Audio/space_mine_boom_sound");
     }
 
     void EnsureSources()
@@ -161,6 +176,11 @@ public class AudioManager : MonoBehaviour
         PlaySpatialOneShot(laserClip, worldPosition, 0.55f);
     }
 
+    public void PlayCorsairLaserAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(corsairLaserClip != null ? corsairLaserClip : laserClip, worldPosition, 0.66f);
+    }
+
     public void PlayExplosion()
     {
         PlayOneShot(explosionClip, 0.75f);
@@ -174,6 +194,52 @@ public class AudioManager : MonoBehaviour
     public void PlayReloadAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(reloadClip, worldPosition, 0.62f);
+    }
+
+    public void PlayShieldHitAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(shieldHitClip, worldPosition, 0.62f);
+    }
+
+    public void PlayHpHitAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(hpHitClip, worldPosition, 0.72f);
+    }
+
+    public void PlayExtractionSequenceAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(extractionSequenceClip, worldPosition, 0.88f);
+    }
+
+    public void PlaySpaceMineBoomAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(spaceMineBoomClip != null ? spaceMineBoomClip : explosionClip, worldPosition, 0.92f);
+    }
+
+    public void PlayEvacBuzzerBurst()
+    {
+        if (evacBuzzerClip == null)
+            return;
+
+        StartCoroutine(PlayEvacBuzzerBurstRoutine());
+    }
+
+    public void PlayEvacBuzzerLoopForDuration(float duration)
+    {
+        if (evacBuzzerClip == null || duration <= 0f)
+            return;
+
+        StopEvacBuzzerLoop();
+        evacBuzzerRoutine = StartCoroutine(PlayEvacBuzzerLoopRoutine(duration));
+    }
+
+    public void StopEvacBuzzerLoop()
+    {
+        if (evacBuzzerRoutine != null)
+        {
+            StopCoroutine(evacBuzzerRoutine);
+            evacBuzzerRoutine = null;
+        }
     }
 
     public void StartDrillingLoop()
@@ -212,6 +278,31 @@ public class AudioManager : MonoBehaviour
             alarmLoopSource.Stop();
     }
 
+    IEnumerator PlayEvacBuzzerBurstRoutine()
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            PlayOneShot(evacBuzzerClip, 0.95f);
+            float waitTime = evacBuzzerClip != null ? Mathf.Max(0.45f, evacBuzzerClip.length + 0.06f) : 0.5f;
+            yield return new WaitForSeconds(waitTime);
+        }
+    }
+
+    IEnumerator PlayEvacBuzzerLoopRoutine(float duration)
+    {
+        float elapsed = 0f;
+        float waitTime = evacBuzzerClip != null ? Mathf.Max(0.45f, evacBuzzerClip.length + 0.06f) : 0.5f;
+
+        while (elapsed < duration)
+        {
+            PlayOneShot(evacBuzzerClip, 0.95f);
+            yield return new WaitForSeconds(waitTime);
+            elapsed += waitTime;
+        }
+
+        evacBuzzerRoutine = null;
+    }
+
     void PlayOneShot(AudioClip clip, float volumeScale)
     {
         if (clip == null || oneShotSource == null)
@@ -231,6 +322,8 @@ public class AudioManager : MonoBehaviour
         AudioSource source = tempObject.AddComponent<AudioSource>();
         ConfigureSpatialSource(source, volumeScale);
         source.clip = clip;
+        source.loop = false;
+        source.playOnAwake = false;
         source.Play();
 
         Destroy(tempObject, clip.length + 0.1f);
@@ -241,6 +334,8 @@ public class AudioManager : MonoBehaviour
         if (source == null)
             return;
 
+        source.loop = false;
+        source.playOnAwake = false;
         source.spatialBlend = 1f;
         source.rolloffMode = AudioRolloffMode.Linear;
         source.minDistance = SpatialMinDistance;

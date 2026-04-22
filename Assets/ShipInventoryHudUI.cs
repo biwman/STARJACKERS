@@ -25,6 +25,7 @@ public class ShipInventoryHudUI : MonoBehaviourPun
     TMP_Text dragVisualLabel;
     bool panelVisible;
     bool hudVisible = true;
+    bool previousHudVisible = true;
     bool dragInProgress;
     int draggedSlotIndex = -1;
 
@@ -552,10 +553,18 @@ public class ShipInventoryHudUI : MonoBehaviourPun
     void UpdateVisibility()
     {
         bool shouldShow = IsGameplayHudVisible();
-        if (hudVisible == shouldShow)
-            return;
+        if (hudVisible != shouldShow)
+        {
+            previousHudVisible = hudVisible;
+            hudVisible = shouldShow;
+        }
 
-        hudVisible = shouldShow;
+        if (!previousHudVisible && hudVisible)
+        {
+            panelVisible = false;
+        }
+
+        previousHudVisible = hudVisible;
 
         if (buttonObject != null)
             buttonObject.SetActive(shouldShow);

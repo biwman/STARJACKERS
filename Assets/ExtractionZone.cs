@@ -1,72 +1,83 @@
-using UnityEngine;
-using Photon.Pun;
 using System.Collections;
 using System.Collections.Generic;
+using Photon.Pun;
 using TMPro;
+using UnityEngine;
 
 public class ExtractionZone : MonoBehaviourPun
 {
     public float activationTime = 3f;
+    public float transitionDuration = 10f;
     public float activeDuration = 15f;
+    public float evacuationAnimationDuration = 4f;
 
-    private bool isActive = false;
-    private bool isBeingUsed = false;
-    private bool isEvacuating = false;
-    private bool messageShowing = false;
+    bool isActive;
+    bool isBeingUsed;
+    bool isTransitioning;
+    bool isEvacuating;
+    bool messageShowing;
 
-    private SpriteRenderer sr;
-    private Coroutine blinkRoutine;
+    SpriteRenderer sr;
+    Coroutine blinkRoutine;
+    Coroutine hideMessageRoutine;
+    GameObject cachedMessageObject;
 
     void Start()
     {
         sr = GetComponent<SpriteRenderer>();
         SetColor(Color.red);
+        cachedMessageObject = FindExtractionMessage();
+        if (cachedMessageObject != null)
+            cachedMessageObject.SetActive(false);
     }
 
-    void SetColor(Color c)
+    void LateUpdate()
+    {
+        if (cachedMessageObject == null)
+            cachedMessageObject = FindExtractionMessage();
+
+        if (cachedMessageObject != null && cachedMessageObject.activeSelf != messageShowing)
+            cachedMessageObject.SetActive(messageShowing);
+    }
+
+    void SetColor(Color color)
     {
         if (sr != null)
-            sr.color = c;
+            sr.color = color;
     }
 
-    // FIX: działa w single i multi
     public void TryUse(PhotonView playerView)
     {
-        if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient) return;
+        if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient)
+            return;
 
         if (!isBeingUsed)
-        {
             StartCoroutine(UseRoutine(playerView));
-        }
     }
 
     IEnumerator UseRoutine(PhotonView playerView)
     {
         isBeingUsed = true;
-        bool startingActivation = !isActive;
-
-        if (startingActivation)
-        {
-            photonView.RPC(nameof(StartAlarmLoop), RpcTarget.All);
-        }
-
-        yield return null;
 
         if (!isActive)
         {
-            isActive = true; // lokalnie od razu
+            if (!isTransitioning)
+            {
+                isTransitioning = true;
+                photonView.RPC(nameof(BeginTransitionStage), RpcTarget.All, transitionDuration);
+                yield return new WaitForSeconds(transitionDuration);
 
-            photonView.RPC("ActivateZone", RpcTarget.All);
-            photonView.RPC("ShowExtractionMessage", RpcTarget.All);
+                isTransitioning = false;
+                if (!isActive)
+                {
+                    isActive = true;
+                    photonView.RPC(nameof(ActivateZone), RpcTarget.All);
+                }
+            }
         }
         else
         {
             EvacuatePlayers();
-        }
-
-        if (startingActivation)
-        {
-            photonView.RPC(nameof(StopAlarmLoop), RpcTarget.All);
         }
 
         isBeingUsed = false;
@@ -76,13 +87,14 @@ public class ExtractionZone : MonoBehaviourPun
     void ActivateZone()
     {
         isActive = true;
+        isTransitioning = false;
         isEvacuating = false;
+        StopEvacBuzzerLoop();
 
         if (blinkRoutine != null)
             StopCoroutine(blinkRoutine);
 
-        blinkRoutine = StartCoroutine(Blink());
-
+        blinkRoutine = StartCoroutine(BlinkActive());
         StartCoroutine(ActiveTimer());
     }
 
@@ -92,119 +104,123 @@ public class ExtractionZone : MonoBehaviourPun
 
         while (timer < activeDuration)
         {
-            if (!isActive) yield break;
+            if (!isActive)
+                yield break;
 
             timer += Time.deltaTime;
             yield return null;
         }
 
         if (!PhotonNetwork.IsConnected || PhotonNetwork.IsMasterClient)
-        {
             EvacuatePlayers();
-        }
     }
 
-    IEnumerator Blink()
+    IEnumerator BlinkActive()
     {
         while (isActive)
         {
             SetColor(Color.green);
             yield return new WaitForSeconds(0.3f);
-
             SetColor(Color.white);
             yield return new WaitForSeconds(0.3f);
         }
     }
 
-    // 🔥 NAJWAŻNIEJSZA FUNKCJA
+    IEnumerator BlinkTransition()
+    {
+        Color dimYellow = new Color(0.55f, 0.45f, 0.04f, 1f);
+        while (isTransitioning && !isActive)
+        {
+            SetColor(Color.yellow);
+            yield return new WaitForSeconds(0.28f);
+
+            if (!isTransitioning || isActive)
+                yield break;
+
+            SetColor(dimYellow);
+            yield return new WaitForSeconds(0.28f);
+        }
+    }
+
     void EvacuatePlayers()
     {
-        if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient) return;
-        if (isEvacuating) return;
+        if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient)
+            return;
+
+        if (isEvacuating)
+            return;
 
         isEvacuating = true;
-
         Debug.Log("EVACUATION!");
 
         PlayerHealth[] playersBeforeEvacuation = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         Collider2D[] hits = GetPlayersInsideZone();
-
         HashSet<int> processedPlayers = new HashSet<int>();
 
-        foreach (var hit in hits)
+        for (int i = 0; i < hits.Length; i++)
         {
-            PlayerHealth p = hit.GetComponentInParent<PlayerHealth>();
+            PlayerHealth playerHealth = hits[i].GetComponentInParent<PlayerHealth>();
+            if (playerHealth == null || playerHealth.IsWreck || playerHealth.IsBotControlled || playerHealth.IsEvacuationAnimating)
+                continue;
 
-            if (p != null && !p.IsWreck && !p.IsBotControlled)
+            PhotonView playerView = playerHealth.photonView;
+            if (playerView == null || processedPlayers.Contains(playerView.ViewID))
+                continue;
+
+            processedPlayers.Add(playerView.ViewID);
+
+            Debug.Log("Evacuating: " + playerView.Owner.NickName);
+            int finalScore = RoundResultsTracker.GetKnownScore(playerView.Owner, playerView.gameObject) + 5;
+            string outcome = playerHealth.IsAstronautControlled ? "evacuated" : "extracted";
+            RoundResultsTracker.RecordOutcome(playerView.Owner, finalScore, outcome);
+            playerView.RPC(nameof(PlayerHealth.OnEvacuated), playerView.Owner, 5);
+            playerView.RPC(nameof(PlayerHealth.BeginEvacuationSequence), RpcTarget.All);
+        }
+
+        photonView.RPC(nameof(ResetZone), RpcTarget.All);
+
+        if (processedPlayers.Count <= 0)
+            return;
+
+        bool anyPlayerRemaining = false;
+        for (int i = 0; i < playersBeforeEvacuation.Length; i++)
+        {
+            PlayerHealth player = playersBeforeEvacuation[i];
+            if (player == null || player.IsWreck || player.photonView == null || player.IsBotControlled || player.IsEvacuationAnimating)
+                continue;
+
+            if (!processedPlayers.Contains(player.photonView.ViewID))
             {
-                PhotonView pv = p.photonView;
-
-                if (processedPlayers.Contains(pv.ViewID))
-                    continue;
-
-                processedPlayers.Add(pv.ViewID);
-
-                Debug.Log("Evacuating: " + pv.Owner.NickName);
-                int finalScore = RoundResultsTracker.GetKnownScore(pv.Owner, pv.gameObject) + 5;
-                string outcome = p.IsAstronautControlled ? "evacuated" : "extracted";
-                RoundResultsTracker.RecordOutcome(pv.Owner, finalScore, outcome);
-
-                // punkt tylko dla właściciela
-                pv.RPC("OnEvacuated", pv.Owner, 5);
-
-                // ZAMIANA (ważne!)
-                if (pv.IsMine || !PhotonNetwork.IsConnected)
-                {
-                    PhotonNetwork.Destroy(pv.gameObject);
-                }
-                else
-                {
-                    pv.RPC("DestroySelf", pv.Owner);
-                }
+                anyPlayerRemaining = true;
+                break;
             }
         }
 
-        photonView.RPC("ResetZone", RpcTarget.All);
+        if (anyPlayerRemaining)
+            return;
 
-        // skrócenie czasu
-        bool anyPlayerEvacuated = processedPlayers.Count > 0;
+        GameTimer timer = FindAnyObjectByType<GameTimer>();
+        if (timer != null)
+            GameTimer.SetExtractionPause(timer.GetCurrentRemainingTime(), evacuationAnimationDuration);
 
-        // KLUCZOWE — KONIEC GRY
-        if (anyPlayerEvacuated)
-        {
-            bool anyPlayerRemaining = false;
+        GameManager manager = FindAnyObjectByType<GameManager>();
+        if (manager != null)
+            StartCoroutine(EndGameAfterEvacuationAnimation(manager));
+    }
 
-            for (int i = 0; i < playersBeforeEvacuation.Length; i++)
-            {
-                PlayerHealth player = playersBeforeEvacuation[i];
-                if (player == null || player.IsWreck || player.photonView == null)
-                    continue;
+    IEnumerator EndGameAfterEvacuationAnimation(GameManager manager)
+    {
+        yield return new WaitForSeconds(evacuationAnimationDuration);
 
-                if (!processedPlayers.Contains(player.photonView.ViewID))
-                {
-                    anyPlayerRemaining = true;
-                    break;
-                }
-            }
-
-            if (!anyPlayerRemaining)
-            {
-                GameManager gm = FindAnyObjectByType<GameManager>();
-                if (gm != null)
-                {
-                    gm.EndGame("evacuation");
-                }
-            }
-        }
+        if (manager != null)
+            manager.EndGame("evacuation");
     }
 
     Collider2D[] GetPlayersInsideZone()
     {
         Collider2D zoneCollider = GetComponent<Collider2D>();
         if (zoneCollider == null)
-        {
             return Physics2D.OverlapCircleAll(transform.position, 1.0f);
-        }
 
         ContactFilter2D filter = new ContactFilter2D
         {
@@ -215,9 +231,7 @@ public class ExtractionZone : MonoBehaviourPun
         Collider2D[] buffer = new Collider2D[32];
         int count = zoneCollider.Overlap(filter, buffer);
         if (count <= 0)
-        {
             return System.Array.Empty<Collider2D>();
-        }
 
         Collider2D[] hits = new Collider2D[count];
         System.Array.Copy(buffer, hits, count);
@@ -229,11 +243,19 @@ public class ExtractionZone : MonoBehaviourPun
     {
         isActive = false;
         isBeingUsed = false;
+        isTransitioning = false;
         isEvacuating = false;
+        messageShowing = false;
         StopAlarmLoop();
+        StopEvacBuzzerLoop();
 
         if (blinkRoutine != null)
             StopCoroutine(blinkRoutine);
+        if (hideMessageRoutine != null)
+        {
+            StopCoroutine(hideMessageRoutine);
+            hideMessageRoutine = null;
+        }
 
         SetColor(Color.red);
     }
@@ -241,52 +263,50 @@ public class ExtractionZone : MonoBehaviourPun
     [PunRPC]
     void ShowExtractionMessage()
     {
-        if (messageShowing) return;
+        if (messageShowing)
+            return;
 
-        GameObject obj = FindExtractionMessage();
+        GameObject obj = cachedMessageObject != null ? cachedMessageObject : FindExtractionMessage();
+        if (obj == null)
+            return;
 
-        if (obj != null)
+        RectTransform rect = obj.GetComponent<RectTransform>();
+        if (rect != null)
+            rect.SetAsLastSibling();
+
+        TMP_Text text = obj.GetComponent<TMP_Text>();
+        if (text == null)
+            text = obj.GetComponentInChildren<TMP_Text>(true);
+
+        if (text != null)
         {
-            RectTransform rect = obj.GetComponent<RectTransform>();
-            if (rect != null)
-            {
-                rect.SetAsLastSibling();
-            }
-
-            TMP_Text text = obj.GetComponent<TMP_Text>();
-            if (text == null)
-                text = obj.GetComponentInChildren<TMP_Text>(true);
-
-            if (text != null)
-            {
-                text.text = "Extraction Zone Activated";
-                text.fontStyle = FontStyles.Bold;
-            }
-
-            messageShowing = true;
-            obj.SetActive(true);
-            StartCoroutine(HideMessage(obj));
+            text.text = "Extraction Zone Activated";
+            text.fontStyle = FontStyles.Bold;
         }
+
+        messageShowing = true;
+        obj.SetActive(true);
+        if (hideMessageRoutine != null)
+            StopCoroutine(hideMessageRoutine);
+        hideMessageRoutine = StartCoroutine(HideMessage(obj));
     }
 
     IEnumerator HideMessage(GameObject obj)
     {
-        yield return new WaitForSeconds(3f);
+        yield return new WaitForSeconds(5f);
 
         obj.SetActive(false);
         messageShowing = false;
+        hideMessageRoutine = null;
     }
 
     GameObject FindExtractionMessage()
     {
-        var allTexts = Resources.FindObjectsOfTypeAll<GameObject>();
-
-        foreach (var go in allTexts)
+        GameObject[] allTexts = Resources.FindObjectsOfTypeAll<GameObject>();
+        for (int i = 0; i < allTexts.Length; i++)
         {
-            if (go.name == "ExtractionMessage")
-            {
-                return go;
-            }
+            if (allTexts[i].name == "ExtractionMessage")
+                return allTexts[i];
         }
 
         return null;
@@ -302,5 +322,25 @@ public class ExtractionZone : MonoBehaviourPun
     void StopAlarmLoop()
     {
         AudioManager.Instance.StopAlarmLoop();
+    }
+
+    [PunRPC]
+    void BeginTransitionStage(float duration)
+    {
+        isTransitioning = true;
+        isActive = false;
+        isEvacuating = false;
+
+        if (blinkRoutine != null)
+            StopCoroutine(blinkRoutine);
+
+        blinkRoutine = StartCoroutine(BlinkTransition());
+        AudioManager.Instance.PlayEvacBuzzerLoopForDuration(duration);
+        ShowExtractionMessage();
+    }
+
+    void StopEvacBuzzerLoop()
+    {
+        AudioManager.Instance.StopEvacBuzzerLoop();
     }
 }
