@@ -10,6 +10,7 @@ public class EnemyBotManager : MonoBehaviour
     double lastHandledStartTime = double.MinValue;
     float nextScanTime;
     readonly System.Collections.Generic.Dictionary<EnemyBotKind, int> spawnedThisRound = new System.Collections.Generic.Dictionary<EnemyBotKind, int>();
+    readonly System.Collections.Generic.Dictionary<EnemyBotKind, int> lastHandledRespawnTick = new System.Collections.Generic.Dictionary<EnemyBotKind, int>();
 
     public static void EnsureExists()
     {
@@ -90,6 +91,7 @@ public class EnemyBotManager : MonoBehaviour
         {
             lastHandledStartTime = double.MinValue;
             spawnedThisRound.Clear();
+            lastHandledRespawnTick.Clear();
             return;
         }
 
@@ -101,6 +103,7 @@ public class EnemyBotManager : MonoBehaviour
         {
             lastHandledStartTime = currentStartTime;
             spawnedThisRound.Clear();
+            lastHandledRespawnTick.Clear();
         }
 
         for (int i = 0; i < EnemyBotCatalog.AllDefinitions.Count; i++)
@@ -119,16 +122,18 @@ public class EnemyBotManager : MonoBehaviour
         {
             DestroyExistingBots(definition.Kind);
             spawnedThisRound[definition.Kind] = 0;
+            lastHandledRespawnTick.Remove(definition.Kind);
             return;
         }
 
+        double elapsed = currentStartTime > 0d ? PhotonNetwork.Time - currentStartTime : 0d;
+        int spawnSecond = RoomSettings.GetEnemySpawnSecond(definition.Kind);
         if (currentStartTime > 0d)
         {
-            double elapsed = PhotonNetwork.Time - currentStartTime;
-            if (elapsed < RoomSettings.GetEnemySpawnSecond(definition.Kind))
+            if (elapsed < spawnSecond)
                 return;
         }
-        else if (RoomSettings.GetEnemySpawnSecond(definition.Kind) > 0)
+        else if (spawnSecond > 0)
         {
             return;
         }
@@ -141,6 +146,33 @@ public class EnemyBotManager : MonoBehaviour
             SpawnEnemy(definition, i);
             spawnedThisRound[definition.Kind] = i + 1;
         }
+
+        if (!RoomSettings.GetEnemyRespawnEnabled(definition.Kind))
+            return;
+
+        int respawnInterval = RoomSettings.GetEnemyRespawnIntervalSeconds(definition.Kind);
+        if (respawnInterval <= 0 || elapsed < respawnInterval || elapsed < spawnSecond)
+            return;
+
+        int currentRespawnTick = Mathf.FloorToInt((float)(elapsed / respawnInterval));
+        int lastTick = lastHandledRespawnTick.TryGetValue(definition.Kind, out int storedTick) ? storedTick : 0;
+        if (currentRespawnTick <= lastTick)
+            return;
+
+        lastHandledRespawnTick[definition.Kind] = currentRespawnTick;
+
+        int activeCount = CountActiveNeutralBots(definition.Kind);
+        int missingCount = Mathf.Max(0, desiredCount - activeCount);
+        if (missingCount <= 0)
+            return;
+
+        int spawnBase = GetSpawnedCount(definition.Kind);
+        for (int i = 0; i < missingCount; i++)
+        {
+            SpawnEnemy(definition, spawnBase + i);
+        }
+
+        spawnedThisRound[definition.Kind] = spawnBase + missingCount;
     }
 
     void SpawnEnemy(EnemyBotDefinition definition, int spawnOrdinal)
@@ -163,13 +195,33 @@ public class EnemyBotManager : MonoBehaviour
         return spawnedThisRound.TryGetValue(kind, out int count) ? count : 0;
     }
 
+    int CountActiveNeutralBots(EnemyBotKind kind)
+    {
+        EnemyBot[] bots = FindObjectsByType<EnemyBot>(FindObjectsInactive.Exclude);
+        int count = 0;
+        for (int i = 0; i < bots.Length; i++)
+        {
+            EnemyBot bot = bots[i];
+            if (bot == null || bot.Kind != kind || bot.IsPlayerPlacedMine)
+                continue;
+
+            PlayerHealth health = bot.GetComponent<PlayerHealth>();
+            if (health != null && health.IsWreck)
+                continue;
+
+            count++;
+        }
+
+        return count;
+    }
+
     void DestroyExistingBots(EnemyBotKind kind)
     {
         EnemyBot[] bots = FindObjectsByType<EnemyBot>(FindObjectsInactive.Exclude);
         for (int i = 0; i < bots.Length; i++)
         {
             EnemyBot bot = bots[i];
-            if (bot == null || bot.Kind != kind)
+            if (bot == null || bot.Kind != kind || bot.IsPlayerPlacedMine)
                 continue;
 
             PhotonView view = bot.GetComponent<PhotonView>();

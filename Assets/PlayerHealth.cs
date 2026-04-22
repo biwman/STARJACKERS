@@ -30,6 +30,8 @@ public class PlayerHealth : MonoBehaviourPun
 
     void Start()
     {
+        EnsureBotBootstrap();
+
         if (!IsAstronautControlled && !IsBotControlled)
         {
             maxHP = DefaultPlayerHp;
@@ -81,6 +83,18 @@ public class PlayerHealth : MonoBehaviourPun
     public void TakeDamage(int dmg, int attackerViewID)
     {
         ApplyDamageInternal(dmg, attackerViewID, true);
+    }
+
+    void EnsureBotBootstrap()
+    {
+        if (!EnemyBot.IsBotInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            return;
+
+        EnemyBot bot = GetComponent<EnemyBot>();
+        if (bot == null)
+            bot = gameObject.AddComponent<EnemyBot>();
+
+        bot.InitializeFromPhotonData();
     }
 
     [PunRPC]

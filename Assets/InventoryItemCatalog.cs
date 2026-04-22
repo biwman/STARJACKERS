@@ -129,6 +129,8 @@ public static class InventoryItemCatalog
     public const string CorsairSalvageId = "corsair_salvage";
     public const string SpaceMineWreckId = "space_mine_wreck";
     public const string PlasmaGunId = "plasma_gun";
+    public const string FusionEngineId = "fusion_engine";
+    public const string GadgetMineId = "gadget_mine";
 
     static readonly Dictionary<string, InventoryItemDefinition> Definitions = BuildDefinitions();
 
@@ -310,6 +312,32 @@ public static class InventoryItemCatalog
                 SellValueAstrons = 260,
                 IconResourcePath = "plasma_gun_resource",
                 ProjectFileName = "plasma_gun.png"
+            },
+            [FusionEngineId] = new InventoryItemDefinition
+            {
+                Id = FusionEngineId,
+                DisplayName = "Fusion Engine",
+                ShortLabel = "FUS",
+                Description = "A high-output engine core that boosts speed, trail output, and engine recovery.",
+                ItemType = InventoryItemType.Equipment,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 200,
+                IconResourcePath = "fusion_engine_icon_resource",
+                ProjectFileName = "fusion_ engine.png",
+                SalvageOutputs = new[] { AsteroidRareId }
+            },
+            [GadgetMineId] = new InventoryItemDefinition
+            {
+                Id = GadgetMineId,
+                DisplayName = "Gadget Mine",
+                ShortLabel = "GMI",
+                Description = "A deployable proximity mine adapted for player gadget slots.",
+                ItemType = InventoryItemType.Equipment,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 200,
+                IconResourcePath = "space_mine_resource",
+                ProjectFileName = "space mine.png",
+                SalvageOutputs = new[] { SpaceMineWreckId, SpaceMineWreckId }
             }
         };
     }

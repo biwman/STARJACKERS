@@ -409,23 +409,23 @@ public class UIRuntimeStyler : MonoBehaviour
             }
         }
 
-        StyleLobbySettingButton("RoundSettingButton", new Vector2(-470f, -292f));
-        StyleLobbySettingButton("MapSizeSettingButton", new Vector2(-70f, -292f));
-        StyleLobbySettingButton("MapBackgroundSettingButton", new Vector2(-470f, -980f));
-        StyleLobbySettingButton("ObstacleSettingButton", new Vector2(-470f, -378f));
-        StyleLobbySettingButton("TreasureSettingButton", new Vector2(-70f, -378f));
-        StyleLobbySettingButton("NebulaSettingButton", new Vector2(-470f, -464f));
-        StyleLobbySettingButton("ExtractionSettingButton", new Vector2(-70f, -464f));
-        StyleLobbySettingButton("BoosterSettingButton", new Vector2(-470f, -550f));
-        StyleLobbySettingButton("AmmoSettingButton", new Vector2(-70f, -550f));
-        StyleLobbySettingButton("BoosterDelaySettingButton", new Vector2(-470f, -636f));
-        StyleLobbySettingButton("MaxInputBoostSettingButton", new Vector2(-70f, -636f));
-        StyleLobbySettingButton("ShipDriftSettingButton", new Vector2(-470f, -722f));
-        StyleLobbySettingButton("DeathTimerSettingButton", new Vector2(-70f, -722f));
-        StyleLobbySettingButton("MovingObjectsSettingButton", new Vector2(-470f, -808f));
-        StyleLobbySettingButton("BulletPushSettingButton", new Vector2(-70f, -808f));
-        StyleLobbySettingButton("ObstacleWeightSettingButton", new Vector2(-470f, -894f));
-        StyleLobbySettingButton("TreasureWeightSettingButton", new Vector2(-70f, -894f));
+        StyleLobbySettingButton("RoundSettingButton", new Vector2(-690f, -292f));
+        StyleLobbySettingButton("MapSizeSettingButton", new Vector2(-290f, -292f));
+        StyleLobbySettingButton("MapBackgroundSettingButton", new Vector2(-690f, -980f));
+        StyleLobbySettingButton("ObstacleSettingButton", new Vector2(-690f, -378f));
+        StyleLobbySettingButton("TreasureSettingButton", new Vector2(-290f, -378f));
+        StyleLobbySettingButton("NebulaSettingButton", new Vector2(-690f, -464f));
+        StyleLobbySettingButton("ExtractionSettingButton", new Vector2(-290f, -464f));
+        StyleLobbySettingButton("BoosterSettingButton", new Vector2(-690f, -550f));
+        StyleLobbySettingButton("AmmoSettingButton", new Vector2(-290f, -550f));
+        StyleLobbySettingButton("BoosterDelaySettingButton", new Vector2(-690f, -636f));
+        StyleLobbySettingButton("MaxInputBoostSettingButton", new Vector2(-290f, -636f));
+        StyleLobbySettingButton("ShipDriftSettingButton", new Vector2(-690f, -722f));
+        StyleLobbySettingButton("DeathTimerSettingButton", new Vector2(-290f, -722f));
+        StyleLobbySettingButton("MovingObjectsSettingButton", new Vector2(-690f, -808f));
+        StyleLobbySettingButton("BulletPushSettingButton", new Vector2(-290f, -808f));
+        StyleLobbySettingButton("ObstacleWeightSettingButton", new Vector2(-690f, -894f));
+        StyleLobbySettingButton("TreasureWeightSettingButton", new Vector2(-290f, -894f));
 
         foreach (GameObject sceneObject in Resources.FindObjectsOfTypeAll<GameObject>())
         {

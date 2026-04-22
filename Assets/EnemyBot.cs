@@ -316,6 +316,8 @@ public class EnemyBotDefinition
     public string CountRoomKey => $"enemy.{Id}.count";
     public string HpRoomKey => $"enemy.{Id}.hp";
     public string SpawnSecondRoomKey => $"enemy.{Id}.spawnSecond";
+    public string RespawnEnabledRoomKey => $"enemy.{Id}.respawnEnabled";
+    public string RespawnIntervalRoomKey => $"enemy.{Id}.respawnInterval";
 
     public Sprite GetVisualSprite()
     {
@@ -664,6 +666,8 @@ public static class EnemyBotCatalog
 [RequireComponent(typeof(Rigidbody2D))]
 public class EnemyBot : MonoBehaviourPun
 {
+    const string PlayerPlacedMineMarker = "player_gadget_mine";
+
     Rigidbody2D rb;
     PhotonView view;
     PlayerHealth health;
@@ -673,11 +677,15 @@ public class EnemyBot : MonoBehaviourPun
     bool hasInitialized;
     bool hasAppliedStats;
     bool hasDetonated;
+    bool isPlayerPlacedMine;
+    int mineOwnerViewId;
 
     public EnemyBotKind Kind => kind;
     public EnemyBotDefinition Definition => EnemyBotCatalog.GetDefinition(kind);
     public bool IsCorsair => kind == EnemyBotKind.Corsair;
     public bool IsSpaceMine => kind == EnemyBotKind.SpaceMine;
+    public bool IsPlayerPlacedMine => isPlayerPlacedMine;
+    public int MineOwnerViewId => mineOwnerViewId;
     public float VisualTargetSize => Definition != null ? Definition.TargetSize : 1.04f;
 
     public static bool IsBotObject(GameObject target)
@@ -722,11 +730,13 @@ public class EnemyBot : MonoBehaviourPun
         rb = GetComponent<Rigidbody2D>();
         health = GetComponent<PlayerHealth>();
         kind = GetKindFromInstantiationData(view != null ? view.InstantiationData : null);
+        ResolveSpecialMineOwner(view != null ? view.InstantiationData : null);
 
         DisablePlayerOnlySystems();
         EnsureBehavior();
         ApplyBotVisuals();
         ConfigurePhysics();
+        ApplyMineOwnerCollisionIgnore();
         if (!hasAppliedStats)
         {
             ApplyBotStats();
@@ -749,6 +759,8 @@ public class EnemyBot : MonoBehaviourPun
     void Update()
     {
         EnsureStableVisuals();
+        if (isPlayerPlacedMine)
+            ApplyMineOwnerCollisionIgnore();
 
         if (!view.IsMine || !IsGameStarted() || health == null || health.IsWreck)
             return;
@@ -986,6 +998,64 @@ public class EnemyBot : MonoBehaviourPun
             return renderer.bounds.center;
 
         return transform.position;
+    }
+
+    void ResolveSpecialMineOwner(object[] instantiationData)
+    {
+        isPlayerPlacedMine = false;
+        mineOwnerViewId = 0;
+
+        if (kind != EnemyBotKind.SpaceMine || instantiationData == null || instantiationData.Length < 3)
+            return;
+
+        if (!(instantiationData[1] is string marker) ||
+            !string.Equals(marker, PlayerPlacedMineMarker, System.StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (instantiationData[2] is int ownerViewId && ownerViewId > 0)
+        {
+            isPlayerPlacedMine = true;
+            mineOwnerViewId = ownerViewId;
+        }
+    }
+
+    void ApplyMineOwnerCollisionIgnore()
+    {
+        if (!isPlayerPlacedMine || mineOwnerViewId <= 0)
+            return;
+
+        PhotonView ownerView = PhotonView.Find(mineOwnerViewId);
+        if (ownerView == null)
+            return;
+
+        Collider2D[] mineColliders = GetComponentsInChildren<Collider2D>(true);
+        Collider2D[] ownerColliders = ownerView.GetComponentsInChildren<Collider2D>(true);
+        for (int i = 0; i < mineColliders.Length; i++)
+        {
+            Collider2D mineCollider = mineColliders[i];
+            if (mineCollider == null)
+                continue;
+
+            for (int j = 0; j < ownerColliders.Length; j++)
+            {
+                Collider2D ownerCollider = ownerColliders[j];
+                if (ownerCollider == null)
+                    continue;
+
+                Physics2D.IgnoreCollision(mineCollider, ownerCollider, true);
+            }
+        }
+    }
+
+    public bool ShouldIgnoreMineTriggerFor(PlayerHealth candidate)
+    {
+        if (!isPlayerPlacedMine || candidate == null || mineOwnerViewId <= 0)
+            return false;
+
+        PhotonView candidateView = candidate.GetComponent<PhotonView>();
+        return candidateView != null && candidateView.ViewID == mineOwnerViewId;
     }
 
     public static Vector3 ResolveSpaceMineDetonationPosition(int sourceViewId, Vector3 fallbackWorldPosition)
@@ -1394,6 +1464,9 @@ public class EnemyMineBehavior : EnemyBotBehaviorBase
         {
             PlayerHealth candidate = players[i];
             if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating)
+                continue;
+
+            if (bot != null && bot.ShouldIgnoreMineTriggerFor(candidate))
                 continue;
 
             EnemyBot candidateBot = candidate.GetComponent<EnemyBot>();

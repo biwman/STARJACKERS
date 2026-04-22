@@ -39,6 +39,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     static readonly int[] EnemyCountOptions = { 1, 2, 3, 4, 5 };
     static readonly int[] EnemyHpOptions = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200 };
     static readonly int[] EnemySpawnSecondOptions = { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120 };
+    static readonly int[] EnemyRespawnIntervalOptions = { 15, 30, 60, 90, 120, 150 };
     static readonly int[] BulletPushMultiplierOptions = { 1, 2, 3, 4, 5 };
     static readonly int[] WeightFactorOptions = { 2, 6, 12 };
 
@@ -469,23 +470,23 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void EnsureHostSettingsUiExists()
     {
-        roundSettingButton = EnsureSettingButton(ref roundSettingText, roundSettingButton, "RoundSettingButton", "RoundSettingText", new Vector2(-470f, -292f), CycleRoundDuration);
-        mapSizeSettingButton = EnsureSettingButton(ref mapSizeSettingText, mapSizeSettingButton, "MapSizeSettingButton", "MapSizeSettingText", new Vector2(-70f, -292f), CycleMapSize);
-        mapBackgroundSettingButton = EnsureSettingButton(ref mapBackgroundSettingText, mapBackgroundSettingButton, "MapBackgroundSettingButton", "MapBackgroundSettingText", new Vector2(-470f, -980f), CycleMapBackground);
-        obstacleSettingButton = EnsureSettingButton(ref obstacleSettingText, obstacleSettingButton, "ObstacleSettingButton", "ObstacleSettingText", new Vector2(-470f, -378f), CycleObstacleDensity);
-        treasureSettingButton = EnsureSettingButton(ref treasureSettingText, treasureSettingButton, "TreasureSettingButton", "TreasureSettingText", new Vector2(-70f, -378f), CycleTreasureDensity);
-        nebulaSettingButton = EnsureSettingButton(ref nebulaSettingText, nebulaSettingButton, "NebulaSettingButton", "NebulaSettingText", new Vector2(-470f, -464f), CycleNebulaDensity);
-        extractionSettingButton = EnsureSettingButton(ref extractionSettingText, extractionSettingButton, "ExtractionSettingButton", "ExtractionSettingText", new Vector2(-70f, -464f), CycleExtractionCount);
-        boosterSettingButton = EnsureSettingButton(ref boosterSettingText, boosterSettingButton, "BoosterSettingButton", "BoosterSettingText", new Vector2(-470f, -550f), CycleBoosterSlowdown);
-        ammoSettingButton = EnsureSettingButton(ref ammoSettingText, ammoSettingButton, "AmmoSettingButton", "AmmoSettingText", new Vector2(-70f, -550f), CycleAmmoCount);
-        boosterDelaySettingButton = EnsureSettingButton(ref boosterDelaySettingText, boosterDelaySettingButton, "BoosterDelaySettingButton", "BoosterDelaySettingText", new Vector2(-470f, -636f), CycleBoosterRecoveryDelay);
-        maxInputBoostSettingButton = EnsureSettingButton(ref maxInputBoostSettingText, maxInputBoostSettingButton, "MaxInputBoostSettingButton", "MaxInputBoostSettingText", new Vector2(-70f, -636f), CycleMaxInputBoostPercent);
-        shipDriftSettingButton = EnsureSettingButton(ref shipDriftSettingText, shipDriftSettingButton, "ShipDriftSettingButton", "ShipDriftSettingText", new Vector2(-470f, -722f), CycleShipDriftEnabled);
-        deathTimerSettingButton = EnsureSettingButton(ref deathTimerSettingText, deathTimerSettingButton, "DeathTimerSettingButton", "DeathTimerSettingText", new Vector2(-70f, -722f), CycleLastShipTimerMultiplier);
-        movingObjectsSettingButton = EnsureSettingButton(ref movingObjectsSettingText, movingObjectsSettingButton, "MovingObjectsSettingButton", "MovingObjectsSettingText", new Vector2(-470f, -808f), CycleMovingObjectsEnabled);
-        bulletPushSettingButton = EnsureSettingButton(ref bulletPushSettingText, bulletPushSettingButton, "BulletPushSettingButton", "BulletPushSettingText", new Vector2(-70f, -808f), CycleBulletPushMultiplier);
-        obstacleWeightSettingButton = EnsureSettingButton(ref obstacleWeightSettingText, obstacleWeightSettingButton, "ObstacleWeightSettingButton", "ObstacleWeightSettingText", new Vector2(-470f, -894f), CycleObstacleWeightFactor);
-        treasureWeightSettingButton = EnsureSettingButton(ref treasureWeightSettingText, treasureWeightSettingButton, "TreasureWeightSettingButton", "TreasureWeightSettingText", new Vector2(-70f, -894f), CycleTreasureWeightFactor);
+        roundSettingButton = EnsureSettingButton(ref roundSettingText, roundSettingButton, "RoundSettingButton", "RoundSettingText", new Vector2(-690f, -292f), CycleRoundDuration);
+        mapSizeSettingButton = EnsureSettingButton(ref mapSizeSettingText, mapSizeSettingButton, "MapSizeSettingButton", "MapSizeSettingText", new Vector2(-290f, -292f), CycleMapSize);
+        mapBackgroundSettingButton = EnsureSettingButton(ref mapBackgroundSettingText, mapBackgroundSettingButton, "MapBackgroundSettingButton", "MapBackgroundSettingText", new Vector2(-690f, -980f), CycleMapBackground);
+        obstacleSettingButton = EnsureSettingButton(ref obstacleSettingText, obstacleSettingButton, "ObstacleSettingButton", "ObstacleSettingText", new Vector2(-690f, -378f), CycleObstacleDensity);
+        treasureSettingButton = EnsureSettingButton(ref treasureSettingText, treasureSettingButton, "TreasureSettingButton", "TreasureSettingText", new Vector2(-290f, -378f), CycleTreasureDensity);
+        nebulaSettingButton = EnsureSettingButton(ref nebulaSettingText, nebulaSettingButton, "NebulaSettingButton", "NebulaSettingText", new Vector2(-690f, -464f), CycleNebulaDensity);
+        extractionSettingButton = EnsureSettingButton(ref extractionSettingText, extractionSettingButton, "ExtractionSettingButton", "ExtractionSettingText", new Vector2(-290f, -464f), CycleExtractionCount);
+        boosterSettingButton = EnsureSettingButton(ref boosterSettingText, boosterSettingButton, "BoosterSettingButton", "BoosterSettingText", new Vector2(-690f, -550f), CycleBoosterSlowdown);
+        ammoSettingButton = EnsureSettingButton(ref ammoSettingText, ammoSettingButton, "AmmoSettingButton", "AmmoSettingText", new Vector2(-290f, -550f), CycleAmmoCount);
+        boosterDelaySettingButton = EnsureSettingButton(ref boosterDelaySettingText, boosterDelaySettingButton, "BoosterDelaySettingButton", "BoosterDelaySettingText", new Vector2(-690f, -636f), CycleBoosterRecoveryDelay);
+        maxInputBoostSettingButton = EnsureSettingButton(ref maxInputBoostSettingText, maxInputBoostSettingButton, "MaxInputBoostSettingButton", "MaxInputBoostSettingText", new Vector2(-290f, -636f), CycleMaxInputBoostPercent);
+        shipDriftSettingButton = EnsureSettingButton(ref shipDriftSettingText, shipDriftSettingButton, "ShipDriftSettingButton", "ShipDriftSettingText", new Vector2(-690f, -722f), CycleShipDriftEnabled);
+        deathTimerSettingButton = EnsureSettingButton(ref deathTimerSettingText, deathTimerSettingButton, "DeathTimerSettingButton", "DeathTimerSettingText", new Vector2(-290f, -722f), CycleLastShipTimerMultiplier);
+        movingObjectsSettingButton = EnsureSettingButton(ref movingObjectsSettingText, movingObjectsSettingButton, "MovingObjectsSettingButton", "MovingObjectsSettingText", new Vector2(-690f, -808f), CycleMovingObjectsEnabled);
+        bulletPushSettingButton = EnsureSettingButton(ref bulletPushSettingText, bulletPushSettingButton, "BulletPushSettingButton", "BulletPushSettingText", new Vector2(-290f, -808f), CycleBulletPushMultiplier);
+        obstacleWeightSettingButton = EnsureSettingButton(ref obstacleWeightSettingText, obstacleWeightSettingButton, "ObstacleWeightSettingButton", "ObstacleWeightSettingText", new Vector2(-690f, -894f), CycleObstacleWeightFactor);
+        treasureWeightSettingButton = EnsureSettingButton(ref treasureWeightSettingText, treasureWeightSettingButton, "TreasureWeightSettingButton", "TreasureWeightSettingText", new Vector2(-290f, -894f), CycleTreasureWeightFactor);
         EnsureEnemySettingsUiExists();
     }
 
@@ -494,15 +495,19 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         for (int i = 0; i < EnemyBotCatalog.AllDefinitions.Count; i++)
         {
             EnemyBotDefinition definition = EnemyBotCatalog.AllDefinitions[i];
-            Vector2 rowOneLeft = new Vector2(270f, -292f - (i * 204f));
-            Vector2 rowOneRight = new Vector2(670f, -292f - (i * 204f));
-            Vector2 rowTwoLeft = new Vector2(270f, -378f - (i * 204f));
-            Vector2 rowTwoRight = new Vector2(670f, -378f - (i * 204f));
+            Vector2 rowOneLeft = new Vector2(40f, -292f - (i * 204f));
+            Vector2 rowOneMiddle = new Vector2(360f, -292f - (i * 204f));
+            Vector2 rowOneRight = new Vector2(680f, -292f - (i * 204f));
+            Vector2 rowTwoLeft = new Vector2(40f, -378f - (i * 204f));
+            Vector2 rowTwoMiddle = new Vector2(360f, -378f - (i * 204f));
+            Vector2 rowTwoRight = new Vector2(680f, -378f - (i * 204f));
 
             EnsureEnemySettingButton(definition, "enabled", rowOneLeft, () => CycleEnemyEnabled(definition.Kind));
-            EnsureEnemySettingButton(definition, "count", rowOneRight, () => CycleEnemyCount(definition.Kind));
+            EnsureEnemySettingButton(definition, "count", rowOneMiddle, () => CycleEnemyCount(definition.Kind));
+            EnsureEnemySettingButton(definition, "respawn", rowOneRight, () => CycleEnemyRespawnEnabled(definition.Kind));
             EnsureEnemySettingButton(definition, "hp", rowTwoLeft, () => CycleEnemyHp(definition.Kind));
-            EnsureEnemySettingButton(definition, "time", rowTwoRight, () => CycleEnemySpawnSecond(definition.Kind));
+            EnsureEnemySettingButton(definition, "time", rowTwoMiddle, () => CycleEnemySpawnSecond(definition.Kind));
+            EnsureEnemySettingButton(definition, "respawnTime", rowTwoRight, () => CycleEnemyRespawnInterval(definition.Kind));
         }
     }
 
@@ -710,6 +715,18 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.SpawnSecondRoomKey))
             {
                 props[definition.SpawnSecondRoomKey] = definition.DefaultSpawnSecond;
+                changed = true;
+            }
+
+            if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.RespawnEnabledRoomKey))
+            {
+                props[definition.RespawnEnabledRoomKey] = RoomSettings.DefaultEnemyRespawnEnabled;
+                changed = true;
+            }
+
+            if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.RespawnIntervalRoomKey))
+            {
+                props[definition.RespawnIntervalRoomKey] = RoomSettings.DefaultEnemyRespawnIntervalSeconds;
                 changed = true;
             }
         }
@@ -1049,6 +1066,34 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RefreshHostSettingsUi();
     }
 
+    void CycleEnemyRespawnEnabled(EnemyBotKind kind)
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[definition.RespawnEnabledRoomKey] = !RoomSettings.GetEnemyRespawnEnabled(kind);
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
+    void CycleEnemyRespawnInterval(EnemyBotKind kind)
+    {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return;
+
+        CycleIntSetting(
+            definition.RespawnIntervalRoomKey,
+            EnemyRespawnIntervalOptions,
+            RoomSettings.GetEnemyRespawnIntervalSeconds(kind),
+            RoomSettings.DefaultEnemyRespawnIntervalSeconds);
+    }
+
     void CycleObstacleWeightFactor()
     {
         CycleIntSetting(RoomSettings.ObstacleWeightFactorKey, WeightFactorOptions, GetObstacleWeightFactor(), RoomSettings.DefaultObstacleWeightFactor);
@@ -1230,13 +1275,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             EnemyBotDefinition definition = EnemyBotCatalog.AllDefinitions[i];
             SetEnemySettingText(definition.Kind, "enabled", definition.DisplayName.ToUpperInvariant() + ": " + (RoomSettings.GetEnemyEnabled(definition.Kind) ? "ON" : "OFF"));
             SetEnemySettingText(definition.Kind, "count", definition.DisplayName.ToUpperInvariant() + " COUNT: " + RoomSettings.GetEnemyCount(definition.Kind));
+            SetEnemySettingText(definition.Kind, "respawn", definition.DisplayName.ToUpperInvariant() + " RESPAWN: " + (RoomSettings.GetEnemyRespawnEnabled(definition.Kind) ? "YES" : "NO"));
             SetEnemySettingText(definition.Kind, "hp", definition.DisplayName.ToUpperInvariant() + " HP: " + RoomSettings.GetEnemyHp(definition.Kind));
             SetEnemySettingText(definition.Kind, "time", definition.DisplayName.ToUpperInvariant() + " TIME: " + RoomSettings.GetEnemySpawnSecond(definition.Kind) + "s");
+            SetEnemySettingText(definition.Kind, "respawnTime", definition.DisplayName.ToUpperInvariant() + " RESPAWN TIME: EVERY " + RoomSettings.GetEnemyRespawnIntervalSeconds(definition.Kind) + "s");
 
             SetSettingButtonState(GetEnemySettingButton(definition.Kind, "enabled"), isHost);
             SetSettingButtonState(GetEnemySettingButton(definition.Kind, "count"), isHost);
+            SetSettingButtonState(GetEnemySettingButton(definition.Kind, "respawn"), isHost);
             SetSettingButtonState(GetEnemySettingButton(definition.Kind, "hp"), isHost);
             SetSettingButtonState(GetEnemySettingButton(definition.Kind, "time"), isHost);
+            SetSettingButtonState(GetEnemySettingButton(definition.Kind, "respawnTime"), isHost);
         }
     }
 

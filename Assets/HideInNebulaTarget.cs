@@ -66,7 +66,7 @@ public class HideInNebulaTarget : MonoBehaviour
     void ApplyVisibility()
     {
         bool shouldHide = HasHiddenNebula();
-        bool keepLocallyVisible = photonView != null && photonView.IsMine;
+        bool keepLocallyVisible = photonView != null && photonView.IsMine && !ShouldForceSharedNebulaVisibility();
         bool shouldBeVisible = !shouldHide || keepLocallyVisible || SharesNebulaWithLocalPlayer();
 
         for (int i = 0; i < renderers.Length; i++)
@@ -76,6 +76,12 @@ public class HideInNebulaTarget : MonoBehaviour
                 renderers[i].enabled = shouldBeVisible;
             }
         }
+    }
+
+    bool ShouldForceSharedNebulaVisibility()
+    {
+        EnemyBot bot = GetComponent<EnemyBot>();
+        return bot != null && bot.Kind == EnemyBotKind.SpaceMine;
     }
 
     bool HasHiddenNebula()

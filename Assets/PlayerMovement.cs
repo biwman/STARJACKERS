@@ -1,4 +1,5 @@
 using UnityEngine;
+using System;
 using Photon.Pun;
 using UnityEngine.Rendering;
 
@@ -27,6 +28,10 @@ public class PlayerMovement : MonoBehaviourPun
     private float boosterRecoveryDelayTimer = 0f;
     private AudioSource engineAudioSource;
     private Vector3 lastAudioPosition;
+    float baseSpeed = 5f;
+    bool baseSpeedCaptured;
+    bool fusionEngineEquipped;
+    string lastAppliedEngineSignature = string.Empty;
     const float AccelerationResponsiveness = 18f;
     const float LowSpeedBrakeResponsiveness = 7.4f;
     const float HighSpeedBrakeResponsiveness = 1.15f;
@@ -34,10 +39,14 @@ public class PlayerMovement : MonoBehaviourPun
 
     public float BoosterNormalized => boosterCharge;
     public bool IsBoosterDepleted => boosterExhausted;
+    public bool HasFusionEngineEquipped => fusionEngineEquipped;
+    public float CurrentSpeedReference => speed;
     float CurrentDepletedSpeedMultiplier => 1f - (RoomSettings.GetBoosterSlowdownPercent() / 100f);
 
     void Start()
     {
+        EnsureBotBootstrap();
+
         bool isAstronaut = GetComponent<AstronautSurvivor>() != null || AstronautSurvivor.IsAstronautInstantiationData(photonView.InstantiationData);
         if (isAstronaut)
         {
@@ -70,7 +79,9 @@ public class PlayerMovement : MonoBehaviourPun
 
         targetRotationAngle = transform.eulerAngles.z;
 
+        CaptureBaseMovementProfile();
         SetupEngineAudio();
+        SyncEquippedEngineProfile(forceRefresh: true);
         lastAudioPosition = transform.position;
 
         if (GetComponent<EnemyBot>() != null)
@@ -100,11 +111,15 @@ public class PlayerMovement : MonoBehaviourPun
 
     void Update()
     {
+        EnsureBotBootstrap();
+
         if (GetComponent<EnemyBot>() != null)
         {
             UpdateEngineAudio();
             return;
         }
+
+        SyncEquippedEngineProfile();
 
         if (photonView.IsMine)
         {
@@ -229,7 +244,7 @@ public class PlayerMovement : MonoBehaviourPun
         if (usingBooster)
         {
             boosterCharge -= deltaTime / boosterDuration;
-            boosterRecoveryDelayTimer = RoomSettings.GetBoosterRecoveryDelay();
+            boosterRecoveryDelayTimer = GetCurrentBoosterRecoveryDelay();
         }
         else if (!boosterExhausted || boosterRecoveryDelayTimer <= 0f)
         {
@@ -245,7 +260,7 @@ public class PlayerMovement : MonoBehaviourPun
         if (!boosterExhausted && boosterCharge <= 0.001f)
         {
             boosterExhausted = true;
-            boosterRecoveryDelayTimer = RoomSettings.GetBoosterRecoveryDelay();
+            boosterRecoveryDelayTimer = GetCurrentBoosterRecoveryDelay();
         }
         else if (boosterExhausted && boosterCharge >= boosterRecoveryThreshold)
         {
@@ -355,7 +370,7 @@ public class PlayerMovement : MonoBehaviourPun
         if (GetComponent<AstronautSurvivor>() != null)
             return;
 
-        AudioClip engineClip = AudioManager.Instance.EngineClip;
+        AudioClip engineClip = ResolveEngineAudioClip();
         if (engineClip == null)
             return;
 
@@ -369,6 +384,8 @@ public class PlayerMovement : MonoBehaviourPun
         engineAudioSource.loop = true;
         engineAudioSource.playOnAwake = false;
         AudioManager.Instance.ConfigureSpatialSource(engineAudioSource, 0f);
+        engineAudioSource.loop = true;
+        engineAudioSource.playOnAwake = false;
         engineAudioSource.volume = 0f;
         engineAudioSource.pitch = 0.85f;
     }
@@ -391,6 +408,8 @@ public class PlayerMovement : MonoBehaviourPun
             speedReference = speed;
 
         float normalizedSpeed = GetAudioSpeedRatio(speedReference);
+
+        SyncEngineAudioClip();
 
         if (!engineAudioSource.isPlaying)
             engineAudioSource.Play();
@@ -416,6 +435,122 @@ public class PlayerMovement : MonoBehaviourPun
             : 0f;
         lastAudioPosition = transform.position;
         return Mathf.Clamp01(delta / speedReference);
+    }
+
+    void EnsureBotBootstrap()
+    {
+        if (!EnemyBot.IsBotInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            return;
+
+        EnemyBot bot = GetComponent<EnemyBot>();
+        if (bot == null)
+            bot = gameObject.AddComponent<EnemyBot>();
+
+        bot.InitializeFromPhotonData();
+    }
+
+    void CaptureBaseMovementProfile()
+    {
+        if (baseSpeedCaptured)
+            return;
+
+        baseSpeed = Mathf.Max(0.1f, speed);
+        baseSpeedCaptured = true;
+    }
+
+    void SyncEquippedEngineProfile(bool forceRefresh = false)
+    {
+        if (GetComponent<EnemyBot>() != null || GetComponent<AstronautSurvivor>() != null)
+            return;
+
+        CaptureBaseMovementProfile();
+
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        int fusionCount = CountEquippedFusionEngines(equipmentSlots, shipSkinIndex);
+        bool hasFusion = fusionCount > 0;
+        string signature = shipSkinIndex + ":" + fusionCount;
+        if (!forceRefresh && signature == lastAppliedEngineSignature)
+            return;
+
+        fusionEngineEquipped = hasFusion;
+        speed = baseSpeed * (fusionEngineEquipped ? 1.2f : 1f);
+        lastAppliedEngineSignature = signature;
+        SyncEngineAudioClip();
+
+        EngineThrusterVFX thrusterVfx = GetComponent<EngineThrusterVFX>();
+        if (thrusterVfx != null)
+            thrusterVfx.RefreshMode();
+    }
+
+    int CountEquippedFusionEngines(string[] equipmentSlots, int shipSkinIndex)
+    {
+        if (equipmentSlots == null)
+            return 0;
+
+        int count = 0;
+        if (IsEquipmentSlotEnabled(3, shipSkinIndex) &&
+            string.Equals(GetEquipmentItem(equipmentSlots, 3), InventoryItemCatalog.FusionEngineId, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        if (IsEquipmentSlotEnabled(4, shipSkinIndex) &&
+            string.Equals(GetEquipmentItem(equipmentSlots, 4), InventoryItemCatalog.FusionEngineId, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    static string GetEquipmentItem(string[] equipmentSlots, int index)
+    {
+        return equipmentSlots != null && index >= 0 && index < equipmentSlots.Length
+            ? equipmentSlots[index]
+            : null;
+    }
+
+    static bool IsEquipmentSlotEnabled(int slotIndex, int shipSkinIndex)
+    {
+        return slotIndex switch
+        {
+            0 => ShipCatalog.GetMainGunSlots(shipSkinIndex) >= 1,
+            1 => ShipCatalog.GetMainGunSlots(shipSkinIndex) >= 2,
+            2 => ShipCatalog.GetShieldSlots(shipSkinIndex) >= 1,
+            3 => ShipCatalog.GetEngineSlots(shipSkinIndex) >= 1,
+            4 => ShipCatalog.GetEngineSlots(shipSkinIndex) >= 2,
+            5 => ShipCatalog.GetGadgetSlots(shipSkinIndex) >= 1,
+            _ => false
+        };
+    }
+
+    float GetCurrentBoosterRecoveryDelay()
+    {
+        float baseDelay = RoomSettings.GetBoosterRecoveryDelay();
+        return Mathf.Max(0f, baseDelay - (fusionEngineEquipped ? 2f : 0f));
+    }
+
+    AudioClip ResolveEngineAudioClip()
+    {
+        return fusionEngineEquipped ? AudioManager.Instance.FusionEngineClip : AudioManager.Instance.EngineClip;
+    }
+
+    void SyncEngineAudioClip()
+    {
+        if (engineAudioSource == null)
+            return;
+
+        AudioClip desiredClip = ResolveEngineAudioClip();
+        if (desiredClip == null || engineAudioSource.clip == desiredClip)
+            return;
+
+        bool wasPlaying = engineAudioSource.isPlaying;
+        engineAudioSource.Stop();
+        engineAudioSource.clip = desiredClip;
+        if (wasPlaying)
+            engineAudioSource.Play();
     }
 
     void ApplyPlayerCollisionMaterial()
@@ -454,6 +589,7 @@ public class EngineThrusterVFX : MonoBehaviour
     bool isEnemyBot;
     bool isAstronaut;
     bool isViper;
+    bool fusionTrailEquipped;
     EnemyTrailProfile enemyTrailProfile;
 
     void Start()
@@ -473,16 +609,31 @@ public class EngineThrusterVFX : MonoBehaviour
         isEnemyBot = enemyBot != null;
         enemyTrailProfile = enemyBot != null && enemyBot.Definition != null ? enemyBot.Definition.Trails : null;
         isAstronaut = GetComponent<AstronautSurvivor>() != null;
+        PlayerMovement movement = GetComponent<PlayerMovement>();
+        fusionTrailEquipped = movement != null && movement.HasFusionEngineEquipped && !isEnemyBot && !isAstronaut;
 
         PhotonView view = GetComponent<PhotonView>();
         int skinIndex = view != null && view.Owner != null ? RoomSettings.GetPlayerShipSkin(view.Owner, 0) : 0;
         isViper = !isEnemyBot && !isAstronaut && ShipCatalog.GetShipTypeFromSkinIndex(skinIndex) == ShipType.Viper;
+
+        ReapplyTrailAppearance();
     }
 
     void Update()
     {
         if (rb == null)
             return;
+
+        PlayerMovement movement = GetComponent<PlayerMovement>();
+        if (movement != null)
+            referenceSpeed = Mathf.Max(1f, movement.CurrentSpeedReference);
+
+        bool desiredFusionTrail = movement != null && movement.HasFusionEngineEquipped && !isEnemyBot && !isAstronaut;
+        if (desiredFusionTrail != fusionTrailEquipped)
+        {
+            fusionTrailEquipped = desiredFusionTrail;
+            ReapplyTrailAppearance();
+        }
 
         float speedNormalized = Mathf.InverseLerp(0.02f, referenceSpeed, rb.linearVelocity.magnitude);
         UpdateVisuals(speedNormalized);
@@ -548,6 +699,13 @@ public class EngineThrusterVFX : MonoBehaviour
         trail.numCornerVertices = 8;
         trail.material = CreateSpritesMaterial();
         trail.generateLightingData = false;
+        ApplyTrailAppearance(trail);
+    }
+
+    void ApplyTrailAppearance(TrailRenderer trail)
+    {
+        if (trail == null)
+            return;
 
         Gradient gradient = new Gradient();
         if (isAstronaut)
@@ -583,6 +741,24 @@ public class EngineThrusterVFX : MonoBehaviour
                     new GradientAlphaKey(0.96f, 0f),
                     new GradientAlphaKey(0.72f, 0.24f),
                     new GradientAlphaKey(0.28f, 0.7f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+        }
+        else if (fusionTrailEquipped)
+        {
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(0.84f, 0.72f, 1f), 0f),
+                    new GradientColorKey(new Color(0.48f, 0.18f, 0.76f), 0.18f),
+                    new GradientColorKey(new Color(0.22f, 0.04f, 0.42f), 0.54f),
+                    new GradientColorKey(new Color(0.06f, 0.01f, 0.14f), 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0.92f, 0f),
+                    new GradientAlphaKey(0.62f, 0.26f),
+                    new GradientAlphaKey(0.24f, 0.72f),
                     new GradientAlphaKey(0f, 1f)
                 });
         }
@@ -633,6 +809,17 @@ public class EngineThrusterVFX : MonoBehaviour
         {
             trail.sortingLayerID = shipRenderer.sortingLayerID;
             trail.sortingOrder = shipRenderer.sortingOrder - 2;
+        }
+    }
+
+    void ReapplyTrailAppearance()
+    {
+        if (trailRenderers == null)
+            return;
+
+        for (int i = 0; i < trailRenderers.Length; i++)
+        {
+            ApplyTrailAppearance(trailRenderers[i]);
         }
     }
 
@@ -691,7 +878,8 @@ public class EngineThrusterVFX : MonoBehaviour
             }
             else
             {
-                trailRenderer.time = Mathf.Lerp(0.22f, 0.82f, intensity);
+                float trailLengthMultiplier = fusionTrailEquipped ? 1.5f : 1f;
+                trailRenderer.time = Mathf.Lerp(0.22f, 0.82f, intensity) * trailLengthMultiplier;
                 trailRenderer.widthMultiplier = Mathf.Lerp(0.03f, 0.16f, intensity);
                 trailRenderer.emitting = clamped > 0.04f;
             }

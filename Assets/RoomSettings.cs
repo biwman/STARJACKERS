@@ -56,6 +56,8 @@ public static class RoomSettings
     public const int DefaultBulletPushMultiplier = 1;
     public const int DefaultObstacleWeightFactor = 6;
     public const int DefaultTreasureWeightFactor = 6;
+    public const bool DefaultEnemyRespawnEnabled = false;
+    public const int DefaultEnemyRespawnIntervalSeconds = 60;
 
     public static float GetRoundDuration()
     {
@@ -252,6 +254,31 @@ public static class RoomSettings
         }
 
         return Mathf.Clamp(definition.DefaultSpawnSecond, 0, 120);
+    }
+
+    public static bool GetEnemyRespawnEnabled(EnemyBotKind kind)
+    {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return DefaultEnemyRespawnEnabled;
+
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(definition.RespawnEnabledRoomKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultEnemyRespawnEnabled;
+    }
+
+    public static int GetEnemyRespawnIntervalSeconds(EnemyBotKind kind)
+    {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return DefaultEnemyRespawnIntervalSeconds;
+
+        return GetInt(definition.RespawnIntervalRoomKey, DefaultEnemyRespawnIntervalSeconds, 15, 150);
     }
 
     public static bool AreEnemyBotsEnabled()

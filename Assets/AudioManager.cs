@@ -17,6 +17,7 @@ public class AudioManager : MonoBehaviour
     AudioClip drillingClip;
     AudioClip clickClip;
     AudioClip engineClip;
+    AudioClip fusionEngineClip;
     AudioClip alarmClip;
     AudioClip explosionClip;
     AudioClip reloadClip;
@@ -42,6 +43,7 @@ public class AudioManager : MonoBehaviour
     }
 
     public AudioClip EngineClip => engineClip;
+    public AudioClip FusionEngineClip => fusionEngineClip != null ? fusionEngineClip : engineClip;
     public AudioClip DrillingClip => drillingClip;
     public AudioClip AlarmClip => alarmClip;
     public AudioClip CorsairLaserClip => corsairLaserClip;
@@ -104,6 +106,7 @@ public class AudioManager : MonoBehaviour
         drillingClip = Resources.Load<AudioClip>("Audio/drilling");
         clickClip = Resources.Load<AudioClip>("Audio/click");
         engineClip = Resources.Load<AudioClip>("Audio/silnik");
+        fusionEngineClip = Resources.Load<AudioClip>("Audio/fusion_engine_sound");
         alarmClip = Resources.Load<AudioClip>("Audio/alarm");
         explosionClip = Resources.Load<AudioClip>("Audio/explosion");
         reloadClip = Resources.Load<AudioClip>("Audio/gun_reload");

@@ -61,6 +61,32 @@ public static class PlayerProfileCraftingCatalog
             },
             OutputItemId = InventoryItemCatalog.PlasmaGunId,
             OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "fusion_engine_from_droid_wreck",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.AsteroidResourceId,
+                InventoryItemCatalog.AsteroidResourceId
+            },
+            OutputItemId = InventoryItemCatalog.FusionEngineId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "gadget_mine_from_mine_wreck",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.SpaceMineWreckId
+            },
+            OutputItemId = InventoryItemCatalog.GadgetMineId,
+            OutputCount = 1
         }
     };
 
