@@ -168,6 +168,9 @@ public class TreasureCollector : MonoBehaviourPun
         if (!photonView.IsMine)
             return;
 
+        if (currentExtraction == null)
+            currentExtraction = ResolveNearbyExtractionZone();
+
         if (currentExtraction != null)
         {
             if (!isCollecting)
@@ -213,6 +216,26 @@ public class TreasureCollector : MonoBehaviourPun
             StartCollectibleFeedback(currentDroppedCargo.GetComponent<PhotonView>());
             StartCoroutine(LootDroppedCargoRoutine(currentDroppedCargo));
         }
+    }
+
+    ExtractionZone ResolveNearbyExtractionZone()
+    {
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, 1.35f);
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null)
+                continue;
+
+            ExtractionZone extractionZone = hit.GetComponent<ExtractionZone>();
+            if (extractionZone == null)
+                extractionZone = hit.GetComponentInParent<ExtractionZone>();
+
+            if (extractionZone != null)
+                return extractionZone;
+        }
+
+        return null;
     }
 
     bool IsAstronautMode()

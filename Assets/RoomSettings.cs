@@ -3,8 +3,17 @@ using UnityEngine;
 
 public static class RoomSettings
 {
+    public const string SessionStateKey = "sessionState";
+    public const string SessionLabelKey = "sessionLabel";
+    public const string SessionHostNameKey = "sessionHostName";
+    public const string SessionCreatedAtKey = "sessionCreatedAt";
+    public const string StartTimeKey = "startTime";
     public const string RoundDurationKey = "roundDuration";
     public const string ObstacleDensityKey = "obstacleDensity";
+    public const string ObstacleDestroyEnabledKey = "obstacleDestroyEnabled";
+    public const string ObstacleHpKey = "obstacleHp";
+    public const string ObstacleSizePercentKey = "obstacleSizePercent";
+    public const string ObstacleNoBordersKey = "obstacleNoBorders";
     public const string TreasureDensityKey = "treasureDensity";
     public const string NebulaDensityKey = "nebulaDensity";
     public const string ExtractionCountKey = "extractionCount";
@@ -36,6 +45,10 @@ public static class RoomSettings
 
     public const float DefaultRoundDuration = 180f;
     public const string DefaultObstacleDensity = "high";
+    public const bool DefaultObstacleDestroyEnabled = false;
+    public const int DefaultObstacleHp = 60;
+    public const int DefaultObstacleSizePercent = 100;
+    public const bool DefaultObstacleNoBorders = false;
     public const int DefaultExtractionCount = 3;
     public const int DefaultBoosterSlowdownPercent = 30;
     public const int DefaultAmmoCount = 15;
@@ -56,8 +69,13 @@ public static class RoomSettings
     public const int DefaultBulletPushMultiplier = 1;
     public const int DefaultObstacleWeightFactor = 6;
     public const int DefaultTreasureWeightFactor = 6;
+    public const int MaxObstacleWeightFactor = 999;
     public const bool DefaultEnemyRespawnEnabled = false;
     public const int DefaultEnemyRespawnIntervalSeconds = 60;
+    public const string SessionStateInLobby = "in_lobby";
+    public const string SessionStateInPlay = "in_play";
+    public const string SessionStateClosingLobby = "closing_lobby";
+    public const string SessionStateSummary = "summary";
 
     public static float GetRoundDuration()
     {
@@ -65,6 +83,78 @@ public static class RoomSettings
             return value;
 
         return DefaultRoundDuration;
+    }
+
+    public static string GetSessionState()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(SessionStateKey, out object value) &&
+            value is string state &&
+            !string.IsNullOrWhiteSpace(state))
+        {
+            return state;
+        }
+
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object startedValue) &&
+            startedValue is bool started &&
+            started)
+        {
+            return SessionStateInPlay;
+        }
+
+        return SessionStateInLobby;
+    }
+
+    public static bool AreObstaclesDestructible()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ObstacleDestroyEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultObstacleDestroyEnabled;
+    }
+
+    public static int GetObstacleHp()
+    {
+        return GetInt(ObstacleHpKey, DefaultObstacleHp, 50, 300);
+    }
+
+    public static int GetObstacleSizePercent()
+    {
+        return GetInt(ObstacleSizePercentKey, DefaultObstacleSizePercent, 50, 500);
+    }
+
+    public static float GetObstacleSizeMultiplier()
+    {
+        return Mathf.Max(0.1f, GetObstacleSizePercent() / 100f);
+    }
+
+    public static int GetObstacleMaxSplitCount()
+    {
+        int sizePercent = GetObstacleSizePercent();
+        if (sizePercent >= 400)
+            return 6;
+
+        if (sizePercent >= 200)
+            return 5;
+
+        return 4;
+    }
+
+    public static bool AreObstaclesBorderless()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ObstacleNoBordersKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultObstacleNoBorders;
     }
 
     public static int GetExtractionCount()
@@ -163,12 +253,17 @@ public static class RoomSettings
 
     public static int GetObstacleWeightFactor()
     {
-        return GetInt(ObstacleWeightFactorKey, DefaultObstacleWeightFactor, 1, 12);
+        return GetInt(ObstacleWeightFactorKey, DefaultObstacleWeightFactor, 1, MaxObstacleWeightFactor);
     }
 
     public static int GetTreasureWeightFactor()
     {
         return GetInt(TreasureWeightFactorKey, DefaultTreasureWeightFactor, 1, 12);
+    }
+
+    public static bool IsObstacleMassMax()
+    {
+        return GetObstacleWeightFactor() >= MaxObstacleWeightFactor;
     }
 
     public static bool GetEnemyEnabled(EnemyBotKind kind)
@@ -209,7 +304,8 @@ public static class RoomSettings
         if (definition == null)
             return 1;
 
-        return GetInt(definition.CountRoomKey, definition.DefaultCount, 1, 5);
+        int maxCount = kind == EnemyBotKind.SpaceMine ? 30 : 5;
+        return GetInt(definition.CountRoomKey, definition.DefaultCount, 1, maxCount);
     }
 
     public static int GetEnemyHp(EnemyBotKind kind)
@@ -308,6 +404,9 @@ public static class RoomSettings
 
     public static string GetMassLabel(int mass)
     {
+        if (mass >= MaxObstacleWeightFactor)
+            return "MAX";
+
         if (mass <= 2)
             return "LIGHT";
 
@@ -363,10 +462,10 @@ public static class RoomSettings
         if (player != null &&
             player.CustomProperties.TryGetValue(ShipSkinKey, out object value))
         {
-            return Mathf.Clamp(ConvertToInt(value, fallback), 0, 3);
+            return Mathf.Clamp(ConvertToInt(value, fallback), 0, ShipCatalog.MaxShipSkinIndex);
         }
 
-        return Mathf.Clamp(fallback, 0, 3);
+        return Mathf.Clamp(fallback, 0, ShipCatalog.MaxShipSkinIndex);
     }
 
     static int GetInt(string key, int defaultValue, int min, int max)
@@ -432,62 +531,225 @@ public static class RoomSettings
 public enum ShipType
 {
     Explorer = 0,
-    Viper = 1
+    Viper = 1,
+    Avenger = 2
 }
 
 public static class ShipCatalog
 {
+    public const int ExplorerBasicSkinIndex = 0;
+    public const int ExplorerGildedSkinIndex = 1;
+    public const int ExplorerSilverSkinIndex = 2;
+    public const int ViperStandardSkinIndex = 3;
+    public const int ViperSnowSkinIndex = 4;
+    public const int ViperNavySkinIndex = 5;
+    public const int AvengerDarkGreenSkinIndex = 6;
+    public const int AvengerMilitarySkinIndex = 7;
+    public const int AvengerNasaSkinIndex = 8;
+    public const int MaxShipSkinIndex = AvengerNasaSkinIndex;
+
     public static ShipType GetShipTypeFromSkinIndex(int skinIndex)
     {
-        return skinIndex == 3 ? ShipType.Viper : ShipType.Explorer;
+        return skinIndex switch
+        {
+            >= AvengerDarkGreenSkinIndex => ShipType.Avenger,
+            >= ViperStandardSkinIndex => ShipType.Viper,
+            _ => ShipType.Explorer
+        };
     }
 
     public static string GetShipTypeDisplayName(ShipType shipType)
     {
-        return shipType == ShipType.Viper ? "Viper" : "Explorer";
+        return shipType switch
+        {
+            ShipType.Viper => "Viper",
+            ShipType.Avenger => "Avenger",
+            _ => "Explorer"
+        };
     }
 
     public static int[] GetSkinsForShipType(ShipType shipType)
     {
-        return shipType == ShipType.Viper
-            ? new[] { 3 }
-            : new[] { 0, 2, 1 };
+        return shipType switch
+        {
+            ShipType.Viper => new[] { ViperStandardSkinIndex, ViperSnowSkinIndex, ViperNavySkinIndex },
+            ShipType.Avenger => new[] { AvengerDarkGreenSkinIndex, AvengerMilitarySkinIndex, AvengerNasaSkinIndex },
+            _ => new[] { ExplorerBasicSkinIndex, ExplorerSilverSkinIndex, ExplorerGildedSkinIndex }
+        };
     }
 
     public static string GetSkinDisplayName(int skinIndex)
     {
         switch (skinIndex)
         {
-            case 0: return "Basic";
-            case 2: return "Silver Shine";
-            case 1: return "Gilded Armour";
-            case 3: return "Standard";
+            case ExplorerBasicSkinIndex: return "Basic";
+            case ExplorerSilverSkinIndex: return "Silver Shine";
+            case ExplorerGildedSkinIndex: return "Gilded Armour";
+            case ViperStandardSkinIndex: return "Standard";
+            case ViperSnowSkinIndex: return "Snow";
+            case ViperNavySkinIndex: return "Navy";
+            case AvengerDarkGreenSkinIndex: return "Darkgreen";
+            case AvengerMilitarySkinIndex: return "Military";
+            case AvengerNasaSkinIndex: return "NASA";
             default: return "Skin";
         }
     }
 
     public static int GetShipInventoryCapacity(int skinIndex)
     {
-        return GetShipTypeFromSkinIndex(skinIndex) == ShipType.Viper ? 10 : 8;
+        return GetShipTypeFromSkinIndex(skinIndex) switch
+        {
+            ShipType.Viper => 10,
+            ShipType.Avenger => 9,
+            _ => 8
+        };
     }
 
     public static int GetMainGunSlots(int skinIndex)
     {
-        return GetShipTypeFromSkinIndex(skinIndex) == ShipType.Viper ? 2 : 1;
+        return GetShipTypeFromSkinIndex(skinIndex) switch
+        {
+            ShipType.Viper => 2,
+            ShipType.Avenger => 2,
+            _ => 1
+        };
     }
 
     public static int GetShieldSlots(int skinIndex)
     {
-        return 1;
+        return GetShipTypeFromSkinIndex(skinIndex) == ShipType.Avenger ? 2 : 1;
     }
 
     public static int GetEngineSlots(int skinIndex)
     {
-        return GetShipTypeFromSkinIndex(skinIndex) == ShipType.Viper ? 2 : 1;
+        return GetShipTypeFromSkinIndex(skinIndex) switch
+        {
+            ShipType.Viper => 2,
+            ShipType.Avenger => 0,
+            _ => 1
+        };
     }
 
     public static int GetGadgetSlots(int skinIndex)
     {
-        return GetShipTypeFromSkinIndex(skinIndex) == ShipType.Viper ? 0 : 1;
+        return GetShipTypeFromSkinIndex(skinIndex) switch
+        {
+            ShipType.Viper => 0,
+            ShipType.Avenger => 2,
+            _ => 1
+        };
+    }
+
+    public static bool IsEquipmentSlotEnabled(int slotIndex, int shipSkinIndex)
+    {
+        return slotIndex switch
+        {
+            0 => GetMainGunSlots(shipSkinIndex) >= 1,
+            1 => GetMainGunSlots(shipSkinIndex) >= 2,
+            2 => GetShieldSlots(shipSkinIndex) >= 1,
+            3 => GetShieldSlots(shipSkinIndex) >= 2,
+            4 => GetEngineSlots(shipSkinIndex) >= 1,
+            5 => GetEngineSlots(shipSkinIndex) >= 2,
+            6 => GetGadgetSlots(shipSkinIndex) >= 1,
+            7 => GetGadgetSlots(shipSkinIndex) >= 2,
+            _ => false
+        };
+    }
+
+    public static string GetEquipmentSlotLabel(int slotIndex)
+    {
+        return slotIndex switch
+        {
+            0 => "MAIN GUN",
+            1 => "MAIN GUN",
+            2 => "SHIELD",
+            3 => "SHIELD",
+            4 => "ENGINE",
+            5 => "ENGINE",
+            6 => "GADGET",
+            7 => "GADGET",
+            _ => "SLOT"
+        };
+    }
+
+    public static string GetShipSkinResourcePath(int skinIndex)
+    {
+        return skinIndex switch
+        {
+            ExplorerBasicSkinIndex => "Visuals/Ships/ship1_resource",
+            ExplorerGildedSkinIndex => "Visuals/Ships/ship2_resource",
+            ExplorerSilverSkinIndex => "Visuals/Ships/ship3_resource",
+            ViperStandardSkinIndex => "ship4_resource",
+            ViperSnowSkinIndex => "Visuals/Ships/viper_snow_resource",
+            ViperNavySkinIndex => "Visuals/Ships/viper_navy_clean_resource",
+            AvengerDarkGreenSkinIndex => "Visuals/Ships/avenger_darkgreen_resource",
+            AvengerMilitarySkinIndex => "Visuals/Ships/avenger_military_resource",
+            AvengerNasaSkinIndex => "Visuals/Ships/avenger_nasa_resource",
+            _ => "Visuals/Ships/ship1_resource"
+        };
+    }
+
+    public static string GetShipSkinEditorResourcePath(int skinIndex)
+    {
+        return skinIndex switch
+        {
+            ExplorerBasicSkinIndex => "Assets/Resources/Visuals/Ships/ship1_resource.png",
+            ExplorerGildedSkinIndex => "Assets/Resources/Visuals/Ships/ship2_resource.png",
+            ExplorerSilverSkinIndex => "Assets/Resources/Visuals/Ships/ship3_resource.png",
+            ViperStandardSkinIndex => "Assets/Resources/ship4_resource.png",
+            ViperSnowSkinIndex => "Assets/Resources/Visuals/Ships/viper_snow_resource.png",
+            ViperNavySkinIndex => "Assets/Resources/Visuals/Ships/viper_navy_clean_resource.png",
+            AvengerDarkGreenSkinIndex => "Assets/Resources/Visuals/Ships/avenger_darkgreen_resource.png",
+            AvengerMilitarySkinIndex => "Assets/Resources/Visuals/Ships/avenger_military_resource.png",
+            AvengerNasaSkinIndex => "Assets/Resources/Visuals/Ships/avenger_nasa_resource.png",
+            _ => "Assets/Resources/Visuals/Ships/ship1_resource.png"
+        };
+    }
+
+    public static string GetShipSkinEditorFallbackPath(int skinIndex)
+    {
+        return skinIndex switch
+        {
+            ExplorerBasicSkinIndex => "Assets/ship1.png",
+            ExplorerGildedSkinIndex => "Assets/ship2.png",
+            ExplorerSilverSkinIndex => "Assets/ship3.png",
+            ViperStandardSkinIndex => "Assets/ship4.png",
+            ViperSnowSkinIndex => "Assets/Viper_skin_white.png",
+            ViperNavySkinIndex => "Assets/Viper_skin_navy_clean_v2.png",
+            AvengerDarkGreenSkinIndex => "Assets/Avenger_skin_darkgreen.png",
+            AvengerMilitarySkinIndex => "Assets/Avenger_skin_military.png",
+            AvengerNasaSkinIndex => "Assets/Avenger_skin_nasa.png",
+            _ => "Assets/ship1.png"
+        };
+    }
+
+    public static string GetWreckResourcePathForSkin(int skinIndex)
+    {
+        return GetShipTypeFromSkinIndex(skinIndex) switch
+        {
+            ShipType.Viper => "wrak2_resource",
+            ShipType.Avenger => "wrak3_resource",
+            _ => "wrak1_resource"
+        };
+    }
+
+    public static string GetWreckEditorResourcePathForSkin(int skinIndex)
+    {
+        return GetShipTypeFromSkinIndex(skinIndex) switch
+        {
+            ShipType.Viper => "Assets/Resources/wrak2_resource.png",
+            ShipType.Avenger => "Assets/Resources/wrak3_resource.png",
+            _ => "Assets/Resources/wrak1_resource.png"
+        };
+    }
+
+    public static string GetWreckEditorFallbackPathForSkin(int skinIndex)
+    {
+        return GetShipTypeFromSkinIndex(skinIndex) switch
+        {
+            ShipType.Viper => "Assets/wrak2.png",
+            ShipType.Avenger => "Assets/wrak3.png",
+            _ => "Assets/wrak1.png"
+        };
     }
 }

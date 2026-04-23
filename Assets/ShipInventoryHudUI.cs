@@ -331,18 +331,24 @@ public class ShipInventoryHudUI : MonoBehaviourPun
             : null;
         PlayerInventoryData normalized = inventory != null ? inventory.Clone() : PlayerInventoryData.Default();
         normalized.Normalize();
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
+        int shipCapacity = ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
 
         int filledSlots = 0;
 
         for (int i = 0; i < normalized.ShipSlots.Length && i < slotButtons.Length; i++)
         {
+            bool slotEnabled = i < shipCapacity;
             string itemId = normalized.ShipSlots[i];
-            bool occupied = !string.IsNullOrWhiteSpace(itemId);
+            bool occupied = slotEnabled && !string.IsNullOrWhiteSpace(itemId);
             Sprite icon = occupied ? InventoryItemCatalog.GetIcon(itemId) : null;
             Image slotImage = slotButtons[i] != null ? slotButtons[i].GetComponent<Image>() : null;
 
             if (occupied)
                 filledSlots++;
+
+            if (slotButtons[i] != null)
+                slotButtons[i].gameObject.SetActive(slotEnabled);
 
             if (slotImage != null)
             {
@@ -367,7 +373,7 @@ public class ShipInventoryHudUI : MonoBehaviourPun
 
         if (buttonText != null)
         {
-            buttonText.text = "CARGO " + filledSlots + "/" + PlayerInventoryData.ShipSlotCount;
+            buttonText.text = "CARGO " + filledSlots + "/" + shipCapacity;
             buttonText.fontSize = 20f;
         }
     }

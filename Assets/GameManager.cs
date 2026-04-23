@@ -21,7 +21,8 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         Hashtable props = new Hashtable();
         props["gameStarted"] = true;
-        props["startTime"] = PhotonNetwork.Time;
+        props[RoomSettings.StartTimeKey] = PhotonNetwork.Time;
+        props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateInPlay;
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;
@@ -75,6 +76,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[ExtractionLayoutKey] = string.Empty;
         props[NebulaLayoutKey] = string.Empty;
         props[MapSeedKey] = -1;
+        props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateSummary;
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;
@@ -131,6 +133,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[ExtractionLayoutKey] = string.Empty;
         props[NebulaLayoutKey] = string.Empty;
         props[MapSeedKey] = -1;
+        props[RoomSettings.StartTimeKey] = -1d;
+        props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateInLobby;
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;

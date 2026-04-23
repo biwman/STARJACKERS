@@ -162,7 +162,8 @@ public class GameTimer : MonoBehaviourPun
 
         Hashtable props = new Hashtable();
         props["gameStarted"] = true;
-        props["startTime"] = PhotonNetwork.Time;
+        props[RoomSettings.StartTimeKey] = PhotonNetwork.Time;
+        props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateInPlay;
         props[LoneShipModeStartTimeKey] = -1d;
         props[EvacuationPauseUntilKey] = -1d;
         props[EvacuationPauseRemainingKey] = -1f;

@@ -35,6 +35,7 @@ public class PlayerMovement : MonoBehaviourPun
     const float AccelerationResponsiveness = 18f;
     const float LowSpeedBrakeResponsiveness = 7.4f;
     const float HighSpeedBrakeResponsiveness = 1.15f;
+    const float BrakeDriftResponsivenessMultiplier = 0.8f;
     static PhysicsMaterial2D playerCollisionMaterial;
 
     public float BoosterNormalized => boosterCharge;
@@ -304,7 +305,7 @@ public class PlayerMovement : MonoBehaviourPun
         if (braking)
         {
             float driftWeight = speedRatio * speedRatio;
-            float brakeResponsiveness = Mathf.Lerp(LowSpeedBrakeResponsiveness, HighSpeedBrakeResponsiveness, driftWeight);
+            float brakeResponsiveness = Mathf.Lerp(LowSpeedBrakeResponsiveness, HighSpeedBrakeResponsiveness, driftWeight) * BrakeDriftResponsivenessMultiplier;
             float releaseDriftMultiplier = effectiveMoveInput == Vector2.zero ? 0.86f : 1f;
             float maxDelta = brakeResponsiveness * speed * releaseDriftMultiplier * Time.fixedDeltaTime;
             rb.linearVelocity = Vector2.MoveTowards(currentVelocity, targetVelocity, maxDelta);
@@ -490,14 +491,14 @@ public class PlayerMovement : MonoBehaviourPun
             return 0;
 
         int count = 0;
-        if (IsEquipmentSlotEnabled(3, shipSkinIndex) &&
-            string.Equals(GetEquipmentItem(equipmentSlots, 3), InventoryItemCatalog.FusionEngineId, StringComparison.Ordinal))
+        if (ShipCatalog.IsEquipmentSlotEnabled(4, shipSkinIndex) &&
+            string.Equals(GetEquipmentItem(equipmentSlots, 4), InventoryItemCatalog.FusionEngineId, StringComparison.Ordinal))
         {
             count++;
         }
 
-        if (IsEquipmentSlotEnabled(4, shipSkinIndex) &&
-            string.Equals(GetEquipmentItem(equipmentSlots, 4), InventoryItemCatalog.FusionEngineId, StringComparison.Ordinal))
+        if (ShipCatalog.IsEquipmentSlotEnabled(5, shipSkinIndex) &&
+            string.Equals(GetEquipmentItem(equipmentSlots, 5), InventoryItemCatalog.FusionEngineId, StringComparison.Ordinal))
         {
             count++;
         }
@@ -510,20 +511,6 @@ public class PlayerMovement : MonoBehaviourPun
         return equipmentSlots != null && index >= 0 && index < equipmentSlots.Length
             ? equipmentSlots[index]
             : null;
-    }
-
-    static bool IsEquipmentSlotEnabled(int slotIndex, int shipSkinIndex)
-    {
-        return slotIndex switch
-        {
-            0 => ShipCatalog.GetMainGunSlots(shipSkinIndex) >= 1,
-            1 => ShipCatalog.GetMainGunSlots(shipSkinIndex) >= 2,
-            2 => ShipCatalog.GetShieldSlots(shipSkinIndex) >= 1,
-            3 => ShipCatalog.GetEngineSlots(shipSkinIndex) >= 1,
-            4 => ShipCatalog.GetEngineSlots(shipSkinIndex) >= 2,
-            5 => ShipCatalog.GetGadgetSlots(shipSkinIndex) >= 1,
-            _ => false
-        };
     }
 
     float GetCurrentBoosterRecoveryDelay()

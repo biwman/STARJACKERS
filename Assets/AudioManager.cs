@@ -22,6 +22,7 @@ public class AudioManager : MonoBehaviour
     AudioClip explosionClip;
     AudioClip reloadClip;
     AudioClip shieldHitClip;
+    AudioClip shieldChargeClip;
     AudioClip hpHitClip;
     AudioClip evacBuzzerClip;
     AudioClip extractionSequenceClip;
@@ -111,6 +112,7 @@ public class AudioManager : MonoBehaviour
         explosionClip = Resources.Load<AudioClip>("Audio/explosion");
         reloadClip = Resources.Load<AudioClip>("Audio/gun_reload");
         shieldHitClip = Resources.Load<AudioClip>("Audio/trafienie_w_tarcze");
+        shieldChargeClip = Resources.Load<AudioClip>("Audio/shield_charge1");
         hpHitClip = Resources.Load<AudioClip>("Audio/trafienie_w_HP");
         evacBuzzerClip = Resources.Load<AudioClip>("Audio/evac_buzzer_sound");
         extractionSequenceClip = Resources.Load<AudioClip>("Audio/extraction_4sekundy");
@@ -202,6 +204,11 @@ public class AudioManager : MonoBehaviour
     public void PlayShieldHitAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(shieldHitClip, worldPosition, 0.62f);
+    }
+
+    public void PlayShieldChargeAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(shieldChargeClip != null ? shieldChargeClip : shieldHitClip, worldPosition, 0.68f);
     }
 
     public void PlayHpHitAt(Vector3 worldPosition)

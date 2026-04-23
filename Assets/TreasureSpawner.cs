@@ -58,7 +58,7 @@ public class TreasureSpawner : MonoBehaviourPun
         List<Vector2> nebulaPositions = ParseLayout(NebulaLayoutKey);
         int spawned = 0;
         int attempts = 0;
-        int targetCount = Mathf.Max(1, Mathf.RoundToInt(treasureCount * GetDensityMultiplier() * RoomSettings.GetMapAreaMultiplier()));
+        int targetCount = Mathf.Max(0, Mathf.RoundToInt(treasureCount * GetDensityMultiplier() * RoomSettings.GetMapAreaMultiplier()));
 
         while (spawned < targetCount && attempts < 300)
         {
@@ -72,7 +72,7 @@ public class TreasureSpawner : MonoBehaviourPun
             if (!IsFarEnough(pos2D, extractionPositions, MinDistanceFromExtraction))
                 continue;
 
-            if (!IsFarEnough(pos2D, obstaclePositions, MinDistanceFromObstacle))
+            if (!IsFarEnough(pos2D, obstaclePositions, GetMinDistanceFromObstacle()))
                 continue;
 
             if (!IsFarEnough(pos2D, nebulaPositions, MinDistanceFromNebula))
@@ -98,6 +98,11 @@ public class TreasureSpawner : MonoBehaviourPun
         }
 
         return true;
+    }
+
+    float GetMinDistanceFromObstacle()
+    {
+        return MinDistanceFromObstacle * Mathf.Clamp(RoomSettings.GetObstacleSizeMultiplier(), 0.75f, 5f);
     }
 
     List<Vector2> ParseLayout(string key)
@@ -136,6 +141,7 @@ public class TreasureSpawner : MonoBehaviourPun
         {
             switch (density)
             {
+                case "none": return 0f;
                 case "low": return 0.5f;
                 case "high": return 2f;
                 default: return 1f;

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using Photon.Pun;
 using TMPro;
@@ -11,7 +12,17 @@ public class PlayerShooting : MonoBehaviourPun
     const float DefaultBulletRangeMultiplier = 15f;
     const float GadgetMinePlacementCooldown = 0.9f;
     const int GadgetMineDefaultCharges = 4;
+    const int BatteryDefaultCharges = 3;
     static readonly Color PlasmaBulletColor = new Color(0.15f, 1f, 0.28f, 1f);
+
+    sealed class GadgetRuntimeState
+    {
+        public string ItemId;
+        public int MaxCharges;
+        public int RemainingCharges;
+        public float Cooldown;
+        public float NextUseTime;
+    }
 
     public Joystick shootJoystick;
     public GameObject bulletPrefab;
@@ -46,22 +57,19 @@ public class PlayerShooting : MonoBehaviourPun
     string baseShotSoundId = string.Empty;
     int multiShotCount = 1;
     string lastAppliedWeaponSignature = string.Empty;
-    bool gadgetMineEquipped;
-    string equippedGadgetItemId = string.Empty;
     string lastAppliedGadgetSignature = string.Empty;
-    float nextGadgetUseTime;
-    int remainingGadgetCharges;
-    int maxGadgetCharges;
+    readonly List<string> activeGadgetItemIds = new List<string>();
+    readonly Dictionary<string, GadgetRuntimeState> gadgetStates = new Dictionary<string, GadgetRuntimeState>(StringComparer.Ordinal);
 
     public int CurrentAmmo => currentAmmo;
     public int MaxAmmo => maxAmmo;
     public bool IsReloading => isReloading;
     public bool CanManualReload => photonView.IsMine && IsGameStarted() && !isReloading && currentAmmo > 0 && currentAmmo < maxAmmo;
-    public bool CanUseGadget => photonView.IsMine && IsGameStarted() && gadgetMineEquipped && remainingGadgetCharges > 0 && Time.time >= nextGadgetUseTime;
-    public string CurrentGadgetItemId => !string.IsNullOrWhiteSpace(equippedGadgetItemId) ? equippedGadgetItemId : null;
-    public Sprite CurrentGadgetIcon => !string.IsNullOrWhiteSpace(equippedGadgetItemId) ? InventoryItemCatalog.GetIcon(equippedGadgetItemId) : null;
-    public int RemainingGadgetCharges => remainingGadgetCharges;
-    public int MaxGadgetCharges => maxGadgetCharges;
+    public IReadOnlyList<string> ActiveGadgetItemIds => activeGadgetItemIds;
+    public string CurrentGadgetItemId => activeGadgetItemIds.Count > 0 ? activeGadgetItemIds[0] : null;
+    public Sprite CurrentGadgetIcon => !string.IsNullOrWhiteSpace(CurrentGadgetItemId) ? InventoryItemCatalog.GetIcon(CurrentGadgetItemId) : null;
+    public int RemainingGadgetCharges => GetRemainingGadgetCharges(CurrentGadgetItemId);
+    public int MaxGadgetCharges => GetMaxGadgetCharges(CurrentGadgetItemId);
     public float ReloadProgress
     {
         get
@@ -354,13 +362,13 @@ public class PlayerShooting : MonoBehaviourPun
             return 0;
 
         int count = 0;
-        if (IsEquipmentSlotEnabled(0, shipSkinIndex) &&
+        if (ShipCatalog.IsEquipmentSlotEnabled(0, shipSkinIndex) &&
             string.Equals(GetEquipmentItem(equipmentSlots, 0), InventoryItemCatalog.PlasmaGunId, StringComparison.Ordinal))
         {
             count++;
         }
 
-        if (IsEquipmentSlotEnabled(1, shipSkinIndex) &&
+        if (ShipCatalog.IsEquipmentSlotEnabled(1, shipSkinIndex) &&
             string.Equals(GetEquipmentItem(equipmentSlots, 1), InventoryItemCatalog.PlasmaGunId, StringComparison.Ordinal))
         {
             count++;
@@ -374,20 +382,6 @@ public class PlayerShooting : MonoBehaviourPun
         return equipmentSlots != null && index >= 0 && index < equipmentSlots.Length
             ? equipmentSlots[index]
             : null;
-    }
-
-    static bool IsEquipmentSlotEnabled(int slotIndex, int shipSkinIndex)
-    {
-        return slotIndex switch
-        {
-            0 => ShipCatalog.GetMainGunSlots(shipSkinIndex) >= 1,
-            1 => ShipCatalog.GetMainGunSlots(shipSkinIndex) >= 2,
-            2 => ShipCatalog.GetShieldSlots(shipSkinIndex) >= 1,
-            3 => ShipCatalog.GetEngineSlots(shipSkinIndex) >= 1,
-            4 => ShipCatalog.GetEngineSlots(shipSkinIndex) >= 2,
-            5 => ShipCatalog.GetGadgetSlots(shipSkinIndex) >= 1,
-            _ => false
-        };
     }
 
     void ApplyPlayerWeaponProfile(int plasmaGunCount)
@@ -432,26 +426,104 @@ public class PlayerShooting : MonoBehaviourPun
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
         string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
-        string gadgetItemId = IsEquipmentSlotEnabled(5, shipSkinIndex) ? GetEquipmentItem(equipmentSlots, 5) : null;
-        string signature = shipSkinIndex + ":" + (gadgetItemId ?? string.Empty);
+        List<string> orderedItems = new List<string>();
+        Dictionary<string, int> gadgetCounts = CollectEquippedGadgetCounts(equipmentSlots, shipSkinIndex, orderedItems);
+        string signature = BuildGadgetSignature(shipSkinIndex, orderedItems, gadgetCounts);
         if (signature == lastAppliedGadgetSignature)
             return;
 
-        equippedGadgetItemId = gadgetItemId ?? string.Empty;
-        gadgetMineEquipped = string.Equals(equippedGadgetItemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal);
-        maxGadgetCharges = ResolveGadgetMaxCharges(equippedGadgetItemId);
-        if (gadgetMineEquipped)
+        Dictionary<string, int> previousCharges = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, GadgetRuntimeState> pair in gadgetStates)
         {
-            if (remainingGadgetCharges <= 0 || string.IsNullOrWhiteSpace(lastAppliedGadgetSignature))
-                remainingGadgetCharges = maxGadgetCharges;
-            else
-                remainingGadgetCharges = Mathf.Clamp(remainingGadgetCharges, 0, maxGadgetCharges);
+            if (pair.Value == null || string.IsNullOrWhiteSpace(pair.Key))
+                continue;
+
+            previousCharges[pair.Key] = pair.Value.RemainingCharges;
         }
-        else
+
+        activeGadgetItemIds.Clear();
+        gadgetStates.Clear();
+        for (int i = 0; i < orderedItems.Count; i++)
         {
-            remainingGadgetCharges = 0;
+            string itemId = orderedItems[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            int equippedCount = gadgetCounts.TryGetValue(itemId, out int count) ? count : 0;
+            int maxCharges = ResolveGadgetMaxCharges(itemId, equippedCount);
+            if (maxCharges <= 0)
+                continue;
+
+            int remainingCharges = previousCharges.TryGetValue(itemId, out int previousRemaining)
+                ? Mathf.Clamp(previousRemaining, 0, maxCharges)
+                : maxCharges;
+
+            GadgetRuntimeState state = new GadgetRuntimeState
+            {
+                ItemId = itemId,
+                MaxCharges = maxCharges,
+                RemainingCharges = remainingCharges,
+                Cooldown = ResolveGadgetCooldown(itemId),
+                NextUseTime = 0f
+            };
+
+            activeGadgetItemIds.Add(itemId);
+            gadgetStates[itemId] = state;
         }
+
         lastAppliedGadgetSignature = signature;
+    }
+
+    Dictionary<string, int> CollectEquippedGadgetCounts(string[] equipmentSlots, int shipSkinIndex, List<string> orderedItems)
+    {
+        Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (equipmentSlots == null)
+            return counts;
+
+        for (int i = 6; i <= 7; i++)
+        {
+            if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
+                continue;
+
+            string itemId = GetEquipmentItem(equipmentSlots, i);
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            if (!counts.ContainsKey(itemId))
+            {
+                counts[itemId] = 0;
+                orderedItems?.Add(itemId);
+            }
+
+            counts[itemId]++;
+        }
+
+        return counts;
+    }
+
+    static string BuildGadgetSignature(int shipSkinIndex, List<string> orderedItems, Dictionary<string, int> counts)
+    {
+        if (orderedItems == null || orderedItems.Count == 0)
+            return shipSkinIndex + ":none";
+
+        System.Text.StringBuilder builder = new System.Text.StringBuilder();
+        builder.Append(shipSkinIndex);
+        builder.Append(':');
+        for (int i = 0; i < orderedItems.Count; i++)
+        {
+            string itemId = orderedItems[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            if (builder[builder.Length - 1] != ':')
+                builder.Append('|');
+
+            builder.Append(itemId);
+            builder.Append('x');
+            builder.Append(counts != null && counts.TryGetValue(itemId, out int count) ? count : 0);
+        }
+
+        return builder.ToString();
     }
 
     bool ShouldFireFromDualWingMuzzles()
@@ -561,18 +633,25 @@ public class PlayerShooting : MonoBehaviourPun
 
     public void TriggerGadgetUse()
     {
-        if (!CanUseGadget)
+        TriggerGadgetUse(CurrentGadgetItemId);
+    }
+
+    public void TriggerGadgetUse(string itemId)
+    {
+        if (!CanUseGadget(itemId))
             return;
 
         bool used = false;
-        if (gadgetMineEquipped)
+        if (string.Equals(itemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal))
             used = TryDeployGadgetMine();
+        else if (string.Equals(itemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
+            used = TryActivateBatteryCharge();
 
-        if (used)
-        {
-            remainingGadgetCharges = Mathf.Max(0, remainingGadgetCharges - 1);
-            nextGadgetUseTime = Time.time + GadgetMinePlacementCooldown;
-        }
+        if (!used || !gadgetStates.TryGetValue(itemId, out GadgetRuntimeState state) || state == null)
+            return;
+
+        state.RemainingCharges = Mathf.Max(0, state.RemainingCharges - 1);
+        state.NextUseTime = Time.time + state.Cooldown;
     }
 
     public void ConfigureWeaponProfile(float configuredFireRate, int configuredMaxAmmo, float configuredReloadDuration, int configuredBulletDamage, float configuredBulletScaleMultiplier, Color configuredBulletColor, float configuredMuzzleOffsetDistance, bool configuredInfiniteAmmo, float configuredBulletSpeed = -1f, string configuredShotSoundId = "", float configuredRangeMultiplier = -1f)
@@ -709,10 +788,92 @@ public class PlayerShooting : MonoBehaviourPun
         return true;
     }
 
-    int ResolveGadgetMaxCharges(string gadgetItemId)
+    bool TryActivateBatteryCharge()
+    {
+        PlayerHealth health = GetComponent<PlayerHealth>();
+        if (health == null || !health.CanActivateBatteryChargeLocally())
+            return false;
+
+        health.RequestBatteryShieldCharge();
+        return true;
+    }
+
+    public bool CanUseGadget(string itemId)
+    {
+        if (!photonView.IsMine || !IsGameStarted() || string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        if (!gadgetStates.TryGetValue(itemId, out GadgetRuntimeState state) || state == null)
+            return false;
+
+        if (state.RemainingCharges <= 0 || Time.time < state.NextUseTime)
+            return false;
+
+        if (string.Equals(itemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
+        {
+            PlayerHealth health = GetComponent<PlayerHealth>();
+            return health != null && health.CanActivateBatteryChargeLocally();
+        }
+
+        return true;
+    }
+
+    public int GetRemainingGadgetCharges(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId) || !gadgetStates.TryGetValue(itemId, out GadgetRuntimeState state) || state == null)
+            return 0;
+
+        return Mathf.Max(0, state.RemainingCharges);
+    }
+
+    public int GetMaxGadgetCharges(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId) || !gadgetStates.TryGetValue(itemId, out GadgetRuntimeState state) || state == null)
+            return 0;
+
+        return Mathf.Max(0, state.MaxCharges);
+    }
+
+    public Sprite GetGadgetIcon(string itemId)
+    {
+        return string.IsNullOrWhiteSpace(itemId) ? null : InventoryItemCatalog.GetIcon(itemId);
+    }
+
+    public string GetGadgetButtonLabel(string itemId)
+    {
+        return InventoryItemCatalog.GetShortLabel(itemId);
+    }
+
+    public Color GetGadgetButtonColor(string itemId)
+    {
+        if (string.Equals(itemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal))
+            return new Color(0.14f, 0.5f, 0.28f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
+            return new Color(0.16f, 0.46f, 0.78f, 0.96f);
+
+        return new Color(0.22f, 0.3f, 0.4f, 0.94f);
+    }
+
+    float ResolveGadgetCooldown(string gadgetItemId)
     {
         if (string.Equals(gadgetItemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal))
-            return GadgetMineDefaultCharges;
+            return GadgetMinePlacementCooldown;
+
+        return 0f;
+    }
+
+    int ResolveGadgetMaxCharges(string gadgetItemId, int equippedCount)
+    {
+        equippedCount = Mathf.Max(0, equippedCount);
+        if (equippedCount <= 0)
+            return 0;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal))
+            return GadgetMineDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
+            return BatteryDefaultCharges * equippedCount;
 
         return 0;
     }
@@ -870,16 +1031,24 @@ public class ReloadButtonUI : MonoBehaviourPun
 [RequireComponent(typeof(PlayerShooting))]
 public class GadgetButtonUI : MonoBehaviourPun
 {
-    const string GadgetButtonName = "GadgetButton";
+    sealed class GadgetButtonWidget
+    {
+        public string ItemId;
+        public GameObject Root;
+        public Button Button;
+        public Image Background;
+        public Image Icon;
+        public TextMeshProUGUI Label;
+        public TextMeshProUGUI Charges;
+    }
+
+    const string GadgetButtonRootName = "GadgetButtonsRoot";
     static Sprite circularButtonSprite;
 
     PlayerShooting shooting;
-    GameObject buttonObject;
-    Button gadgetButton;
-    Image backgroundImage;
-    Image gadgetIconImage;
-    TextMeshProUGUI buttonText;
-    TextMeshProUGUI chargesText;
+    GameObject rootObject;
+    readonly List<GadgetButtonWidget> widgets = new List<GadgetButtonWidget>();
+    string lastWidgetSignature = string.Empty;
 
     void Start()
     {
@@ -891,28 +1060,38 @@ public class GadgetButtonUI : MonoBehaviourPun
             return;
         }
 
-        CreateButton();
+        RebuildButtonsIfNeeded();
         RefreshState();
     }
 
     void Update()
     {
-        EnsureButton();
+        RebuildButtonsIfNeeded();
         RefreshState();
     }
 
     void OnDestroy()
     {
-        if (buttonObject != null)
-            Destroy(buttonObject);
+        DestroyAllButtons();
     }
 
-    void CreateButton()
+    void RebuildButtonsIfNeeded()
     {
-        GameObject existing = GameObject.Find(GadgetButtonName);
-        if (existing != null)
-            Destroy(existing);
+        if (!photonView.IsMine || shooting == null)
+            return;
 
+        IReadOnlyList<string> itemIds = shooting.ActiveGadgetItemIds;
+        string signature = BuildWidgetSignature(itemIds);
+        if (signature == lastWidgetSignature && rootObject != null && widgets.Count == itemIds.Count)
+            return;
+
+        DestroyAllButtons();
+        CreateButtons(itemIds);
+        lastWidgetSignature = signature;
+    }
+
+    void CreateButtons(IReadOnlyList<string> itemIds)
+    {
         GameObject canvas = GameObject.Find("Canvas");
         GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
         if (canvas == null || shootJoystickObject == null)
@@ -922,134 +1101,183 @@ public class GadgetButtonUI : MonoBehaviourPun
         if (joystickRect == null)
             return;
 
-        buttonObject = new GameObject(GadgetButtonName, typeof(RectTransform), typeof(Image), typeof(Button));
-        buttonObject.transform.SetParent(canvas.transform, false);
+        GameObject existingRoot = GameObject.Find(GadgetButtonRootName);
+        if (existingRoot != null)
+            Destroy(existingRoot);
 
-        RectTransform rect = buttonObject.GetComponent<RectTransform>();
-        rect.anchorMin = joystickRect.anchorMin;
-        rect.anchorMax = joystickRect.anchorMax;
+        rootObject = new GameObject(GadgetButtonRootName, typeof(RectTransform));
+        rootObject.transform.SetParent(canvas.transform, false);
+
+        RectTransform rootRect = rootObject.GetComponent<RectTransform>();
+        rootRect.anchorMin = joystickRect.anchorMin;
+        rootRect.anchorMax = joystickRect.anchorMax;
+        rootRect.pivot = new Vector2(0.5f, 0.5f);
+        rootRect.anchoredPosition = joystickRect.anchoredPosition;
+        rootRect.sizeDelta = Vector2.zero;
+
+        for (int i = 0; i < itemIds.Count; i++)
+        {
+            GadgetButtonWidget widget = CreateWidget(itemIds[i], i);
+            if (widget != null)
+                widgets.Add(widget);
+        }
+    }
+
+    GadgetButtonWidget CreateWidget(string itemId, int index)
+    {
+        if (rootObject == null || string.IsNullOrWhiteSpace(itemId))
+            return null;
+
+        GadgetButtonWidget widget = new GadgetButtonWidget();
+        widget.ItemId = itemId;
+        widget.Root = new GameObject("GadgetButton_" + itemId, typeof(RectTransform), typeof(Image), typeof(Button));
+        widget.Root.transform.SetParent(rootObject.transform, false);
+
+        RectTransform rect = widget.Root.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = joystickRect.anchoredPosition + new Vector2(0f, 392f);
+        rect.anchoredPosition = new Vector2(0f, 392f + (index * 126f));
         rect.sizeDelta = new Vector2(112f, 112f);
 
-        backgroundImage = buttonObject.GetComponent<Image>();
-        backgroundImage.sprite = GetCircularButtonSprite();
-        backgroundImage.type = Image.Type.Simple;
-        backgroundImage.color = new Color(0.14f, 0.5f, 0.28f, 0.96f);
+        widget.Background = widget.Root.GetComponent<Image>();
+        widget.Background.sprite = GetCircularButtonSprite();
+        widget.Background.type = Image.Type.Simple;
 
-        gadgetButton = buttonObject.GetComponent<Button>();
-        gadgetButton.transition = Selectable.Transition.ColorTint;
-        gadgetButton.targetGraphic = backgroundImage;
-        gadgetButton.onClick.AddListener(HandleGadgetClicked);
+        widget.Button = widget.Root.GetComponent<Button>();
+        widget.Button.transition = Selectable.Transition.ColorTint;
+        widget.Button.targetGraphic = widget.Background;
+        string capturedItemId = itemId;
+        widget.Button.onClick.AddListener(() => HandleGadgetClicked(capturedItemId));
 
-        GameObject iconObject = new GameObject("GadgetButtonIcon", typeof(RectTransform), typeof(Image));
-        iconObject.transform.SetParent(buttonObject.transform, false);
+        TMP_Text referenceText = FindAnyObjectByType<TMP_Text>();
+
+        GameObject iconObject = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+        iconObject.transform.SetParent(widget.Root.transform, false);
         RectTransform iconRect = iconObject.GetComponent<RectTransform>();
         iconRect.anchorMin = new Vector2(0.5f, 0.5f);
         iconRect.anchorMax = new Vector2(0.5f, 0.5f);
         iconRect.pivot = new Vector2(0.5f, 0.5f);
-        iconRect.anchoredPosition = new Vector2(0f, 4f);
-        iconRect.sizeDelta = new Vector2(62f, 62f);
+        iconRect.anchoredPosition = new Vector2(0f, 8f);
+        iconRect.sizeDelta = new Vector2(60f, 60f);
+        widget.Icon = iconObject.GetComponent<Image>();
+        widget.Icon.preserveAspect = true;
 
-        gadgetIconImage = iconObject.GetComponent<Image>();
-        gadgetIconImage.preserveAspect = true;
-        gadgetIconImage.color = new Color(1f, 1f, 1f, 0.82f);
-
-        GameObject textObject = new GameObject("GadgetButtonText", typeof(RectTransform), typeof(TextMeshProUGUI));
-        textObject.transform.SetParent(buttonObject.transform, false);
-        RectTransform textRect = textObject.GetComponent<RectTransform>();
-        textRect.anchorMin = new Vector2(0.5f, 0f);
-        textRect.anchorMax = new Vector2(0.5f, 0f);
-        textRect.pivot = new Vector2(0.5f, 0f);
-        textRect.anchoredPosition = new Vector2(0f, 10f);
-        textRect.sizeDelta = new Vector2(90f, 26f);
-
-        buttonText = textObject.GetComponent<TextMeshProUGUI>();
-        buttonText.text = "GADGET";
-        buttonText.fontSize = 19f;
-        buttonText.fontStyle = FontStyles.Bold;
-        buttonText.alignment = TextAlignmentOptions.Center;
-        buttonText.textWrappingMode = TextWrappingModes.NoWrap;
-        buttonText.color = Color.white;
-
-        TMP_Text referenceText = FindAnyObjectByType<TMP_Text>();
+        GameObject labelObject = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+        labelObject.transform.SetParent(widget.Root.transform, false);
+        RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+        labelRect.anchorMin = new Vector2(0.5f, 0f);
+        labelRect.anchorMax = new Vector2(0.5f, 0f);
+        labelRect.pivot = new Vector2(0.5f, 0f);
+        labelRect.anchoredPosition = new Vector2(0f, 14f);
+        labelRect.sizeDelta = new Vector2(90f, 24f);
+        widget.Label = labelObject.GetComponent<TextMeshProUGUI>();
+        widget.Label.fontSize = 18f;
+        widget.Label.fontStyle = FontStyles.Bold;
+        widget.Label.alignment = TextAlignmentOptions.Center;
+        widget.Label.textWrappingMode = TextWrappingModes.NoWrap;
         if (referenceText != null)
         {
-            buttonText.font = referenceText.font;
-            buttonText.fontSharedMaterial = referenceText.fontSharedMaterial;
+            widget.Label.font = referenceText.font;
+            widget.Label.fontSharedMaterial = referenceText.fontSharedMaterial;
         }
 
-        GameObject chargesObject = new GameObject("GadgetButtonCharges", typeof(RectTransform), typeof(TextMeshProUGUI));
-        chargesObject.transform.SetParent(buttonObject.transform, false);
+        GameObject chargesObject = new GameObject("Charges", typeof(RectTransform), typeof(TextMeshProUGUI));
+        chargesObject.transform.SetParent(widget.Root.transform, false);
         RectTransform chargesRect = chargesObject.GetComponent<RectTransform>();
         chargesRect.anchorMin = new Vector2(0.5f, 0f);
         chargesRect.anchorMax = new Vector2(0.5f, 0f);
         chargesRect.pivot = new Vector2(0.5f, 0f);
         chargesRect.anchoredPosition = new Vector2(0f, -8f);
         chargesRect.sizeDelta = new Vector2(72f, 24f);
-
-        chargesText = chargesObject.GetComponent<TextMeshProUGUI>();
-        chargesText.fontSize = 20f;
-        chargesText.fontStyle = FontStyles.Bold;
-        chargesText.alignment = TextAlignmentOptions.Center;
-        chargesText.textWrappingMode = TextWrappingModes.NoWrap;
-        chargesText.color = Color.white;
+        widget.Charges = chargesObject.GetComponent<TextMeshProUGUI>();
+        widget.Charges.fontSize = 20f;
+        widget.Charges.fontStyle = FontStyles.Bold;
+        widget.Charges.alignment = TextAlignmentOptions.Center;
+        widget.Charges.textWrappingMode = TextWrappingModes.NoWrap;
         if (referenceText != null)
         {
-            chargesText.font = referenceText.font;
-            chargesText.fontSharedMaterial = referenceText.fontSharedMaterial;
+            widget.Charges.font = referenceText.font;
+            widget.Charges.fontSharedMaterial = referenceText.fontSharedMaterial;
         }
-    }
 
-    void EnsureButton()
-    {
-        if (!photonView.IsMine)
-            return;
-
-        if (buttonObject != null && gadgetButton != null && backgroundImage != null && gadgetIconImage != null && buttonText != null && chargesText != null)
-            return;
-
-        CreateButton();
+        return widget;
     }
 
     void RefreshState()
     {
-        if (shooting == null || gadgetButton == null || backgroundImage == null || gadgetIconImage == null || buttonText == null || chargesText == null)
+        if (shooting == null)
             return;
 
-        bool visible = !string.IsNullOrWhiteSpace(shooting.CurrentGadgetItemId);
-        if (buttonObject != null && buttonObject.activeSelf != visible)
-            buttonObject.SetActive(visible);
+        if (rootObject != null)
+            rootObject.SetActive(widgets.Count > 0);
 
-        if (!visible)
-            return;
+        for (int i = 0; i < widgets.Count; i++)
+        {
+            GadgetButtonWidget widget = widgets[i];
+            if (widget == null || widget.Root == null)
+                continue;
 
-        gadgetIconImage.sprite = shooting.CurrentGadgetIcon;
-        gadgetIconImage.enabled = gadgetIconImage.sprite != null;
+            int remaining = shooting.GetRemainingGadgetCharges(widget.ItemId);
+            int max = shooting.GetMaxGadgetCharges(widget.ItemId);
+            bool canUse = shooting.CanUseGadget(widget.ItemId);
+            bool depleted = max > 0 && remaining <= 0;
 
-        bool canUse = shooting.CanUseGadget;
-        gadgetButton.interactable = canUse;
-        backgroundImage.color = canUse
-            ? new Color(0.14f, 0.5f, 0.28f, 0.96f)
-            : new Color(0.15f, 0.19f, 0.24f, 0.82f);
-        buttonText.color = canUse
-            ? Color.white
-            : new Color(0.82f, 0.86f, 0.91f, 0.82f);
-        gadgetIconImage.color = canUse
-            ? new Color(1f, 1f, 1f, 0.82f)
-            : new Color(0.82f, 0.86f, 0.91f, 0.54f);
-        chargesText.text = shooting.MaxGadgetCharges > 0 ? shooting.RemainingGadgetCharges.ToString() : string.Empty;
-        chargesText.color = canUse
-            ? Color.white
-            : new Color(0.78f, 0.8f, 0.82f, 0.82f);
+            widget.Icon.sprite = shooting.GetGadgetIcon(widget.ItemId);
+            widget.Icon.enabled = widget.Icon.sprite != null;
+            widget.Label.text = shooting.GetGadgetButtonLabel(widget.ItemId);
+            widget.Charges.text = max > 0 ? remaining.ToString() : string.Empty;
+
+            widget.Button.interactable = canUse;
+            widget.Background.color = canUse
+                ? shooting.GetGadgetButtonColor(widget.ItemId)
+                : new Color(0.15f, 0.19f, 0.24f, 0.82f);
+            widget.Label.color = canUse
+                ? Color.white
+                : new Color(0.82f, 0.86f, 0.91f, 0.82f);
+            widget.Charges.color = canUse
+                ? Color.white
+                : new Color(0.78f, 0.8f, 0.82f, 0.82f);
+            widget.Icon.color = depleted
+                ? new Color(0.6f, 0.6f, 0.6f, 0.72f)
+                : canUse
+                    ? new Color(1f, 1f, 1f, 0.88f)
+                    : new Color(0.82f, 0.86f, 0.91f, 0.54f);
+        }
     }
 
-    void HandleGadgetClicked()
+    void HandleGadgetClicked(string itemId)
     {
         if (shooting == null)
             return;
 
-        shooting.TriggerGadgetUse();
+        shooting.TriggerGadgetUse(itemId);
+    }
+
+    void DestroyAllButtons()
+    {
+        for (int i = 0; i < widgets.Count; i++)
+        {
+            if (widgets[i]?.Root != null)
+                Destroy(widgets[i].Root);
+        }
+
+        widgets.Clear();
+        lastWidgetSignature = string.Empty;
+
+        if (rootObject != null)
+        {
+            Destroy(rootObject);
+            rootObject = null;
+        }
+    }
+
+    static string BuildWidgetSignature(IReadOnlyList<string> itemIds)
+    {
+        if (itemIds == null || itemIds.Count == 0)
+            return string.Empty;
+
+        return string.Join("|", itemIds);
     }
 
     static Sprite GetCircularButtonSprite()

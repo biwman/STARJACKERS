@@ -94,6 +94,8 @@ MonoBehaviour:
   - ReceivePendingWreckLootRpc
   - ResolveReservedDroppedCargoLoot
   - ResolveReservedWreckLoot
+  - HandleBatteryShieldChargeRequest
+  - PlayBatteryShieldChargeAudio
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

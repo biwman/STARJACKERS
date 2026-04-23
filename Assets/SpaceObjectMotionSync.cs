@@ -8,6 +8,8 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
     const byte SnapshotEventCode = 71;
     const byte ImpulseRequestEventCode = 72;
     const byte SpaceMineDetonationEventCode = 73;
+    const byte ObstacleDamageRequestEventCode = 74;
+    const byte ObstacleStateSyncEventCode = 75;
 
     static SpaceObjectMotionSync instance;
 
@@ -97,6 +99,41 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         PhotonNetwork.RaiseEvent(SpaceMineDetonationEventCode, payload, options, SendOptions.SendReliable);
     }
 
+    public static void RequestObstacleDamage(string stableId, int damage)
+    {
+        if (string.IsNullOrWhiteSpace(stableId) || damage <= 0)
+            return;
+
+        if (!PhotonNetwork.IsConnected || PhotonNetwork.IsMasterClient)
+        {
+            ObstacleSpawner.ApplyObstacleDamage(stableId, damage);
+            return;
+        }
+
+        Player masterClient = PhotonNetwork.MasterClient;
+        if (masterClient == null)
+            return;
+
+        object[] payload = { stableId, damage };
+        RaiseEventOptions options = new RaiseEventOptions { TargetActors = new[] { masterClient.ActorNumber } };
+        PhotonNetwork.RaiseEvent(ObstacleDamageRequestEventCode, payload, options, SendOptions.SendReliable);
+    }
+
+    public static void BroadcastObstacleState(string serializedState, int[] targetActors = null)
+    {
+        if (!PhotonNetwork.IsConnected)
+        {
+            ObstacleSpawner.ApplyRuntimeStateSnapshot(serializedState);
+            return;
+        }
+
+        RaiseEventOptions options = targetActors != null && targetActors.Length > 0
+            ? new RaiseEventOptions { TargetActors = targetActors }
+            : new RaiseEventOptions { Receivers = ReceiverGroup.Others };
+
+        PhotonNetwork.RaiseEvent(ObstacleStateSyncEventCode, serializedState, options, SendOptions.SendReliable);
+    }
+
     public void OnEvent(EventData photonEvent)
     {
         switch (photonEvent.Code)
@@ -109,6 +146,12 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
                 break;
             case SpaceMineDetonationEventCode:
                 ApplySpaceMineDetonation(photonEvent.CustomData as object[]);
+                break;
+            case ObstacleDamageRequestEventCode:
+                ApplyObstacleDamageRequest(photonEvent.CustomData as object[]);
+                break;
+            case ObstacleStateSyncEventCode:
+                ApplyObstacleStateSync(photonEvent.CustomData);
                 break;
         }
     }
@@ -163,6 +206,28 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
 
         Vector3 resolvedWorldPosition = EnemyBot.ResolveSpaceMineDetonationPosition(sourceViewId, fallbackWorldPosition);
         EnemyBot.SpawnSpaceMineDetonationEffects(resolvedWorldPosition);
+    }
+
+    void ApplyObstacleDamageRequest(object[] payload)
+    {
+        if (!PhotonNetwork.IsMasterClient || payload == null || payload.Length < 2)
+            return;
+
+        string stableId = payload[0] as string;
+        if (string.IsNullOrWhiteSpace(stableId))
+            return;
+
+        int damage = ConvertToInt(payload[1]);
+        if (damage <= 0)
+            return;
+
+        ObstacleSpawner.ApplyObstacleDamage(stableId, damage);
+    }
+
+    void ApplyObstacleStateSync(object payload)
+    {
+        if (payload is string serializedState)
+            ObstacleSpawner.ApplyRuntimeStateSnapshot(serializedState);
     }
 
     static float ConvertToFloat(object value)

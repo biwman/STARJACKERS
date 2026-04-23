@@ -29,6 +29,7 @@ public class MovingSpaceObject : MonoBehaviour
 
     static readonly Dictionary<string, MovingSpaceObject> ObjectsById = new Dictionary<string, MovingSpaceObject>();
     static PhysicsMaterial2D sharedBouncyMaterial;
+    static Collider2D[] cachedWallColliders;
 
     string stableId;
     SpaceObjectType objectType;
@@ -46,8 +47,12 @@ public class MovingSpaceObject : MonoBehaviour
     float networkAngularVelocity;
     bool hasNetworkState;
     bool configured;
+    bool boundaryCollisionIgnoreInitialized;
+    bool lastBoundaryIgnoreSetting;
+    Collider2D[] cachedObjectColliders;
 
     public string StableId => stableId;
+    public SpaceObjectType ObjectType => objectType;
 
     public static PhysicsMaterial2D GetSharedBouncyMaterial()
     {
@@ -131,6 +136,14 @@ public class MovingSpaceObject : MonoBehaviour
         PlayerMovement player = collision.collider.GetComponentInParent<PlayerMovement>();
         if (player != null && player.GetComponent<AstronautSurvivor>() == null)
         {
+            if (objectType == SpaceObjectType.Obstacle && RoomSettings.IsObstacleMassMax())
+            {
+                if (isAuthority)
+                    rb.linearVelocity = Vector2.ClampMagnitude(rb.linearVelocity, GetBaseSpeed() * MaxSpeedMultiplier);
+
+                return;
+            }
+
             Rigidbody2D playerRb = player.GetComponent<Rigidbody2D>();
             Vector2 playerVelocity = playerRb != null ? playerRb.linearVelocity : Vector2.zero;
             if (playerVelocity.sqrMagnitude >= 0.01f)
@@ -200,6 +213,35 @@ public class MovingSpaceObject : MonoBehaviour
         }
     }
 
+    public void SetMotionState(Vector2 position, Vector2 velocity, float rotation, float angularVelocity, bool authorityState)
+    {
+        EnsureRigidBody();
+        ApplySimulationMode();
+
+        if (authorityState)
+            EnsureDynamicBody();
+
+        rb.position = position;
+        rb.rotation = rotation;
+        rb.linearVelocity = velocity;
+        rb.angularVelocity = angularVelocity;
+
+        if (velocity.sqrMagnitude > 0.0001f)
+            cruiseDirection = velocity.normalized;
+
+        networkPosition = position;
+        networkVelocity = velocity;
+        networkRotation = rotation;
+        networkAngularVelocity = angularVelocity;
+        hasNetworkState = true;
+    }
+
+    public void NotifyColliderShapeChanged()
+    {
+        cachedObjectColliders = GetComponents<Collider2D>();
+        boundaryCollisionIgnoreInitialized = false;
+    }
+
     void EnsureRigidBody()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -217,6 +259,7 @@ public class MovingSpaceObject : MonoBehaviour
         rb.useFullKinematicContacts = true;
 
         Collider2D[] colliders = GetComponents<Collider2D>();
+        cachedObjectColliders = colliders;
         PhysicsMaterial2D material = GetSharedBouncyMaterial();
         foreach (Collider2D currentCollider in colliders)
         {
@@ -253,6 +296,12 @@ public class MovingSpaceObject : MonoBehaviour
         if (rb == null)
             EnsureRigidBody();
 
+        bool ignoreWalls = objectType == SpaceObjectType.Obstacle && RoomSettings.AreObstaclesBorderless();
+        if (!boundaryCollisionIgnoreInitialized || ignoreWalls != lastBoundaryIgnoreSetting)
+        {
+            RefreshBoundaryCollisionIgnore(ignoreWalls);
+        }
+
         if (isAuthority && movingEnabled)
         {
             EnsureDynamicBody();
@@ -272,6 +321,66 @@ public class MovingSpaceObject : MonoBehaviour
                 rb.angularVelocity = 0f;
             }
         }
+    }
+
+    void RefreshBoundaryCollisionIgnore(bool ignoreWalls)
+    {
+        if (objectType != SpaceObjectType.Obstacle)
+            return;
+
+        Collider2D[] objectColliders = cachedObjectColliders != null && cachedObjectColliders.Length > 0
+            ? cachedObjectColliders
+            : GetComponents<Collider2D>();
+        if (objectColliders == null || objectColliders.Length == 0)
+            return;
+
+        cachedObjectColliders = objectColliders;
+        Collider2D[] wallColliders = GetWallColliders();
+        for (int wallIndex = 0; wallIndex < wallColliders.Length; wallIndex++)
+        {
+            Collider2D wallCollider = wallColliders[wallIndex];
+            if (wallCollider == null)
+                continue;
+
+            for (int i = 0; i < objectColliders.Length; i++)
+            {
+                Collider2D objectCollider = objectColliders[i];
+                if (objectCollider != null)
+                    Physics2D.IgnoreCollision(objectCollider, wallCollider, ignoreWalls);
+            }
+        }
+
+        lastBoundaryIgnoreSetting = ignoreWalls;
+        boundaryCollisionIgnoreInitialized = true;
+    }
+
+    static Collider2D[] GetWallColliders()
+    {
+        if (cachedWallColliders != null && cachedWallColliders.Length == 4)
+        {
+            bool allPresent = true;
+            for (int i = 0; i < cachedWallColliders.Length; i++)
+            {
+                if (cachedWallColliders[i] == null)
+                {
+                    allPresent = false;
+                    break;
+                }
+            }
+
+            if (allPresent)
+                return cachedWallColliders;
+        }
+
+        string[] wallNames = { "WallTop", "WallBottom", "WallLeft", "WallRight" };
+        cachedWallColliders = new Collider2D[wallNames.Length];
+        for (int i = 0; i < wallNames.Length; i++)
+        {
+            GameObject wall = GameObject.Find(wallNames[i]);
+            cachedWallColliders[i] = wall != null ? wall.GetComponent<Collider2D>() : null;
+        }
+
+        return cachedWallColliders;
     }
 
     void EnsureDynamicBody()
@@ -372,15 +481,26 @@ public class MovingSpaceObject : MonoBehaviour
 
     float GetMassFactor()
     {
-        return objectType == SpaceObjectType.Obstacle
-            ? RoomSettings.GetObstacleWeightFactor()
-            : RoomSettings.GetTreasureWeightFactor();
+        if (objectType == SpaceObjectType.Obstacle)
+        {
+            return RoomSettings.IsObstacleMassMax()
+                ? 100000f
+                : RoomSettings.GetObstacleWeightFactor();
+        }
+
+        return RoomSettings.GetTreasureWeightFactor();
     }
 
     void KeepInsideMapBounds()
     {
         if (rb == null)
             return;
+
+        if (objectType == SpaceObjectType.Obstacle && RoomSettings.AreObstaclesBorderless())
+        {
+            WrapAcrossMapBounds();
+            return;
+        }
 
         Vector2 mapSize = RoomSettings.GetMapDimensions();
         float halfX = mapSize.x * 0.5f;
@@ -433,6 +553,44 @@ public class MovingSpaceObject : MonoBehaviour
             rb.angularVelocity = Mathf.Clamp(-rb.angularVelocity * 0.6f, -MaxBoundaryAngularSpeed, MaxBoundaryAngularSpeed);
             baseAngularSpeed *= -1f;
         }
+    }
+
+    void WrapAcrossMapBounds()
+    {
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = mapSize.x * 0.5f;
+        float halfY = mapSize.y * 0.5f;
+        float boundsRadius = GetBoundsRadius();
+
+        Vector2 position = rb.position;
+        bool wrapped = false;
+
+        if (position.x > halfX + boundsRadius)
+        {
+            position.x = -halfX - boundsRadius;
+            wrapped = true;
+        }
+        else if (position.x < -halfX - boundsRadius)
+        {
+            position.x = halfX + boundsRadius;
+            wrapped = true;
+        }
+
+        if (position.y > halfY + boundsRadius)
+        {
+            position.y = -halfY - boundsRadius;
+            wrapped = true;
+        }
+        else if (position.y < -halfY - boundsRadius)
+        {
+            position.y = halfY + boundsRadius;
+            wrapped = true;
+        }
+
+        if (!wrapped)
+            return;
+
+        rb.position = position;
     }
 
     float GetBoundsRadius()

@@ -99,6 +99,12 @@ public class Bullet : MonoBehaviourPun
             hp.photonView.RPC("TakeDamage", RpcTarget.MasterClient, damage, ownerViewID);
         }
 
+        ObstacleChunk obstacleChunk = collision.gameObject.GetComponentInParent<ObstacleChunk>();
+        if (obstacleChunk != null && !string.IsNullOrWhiteSpace(obstacleChunk.StableId) && RoomSettings.AreObstaclesDestructible())
+        {
+            SpaceObjectMotionSync.RequestObstacleDamage(obstacleChunk.StableId, damage);
+        }
+
         ApplyBulletPush(collision);
 
         DestroyBullet();

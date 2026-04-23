@@ -11,6 +11,10 @@ using System.Collections.Generic;
 
 public class LobbyManager : MonoBehaviourPunCallbacks
 {
+    const float BottomActionButtonsY = -422f;
+    const float BottomActionReadyX = -40f;
+    const float BottomActionBackX = 300f;
+
     static readonly string[] GameplayHudObjectNames =
     {
         "JoystickBG",
@@ -27,9 +31,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     };
 
     static readonly float[] RoundDurationOptions = { 60f, 90f, 120f, 150f, 180f, 210f, 240f };
-    static readonly string[] DensityOptions = { "low", "medium", "high" };
+    static readonly string[] DensityOptions = { "none", "low", "medium", "high" };
     static readonly string[] MapSizeOptions = { "small", "medium", "large", "very_large", "super_large" };
     static readonly int[] MapBackgroundOptions = { 1, 2, 3, 4, 5, 6 };
+    static readonly int[] ObstacleHpOptions = { 50, 100, 150, 200, 250, 300 };
+    static readonly int[] ObstacleSizePercentOptions = { 50, 100, 150, 200, 250, 300, 350, 400, 450, 500 };
     static readonly int[] ExtractionCountOptions = { 1, 2, 3, 4 };
     static readonly int[] BoosterSlowdownOptions = { 30, 40, 50, 60, 70, 80, 90, 100 };
     static readonly int[] AmmoCountOptions = { 5, 10, 15, 20, 25, 30 };
@@ -37,11 +43,13 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     static readonly int[] MaxInputBoostPercentOptions = { 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50 };
     static readonly int[] LastShipTimerMultiplierOptions = { 1, 2, 3, 4, 5 };
     static readonly int[] EnemyCountOptions = { 1, 2, 3, 4, 5 };
+    static readonly int[] SpaceMineCountOptions = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 };
     static readonly int[] EnemyHpOptions = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200 };
     static readonly int[] EnemySpawnSecondOptions = { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120 };
     static readonly int[] EnemyRespawnIntervalOptions = { 15, 30, 60, 90, 120, 150 };
     static readonly int[] BulletPushMultiplierOptions = { 1, 2, 3, 4, 5 };
-    static readonly int[] WeightFactorOptions = { 2, 6, 12 };
+    static readonly int[] ObstacleWeightFactorOptions = { 2, 6, 12, RoomSettings.MaxObstacleWeightFactor };
+    static readonly int[] TreasureWeightFactorOptions = { 2, 6, 12 };
 
     public Button readyButton;
     public TMP_Text readyText;
@@ -50,6 +58,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text mapSizeSettingText;
     public TMP_Text mapBackgroundSettingText;
     public TMP_Text obstacleSettingText;
+    public TMP_Text obstacleDestroySettingText;
+    public TMP_Text obstacleHpValueSettingText;
+    public TMP_Text obstacleSizeSettingText;
+    public TMP_Text obstacleNoBordersSettingText;
     public TMP_Text treasureSettingText;
     public TMP_Text nebulaSettingText;
     public TMP_Text extractionSettingText;
@@ -71,6 +83,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button mapSizeSettingButton;
     public Button mapBackgroundSettingButton;
     public Button obstacleSettingButton;
+    public Button obstacleDestroySettingButton;
+    public Button obstacleHpValueSettingButton;
+    public Button obstacleSizeSettingButton;
+    public Button obstacleNoBordersSettingButton;
     public Button treasureSettingButton;
     public Button nebulaSettingButton;
     public Button extractionSettingButton;
@@ -84,6 +100,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button bulletPushSettingButton;
     public Button obstacleWeightSettingButton;
     public Button treasureWeightSettingButton;
+    public Button backToRoundsButton;
+    public TMP_Text backToRoundsText;
 
     bool isReady = false;
     bool hasRecordedCurrentRound = false;
@@ -109,6 +127,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         EnsurePlayerStatusListExists();
         EnsureHostSettingsUiExists();
+        EnsureLobbyNavigationUiExists();
 
         if (PhotonNetwork.InRoom)
         {
@@ -149,6 +168,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             Debug.Log("GAME ALREADY STARTED (Start)");
             HideLobby();
         }
+
+        EnsureBottomActionButtonsLayout();
     }
 
     void Update()
@@ -168,13 +189,28 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public override void OnJoinedRoom()
     {
         hasRecordedCurrentRound = false;
-        ShowLobby();
         EnsurePlayerStatusListExists();
         EnsureHostSettingsUiExists();
+        EnsureLobbyNavigationUiExists();
+        EnsureBottomActionButtonsLayout();
         EnsureDefaultRoomSettings();
-        SetReady(false);
-        RefreshPlayerStatusList();
-        RefreshHostSettingsUi();
+
+        bool started = PhotonNetwork.CurrentRoom != null &&
+                       PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
+                       value is bool startedValue &&
+                       startedValue;
+
+        if (started)
+        {
+            HideLobby();
+        }
+        else
+        {
+            ShowLobby();
+            SetReady(false);
+            RefreshPlayerStatusList();
+            RefreshHostSettingsUi();
+        }
     }
 
     void ToggleReady()
@@ -211,6 +247,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changedProps.ContainsKey(RoomSettings.MapSizeKey) ||
             changedProps.ContainsKey(RoomSettings.MapBackgroundKey) ||
             changedProps.ContainsKey(RoomSettings.ObstacleDensityKey) ||
+            changedProps.ContainsKey(RoomSettings.ObstacleDestroyEnabledKey) ||
+            changedProps.ContainsKey(RoomSettings.ObstacleHpKey) ||
+            changedProps.ContainsKey(RoomSettings.ObstacleSizePercentKey) ||
+            changedProps.ContainsKey(RoomSettings.ObstacleNoBordersKey) ||
             changedProps.ContainsKey(RoomSettings.TreasureDensityKey) ||
             changedProps.ContainsKey(RoomSettings.NebulaDensityKey) ||
             changedProps.ContainsKey(RoomSettings.ExtractionCountKey) ||
@@ -279,6 +319,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             propertiesThatChanged.ContainsKey(RoomSettings.MapSizeKey) ||
             propertiesThatChanged.ContainsKey(RoomSettings.MapBackgroundKey) ||
             propertiesThatChanged.ContainsKey(RoomSettings.ObstacleDensityKey) ||
+            propertiesThatChanged.ContainsKey(RoomSettings.ObstacleDestroyEnabledKey) ||
+            propertiesThatChanged.ContainsKey(RoomSettings.ObstacleHpKey) ||
+            propertiesThatChanged.ContainsKey(RoomSettings.ObstacleSizePercentKey) ||
+            propertiesThatChanged.ContainsKey(RoomSettings.ObstacleNoBordersKey) ||
             propertiesThatChanged.ContainsKey(RoomSettings.TreasureDensityKey) ||
             propertiesThatChanged.ContainsKey(RoomSettings.NebulaDensityKey) ||
             propertiesThatChanged.ContainsKey(RoomSettings.ExtractionCountKey) ||
@@ -378,6 +422,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         cg.alpha = 1;
         cg.interactable = true;
         cg.blocksRaycasts = true;
+        EnsureBottomActionButtonsLayout();
     }
 
     void SetGameplayHudVisible(bool visible)
@@ -474,6 +519,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         mapSizeSettingButton = EnsureSettingButton(ref mapSizeSettingText, mapSizeSettingButton, "MapSizeSettingButton", "MapSizeSettingText", new Vector2(-290f, -292f), CycleMapSize);
         mapBackgroundSettingButton = EnsureSettingButton(ref mapBackgroundSettingText, mapBackgroundSettingButton, "MapBackgroundSettingButton", "MapBackgroundSettingText", new Vector2(-690f, -980f), CycleMapBackground);
         obstacleSettingButton = EnsureSettingButton(ref obstacleSettingText, obstacleSettingButton, "ObstacleSettingButton", "ObstacleSettingText", new Vector2(-690f, -378f), CycleObstacleDensity);
+        obstacleDestroySettingButton = EnsureSettingButton(ref obstacleDestroySettingText, obstacleDestroySettingButton, "ObstacleDestroySettingButton", "ObstacleDestroySettingText", new Vector2(-690f, -1066f), CycleObstacleDestroyEnabled);
+        obstacleHpValueSettingButton = EnsureSettingButton(ref obstacleHpValueSettingText, obstacleHpValueSettingButton, "ObstacleHpValueSettingButton", "ObstacleHpValueSettingText", new Vector2(-290f, -1066f), CycleObstacleHp);
+        obstacleSizeSettingButton = EnsureSettingButton(ref obstacleSizeSettingText, obstacleSizeSettingButton, "ObstacleSizeSettingButton", "ObstacleSizeSettingText", new Vector2(-690f, -1152f), CycleObstacleSizePercent);
+        obstacleNoBordersSettingButton = EnsureSettingButton(ref obstacleNoBordersSettingText, obstacleNoBordersSettingButton, "ObstacleNoBordersSettingButton", "ObstacleNoBordersSettingText", new Vector2(-290f, -1152f), CycleObstacleNoBorders);
         treasureSettingButton = EnsureSettingButton(ref treasureSettingText, treasureSettingButton, "TreasureSettingButton", "TreasureSettingText", new Vector2(-290f, -378f), CycleTreasureDensity);
         nebulaSettingButton = EnsureSettingButton(ref nebulaSettingText, nebulaSettingButton, "NebulaSettingButton", "NebulaSettingText", new Vector2(-690f, -464f), CycleNebulaDensity);
         extractionSettingButton = EnsureSettingButton(ref extractionSettingText, extractionSettingButton, "ExtractionSettingButton", "ExtractionSettingText", new Vector2(-290f, -464f), CycleExtractionCount);
@@ -488,6 +537,48 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         obstacleWeightSettingButton = EnsureSettingButton(ref obstacleWeightSettingText, obstacleWeightSettingButton, "ObstacleWeightSettingButton", "ObstacleWeightSettingText", new Vector2(-690f, -894f), CycleObstacleWeightFactor);
         treasureWeightSettingButton = EnsureSettingButton(ref treasureWeightSettingText, treasureWeightSettingButton, "TreasureWeightSettingButton", "TreasureWeightSettingText", new Vector2(-290f, -894f), CycleTreasureWeightFactor);
         EnsureEnemySettingsUiExists();
+    }
+
+    void EnsureLobbyNavigationUiExists()
+    {
+        backToRoundsButton = EnsureSettingButton(
+            ref backToRoundsText,
+            backToRoundsButton,
+            "BackToRoundsButton",
+            "BackToRoundsText",
+            new Vector2(BottomActionBackX, BottomActionButtonsY),
+            OnBackToRoundsClicked);
+
+        if (backToRoundsButton != null)
+        {
+            RectTransform rect = backToRoundsButton.GetComponent<RectTransform>();
+            if (rect != null)
+                rect.sizeDelta = new Vector2(300f, 62f);
+        }
+
+        EnsureBottomActionButtonsLayout();
+    }
+
+    void EnsureBottomActionButtonsLayout()
+    {
+        PositionBottomActionButton(readyButton, BottomActionReadyX, BottomActionButtonsY, new Vector2(220f, 62f));
+        PositionBottomActionButton(backToRoundsButton, BottomActionBackX, BottomActionButtonsY, new Vector2(300f, 62f));
+    }
+
+    void PositionBottomActionButton(Button button, float anchoredX, float anchoredY, Vector2 size)
+    {
+        if (button == null)
+            return;
+
+        RectTransform rect = button.GetComponent<RectTransform>();
+        if (rect == null)
+            return;
+
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = new Vector2(anchoredX, anchoredY);
+        rect.sizeDelta = size;
     }
 
     void EnsureEnemySettingsUiExists()
@@ -582,6 +673,40 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         Hashtable props = new Hashtable();
         bool changed = false;
+        string hostName = !string.IsNullOrWhiteSpace(PhotonNetwork.NickName) ? PhotonNetwork.NickName : "Pilot";
+        bool roundStarted = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object startedValue) &&
+                            startedValue is bool started &&
+                            started;
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.SessionStateKey))
+        {
+            props[RoomSettings.SessionStateKey] = roundStarted ? RoomSettings.SessionStateInPlay : RoomSettings.SessionStateInLobby;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.SessionLabelKey))
+        {
+            props[RoomSettings.SessionLabelKey] = hostName + "'s Round";
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.SessionHostNameKey))
+        {
+            props[RoomSettings.SessionHostNameKey] = hostName;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.SessionCreatedAtKey))
+        {
+            props[RoomSettings.SessionCreatedAtKey] = PhotonNetwork.Time;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.StartTimeKey))
+        {
+            props[RoomSettings.StartTimeKey] = -1d;
+            changed = true;
+        }
 
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.RoundDurationKey))
         {
@@ -592,6 +717,30 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ObstacleDensityKey))
         {
             props[RoomSettings.ObstacleDensityKey] = RoomSettings.DefaultObstacleDensity;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ObstacleDestroyEnabledKey))
+        {
+            props[RoomSettings.ObstacleDestroyEnabledKey] = RoomSettings.DefaultObstacleDestroyEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ObstacleHpKey))
+        {
+            props[RoomSettings.ObstacleHpKey] = RoomSettings.DefaultObstacleHp;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ObstacleSizePercentKey))
+        {
+            props[RoomSettings.ObstacleSizePercentKey] = RoomSettings.DefaultObstacleSizePercent;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ObstacleNoBordersKey))
+        {
+            props[RoomSettings.ObstacleNoBordersKey] = RoomSettings.DefaultObstacleNoBorders;
             changed = true;
         }
 
@@ -846,6 +995,38 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         CycleDensitySetting(RoomSettings.ObstacleDensityKey, GetObstacleDensity());
     }
 
+    void CycleObstacleDestroyEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.ObstacleDestroyEnabledKey] = !AreObstaclesDestructible();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
+    void CycleObstacleHp()
+    {
+        CycleIntSetting(RoomSettings.ObstacleHpKey, ObstacleHpOptions, GetObstacleHp(), RoomSettings.DefaultObstacleHp);
+    }
+
+    void CycleObstacleSizePercent()
+    {
+        CycleIntSetting(RoomSettings.ObstacleSizePercentKey, ObstacleSizePercentOptions, GetObstacleSizePercent(), RoomSettings.DefaultObstacleSizePercent);
+    }
+
+    void CycleObstacleNoBorders()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.ObstacleNoBordersKey] = !AreObstaclesBorderless();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
     void CycleMapSize()
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
@@ -1031,7 +1212,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (definition == null)
             return;
 
-        CycleIntSetting(definition.CountRoomKey, EnemyCountOptions, RoomSettings.GetEnemyCount(kind), definition.DefaultCount);
+        int[] options = kind == EnemyBotKind.SpaceMine ? SpaceMineCountOptions : EnemyCountOptions;
+        CycleIntSetting(definition.CountRoomKey, options, RoomSettings.GetEnemyCount(kind), definition.DefaultCount);
     }
 
     void CycleEnemyHp(EnemyBotKind kind)
@@ -1096,12 +1278,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void CycleObstacleWeightFactor()
     {
-        CycleIntSetting(RoomSettings.ObstacleWeightFactorKey, WeightFactorOptions, GetObstacleWeightFactor(), RoomSettings.DefaultObstacleWeightFactor);
+        CycleIntSetting(RoomSettings.ObstacleWeightFactorKey, ObstacleWeightFactorOptions, GetObstacleWeightFactor(), RoomSettings.DefaultObstacleWeightFactor);
     }
 
     void CycleTreasureWeightFactor()
     {
-        CycleIntSetting(RoomSettings.TreasureWeightFactorKey, WeightFactorOptions, GetTreasureWeightFactor(), RoomSettings.DefaultTreasureWeightFactor);
+        CycleIntSetting(RoomSettings.TreasureWeightFactorKey, TreasureWeightFactorOptions, GetTreasureWeightFactor(), RoomSettings.DefaultTreasureWeightFactor);
     }
 
     void CycleBulletPushMultiplier()
@@ -1178,6 +1360,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     void RefreshHostSettingsUi()
     {
         EnsureHostSettingsUiExists();
+        EnsureLobbyNavigationUiExists();
+        EnsureBottomActionButtonsLayout();
 
         bool isHost = PhotonNetwork.IsMasterClient;
 
@@ -1192,6 +1376,18 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (obstacleSettingText != null)
             obstacleSettingText.text = "OBSTACLES DENSITY: " + FormatDensity(GetObstacleDensity());
+
+        if (obstacleDestroySettingText != null)
+            obstacleDestroySettingText.text = "OBSTACLES DESTROY: " + (AreObstaclesDestructible() ? "ON" : "OFF");
+
+        if (obstacleHpValueSettingText != null)
+            obstacleHpValueSettingText.text = "OBSTACLE HP: " + GetObstacleHp();
+
+        if (obstacleSizeSettingText != null)
+            obstacleSizeSettingText.text = "OBSTACLE SIZE: " + GetObstacleSizePercent() + "%";
+
+        if (obstacleNoBordersSettingText != null)
+            obstacleNoBordersSettingText.text = "OBSTACLES NO BORDERS: " + (AreObstaclesBorderless() ? "YES" : "NO");
 
         if (treasureSettingText != null)
             treasureSettingText.text = "RESOURCES DENSITY: " + FormatDensity(GetTreasureDensity());
@@ -1236,6 +1432,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(mapSizeSettingButton, isHost);
         SetSettingButtonState(mapBackgroundSettingButton, isHost);
         SetSettingButtonState(obstacleSettingButton, isHost);
+        SetSettingButtonState(obstacleDestroySettingButton, isHost);
+        SetSettingButtonState(obstacleHpValueSettingButton, isHost);
+        SetSettingButtonState(obstacleSizeSettingButton, isHost);
+        SetSettingButtonState(obstacleNoBordersSettingButton, isHost);
         SetSettingButtonState(treasureSettingButton, isHost);
         SetSettingButtonState(nebulaSettingButton, isHost);
         SetSettingButtonState(extractionSettingButton, isHost);
@@ -1249,7 +1449,36 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(bulletPushSettingButton, isHost);
         SetSettingButtonState(obstacleWeightSettingButton, isHost);
         SetSettingButtonState(treasureWeightSettingButton, isHost);
+        RefreshLobbyNavigationButton();
         RefreshEnemySettingTexts(isHost);
+    }
+
+    void RefreshLobbyNavigationButton()
+    {
+        if (backToRoundsButton == null)
+            return;
+
+        bool inLobbyState = PhotonNetwork.InRoom && RoomSettings.GetSessionState() == RoomSettings.SessionStateInLobby;
+        backToRoundsButton.interactable = inLobbyState;
+        backToRoundsButton.gameObject.SetActive(true);
+        backToRoundsButton.transform.SetAsLastSibling();
+
+        Image image = backToRoundsButton.GetComponent<Image>();
+        if (image != null)
+        {
+            image.color = inLobbyState
+                ? PhotonNetwork.IsMasterClient
+                    ? new Color(0.58f, 0.18f, 0.18f, 0.98f)
+                    : new Color(0.16f, 0.34f, 0.58f, 0.98f)
+                : new Color(0.12f, 0.14f, 0.18f, 0.72f);
+        }
+
+        if (backToRoundsText != null)
+        {
+            backToRoundsText.text = PhotonNetwork.IsMasterClient ? "CLOSE LOBBY" : "BACK TO ROUNDS";
+            backToRoundsText.fontSize = 20f;
+            backToRoundsText.characterSpacing = 1.8f;
+        }
     }
 
     void SetSettingButtonState(Button button, bool interactable)
@@ -1295,6 +1524,14 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             textField.text = text;
     }
 
+    void OnBackToRoundsClicked()
+    {
+        if (!PhotonNetwork.InRoom || RoomSettings.GetSessionState() != RoomSettings.SessionStateInLobby)
+            return;
+
+        NetworkManager.ReturnToSessionBrowserFromLobby();
+    }
+
     Button GetEnemySettingButton(EnemyBotKind kind, string suffix)
     {
         enemySettingButtons.TryGetValue(GetEnemySettingUiKey(kind, suffix), out Button button);
@@ -1327,6 +1564,26 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     string GetObstacleDensity()
     {
         return GetDensitySetting(RoomSettings.ObstacleDensityKey);
+    }
+
+    bool AreObstaclesDestructible()
+    {
+        return RoomSettings.AreObstaclesDestructible();
+    }
+
+    int GetObstacleHp()
+    {
+        return RoomSettings.GetObstacleHp();
+    }
+
+    int GetObstacleSizePercent()
+    {
+        return RoomSettings.GetObstacleSizePercent();
+    }
+
+    bool AreObstaclesBorderless()
+    {
+        return RoomSettings.AreObstaclesBorderless();
     }
 
     string GetMapSize()

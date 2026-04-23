@@ -7,6 +7,9 @@ public class PlayerHealth : MonoBehaviourPun
 {
     const int DefaultPlayerHp = 50;
     const int DefaultPlayerShield = 50;
+    const int BatteryShieldPerTick = 5;
+    const int BatteryTickCount = 5;
+    const float BatteryTickInterval = 1f;
     const float EvacuationAnimationDuration = 4f;
     const float MinimumEvacuationScale = 0.01f;
     const float AstronautSpawnClearanceRadius = 0.34f;
@@ -27,6 +30,19 @@ public class PlayerHealth : MonoBehaviourPun
     public bool IsBotControlled => GetComponent<EnemyBot>() != null;
     public bool IsAstronautControlled => GetComponent<AstronautSurvivor>() != null;
     public bool IsEvacuationAnimating => isEvacuationAnimating;
+
+    public bool CanActivateBatteryChargeLocally()
+    {
+        return !IsWreck && !isEvacuationAnimating && currentShield < maxShield;
+    }
+
+    public void RequestBatteryShieldCharge()
+    {
+        if (!photonView.IsMine || !CanActivateBatteryChargeLocally())
+            return;
+
+        photonView.RPC(nameof(HandleBatteryShieldChargeRequest), RpcTarget.MasterClient);
+    }
 
     void Start()
     {
@@ -155,6 +171,33 @@ public class PlayerHealth : MonoBehaviourPun
         {
             hpBar.maxValue = maxHP;
             hpBar.value = currentHP;
+        }
+    }
+
+    [PunRPC]
+    void HandleBatteryShieldChargeRequest()
+    {
+        if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || currentShield >= maxShield)
+            return;
+
+        photonView.RPC(nameof(PlayBatteryShieldChargeAudio), RpcTarget.All);
+        StartCoroutine(ApplyBatteryShieldChargeRoutine());
+    }
+
+    System.Collections.IEnumerator ApplyBatteryShieldChargeRoutine()
+    {
+        for (int i = 0; i < BatteryTickCount; i++)
+        {
+            if (IsWreck || isEvacuationAnimating)
+                yield break;
+
+            yield return new WaitForSeconds(BatteryTickInterval);
+
+            if (currentShield >= maxShield)
+                yield break;
+
+            currentShield = Mathf.Min(maxShield, currentShield + BatteryShieldPerTick);
+            photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
         }
     }
 
@@ -499,6 +542,17 @@ public class PlayerHealth : MonoBehaviourPun
             wreck = gameObject.AddComponent<ShipWreck>();
 
         wreck.InitializeFromLootJson(serializedLoot, shipSkinIndex);
+        wreck.SetBaseColor(Color.white);
+
+        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+        if (renderer != null)
+        {
+            Sprite wreckSprite = LoadPlayerWreckSprite(shipSkinIndex);
+            if (wreckSprite != null)
+                renderer.sprite = wreckSprite;
+
+            renderer.color = Color.white;
+        }
     }
 
     [PunRPC]
@@ -606,6 +660,12 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
+    void PlayBatteryShieldChargeAudio()
+    {
+        AudioManager.Instance.PlayShieldChargeAt(transform.position);
+    }
+
+    [PunRPC]
     void PlayHpHitAudio()
     {
         AudioManager.Instance.PlayHpHitAt(transform.position);
@@ -676,6 +736,44 @@ public class PlayerHealth : MonoBehaviourPun
             PhotonNetwork.Destroy(gameObject);
         else if (!PhotonNetwork.IsConnected)
             Destroy(gameObject);
+    }
+
+    Sprite LoadPlayerWreckSprite(int shipSkinIndex)
+    {
+        string resourcePath = ShipCatalog.GetWreckResourcePathForSkin(shipSkinIndex);
+        if (!string.IsNullOrWhiteSpace(resourcePath))
+        {
+            Sprite resourceSprite = Resources.Load<Sprite>(resourcePath);
+            if (resourceSprite != null)
+                return resourceSprite;
+        }
+
+#if UNITY_EDITOR
+        string editorPath = ShipCatalog.GetWreckEditorResourcePathForSkin(shipSkinIndex);
+        if (!string.IsNullOrWhiteSpace(editorPath))
+        {
+            UnityEngine.Object[] assets = UnityEditor.AssetDatabase.LoadAllAssetsAtPath(editorPath);
+            for (int i = 0; i < assets.Length; i++)
+            {
+                if (assets[i] is Sprite sprite)
+                    return sprite;
+            }
+
+            Sprite directSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(editorPath);
+            if (directSprite != null)
+                return directSprite;
+        }
+
+        string fallbackPath = ShipCatalog.GetWreckEditorFallbackPathForSkin(shipSkinIndex);
+        if (!string.IsNullOrWhiteSpace(fallbackPath))
+        {
+            Sprite fallbackSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(fallbackPath);
+            if (fallbackSprite != null)
+                return fallbackSprite;
+        }
+#endif
+
+        return null;
     }
 
     GameObject FindObjectEvenIfDisabled(string name)

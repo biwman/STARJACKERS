@@ -7,6 +7,7 @@ using UnityEngine;
 
 public class NebulaSpawner : MonoBehaviour
 {
+    const string EmptyLayoutSentinel = "__empty__";
     const string GameStartedKey = "gameStarted";
     const string ExtractionLayoutKey = "extractionLayout";
     const string ObstacleLayoutKey = "obstacleLayout";
@@ -107,6 +108,12 @@ public class NebulaSpawner : MonoBehaviour
         if (layoutApplied || string.IsNullOrWhiteSpace(layout))
             return;
 
+        if (layout == EmptyLayoutSentinel)
+        {
+            layoutApplied = true;
+            return;
+        }
+
         List<Vector2> positions = ParseLayout(layout);
         for (int i = 0; i < positions.Count; i++)
         {
@@ -127,7 +134,7 @@ public class NebulaSpawner : MonoBehaviour
         List<Vector2> extractionPositions = ParseLayout(GetRoomLayout(ExtractionLayoutKey));
         List<Vector2> obstaclePositions = ParseLayout(GetRoomLayout(ObstacleLayoutKey));
         List<Vector2> playerPositions = GetCurrentPlayerPositions();
-        int targetCount = Mathf.Max(1, Mathf.RoundToInt(nebulaCount * GetDensityMultiplier() * RoomSettings.GetMapAreaMultiplier()));
+        int targetCount = Mathf.Max(0, Mathf.RoundToInt(nebulaCount * GetDensityMultiplier() * RoomSettings.GetMapAreaMultiplier()));
         int attempts = 0;
 
         while (positions.Count < targetCount && attempts < 400)
@@ -144,7 +151,7 @@ public class NebulaSpawner : MonoBehaviour
             if (!IsFarEnough(candidate, extractionPositions, MinDistanceFromExtraction))
                 continue;
 
-            if (!IsFarEnough(candidate, obstaclePositions, MinDistanceFromObstacle))
+            if (!IsFarEnough(candidate, obstaclePositions, GetMinDistanceFromObstacle()))
                 continue;
 
             if (!IsFarEnough(candidate, playerPositions, MinDistanceFromPlayers))
@@ -152,6 +159,9 @@ public class NebulaSpawner : MonoBehaviour
 
             positions.Add(candidate);
         }
+
+        if (positions.Count == 0)
+            return EmptyLayoutSentinel;
 
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < positions.Count; i++)
@@ -176,6 +186,11 @@ public class NebulaSpawner : MonoBehaviour
         }
 
         return true;
+    }
+
+    float GetMinDistanceFromObstacle()
+    {
+        return MinDistanceFromObstacle * Mathf.Clamp(RoomSettings.GetObstacleSizeMultiplier(), 0.75f, 5f);
     }
 
     List<Vector2> ParseLayout(string layout)
@@ -242,6 +257,7 @@ public class NebulaSpawner : MonoBehaviour
         {
             switch (density)
             {
+                case "none": return 0f;
                 case "low": return 0.8f;
                 case "high": return 2.4f;
                 default: return 1.35f;

@@ -14,7 +14,7 @@ public class ShipWreck : MonoBehaviourPun
 {
     readonly List<string> lootItems = new List<string>();
     SpriteRenderer spriteRenderer;
-    Color baseColor = new Color(0.46f, 0.48f, 0.52f, 0.96f);
+    Color baseColor = Color.white;
     int sourceShipSkinIndex;
     bool isHighlighted;
     bool destroyWhenEmpty = true;
@@ -32,6 +32,8 @@ public class ShipWreck : MonoBehaviourPun
     public void InitializeFromLootJson(string rawLoot, int shipSkinIndex = 0)
     {
         sourceShipSkinIndex = shipSkinIndex;
+        if (shipSkinIndex >= 0)
+            baseColor = Color.white;
         lootItems.Clear();
         string[] slots = PlayerProfileService.DeserializeShipInventorySlots(rawLoot);
         for (int i = 0; i < slots.Length; i++)

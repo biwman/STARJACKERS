@@ -87,8 +87,23 @@ public static class PlayerProfileCraftingCatalog
             },
             OutputItemId = InventoryItemCatalog.GadgetMineId,
             OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "battery_from_asteroids",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.AsteroidResourceId,
+                InventoryItemCatalog.AsteroidResourceId,
+                InventoryItemCatalog.AsteroidResourceId,
+                InventoryItemCatalog.AsteroidGoldId
+            },
+            OutputItemId = InventoryItemCatalog.BatteryId,
+            OutputCount = 1
         }
     };
+
+    public static IReadOnlyList<PlayerProfileCraftingRecipe> GetAllRecipes() => Recipes;
 
     public static bool TryCraft(string[] craftingSlots, out PlayerProfileCraftingResult result)
     {

@@ -131,6 +131,7 @@ public static class InventoryItemCatalog
     public const string PlasmaGunId = "plasma_gun";
     public const string FusionEngineId = "fusion_engine";
     public const string GadgetMineId = "gadget_mine";
+    public const string BatteryId = "battery";
 
     static readonly Dictionary<string, InventoryItemDefinition> Definitions = BuildDefinitions();
 
@@ -311,7 +312,8 @@ public static class InventoryItemCatalog
                 Rarity = InventoryItemRarity.Epic,
                 SellValueAstrons = 260,
                 IconResourcePath = "plasma_gun_resource",
-                ProjectFileName = "plasma_gun.png"
+                ProjectFileName = "plasma_gun.png",
+                SalvageOutputs = new[] { AsteroidGoldId, AsteroidGoldId }
             },
             [FusionEngineId] = new InventoryItemDefinition
             {
@@ -338,6 +340,19 @@ public static class InventoryItemCatalog
                 IconResourcePath = "space_mine_resource",
                 ProjectFileName = "space mine.png",
                 SalvageOutputs = new[] { SpaceMineWreckId, SpaceMineWreckId }
+            },
+            [BatteryId] = new InventoryItemDefinition
+            {
+                Id = BatteryId,
+                DisplayName = "Battery",
+                ShortLabel = "BAT",
+                Description = "A reusable shield charge pack that restores shields over time when triggered from a gadget slot.",
+                ItemType = InventoryItemType.Equipment,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 100,
+                IconResourcePath = "battery_charge_resource",
+                ProjectFileName = "battery_charge.png",
+                SalvageOutputs = new[] { AsteroidResourceId, AsteroidResourceId }
             }
         };
     }

@@ -150,7 +150,7 @@ public class PlayerProfileService : MonoBehaviour
                 nickname = nicknameItem.Value.GetAsString();
 
             if (data.TryGetValue(CloudShipSkinKey, out Item skinItem) && skinItem?.Value != null)
-                shipSkinIndex = Mathf.Clamp(skinItem.Value.GetAs<int>(), 0, 3);
+                shipSkinIndex = Mathf.Clamp(skinItem.Value.GetAs<int>(), 0, ShipCatalog.MaxShipSkinIndex);
 
             if (data.TryGetValue(CloudGamesPlayedKey, out Item gamesItem) && gamesItem?.Value != null)
                 gamesPlayed = Mathf.Max(0, gamesItem.Value.GetAs<int>());
@@ -171,7 +171,7 @@ public class PlayerProfileService : MonoBehaviour
         CurrentProfile = new PlayerProfileData
         {
             Nickname = SanitizeNickname(nickname),
-            ShipSkinIndex = Mathf.Clamp(shipSkinIndex, 0, 3),
+            ShipSkinIndex = Mathf.Clamp(shipSkinIndex, 0, ShipCatalog.MaxShipSkinIndex),
             GamesPlayed = gamesPlayed,
             TotalXp = totalXp,
             Astrons = astrons,
@@ -193,7 +193,7 @@ public class PlayerProfileService : MonoBehaviour
             CurrentProfile = new PlayerProfileData
             {
                 Nickname = SanitizeNickname(nickname),
-                ShipSkinIndex = Mathf.Clamp(shipSkinIndex, 0, 3),
+                ShipSkinIndex = Mathf.Clamp(shipSkinIndex, 0, ShipCatalog.MaxShipSkinIndex),
                 GamesPlayed = CurrentProfile != null ? CurrentProfile.GamesPlayed : 0,
                 TotalXp = CurrentProfile != null ? CurrentProfile.TotalXp : 0,
                 Astrons = CurrentProfile != null ? CurrentProfile.Astrons : 0,
@@ -495,7 +495,7 @@ public class PlayerProfileService : MonoBehaviour
         await EnsureInitializedAsync();
         EnsureInventory();
 
-        int clampedSkin = Mathf.Clamp(newShipSkinIndex, 0, 3);
+        int clampedSkin = Mathf.Clamp(newShipSkinIndex, 0, ShipCatalog.MaxShipSkinIndex);
         if (CurrentProfile.ShipSkinIndex == clampedSkin)
             return true;
 
@@ -944,7 +944,7 @@ public class PlayerInventoryData
 {
     public const int PlayerSlotCount = 30;
     public const int ShipSlotCount = 10;
-    public const int EquipmentSlotCount = 6;
+    public const int EquipmentSlotCount = 8;
     public const int CraftingSlotCount = 4;
     public string[] PlayerSlots;
     public string[] ShipSlots;
@@ -1134,16 +1134,7 @@ public class PlayerInventoryData
         if (slotIndex < 0 || slotIndex >= EquipmentSlots.Length)
             return false;
 
-        return slotIndex switch
-        {
-            0 => ShipCatalog.GetMainGunSlots(shipSkinIndex) >= 1,
-            1 => ShipCatalog.GetMainGunSlots(shipSkinIndex) >= 2,
-            2 => ShipCatalog.GetShieldSlots(shipSkinIndex) >= 1,
-            3 => ShipCatalog.GetEngineSlots(shipSkinIndex) >= 1,
-            4 => ShipCatalog.GetEngineSlots(shipSkinIndex) >= 2,
-            5 => ShipCatalog.GetGadgetSlots(shipSkinIndex) >= 1,
-            _ => false
-        };
+        return ShipCatalog.IsEquipmentSlotEnabled(slotIndex, shipSkinIndex);
     }
 
     public void SetShipSlots(string[] source)

@@ -413,6 +413,10 @@ public class UIRuntimeStyler : MonoBehaviour
         StyleLobbySettingButton("MapSizeSettingButton", new Vector2(-290f, -292f));
         StyleLobbySettingButton("MapBackgroundSettingButton", new Vector2(-690f, -980f));
         StyleLobbySettingButton("ObstacleSettingButton", new Vector2(-690f, -378f));
+        StyleLobbySettingButton("ObstacleDestroySettingButton", new Vector2(-690f, -1066f));
+        StyleLobbySettingButton("ObstacleHpValueSettingButton", new Vector2(-290f, -1066f));
+        StyleLobbySettingButton("ObstacleSizeSettingButton", new Vector2(-690f, -1152f));
+        StyleLobbySettingButton("ObstacleNoBordersSettingButton", new Vector2(-290f, -1152f));
         StyleLobbySettingButton("TreasureSettingButton", new Vector2(-290f, -378f));
         StyleLobbySettingButton("NebulaSettingButton", new Vector2(-690f, -464f));
         StyleLobbySettingButton("ExtractionSettingButton", new Vector2(-290f, -464f));

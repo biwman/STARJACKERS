@@ -76,6 +76,26 @@ public class GameVisualTheme : MonoBehaviour
             DontDestroyOnLoad(root);
     }
 
+    public static int GetObstacleSpriteVariantCount()
+    {
+        EnsureInstance();
+        if (instance == null)
+            return 0;
+
+        instance.LoadAssets();
+        return instance.obstacleSprites != null ? instance.obstacleSprites.Length : 0;
+    }
+
+    public static void ApplyObstacleVisual(GameObject target)
+    {
+        EnsureInstance();
+        if (instance == null || target == null)
+            return;
+
+        instance.LoadAssets();
+        instance.ApplyObstacleVisualInternal(target);
+    }
+
 #if UNITY_EDITOR
     static void EnsureEditorInstance()
     {
@@ -174,20 +194,20 @@ public class GameVisualTheme : MonoBehaviour
 
     void LoadAssets()
     {
-        shipSprites = new[]
+        shipSprites = new Sprite[ShipCatalog.MaxShipSkinIndex + 1];
+        wreckSprites = new Sprite[ShipCatalog.MaxShipSkinIndex + 1];
+        for (int skinIndex = 0; skinIndex <= ShipCatalog.MaxShipSkinIndex; skinIndex++)
         {
-            LoadSpriteFromResourcesOrEditor("Visuals/Ships/ship1_resource", "Assets/Resources/Visuals/Ships/ship1_resource.png", "Assets/ship1.png"),
-            LoadSpriteFromResourcesOrEditor("Visuals/Ships/ship2_resource", "Assets/Resources/Visuals/Ships/ship2_resource.png", "Assets/ship2.png"),
-            LoadSpriteFromResourcesOrEditor("Visuals/Ships/ship3_resource", "Assets/Resources/Visuals/Ships/ship3_resource.png", "Assets/ship3.png"),
-            LoadSpriteFromResourcesOrEditor("ship4_resource", "Assets/Resources/ship4_resource.png", "Assets/ship4.png")
-        };
-        wreckSprites = new[]
-        {
-            null,
-            LoadSpriteFromResourcesOrEditor("wrak2_resource", "Assets/Resources/wrak2_resource.png", "Assets/wrak2.png"),
-            null,
-            null
-        };
+            shipSprites[skinIndex] = LoadSpriteFromResourcesOrEditor(
+                ShipCatalog.GetShipSkinResourcePath(skinIndex),
+                ShipCatalog.GetShipSkinEditorResourcePath(skinIndex),
+                ShipCatalog.GetShipSkinEditorFallbackPath(skinIndex));
+
+            wreckSprites[skinIndex] = LoadSpriteFromResourcesOrEditor(
+                ShipCatalog.GetWreckResourcePathForSkin(skinIndex),
+                ShipCatalog.GetWreckEditorResourcePathForSkin(skinIndex),
+                ShipCatalog.GetWreckEditorFallbackPathForSkin(skinIndex));
+        }
         enemyBotSprite = LoadSpriteFromResourcesOrEditor("droid1_resource", "Assets/Resources/droid1_resource.png", "Assets/droid1.png");
         corsairSprite = LoadSpriteFromResourcesOrEditor("statek_duzy_resource", "Assets/Resources/statek_duzy_resource.png", "Assets/statek_duzy.png");
         astronautSprite = LoadSpriteFromResourcesOrEditor("kosmonauta_resource", "Assets/Resources/kosmonauta_resource.png", "Assets/kosmonauta.png");
@@ -449,34 +469,55 @@ public class GameVisualTheme : MonoBehaviour
             if (target.GetComponent<PlayerHealth>() != null || target.GetComponent<Treasure>() != null)
                 continue;
 
-            PolygonCollider2D polygonCollider = target.GetComponent<PolygonCollider2D>();
-            BoxCollider2D boxCollider = target.GetComponent<BoxCollider2D>();
-
-            Sprite obstacleSprite = GetStableObstacleSprite(target);
-            if (obstacleSprite == null)
-                continue;
-
-            if (renderer.sprite != obstacleSprite)
-            {
-                renderer.sprite = obstacleSprite;
-                renderer.color = Color.white;
-            }
-            float obstacleSize = ObstacleTargetSize * GetStableObstacleSizeMultiplier(target);
-            FitSpriteToTargetSize(renderer, obstacleSize);
-
-            if (polygonCollider == null)
-            {
-                polygonCollider = target.AddComponent<PolygonCollider2D>();
-            }
-
-            polygonCollider.isTrigger = false;
-            polygonCollider.autoTiling = false;
-
-            if (boxCollider != null)
-            {
-                boxCollider.enabled = false;
-            }
+            ApplyObstacleVisualInternal(target, renderer);
         }
+    }
+
+    void ApplyObstacleVisualInternal(GameObject target)
+    {
+        if (target == null)
+            return;
+
+        SpriteRenderer renderer = target.GetComponent<SpriteRenderer>();
+        if (renderer == null)
+            return;
+
+        ApplyObstacleVisualInternal(target, renderer);
+    }
+
+    void ApplyObstacleVisualInternal(GameObject target, SpriteRenderer renderer)
+    {
+        if (target == null || renderer == null || obstacleSprites == null || obstacleSprites.Length == 0)
+            return;
+
+        PolygonCollider2D polygonCollider = target.GetComponent<PolygonCollider2D>();
+        BoxCollider2D boxCollider = target.GetComponent<BoxCollider2D>();
+
+        Sprite obstacleSprite = GetStableObstacleSprite(target);
+        if (obstacleSprite == null)
+            return;
+
+        if (renderer.sprite != obstacleSprite)
+        {
+            renderer.sprite = obstacleSprite;
+            renderer.color = Color.white;
+        }
+
+        float obstacleSize = ObstacleTargetSize * RoomSettings.GetObstacleSizeMultiplier() * GetStableObstacleSizeMultiplier(target);
+        FitSpriteToTargetSize(renderer, obstacleSize);
+
+        if (polygonCollider == null)
+            polygonCollider = target.AddComponent<PolygonCollider2D>();
+
+        polygonCollider.isTrigger = false;
+        polygonCollider.autoTiling = false;
+
+        if (boxCollider != null)
+            boxCollider.enabled = false;
+
+        MovingSpaceObject movingObject = target.GetComponent<MovingSpaceObject>();
+        if (movingObject != null)
+            movingObject.NotifyColliderShapeChanged();
     }
 
     void ApplyExtractionZoneSprites()
@@ -533,6 +574,10 @@ public class GameVisualTheme : MonoBehaviour
         if (target == null)
             return 1f;
 
+        ObstacleChunk chunk = target.GetComponent<ObstacleChunk>();
+        if (chunk != null)
+            return chunk.SizeFactor;
+
         MovingSpaceObject movingObject = target.GetComponent<MovingSpaceObject>();
         string stableKey = movingObject != null && !string.IsNullOrWhiteSpace(movingObject.StableId)
             ? movingObject.StableId
@@ -549,6 +594,13 @@ public class GameVisualTheme : MonoBehaviour
     {
         if (target == null || obstacleSprites == null || obstacleSprites.Length == 0)
             return null;
+
+        ObstacleChunk chunk = target.GetComponent<ObstacleChunk>();
+        if (chunk != null && chunk.SpriteVariantIndex >= 0)
+        {
+            int chunkIndex = Mathf.Clamp(chunk.SpriteVariantIndex, 0, obstacleSprites.Length - 1);
+            return obstacleSprites[chunkIndex];
+        }
 
         MovingSpaceObject movingObject = target.GetComponent<MovingSpaceObject>();
         string stableKey = movingObject != null && !string.IsNullOrWhiteSpace(movingObject.StableId)
@@ -632,6 +684,7 @@ public class GameVisualTheme : MonoBehaviour
             signature = signature * 31 + droppedCrates.Length;
             signature = signature * 31 + RoomSettings.GetMapBackgroundIndex();
             signature = signature * 31 + RoomSettings.GetMapSizeMode().GetHashCode();
+            signature = signature * 31 + RoomSettings.GetObstacleSizePercent();
 
             for (int i = 0; i < players.Length; i++)
             {
