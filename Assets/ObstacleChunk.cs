@@ -97,7 +97,7 @@ public class ObstacleChunk : MonoBehaviour
         stableId = id;
         sizeFactor = Mathf.Max(MinimumSizeFactor, configuredSizeFactor);
         maxHealth = Mathf.Max(1, configuredMaxHealth);
-        currentHealth = Mathf.Clamp(configuredCurrentHealth, 1, maxHealth);
+        currentHealth = Mathf.Clamp(configuredCurrentHealth, 0, maxHealth);
         splitCount = Mathf.Max(0, configuredSplitCount);
         spriteVariantIndex = configuredSpriteVariantIndex;
 

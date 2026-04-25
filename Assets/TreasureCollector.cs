@@ -17,6 +17,8 @@ public class TreasureCollector : MonoBehaviourPun
     const float BeamJitterAmplitude = 0.08f;
     const float BeamJitterFrequency = 18f;
     const float BeamZOffset = -0.35f;
+    const float ExtractionUseSearchRadius = 2.1f;
+    const float ExtractionUseKeepAliveDistance = 1.15f;
 
     public Button collectButton;
     public TMP_Text scoreText;
@@ -41,6 +43,12 @@ public class TreasureCollector : MonoBehaviourPun
     Coroutine pickupToastRoutine;
     Coroutine extractionUseRoutine;
     bool collectButtonHooked;
+
+    public static void ResetRoundReservations()
+    {
+        ReservedWreckLoot.Clear();
+        ReservedDroppedCargoLoot.Clear();
+    }
 
     void Start()
     {
@@ -225,7 +233,10 @@ public class TreasureCollector : MonoBehaviourPun
 
     ExtractionZone ResolveNearbyExtractionZone()
     {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, 1.35f);
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, ExtractionUseSearchRadius);
+        ExtractionZone bestZone = null;
+        float bestDistance = float.MaxValue;
+
         for (int i = 0; i < hits.Length; i++)
         {
             Collider2D hit = hits[i];
@@ -236,11 +247,18 @@ public class TreasureCollector : MonoBehaviourPun
             if (extractionZone == null)
                 extractionZone = hit.GetComponentInParent<ExtractionZone>();
 
-            if (extractionZone != null)
-                return extractionZone;
+            if (extractionZone == null)
+                continue;
+
+            float distance = GetDistanceToExtractionZone(extractionZone);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestZone = extractionZone;
+            }
         }
 
-        return null;
+        return bestZone;
     }
 
     bool IsAstronautMode()
@@ -272,12 +290,13 @@ public class TreasureCollector : MonoBehaviourPun
 
         while (timer < collectTime)
         {
-            if (!isCollecting || extractionZone == null || currentExtraction != extractionZone)
+            if (!isCollecting || extractionZone == null || !IsExtractionStillUsable(extractionZone))
             {
                 AbortCollection();
                 yield break;
             }
 
+            currentExtraction = extractionZone;
             timer += Time.deltaTime;
             yield return null;
         }
@@ -287,6 +306,32 @@ public class TreasureCollector : MonoBehaviourPun
             photonView.RPC(nameof(RequestUseExtraction), RpcTarget.MasterClient, ezView.ViewID);
 
         FinishCollection();
+    }
+
+    bool IsExtractionStillUsable(ExtractionZone extractionZone)
+    {
+        if (extractionZone == null)
+            return false;
+
+        if (currentExtraction == extractionZone)
+            return true;
+
+        return GetDistanceToExtractionZone(extractionZone) <= ExtractionUseKeepAliveDistance;
+    }
+
+    float GetDistanceToExtractionZone(ExtractionZone extractionZone)
+    {
+        if (extractionZone == null)
+            return float.MaxValue;
+
+        Collider2D zoneCollider = extractionZone.GetComponent<Collider2D>();
+        if (zoneCollider != null)
+        {
+            Vector2 closestPoint = zoneCollider.ClosestPoint(transform.position);
+            return Vector2.Distance(transform.position, closestPoint);
+        }
+
+        return Vector2.Distance(transform.position, extractionZone.transform.position);
     }
 
     IEnumerator CollectTreasureRoutine(Treasure treasureToCollect)
@@ -415,6 +460,36 @@ public class TreasureCollector : MonoBehaviourPun
         if (shooting != null) shooting.enabled = false;
     }
 
+    public void ForceCancelCollectionForDeath()
+    {
+        isCollecting = false;
+
+        if (currentTreasure != null)
+            currentTreasure.isBeingCollected = false;
+        if (currentWreck != null)
+            currentWreck.isBeingCollected = false;
+        if (currentDroppedCargo != null)
+            currentDroppedCargo.isBeingCollected = false;
+
+        if (extractionUseRoutine != null)
+        {
+            StopCoroutine(extractionUseRoutine);
+            extractionUseRoutine = null;
+        }
+
+        StopAllCoroutines();
+        StopLocalDrillingLoop();
+        SetBeamEnabled(false);
+        ClearCurrentHighlight();
+
+        currentTreasure = null;
+        currentWreck = null;
+        currentDroppedCargo = null;
+
+        if (movement != null) movement.enabled = false;
+        if (shooting != null) shooting.enabled = false;
+    }
+
     void AbortCollection(Treasure treasure = null)
     {
         if (treasure != null)
@@ -431,8 +506,21 @@ public class TreasureCollector : MonoBehaviourPun
         currentWreck = null;
         currentDroppedCargo = null;
 
+        if (!CanRestoreControlsAfterCollection())
+        {
+            if (movement != null) movement.enabled = false;
+            if (shooting != null) shooting.enabled = false;
+            return;
+        }
+
         if (movement != null) movement.enabled = true;
         if (shooting != null) shooting.enabled = true;
+    }
+
+    bool CanRestoreControlsAfterCollection()
+    {
+        PlayerHealth health = GetComponent<PlayerHealth>();
+        return health == null || (!health.IsWreck && !health.IsEvacuationAnimating);
     }
 
     void StartCollectibleFeedback(PhotonView targetView)

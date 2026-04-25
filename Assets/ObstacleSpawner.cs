@@ -290,15 +290,30 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         if (source == null)
             return;
 
+        string sourceStableId = source.StableId;
         ObstacleChunk.RuntimeState sourceState = source.CaptureRuntimeState();
-        TryCreateSplitChildren(source, sourceState);
+        bool createdChildren = TryCreateSplitChildren(
+            source,
+            sourceState,
+            out ObstacleChunk.RuntimeState childAState,
+            out ObstacleChunk.RuntimeState childBState);
 
         if (source != null && source.gameObject != null)
-            Destroy(source.gameObject);
+            DestroyObstacleImmediately(source.gameObject);
 
         if (PhotonNetwork.IsConnected && PhotonNetwork.IsMasterClient)
         {
-            BroadcastCurrentRuntimeStateToOthers();
+            if (createdChildren)
+            {
+                SpaceObjectMotionSync.BroadcastObstacleSplit(
+                    sourceStableId,
+                    SerializeRuntimeState(childAState),
+                    SerializeRuntimeState(childBState));
+            }
+            else
+            {
+                SpaceObjectMotionSync.BroadcastObstacleSplit(sourceStableId, string.Empty, string.Empty);
+            }
         }
         else if (!PhotonNetwork.IsConnected)
         {
@@ -307,8 +322,15 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         }
     }
 
-    bool TryCreateSplitChildren(ObstacleChunk source, ObstacleChunk.RuntimeState sourceState)
+    bool TryCreateSplitChildren(
+        ObstacleChunk source,
+        ObstacleChunk.RuntimeState sourceState,
+        out ObstacleChunk.RuntimeState childA,
+        out ObstacleChunk.RuntimeState childB)
     {
+        childA = default;
+        childB = default;
+
         if (source == null || !source.CanSplit)
             return false;
 
@@ -325,7 +347,7 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
         BuildChildMotion(sourceState, out Vector2 velocityA, out Vector2 velocityB, out float angularVelocityA, out float angularVelocityB);
 
-        ObstacleChunk.RuntimeState childA = new ObstacleChunk.RuntimeState(
+        childA = new ObstacleChunk.RuntimeState(
             AllocateDynamicObstacleId(),
             childPosA,
             velocityA,
@@ -337,7 +359,7 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
             sourceState.SplitCount + 1,
             sourceState.SpriteVariantIndex);
 
-        ObstacleChunk.RuntimeState childB = new ObstacleChunk.RuntimeState(
+        childB = new ObstacleChunk.RuntimeState(
             AllocateDynamicObstacleId(),
             childPosB,
             velocityB,
@@ -352,6 +374,22 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         CreateOrUpdateObstacleFromState(childA, true);
         CreateOrUpdateObstacleFromState(childB, true);
         return true;
+    }
+
+    void DestroyObstacleImmediately(GameObject obstacleObject)
+    {
+        if (obstacleObject == null)
+            return;
+
+        Collider2D[] colliders = obstacleObject.GetComponentsInChildren<Collider2D>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            if (colliders[i] != null)
+                colliders[i].enabled = false;
+        }
+
+        obstacleObject.SetActive(false);
+        Destroy(obstacleObject);
     }
 
     void BuildChildMotion(
@@ -470,34 +508,15 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
             if (chunk == null || string.IsNullOrWhiteSpace(chunk.StableId))
                 continue;
 
+            if (chunk.CurrentHealth <= 0)
+                continue;
+
             ObstacleChunk.RuntimeState state = chunk.CaptureRuntimeState();
             if (wroteEntry)
                 builder.Append(';');
 
             wroteEntry = true;
-            builder.Append(state.StableId);
-            builder.Append('|');
-            builder.Append(state.Position.x.ToString(CultureInfo.InvariantCulture));
-            builder.Append('|');
-            builder.Append(state.Position.y.ToString(CultureInfo.InvariantCulture));
-            builder.Append('|');
-            builder.Append(state.Velocity.x.ToString(CultureInfo.InvariantCulture));
-            builder.Append('|');
-            builder.Append(state.Velocity.y.ToString(CultureInfo.InvariantCulture));
-            builder.Append('|');
-            builder.Append(state.Rotation.ToString(CultureInfo.InvariantCulture));
-            builder.Append('|');
-            builder.Append(state.AngularVelocity.ToString(CultureInfo.InvariantCulture));
-            builder.Append('|');
-            builder.Append(state.SizeFactor.ToString(CultureInfo.InvariantCulture));
-            builder.Append('|');
-            builder.Append(state.MaxHealth.ToString(CultureInfo.InvariantCulture));
-            builder.Append('|');
-            builder.Append(state.CurrentHealth.ToString(CultureInfo.InvariantCulture));
-            builder.Append('|');
-            builder.Append(state.SplitCount.ToString(CultureInfo.InvariantCulture));
-            builder.Append('|');
-            builder.Append(state.SpriteVariantIndex.ToString(CultureInfo.InvariantCulture));
+            builder.Append(SerializeRuntimeState(state));
         }
 
         return wroteEntry ? builder.ToString() : EmptyLayoutSentinel;
@@ -509,6 +528,38 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
             return;
 
         instance.ApplyRuntimeStateSnapshotInternal(serializedState);
+    }
+
+    public static void ApplyObstacleSplitDelta(string sourceStableId, string childAState, string childBState)
+    {
+        if (instance == null)
+            return;
+
+        instance.ApplyObstacleSplitDeltaInternal(sourceStableId, childAState, childBState);
+    }
+
+    void ApplyObstacleSplitDeltaInternal(string sourceStableId, string childAState, string childBState)
+    {
+        if (!string.IsNullOrWhiteSpace(sourceStableId))
+        {
+            ObstacleChunk source = ObstacleChunk.Find(sourceStableId);
+            if (source != null && source.gameObject != null)
+                DestroyObstacleImmediately(source.gameObject);
+        }
+
+        ApplySingleRuntimeState(childAState, PhotonNetwork.IsMasterClient);
+        ApplySingleRuntimeState(childBState, PhotonNetwork.IsMasterClient);
+        RebuildDynamicObstacleSequenceFromScene();
+        layoutApplied = true;
+    }
+
+    void ApplySingleRuntimeState(string serializedState, bool authorityState)
+    {
+        if (string.IsNullOrWhiteSpace(serializedState))
+            return;
+
+        if (TryParseRuntimeState(serializedState, out ObstacleChunk.RuntimeState state) && state.CurrentHealth > 0)
+            CreateOrUpdateObstacleFromState(state, authorityState);
     }
 
     void ApplyRuntimeStateSnapshotInternal(string serializedState)
@@ -528,7 +579,8 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
         foreach (KeyValuePair<string, ObstacleChunk.RuntimeState> entry in targetStates)
         {
-            CreateOrUpdateObstacleFromState(entry.Value, PhotonNetwork.IsMasterClient);
+            if (entry.Value.CurrentHealth > 0)
+                CreateOrUpdateObstacleFromState(entry.Value, PhotonNetwork.IsMasterClient);
         }
 
         RebuildDynamicObstacleSequenceFromScene();
@@ -570,52 +622,92 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
             if (string.IsNullOrWhiteSpace(entry))
                 continue;
 
-            string[] parts = entry.Split('|');
-            if (parts.Length != 10 && parts.Length != 12)
-                continue;
-
-            string stableId = parts[0];
-            if (string.IsNullOrWhiteSpace(stableId))
-                continue;
-
-            if (!TryParseFloat(parts[1], out float posX) ||
-                !TryParseFloat(parts[2], out float posY) ||
-                !TryParseFloat(parts[3], out float velX) ||
-                !TryParseFloat(parts[4], out float velY) ||
-                !TryParseFloat(parts[5], out float rotation) ||
-                !TryParseFloat(parts[6], out float angularVelocity) ||
-                !TryParseFloat(parts[7], out float sizeFactor) ||
-                !int.TryParse(parts[8], NumberStyles.Integer, CultureInfo.InvariantCulture, out int maxHealth) ||
-                !int.TryParse(parts[9], NumberStyles.Integer, CultureInfo.InvariantCulture, out int currentHealth))
-            {
-                continue;
-            }
-
-            int splitCount = 0;
-            int spriteVariantIndex = ObstacleChunk.ComputeStableSpriteVariantIndex(stableId, GameVisualTheme.GetObstacleSpriteVariantCount());
-            if (parts.Length >= 12)
-            {
-                if (!int.TryParse(parts[10], NumberStyles.Integer, CultureInfo.InvariantCulture, out splitCount) ||
-                    !int.TryParse(parts[11], NumberStyles.Integer, CultureInfo.InvariantCulture, out spriteVariantIndex))
-                {
-                    continue;
-                }
-            }
-
-            parsed[stableId] = new ObstacleChunk.RuntimeState(
-                stableId,
-                new Vector2(posX, posY),
-                new Vector2(velX, velY),
-                rotation,
-                angularVelocity,
-                sizeFactor,
-                maxHealth,
-                currentHealth,
-                splitCount,
-                spriteVariantIndex);
+            if (TryParseRuntimeState(entry, out ObstacleChunk.RuntimeState state) && state.CurrentHealth > 0)
+                parsed[state.StableId] = state;
         }
 
         return parsed;
+    }
+
+    static string SerializeRuntimeState(ObstacleChunk.RuntimeState state)
+    {
+        StringBuilder builder = new StringBuilder();
+        builder.Append(state.StableId);
+        builder.Append('|');
+        builder.Append(state.Position.x.ToString(CultureInfo.InvariantCulture));
+        builder.Append('|');
+        builder.Append(state.Position.y.ToString(CultureInfo.InvariantCulture));
+        builder.Append('|');
+        builder.Append(state.Velocity.x.ToString(CultureInfo.InvariantCulture));
+        builder.Append('|');
+        builder.Append(state.Velocity.y.ToString(CultureInfo.InvariantCulture));
+        builder.Append('|');
+        builder.Append(state.Rotation.ToString(CultureInfo.InvariantCulture));
+        builder.Append('|');
+        builder.Append(state.AngularVelocity.ToString(CultureInfo.InvariantCulture));
+        builder.Append('|');
+        builder.Append(state.SizeFactor.ToString(CultureInfo.InvariantCulture));
+        builder.Append('|');
+        builder.Append(state.MaxHealth.ToString(CultureInfo.InvariantCulture));
+        builder.Append('|');
+        builder.Append(state.CurrentHealth.ToString(CultureInfo.InvariantCulture));
+        builder.Append('|');
+        builder.Append(state.SplitCount.ToString(CultureInfo.InvariantCulture));
+        builder.Append('|');
+        builder.Append(state.SpriteVariantIndex.ToString(CultureInfo.InvariantCulture));
+        return builder.ToString();
+    }
+
+    static bool TryParseRuntimeState(string serializedState, out ObstacleChunk.RuntimeState state)
+    {
+        state = default;
+        if (string.IsNullOrWhiteSpace(serializedState))
+            return false;
+
+        string[] parts = serializedState.Split('|');
+        if (parts.Length != 10 && parts.Length != 12)
+            return false;
+
+        string stableId = parts[0];
+        if (string.IsNullOrWhiteSpace(stableId))
+            return false;
+
+        if (!TryParseFloat(parts[1], out float posX) ||
+            !TryParseFloat(parts[2], out float posY) ||
+            !TryParseFloat(parts[3], out float velX) ||
+            !TryParseFloat(parts[4], out float velY) ||
+            !TryParseFloat(parts[5], out float rotation) ||
+            !TryParseFloat(parts[6], out float angularVelocity) ||
+            !TryParseFloat(parts[7], out float sizeFactor) ||
+            !int.TryParse(parts[8], NumberStyles.Integer, CultureInfo.InvariantCulture, out int maxHealth) ||
+            !int.TryParse(parts[9], NumberStyles.Integer, CultureInfo.InvariantCulture, out int currentHealth))
+        {
+            return false;
+        }
+
+        int splitCount = 0;
+        int spriteVariantIndex = ObstacleChunk.ComputeStableSpriteVariantIndex(stableId, GameVisualTheme.GetObstacleSpriteVariantCount());
+        if (parts.Length >= 12)
+        {
+            if (!int.TryParse(parts[10], NumberStyles.Integer, CultureInfo.InvariantCulture, out splitCount) ||
+                !int.TryParse(parts[11], NumberStyles.Integer, CultureInfo.InvariantCulture, out spriteVariantIndex))
+            {
+                return false;
+            }
+        }
+
+        state = new ObstacleChunk.RuntimeState(
+            stableId,
+            new Vector2(posX, posY),
+            new Vector2(velX, velY),
+            rotation,
+            angularVelocity,
+            sizeFactor,
+            maxHealth,
+            currentHealth,
+            splitCount,
+            spriteVariantIndex);
+        return true;
     }
 
     static bool TryParseFloat(string raw, out float value)
@@ -633,6 +725,32 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
         string snapshot = instance.CaptureRuntimeStateSnapshotInternal();
         SpaceObjectMotionSync.BroadcastObstacleState(snapshot, new[] { actorNumber });
+    }
+
+    public static void ResetForSessionTransition()
+    {
+        if (instance == null)
+            return;
+
+        instance.ResetLocalRuntimeState();
+    }
+
+    void ResetLocalRuntimeState()
+    {
+        StopAllCoroutines();
+        layoutApplied = false;
+        mapSeed = 0;
+        dynamicObstacleSequence = 0;
+
+        ObstacleChunk[] chunks = FindObjectsByType<ObstacleChunk>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < chunks.Length; i++)
+        {
+            ObstacleChunk chunk = chunks[i];
+            if (chunk != null && chunk.gameObject != null)
+                Destroy(chunk.gameObject);
+        }
+
+        StartCoroutine(InitializeWhenRoundStarts());
     }
 
     void BroadcastCurrentRuntimeStateToOthers()

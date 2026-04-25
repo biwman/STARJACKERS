@@ -12,6 +12,8 @@ public class ShipWreckLootSnapshot
 [RequireComponent(typeof(PhotonView))]
 public class ShipWreck : MonoBehaviourPun
 {
+    static int fallbackStableIdSequence;
+
     readonly List<string> lootItems = new List<string>();
     SpriteRenderer spriteRenderer;
     Color baseColor = Color.white;
@@ -43,6 +45,19 @@ public class ShipWreck : MonoBehaviourPun
         }
 
         RefreshVisualState();
+        EnsureNetworkMotion();
+    }
+
+    void EnsureNetworkMotion()
+    {
+        MovingSpaceObject movingObject = GetComponent<MovingSpaceObject>();
+        if (movingObject == null)
+            movingObject = gameObject.AddComponent<MovingSpaceObject>();
+
+        string stableId = photonView != null && photonView.ViewID > 0
+            ? "wreck_" + photonView.ViewID
+            : "wreck_local_" + (++fallbackStableIdSequence);
+        movingObject.Configure(stableId, MovingSpaceObject.SpaceObjectType.Treasure);
     }
 
     public int GetFirstLootIndex()

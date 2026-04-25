@@ -278,11 +278,7 @@ public class EndGameWatcher : MonoBehaviour
 
     void OnBackButtonClicked()
     {
-        GameManager gameManager = FindAnyObjectByType<GameManager>();
-        if (gameManager != null)
-        {
-            gameManager.LeaveRoomToProfile();
-        }
+        NetworkManager.ReturnToSessionBrowserFromRound();
     }
 
     void PopulateScoreboard(EndScreenUI ui)

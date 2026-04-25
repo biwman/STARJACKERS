@@ -573,6 +573,14 @@ public class PlayerHealth : MonoBehaviourPun
     {
         IsWreck = true;
 
+        if (photonView != null &&
+            photonView.IsMine &&
+            PhotonNetwork.LocalPlayer != null &&
+            ReferenceEquals(PhotonNetwork.LocalPlayer.TagObject, gameObject))
+        {
+            PhotonNetwork.LocalPlayer.TagObject = null;
+        }
+
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null)
         {
@@ -586,7 +594,10 @@ public class PlayerHealth : MonoBehaviourPun
 
         TreasureCollector collector = GetComponent<TreasureCollector>();
         if (collector != null)
+        {
+            collector.ForceCancelCollectionForDeath();
             collector.enabled = false;
+        }
 
         HealthBarUI healthBarUi = GetComponent<HealthBarUI>();
         if (healthBarUi != null)

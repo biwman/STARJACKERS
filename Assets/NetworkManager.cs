@@ -8,6 +8,11 @@ using UnityEngine;
 
 public class NetworkManager : MonoBehaviourPunCallbacks
 {
+    const float BrowserJoinLobbyWatchdogSeconds = 8f;
+    const float BrowserRecoveryPollSeconds = 1f;
+    const float LeaveRoomRetryPollSeconds = 0.5f;
+    const float LeaveRoomRetryTimeoutSeconds = 6f;
+
     enum PendingBrowserAction
     {
         None,
@@ -47,6 +52,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     string latestBrowserStatus = string.Empty;
     bool returnToBrowserAfterLeave;
     string leaveRoomBrowserStatus = string.Empty;
+    Coroutine sessionBrowserRecoveryRoutine;
+    Coroutine leaveRoomRetryRoutine;
+    float joiningLobbyStartedAt = -1f;
+    bool reconnectingForBrowserRecovery;
+    bool preservePendingBrowserActionAfterLeave;
 
     public static bool SessionRequested { get; private set; }
     public static event Action<IReadOnlyList<SessionRoomEntry>> SessionRoomListChanged;
@@ -70,6 +80,13 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         {
             instance.pendingBrowserAction = PendingBrowserAction.None;
             instance.pendingRoomName = null;
+            if (PhotonNetwork.InRoom)
+            {
+                SessionBrowserPanelUI.ShowBrowser();
+                instance.LeaveCurrentRoomToSessionBrowser("Returning to active rounds...");
+                return;
+            }
+
             instance.BeginSessionBrowserFlow();
         }
         else
@@ -123,6 +140,13 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         instance.pendingBrowserAction = PendingBrowserAction.CreateRoom;
         instance.pendingRoomName = null;
+        if (PhotonNetwork.InRoom)
+        {
+            SessionBrowserPanelUI.ShowBrowser();
+            instance.LeaveCurrentRoomToSessionBrowser("Leaving current round...", true);
+            return;
+        }
+
         instance.BeginSessionBrowserFlow();
     }
 
@@ -145,6 +169,13 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         instance.pendingBrowserAction = PendingBrowserAction.JoinRoom;
         instance.pendingRoomName = roomName;
+        if (PhotonNetwork.InRoom)
+        {
+            SessionBrowserPanelUI.ShowBrowser();
+            instance.LeaveCurrentRoomToSessionBrowser("Leaving current round...", true);
+            return;
+        }
+
         instance.BeginSessionBrowserFlow();
     }
 
@@ -162,6 +193,22 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         SessionBrowserPanelUI.ShowBrowser();
         instance.ReturnToSessionBrowserFromCurrentLobby();
+    }
+
+    public static void ReturnToSessionBrowserFromRound()
+    {
+        SessionRequested = true;
+        if (instance == null)
+            instance = FindAnyObjectByType<NetworkManager>();
+
+        if (instance == null)
+        {
+            Debug.LogWarning("NetworkManager instance not found when returning from the round.");
+            return;
+        }
+
+        SessionBrowserPanelUI.ShowBrowser();
+        instance.LeaveCurrentRoomToSessionBrowser("Returning to active rounds...");
     }
 
     void Awake()
@@ -190,6 +237,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     void BeginSessionBrowserFlow()
     {
+        EnsureSessionBrowserRecoveryRoutine();
+
         if (PhotonNetwork.InRoom)
             return;
 
@@ -209,10 +258,14 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
             if (PhotonNetwork.NetworkClientState == ClientState.JoiningLobby)
             {
+                if (joiningLobbyStartedAt < 0f)
+                    joiningLobbyStartedAt = Time.unscaledTime;
+
                 PublishBrowserStatus("Loading active rounds...");
                 return;
             }
 
+            joiningLobbyStartedAt = Time.unscaledTime;
             PublishBrowserStatus("Loading active rounds...");
             PhotonNetwork.JoinLobby();
             return;
@@ -247,6 +300,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedLobby()
     {
+        joiningLobbyStartedAt = -1f;
         PublishBrowserStatus("Choose a round or create a new one.");
         PublishRoomListChanged();
         ExecutePendingBrowserActionIfNeeded();
@@ -297,6 +351,18 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         PublishRoomListChanged();
         returnToBrowserAfterLeave = false;
         leaveRoomBrowserStatus = string.Empty;
+        preservePendingBrowserActionAfterLeave = false;
+        joiningLobbyStartedAt = -1f;
+        StopLeaveRoomRetryRoutine();
+
+        if (reconnectingForBrowserRecovery && SessionRequested && !PhotonNetwork.InRoom)
+        {
+            reconnectingForBrowserRecovery = false;
+            PublishBrowserStatus("Reconnecting to active rounds...");
+            PhotonNetwork.ConnectUsingSettings();
+            EnsureSessionBrowserRecoveryRoutine();
+            return;
+        }
 
         if (SessionRequested && !PhotonNetwork.InRoom)
         {
@@ -316,6 +382,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         roomListCache.Clear();
         PublishRoomListChanged();
         PublishBrowserStatus(string.Empty);
+        StopSessionBrowserRecoveryRoutine();
+        StopLeaveRoomRetryRoutine();
 
         PlayerProfileService.Instance.ApplyProfileToPhoton();
 
@@ -339,12 +407,21 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return;
 
         returnToBrowserAfterLeave = false;
-        pendingBrowserAction = PendingBrowserAction.None;
-        pendingRoomName = null;
+        StopLeaveRoomRetryRoutine();
+        bool keepPendingAction = preservePendingBrowserActionAfterLeave;
+        preservePendingBrowserActionAfterLeave = false;
+        if (!keepPendingAction)
+        {
+            pendingBrowserAction = PendingBrowserAction.None;
+            pendingRoomName = null;
+        }
 
         PlayerMovement.gameStarted = false;
         PlayerShooting.gameStarted = false;
         PhotonNetwork.LocalPlayer.TagObject = null;
+        HideRoundEndScreenIfPresent();
+        HideRoundTransientUi();
+        CleanupLocalRoundScene();
 
         SessionRequested = true;
         SessionBrowserPanelUI.ShowBrowser();
@@ -407,7 +484,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     void CreateNewRoundInternal()
     {
         if (PhotonNetwork.InRoom)
+        {
+            LeaveCurrentRoomToSessionBrowser("Leaving current round...", true);
             return;
+        }
 
         if (!PhotonNetwork.IsConnectedAndReady || !PhotonNetwork.InLobby)
         {
@@ -415,6 +495,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             BeginSessionBrowserFlow();
             return;
         }
+
+        CleanupLocalRoundScene();
 
         string roomName = BuildRoomName();
         Hashtable roomProps = BuildInitialRoomProperties();
@@ -437,7 +519,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return;
 
         if (PhotonNetwork.InRoom)
+        {
+            LeaveCurrentRoomToSessionBrowser("Leaving current round...", true);
             return;
+        }
 
         if (!PhotonNetwork.IsConnectedAndReady || !PhotonNetwork.InLobby)
         {
@@ -446,6 +531,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             BeginSessionBrowserFlow();
             return;
         }
+
+        CleanupLocalRoundScene();
 
         PublishBrowserStatus("Joining selected round...");
         PhotonNetwork.JoinRoom(roomName);
@@ -841,16 +928,34 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         LeaveCurrentRoomToSessionBrowser("Returning to active rounds...");
     }
 
-    void LeaveCurrentRoomToSessionBrowser(string status)
+    void LeaveCurrentRoomToSessionBrowser(string status, bool keepPendingAction = false)
     {
         if (returnToBrowserAfterLeave)
+        {
+            if (keepPendingAction)
+                preservePendingBrowserActionAfterLeave = true;
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                leaveRoomBrowserStatus = status;
+                PublishBrowserStatus(status);
+            }
+
+            if (PhotonNetwork.InRoom)
+                EnsureLeaveRoomRetryRoutine();
+
             return;
+        }
 
         SessionRequested = true;
         returnToBrowserAfterLeave = true;
+        preservePendingBrowserActionAfterLeave = keepPendingAction;
         leaveRoomBrowserStatus = status ?? string.Empty;
-        pendingBrowserAction = PendingBrowserAction.None;
-        pendingRoomName = null;
+        if (!keepPendingAction)
+        {
+            pendingBrowserAction = PendingBrowserAction.None;
+            pendingRoomName = null;
+        }
 
         if (PhotonNetwork.LocalPlayer != null)
             PhotonNetwork.LocalPlayer.TagObject = null;
@@ -864,6 +969,255 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        PhotonNetwork.LeaveRoom(false);
+        bool leaveStarted = PhotonNetwork.LeaveRoom(false);
+        if (!leaveStarted)
+        {
+            Debug.LogWarning("LeaveRoom did not start while returning to active rounds. State: " + PhotonNetwork.NetworkClientState);
+
+            if (!PhotonNetwork.InRoom)
+            {
+                returnToBrowserAfterLeave = false;
+                BeginSessionBrowserFlow();
+            }
+            else
+            {
+                PublishBrowserStatus("Waiting to leave current round...");
+                EnsureLeaveRoomRetryRoutine();
+            }
+        }
+    }
+
+    void EnsureLeaveRoomRetryRoutine()
+    {
+        if (leaveRoomRetryRoutine != null)
+            return;
+
+        leaveRoomRetryRoutine = StartCoroutine(LeaveRoomRetryLoop());
+    }
+
+    void StopLeaveRoomRetryRoutine()
+    {
+        if (leaveRoomRetryRoutine == null)
+            return;
+
+        StopCoroutine(leaveRoomRetryRoutine);
+        leaveRoomRetryRoutine = null;
+    }
+
+    System.Collections.IEnumerator LeaveRoomRetryLoop()
+    {
+        WaitForSecondsRealtime wait = new WaitForSecondsRealtime(LeaveRoomRetryPollSeconds);
+        float deadline = Time.unscaledTime + LeaveRoomRetryTimeoutSeconds;
+
+        while (returnToBrowserAfterLeave && PhotonNetwork.InRoom && Time.unscaledTime < deadline)
+        {
+            yield return wait;
+
+            if (!returnToBrowserAfterLeave || !PhotonNetwork.InRoom)
+                break;
+
+            ClientState state = PhotonNetwork.NetworkClientState;
+            if (state == ClientState.Joined || state == ClientState.Disconnected || state == ClientState.ConnectedToMasterServer)
+            {
+                if (PhotonNetwork.LeaveRoom(false))
+                    break;
+            }
+        }
+
+        leaveRoomRetryRoutine = null;
+
+        if (returnToBrowserAfterLeave && !PhotonNetwork.InRoom)
+        {
+            returnToBrowserAfterLeave = false;
+            BeginSessionBrowserFlow();
+        }
+        else if (returnToBrowserAfterLeave && PhotonNetwork.InRoom)
+        {
+            PublishBrowserStatus("Still leaving current round. Please wait...");
+        }
+    }
+
+    void EnsureSessionBrowserRecoveryRoutine()
+    {
+        if (sessionBrowserRecoveryRoutine != null || !SessionRequested)
+            return;
+
+        sessionBrowserRecoveryRoutine = StartCoroutine(SessionBrowserRecoveryLoop());
+    }
+
+    void StopSessionBrowserRecoveryRoutine()
+    {
+        if (sessionBrowserRecoveryRoutine != null)
+        {
+            StopCoroutine(sessionBrowserRecoveryRoutine);
+            sessionBrowserRecoveryRoutine = null;
+        }
+
+        joiningLobbyStartedAt = -1f;
+        reconnectingForBrowserRecovery = false;
+    }
+
+    System.Collections.IEnumerator SessionBrowserRecoveryLoop()
+    {
+        WaitForSecondsRealtime wait = new WaitForSecondsRealtime(BrowserRecoveryPollSeconds);
+
+        while (SessionRequested && !PhotonNetwork.InRoom)
+        {
+            if (!PhotonNetwork.IsConnected)
+            {
+                PublishBrowserStatus("Connecting...");
+                PhotonNetwork.ConnectUsingSettings();
+                joiningLobbyStartedAt = -1f;
+                yield return wait;
+                continue;
+            }
+
+            if (PhotonNetwork.IsConnectedAndReady)
+            {
+                if (PhotonNetwork.InLobby)
+                {
+                    joiningLobbyStartedAt = -1f;
+                    if (pendingBrowserAction == PendingBrowserAction.None)
+                    {
+                        PublishBrowserStatus("Choose a round or create a new one.");
+                        PublishRoomListChanged();
+                    }
+                }
+                else if (PhotonNetwork.NetworkClientState == ClientState.JoiningLobby)
+                {
+                    if (joiningLobbyStartedAt < 0f)
+                        joiningLobbyStartedAt = Time.unscaledTime;
+
+                    if (Time.unscaledTime - joiningLobbyStartedAt > BrowserJoinLobbyWatchdogSeconds)
+                    {
+                        reconnectingForBrowserRecovery = true;
+                        PublishBrowserStatus("Refreshing multiplayer connection...");
+                        PhotonNetwork.Disconnect();
+                        yield return wait;
+                        continue;
+                    }
+                }
+                else
+                {
+                    joiningLobbyStartedAt = Time.unscaledTime;
+                    PublishBrowserStatus("Loading active rounds...");
+                    PhotonNetwork.JoinLobby();
+                }
+            }
+
+            yield return wait;
+        }
+
+        sessionBrowserRecoveryRoutine = null;
+        joiningLobbyStartedAt = -1f;
+    }
+
+    void HideRoundEndScreenIfPresent()
+    {
+        GameObject endScreen = GameObject.Find("EndScreen");
+        if (endScreen != null)
+            endScreen.SetActive(false);
+
+        EndScreenUI endScreenUi = FindAnyObjectByType<EndScreenUI>();
+        if (endScreenUi != null && endScreenUi.panel != null)
+            endScreenUi.panel.SetActive(false);
+    }
+
+    void HideRoundTransientUi()
+    {
+        string[] transientNames =
+        {
+            "DeathMessage",
+            "TimeUpMessage",
+            "ExtractionMessage"
+        };
+
+        GameObject[] objects = Resources.FindObjectsOfTypeAll<GameObject>();
+        for (int i = 0; i < objects.Length; i++)
+        {
+            GameObject obj = objects[i];
+            if (obj == null || !obj.scene.IsValid())
+                continue;
+
+            for (int nameIndex = 0; nameIndex < transientNames.Length; nameIndex++)
+            {
+                if (obj.name == transientNames[nameIndex])
+                {
+                    obj.SetActive(false);
+                    break;
+                }
+            }
+        }
+    }
+
+    void CleanupLocalRoundScene()
+    {
+        PlayerMovement.gameStarted = false;
+        PlayerShooting.gameStarted = false;
+        RoundResultsTracker.ResetForCurrentRoom();
+        TreasureCollector.ResetRoundReservations();
+        ObstacleSpawner.ResetForSessionTransition();
+
+        HashSet<GameObject> queued = new HashSet<GameObject>();
+        QueueDestroyFromComponents<PlayerHealth>(queued);
+        QueueDestroyFromComponents<Treasure>(queued);
+        QueueDestroyFromComponents<ShipWreck>(queued);
+        QueueDestroyFromComponents<DroppedCargoCrate>(queued);
+        QueueDestroyFromComponents<Bullet>(queued);
+        QueueDestroyFromComponents<ObstacleChunk>(queued);
+        QueueDestroyFromComponents<NebulaField>(queued);
+        QueueDestroyFromComponents<TreasureSpawner>(queued);
+        QueueDestroyFromComponents<NebulaSpawner>(queued);
+        QueueDestroyFromComponents<EnemyBotManager>(queued);
+        QueueDestroyFromComponents<DroppedCargoManager>(queued);
+
+        ExtractionZone[] extractionZones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < extractionZones.Length; i++)
+        {
+            ExtractionZone zone = extractionZones[i];
+            if (zone == null)
+                continue;
+
+            PhotonView view = zone.GetComponent<PhotonView>();
+            if (view != null && view.IsRoomView)
+                continue;
+
+            QueueDestroyObject(zone.gameObject, queued);
+        }
+
+        PhotonView[] views = FindObjectsByType<PhotonView>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < views.Length; i++)
+        {
+            PhotonView view = views[i];
+            if (view == null || view.IsRoomView)
+                continue;
+
+            if (view.GetComponent<NetworkManager>() != null)
+                continue;
+
+            QueueDestroyObject(view.gameObject, queued);
+        }
+    }
+
+    void QueueDestroyFromComponents<T>(HashSet<GameObject> queued) where T : Component
+    {
+        T[] components = FindObjectsByType<T>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < components.Length; i++)
+        {
+            T component = components[i];
+            if (component == null)
+                continue;
+
+            QueueDestroyObject(component.gameObject, queued);
+        }
+    }
+
+    void QueueDestroyObject(GameObject target, HashSet<GameObject> queued)
+    {
+        if (target == null || !target.scene.IsValid() || queued.Contains(target))
+            return;
+
+        queued.Add(target);
+        Destroy(target);
     }
 }

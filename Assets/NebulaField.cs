@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -14,6 +15,7 @@ public class NebulaField : MonoBehaviour
     const float MinSizeMultiplier = 1f;
     const float MaxSizeMultiplier = 4f;
 
+    static readonly Dictionary<int, NebulaField> FieldsByKey = new Dictionary<int, NebulaField>();
     static Sprite cachedNebulaSprite;
 
     SpriteRenderer spriteRenderer;
@@ -24,12 +26,35 @@ public class NebulaField : MonoBehaviour
     void Awake()
     {
         nebulaKey = GetHashCode();
+        FieldsByKey[nebulaKey] = this;
         spriteRenderer = GetComponent<SpriteRenderer>();
         triggerCollider = GetComponent<CircleCollider2D>();
         nebulaScaleMultiplier = GetDeterministicScaleMultiplier((Vector2)transform.position);
         transform.rotation = Quaternion.Euler(0f, 0f, GetDeterministicRotation((Vector2)transform.position));
         ConfigureVisual();
         ConfigureCollider();
+    }
+
+    void OnEnable()
+    {
+        FieldsByKey[nebulaKey] = this;
+    }
+
+    void OnDisable()
+    {
+        if (FieldsByKey.TryGetValue(nebulaKey, out NebulaField field) && field == this)
+            FieldsByKey.Remove(nebulaKey);
+
+        HideInNebulaTarget.RemoveNebulaFromAll(nebulaKey);
+    }
+
+    public static bool TryGetField(int nebulaId, out NebulaField field)
+    {
+        if (FieldsByKey.TryGetValue(nebulaId, out field) && field != null && field.isActiveAndEnabled)
+            return true;
+
+        field = null;
+        return false;
     }
 
     void ConfigureVisual()
@@ -142,6 +167,28 @@ public class NebulaField : MonoBehaviour
 
         float distance = Vector2.Distance(transform.position, targetBounds.center);
         return distance <= allowedDistance;
+    }
+
+    public bool ContainsTarget(HideInNebulaTarget target)
+    {
+        if (target == null)
+            return false;
+
+        Bounds targetBounds = GetTargetBounds(target);
+        float nebulaRadius = GetWorldNebulaRadius();
+        float targetRadius = Mathf.Max(targetBounds.extents.x, targetBounds.extents.y);
+        float distance = Vector2.Distance(transform.position, targetBounds.center);
+        return distance <= nebulaRadius + Mathf.Max(0.08f, targetRadius * 0.12f);
+    }
+
+    public bool ShouldHide(HideInNebulaTarget target)
+    {
+        return ShouldHideTarget(target);
+    }
+
+    public bool ShouldDamage(HideInNebulaTarget target)
+    {
+        return ShouldDamageTarget(target);
     }
 
     bool ShouldDamageTarget(HideInNebulaTarget target)

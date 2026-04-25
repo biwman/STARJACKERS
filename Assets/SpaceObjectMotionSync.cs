@@ -10,6 +10,8 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
     const byte SpaceMineDetonationEventCode = 73;
     const byte ObstacleDamageRequestEventCode = 74;
     const byte ObstacleStateSyncEventCode = 75;
+    const byte ObstacleSplitEventCode = 76;
+    const float MaxAcceptedImpulseMagnitude = 8f;
 
     static SpaceObjectMotionSync instance;
 
@@ -81,9 +83,9 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         if (masterClient == null)
             return;
 
-        object[] payload = { stableId, impulse.x, impulse.y };
-        RaiseEventOptions options = new RaiseEventOptions { TargetActors = new[] { masterClient.ActorNumber } };
-        PhotonNetwork.RaiseEvent(ImpulseRequestEventCode, payload, options, SendOptions.SendReliable);
+        object[] payload = { stableId, impulse.x, impulse.y, PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : 0 };
+        RaiseEventOptions options = new RaiseEventOptions { Receivers = ReceiverGroup.MasterClient };
+        PhotonNetwork.RaiseEvent(ImpulseRequestEventCode, payload, options, SendOptions.SendUnreliable);
     }
 
     public static void BroadcastSpaceMineDetonation(int sourceViewId, Vector3 worldPosition)
@@ -134,6 +136,28 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         PhotonNetwork.RaiseEvent(ObstacleStateSyncEventCode, serializedState, options, SendOptions.SendReliable);
     }
 
+    public static void BroadcastObstacleSplit(string sourceStableId, string childAState, string childBState)
+    {
+        if (string.IsNullOrWhiteSpace(sourceStableId))
+            return;
+
+        if (!PhotonNetwork.IsConnected)
+        {
+            ObstacleSpawner.ApplyObstacleSplitDelta(sourceStableId, childAState, childBState);
+            return;
+        }
+
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        object[] payload = { sourceStableId, childAState ?? string.Empty, childBState ?? string.Empty };
+        PhotonNetwork.RaiseEvent(
+            ObstacleSplitEventCode,
+            payload,
+            new RaiseEventOptions { Receivers = ReceiverGroup.Others },
+            SendOptions.SendReliable);
+    }
+
     public void OnEvent(EventData photonEvent)
     {
         switch (photonEvent.Code)
@@ -142,7 +166,7 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
                 ApplySnapshot(photonEvent.CustomData as object[]);
                 break;
             case ImpulseRequestEventCode:
-                ApplyImpulseRequest(photonEvent.CustomData as object[]);
+                ApplyImpulseRequest(photonEvent);
                 break;
             case SpaceMineDetonationEventCode:
                 ApplySpaceMineDetonation(photonEvent.CustomData as object[]);
@@ -152,6 +176,9 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
                 break;
             case ObstacleStateSyncEventCode:
                 ApplyObstacleStateSync(photonEvent.CustomData);
+                break;
+            case ObstacleSplitEventCode:
+                ApplyObstacleSplit(photonEvent.CustomData as object[]);
                 break;
         }
     }
@@ -176,8 +203,9 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         target.ApplyNetworkState(position, velocity, rotation, angularVelocity);
     }
 
-    void ApplyImpulseRequest(object[] payload)
+    void ApplyImpulseRequest(EventData photonEvent)
     {
+        object[] payload = photonEvent.CustomData as object[];
         if (!PhotonNetwork.IsMasterClient || payload == null || payload.Length < 3)
             return;
 
@@ -189,8 +217,11 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         if (target == null)
             return;
 
-        Vector2 impulse = new Vector2(ConvertToFloat(payload[1]), ConvertToFloat(payload[2]));
+        Vector2 impulse = Vector2.ClampMagnitude(
+            new Vector2(ConvertToFloat(payload[1]), ConvertToFloat(payload[2])),
+            MaxAcceptedImpulseMagnitude);
         target.ApplyImpulse(impulse);
+        target.ForceBroadcastSnapshot();
     }
 
     void ApplySpaceMineDetonation(object[] payload)
@@ -228,6 +259,17 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
     {
         if (payload is string serializedState)
             ObstacleSpawner.ApplyRuntimeStateSnapshot(serializedState);
+    }
+
+    void ApplyObstacleSplit(object[] payload)
+    {
+        if (PhotonNetwork.IsMasterClient || payload == null || payload.Length < 3)
+            return;
+
+        string sourceStableId = payload[0] as string;
+        string childAState = payload[1] as string;
+        string childBState = payload[2] as string;
+        ObstacleSpawner.ApplyObstacleSplitDelta(sourceStableId, childAState, childBState);
     }
 
     static float ConvertToFloat(object value)

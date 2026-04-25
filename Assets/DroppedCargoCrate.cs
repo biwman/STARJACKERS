@@ -42,6 +42,7 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
     float networkRotation;
     float networkAngularVelocity;
     bool hasNetworkState;
+    Vector2 predictedLocalOffset;
 
     public bool isBeingCollected;
     public bool HasLoot => !string.IsNullOrWhiteSpace(storedItemId);
@@ -241,13 +242,15 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
         if (!hasNetworkState || rb == null)
             return;
 
-        Vector2 predictedPosition = networkPosition + networkVelocity * SnapshotInterval;
+        predictedLocalOffset = Vector2.Lerp(predictedLocalOffset, Vector2.zero, 1f - Mathf.Exp(-8f * Time.fixedDeltaTime));
+        Vector2 predictedPosition = networkPosition + networkVelocity * SnapshotInterval + predictedLocalOffset;
         float smoothing = 1f - Mathf.Exp(-RemoteSmoothing * Time.fixedDeltaTime);
 
         if (Vector2.Distance(rb.position, predictedPosition) > 1.2f)
         {
             rb.position = predictedPosition;
             rb.rotation = networkRotation;
+            predictedLocalOffset = Vector2.zero;
         }
 
         rb.MovePosition(Vector2.Lerp(rb.position, predictedPosition, smoothing));
@@ -317,6 +320,19 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
             return;
         }
 
+        TryRequestRemoteImpulseFromCollision(collision);
+    }
+
+    void OnCollisionStay2D(Collision2D collision)
+    {
+        if (!initialized || PhotonNetwork.CurrentRoom == null || isAuthority)
+            return;
+
+        TryRequestRemoteImpulseFromCollision(collision);
+    }
+
+    void TryRequestRemoteImpulseFromCollision(Collision2D collision)
+    {
         if (Time.time < nextImpulseRequestTime)
             return;
 
@@ -332,8 +348,31 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
         if (playerVelocity.sqrMagnitude < 0.02f)
             return;
 
+        TryRequestRemoteImpulse(playerVelocity * 0.65f);
+    }
+
+    public bool TryRequestRemoteImpulse(Vector2 impulse)
+    {
+        if (!initialized || isAuthority || !PhotonNetwork.IsConnected || Time.time < nextImpulseRequestTime)
+            return false;
+
+        if (impulse.sqrMagnitude < 0.0001f)
+            return false;
+
         nextImpulseRequestTime = Time.time + ImpulseRequestCooldown;
-        RequestImpulseFromClient(playerVelocity * 0.65f);
+        ApplyRemotePushPrediction(impulse);
+        RequestImpulseFromClient(impulse);
+        return true;
+    }
+
+    void ApplyRemotePushPrediction(Vector2 impulse)
+    {
+        if (isAuthority || rb == null)
+            return;
+
+        Vector2 offset = impulse * 0.022f;
+        predictedLocalOffset = Vector2.ClampMagnitude(predictedLocalOffset + offset, 0.5f);
+        rb.position += offset;
     }
 
     void ApplyCollisionResponse(Collision2D collision)
@@ -400,7 +439,7 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
             return;
 
         object[] payload = { photonView.ViewID, impulse.x, impulse.y };
-        PhotonNetwork.RaiseEvent(ImpulseRequestEventCode, payload, new RaiseEventOptions { TargetActors = new[] { masterClient.ActorNumber } }, SendOptions.SendReliable);
+        PhotonNetwork.RaiseEvent(ImpulseRequestEventCode, payload, new RaiseEventOptions { Receivers = ReceiverGroup.MasterClient }, SendOptions.SendUnreliable);
     }
 
     public void OnEvent(EventData photonEvent)
@@ -430,11 +469,13 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
         networkRotation = ConvertToFloat(payload[5]);
         networkAngularVelocity = ConvertToFloat(payload[6]);
         hasNetworkState = true;
+        predictedLocalOffset *= 0.35f;
 
         if (rb != null && Vector2.Distance(rb.position, networkPosition) > 2f)
         {
             rb.position = networkPosition;
             rb.rotation = networkRotation;
+            predictedLocalOffset = Vector2.zero;
         }
     }
 
@@ -448,9 +489,17 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
             return;
 
         Vector2 impulse = new Vector2(ConvertToFloat(payload[1]), ConvertToFloat(payload[2]));
+        impulse = Vector2.ClampMagnitude(impulse, 7f);
         rb.linearVelocity += impulse;
         driftVelocity = rb.linearVelocity;
         rb.angularVelocity = Mathf.Clamp(rb.angularVelocity + impulse.magnitude * 9f * Mathf.Sign(Random.value - 0.5f), -MaxAngularSpeed, MaxAngularSpeed);
+
+        if (PhotonNetwork.IsConnected)
+        {
+            nextSnapshotTime = Time.time + SnapshotInterval;
+            object[] snapshot = { photonView.ViewID, rb.position.x, rb.position.y, rb.linearVelocity.x, rb.linearVelocity.y, rb.rotation, rb.angularVelocity };
+            PhotonNetwork.RaiseEvent(SnapshotEventCode, snapshot, new RaiseEventOptions { Receivers = ReceiverGroup.Others }, SendOptions.SendUnreliable);
+        }
     }
 
     static float ConvertToFloat(object value)

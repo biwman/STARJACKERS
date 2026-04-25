@@ -6,6 +6,8 @@ using System.Collections.Generic;
 [DisallowMultipleComponent]
 public class HideInNebulaTarget : MonoBehaviour
 {
+    const float NebulaStateValidationInterval = 0.35f;
+
     static readonly HashSet<int> LocalPlayerNebulas = new HashSet<int>();
 
     Renderer[] renderers;
@@ -14,6 +16,7 @@ public class HideInNebulaTarget : MonoBehaviour
     Coroutine damageRoutine;
     Dictionary<int, bool> hiddenNebulaStates = new Dictionary<int, bool>();
     HashSet<int> damagingNebulas = new HashSet<int>();
+    float nextNebulaStateValidationTime;
     public bool IsHiddenForOthers => HasHiddenNebula();
 
     void Awake()
@@ -21,6 +24,15 @@ public class HideInNebulaTarget : MonoBehaviour
         photonView = GetComponent<PhotonView>();
         playerHealth = GetComponent<PlayerHealth>();
         CacheRenderers();
+    }
+
+    void Update()
+    {
+        if (Time.time < nextNebulaStateValidationTime)
+            return;
+
+        nextNebulaStateValidationTime = Time.time + NebulaStateValidationInterval;
+        ValidateNebulaContacts();
     }
 
     public void UpdateNebulaState(int nebulaId, bool shouldHide, bool shouldDamage)
@@ -55,6 +67,16 @@ public class HideInNebulaTarget : MonoBehaviour
         }
     }
 
+    public static void RemoveNebulaFromAll(int nebulaId)
+    {
+        HideInNebulaTarget[] targets = FindObjectsByType<HideInNebulaTarget>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < targets.Length; i++)
+        {
+            if (targets[i] != null)
+                targets[i].RemoveNebula(nebulaId);
+        }
+    }
+
     void CacheRenderers()
     {
         if (renderers == null || renderers.Length == 0)
@@ -83,7 +105,8 @@ public class HideInNebulaTarget : MonoBehaviour
         return photonView != null &&
                photonView.IsMine &&
                playerHealth != null &&
-               !playerHealth.IsBotControlled;
+               !playerHealth.IsBotControlled &&
+               !playerHealth.IsWreck;
     }
 
     bool HasHiddenNebula()
@@ -119,6 +142,68 @@ public class HideInNebulaTarget : MonoBehaviour
         {
             if (targets[i] != null)
                 targets[i].ApplyVisibility();
+        }
+    }
+
+    void ValidateNebulaContacts()
+    {
+        if (hiddenNebulaStates.Count == 0 && damagingNebulas.Count == 0)
+            return;
+
+        List<int> nebulaIds = new List<int>(hiddenNebulaStates.Keys);
+        foreach (int damagingId in damagingNebulas)
+        {
+            if (!nebulaIds.Contains(damagingId))
+                nebulaIds.Add(damagingId);
+        }
+
+        bool changed = false;
+        for (int i = 0; i < nebulaIds.Count; i++)
+        {
+            int nebulaId = nebulaIds[i];
+            if (!NebulaField.TryGetField(nebulaId, out NebulaField field) || !field.ContainsTarget(this))
+            {
+                changed |= hiddenNebulaStates.Remove(nebulaId);
+                changed |= damagingNebulas.Remove(nebulaId);
+                continue;
+            }
+
+            bool shouldHide = field.ShouldHide(this);
+            bool shouldDamage = field.ShouldDamage(this);
+
+            if (!hiddenNebulaStates.TryGetValue(nebulaId, out bool previousHide) || previousHide != shouldHide)
+            {
+                hiddenNebulaStates[nebulaId] = shouldHide;
+                changed = true;
+            }
+
+            bool hadDamage = damagingNebulas.Contains(nebulaId);
+            if (shouldDamage && !hadDamage)
+            {
+                damagingNebulas.Add(nebulaId);
+                changed = true;
+            }
+            else if (!shouldDamage && hadDamage)
+            {
+                damagingNebulas.Remove(nebulaId);
+                changed = true;
+            }
+        }
+
+        if (!changed)
+            return;
+
+        RefreshLocalNebulaCache();
+        ApplyVisibility();
+
+        if (damagingNebulas.Count == 0 && damageRoutine != null)
+        {
+            StopCoroutine(damageRoutine);
+            damageRoutine = null;
+        }
+        else if (playerHealth != null && photonView != null && photonView.IsMine && damageRoutine == null && damagingNebulas.Count > 0)
+        {
+            damageRoutine = StartCoroutine(ApplyNebulaDamage());
         }
     }
 

@@ -26,6 +26,7 @@ public class MovingSpaceObject : MonoBehaviour
     const float SnapshotInterval = 0.045f;
     const float RemoteSmoothing = 16f;
     const float ImpulseRequestCooldown = 0.05f;
+    const float RemotePredictionMaxOffset = 0.65f;
 
     static readonly Dictionary<string, MovingSpaceObject> ObjectsById = new Dictionary<string, MovingSpaceObject>();
     static PhysicsMaterial2D sharedBouncyMaterial;
@@ -46,6 +47,7 @@ public class MovingSpaceObject : MonoBehaviour
     float networkRotation;
     float networkAngularVelocity;
     bool hasNetworkState;
+    Vector2 predictedLocalOffset;
     bool configured;
     bool boundaryCollisionIgnoreInitialized;
     bool lastBoundaryIgnoreSetting;
@@ -195,6 +197,15 @@ public class MovingSpaceObject : MonoBehaviour
         }
     }
 
+    public void ForceBroadcastSnapshot()
+    {
+        if (!isAuthority || rb == null || string.IsNullOrWhiteSpace(stableId))
+            return;
+
+        nextSnapshotTime = Time.time + SnapshotInterval;
+        SpaceObjectMotionSync.BroadcastState(stableId, rb.position, rb.linearVelocity, rb.rotation, rb.angularVelocity);
+    }
+
     public void ApplyNetworkState(Vector2 position, Vector2 velocity, float rotation, float angularVelocity)
     {
         if (isAuthority)
@@ -205,12 +216,29 @@ public class MovingSpaceObject : MonoBehaviour
         networkRotation = rotation;
         networkAngularVelocity = angularVelocity;
         hasNetworkState = true;
+        predictedLocalOffset *= 0.35f;
 
         if (rb != null && Vector2.Distance(rb.position, position) > 2f)
         {
             rb.position = position;
             rb.rotation = rotation;
+            predictedLocalOffset = Vector2.zero;
         }
+    }
+
+    public void ApplyRemotePushPrediction(Vector2 impulse)
+    {
+        if (isAuthority || rb == null || impulse.sqrMagnitude < 0.0001f)
+            return;
+
+        int weightFactor = objectType == SpaceObjectType.Obstacle
+            ? RoomSettings.GetObstacleWeightFactor()
+            : RoomSettings.GetTreasureWeightFactor();
+        weightFactor = Mathf.Max(1, weightFactor);
+
+        Vector2 offset = impulse * (0.018f / weightFactor);
+        predictedLocalOffset = Vector2.ClampMagnitude(predictedLocalOffset + offset, RemotePredictionMaxOffset);
+        rb.position += offset;
     }
 
     public void SetMotionState(Vector2 position, Vector2 velocity, float rotation, float angularVelocity, bool authorityState)
@@ -442,7 +470,8 @@ public class MovingSpaceObject : MonoBehaviour
         if (!hasNetworkState || rb == null)
             return;
 
-        Vector2 predictedPosition = networkPosition + networkVelocity * SnapshotInterval;
+        predictedLocalOffset = Vector2.Lerp(predictedLocalOffset, Vector2.zero, 1f - Mathf.Exp(-8f * Time.fixedDeltaTime));
+        Vector2 predictedPosition = networkPosition + networkVelocity * SnapshotInterval + predictedLocalOffset;
         float smoothing = 1f - Mathf.Exp(-RemoteSmoothing * Time.fixedDeltaTime);
 
         if (Vector2.Distance(rb.position, predictedPosition) > 1.6f)

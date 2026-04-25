@@ -87,6 +87,8 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         if (PhotonNetwork.CurrentRoom != null)
         {
+            PhotonNetwork.CurrentRoom.IsOpen = false;
+            PhotonNetwork.CurrentRoom.IsVisible = false;
             PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         }
     }

@@ -10,6 +10,7 @@ public class ExtractionZone : MonoBehaviourPun
     public float transitionDuration = 10f;
     public float activeDuration = 15f;
     public float evacuationAnimationDuration = 4f;
+    const float RequestedPlayerEvacuationGraceDistance = 1.65f;
 
     bool isActive;
     bool isBeingUsed;
@@ -77,7 +78,7 @@ public class ExtractionZone : MonoBehaviourPun
         }
         else
         {
-            EvacuatePlayers();
+            EvacuatePlayers(playerView);
         }
 
         isBeingUsed = false;
@@ -142,7 +143,7 @@ public class ExtractionZone : MonoBehaviourPun
         }
     }
 
-    void EvacuatePlayers()
+    void EvacuatePlayers(PhotonView requestedPlayerView = null)
     {
         if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient)
             return;
@@ -157,24 +158,12 @@ public class ExtractionZone : MonoBehaviourPun
         Collider2D[] hits = GetPlayersInsideZone();
         HashSet<int> processedPlayers = new HashSet<int>();
 
+        TryEvacuateRequestedPlayer(requestedPlayerView, processedPlayers);
+
         for (int i = 0; i < hits.Length; i++)
         {
             PlayerHealth playerHealth = hits[i].GetComponentInParent<PlayerHealth>();
-            if (playerHealth == null || playerHealth.IsWreck || playerHealth.IsBotControlled || playerHealth.IsEvacuationAnimating)
-                continue;
-
-            PhotonView playerView = playerHealth.photonView;
-            if (playerView == null || processedPlayers.Contains(playerView.ViewID))
-                continue;
-
-            processedPlayers.Add(playerView.ViewID);
-
-            Debug.Log("Evacuating: " + playerView.Owner.NickName);
-            int finalScore = RoundResultsTracker.GetKnownScore(playerView.Owner, playerView.gameObject) + 5;
-            string outcome = playerHealth.IsAstronautControlled ? "evacuated" : "extracted";
-            RoundResultsTracker.RecordOutcome(playerView.Owner, finalScore, outcome);
-            playerView.RPC(nameof(PlayerHealth.OnEvacuated), playerView.Owner, 5);
-            playerView.RPC(nameof(PlayerHealth.BeginEvacuationSequence), RpcTarget.All);
+            TryEvacuatePlayer(playerHealth, processedPlayers);
         }
 
         photonView.RPC(nameof(ResetZone), RpcTarget.All);
@@ -214,6 +203,62 @@ public class ExtractionZone : MonoBehaviourPun
 
         if (manager != null)
             manager.EndGame("evacuation");
+    }
+
+    void TryEvacuateRequestedPlayer(PhotonView requestedPlayerView, HashSet<int> processedPlayers)
+    {
+        if (requestedPlayerView == null || processedPlayers == null)
+            return;
+
+        PlayerHealth requestedPlayer = requestedPlayerView.GetComponent<PlayerHealth>();
+        if (requestedPlayer == null || !IsPlayerCloseEnoughForRequestedEvacuation(requestedPlayer))
+            return;
+
+        TryEvacuatePlayer(requestedPlayer, processedPlayers);
+    }
+
+    bool TryEvacuatePlayer(PlayerHealth playerHealth, HashSet<int> processedPlayers)
+    {
+        if (playerHealth == null || playerHealth.IsWreck || playerHealth.IsBotControlled || playerHealth.IsEvacuationAnimating)
+            return false;
+
+        PhotonView playerView = playerHealth.photonView;
+        if (playerView == null || processedPlayers == null || processedPlayers.Contains(playerView.ViewID))
+            return false;
+
+        processedPlayers.Add(playerView.ViewID);
+
+        Debug.Log("Evacuating: " + playerView.Owner.NickName);
+        int finalScore = RoundResultsTracker.GetKnownScore(playerView.Owner, playerView.gameObject) + 5;
+        string outcome = playerHealth.IsAstronautControlled ? "evacuated" : "extracted";
+        RoundResultsTracker.RecordOutcome(playerView.Owner, finalScore, outcome);
+        playerView.RPC(nameof(PlayerHealth.OnEvacuated), playerView.Owner, 5);
+        playerView.RPC(nameof(PlayerHealth.BeginEvacuationSequence), RpcTarget.All);
+        return true;
+    }
+
+    bool IsPlayerCloseEnoughForRequestedEvacuation(PlayerHealth playerHealth)
+    {
+        if (playerHealth == null)
+            return false;
+
+        Collider2D zoneCollider = GetComponent<Collider2D>();
+        Collider2D[] playerColliders = playerHealth.GetComponentsInChildren<Collider2D>();
+        if (zoneCollider != null && playerColliders != null && playerColliders.Length > 0)
+        {
+            for (int i = 0; i < playerColliders.Length; i++)
+            {
+                Collider2D playerCollider = playerColliders[i];
+                if (playerCollider == null || !playerCollider.enabled)
+                    continue;
+
+                ColliderDistance2D distance = zoneCollider.Distance(playerCollider);
+                if (distance.isOverlapped || distance.distance <= RequestedPlayerEvacuationGraceDistance)
+                    return true;
+            }
+        }
+
+        return Vector2.Distance(transform.position, playerHealth.transform.position) <= RequestedPlayerEvacuationGraceDistance + 1.4f;
     }
 
     Collider2D[] GetPlayersInsideZone()

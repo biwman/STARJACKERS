@@ -36,6 +36,12 @@ public class DroppedCargoManager : MonoBehaviourPunCallbacks
         instance = this;
     }
 
+    void OnDestroy()
+    {
+        if (instance == this)
+            instance = null;
+    }
+
     void Update()
     {
         if (Time.unscaledTime < nextScanTime)

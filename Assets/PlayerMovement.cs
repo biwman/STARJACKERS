@@ -40,7 +40,12 @@ public class PlayerMovement : MonoBehaviourPun
     const float HighSpeedBrakeResponsiveness = 1.15f;
     const float BrakeDriftResponsivenessMultiplier = 0.8f;
     const float MaxDriftInertiaSlowdown = 4.2f;
+    const float MovingObjectImpulseRequestCooldown = 0.08f;
+    const float RemotePushNoseProbeRadius = 0.9f;
+    const float RemotePushBodyProbeRadius = 0.68f;
     static PhysicsMaterial2D playerCollisionMaterial;
+    static readonly Collider2D[] RemotePushProbeHits = new Collider2D[32];
+    float nextMovingObjectImpulseRequestTime;
 
     public float BoosterNormalized => boosterCharge;
     public bool IsBoosterDepleted => boosterExhausted;
@@ -189,6 +194,7 @@ public class PlayerMovement : MonoBehaviourPun
         {
             ApplyVelocity(currentSpeed);
             ClampExcessCollisionBoost(currentSpeed);
+            TryRequestNearbyMovingObjectImpulse();
             rb.angularVelocity = 0f;
             float maxTurnDelta = BaseTurnDegreesPerSecond * Mathf.Max(0.1f, turnRateMultiplier) * Time.fixedDeltaTime;
             float nextAngle = Mathf.MoveTowardsAngle(rb.rotation, targetRotationAngle, maxTurnDelta);
@@ -250,23 +256,138 @@ public class PlayerMovement : MonoBehaviourPun
         MovingSpaceObject movingObject = collision.collider != null
             ? collision.collider.GetComponentInParent<MovingSpaceObject>()
             : null;
-        if (movingObject == null || string.IsNullOrWhiteSpace(movingObject.StableId))
+
+        Vector2 playerVelocity = rb != null ? rb.linearVelocity : Vector2.zero;
+        if (RequestMovingObjectImpulse(movingObject, playerVelocity, 1.25f))
             return;
 
-        if (movingObject.ObjectType == MovingSpaceObject.SpaceObjectType.Obstacle && RoomSettings.IsObstacleMassMax())
+        DroppedCargoCrate crate = collision.collider != null
+            ? collision.collider.GetComponentInParent<DroppedCargoCrate>()
+            : null;
+        RequestDroppedCargoImpulse(crate, playerVelocity, 0.65f);
+    }
+
+    void TryRequestNearbyMovingObjectImpulse()
+    {
+        if (!PhotonNetwork.IsConnected ||
+            PhotonNetwork.IsMasterClient ||
+            rb == null ||
+            GetComponent<AstronautSurvivor>() != null ||
+            Time.time < nextMovingObjectImpulseRequestTime)
+        {
             return;
+        }
 
         Vector2 playerVelocity = rb.linearVelocity;
         if (playerVelocity.sqrMagnitude < 0.01f)
             return;
+
+        Vector2 noseProbeCenter = rb.position + (Vector2)transform.up * GetRemotePushProbeDistance();
+        MovingSpaceObject bestObject = null;
+        DroppedCargoCrate bestCrate = null;
+        float bestDistance = float.MaxValue;
+
+        FindRemotePushTarget(noseProbeCenter, RemotePushNoseProbeRadius, ref bestObject, ref bestCrate, ref bestDistance);
+        FindRemotePushTarget(rb.position, RemotePushBodyProbeRadius, ref bestObject, ref bestCrate, ref bestDistance);
+
+        if (RequestMovingObjectImpulse(bestObject, playerVelocity, bestObject != null && bestObject.ObjectType == MovingSpaceObject.SpaceObjectType.Treasure ? 1.45f : 0.95f))
+            return;
+
+        RequestDroppedCargoImpulse(bestCrate, playerVelocity, 0.75f);
+    }
+
+    void FindRemotePushTarget(
+        Vector2 probeCenter,
+        float probeRadius,
+        ref MovingSpaceObject bestObject,
+        ref DroppedCargoCrate bestCrate,
+        ref float bestDistance)
+    {
+        ContactFilter2D contactFilter = new ContactFilter2D { useTriggers = false };
+        int hitCount = Physics2D.OverlapCircle(probeCenter, probeRadius, contactFilter, RemotePushProbeHits);
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D hit = RemotePushProbeHits[i];
+            RemotePushProbeHits[i] = null;
+            if (hit == null || hit.isTrigger)
+                continue;
+
+            if (hit.transform == transform || hit.transform.IsChildOf(transform))
+                continue;
+
+            float distance = Vector2.Distance(probeCenter, hit.ClosestPoint(probeCenter));
+
+            MovingSpaceObject movingObject = hit.GetComponentInParent<MovingSpaceObject>();
+            if (movingObject != null &&
+                !string.IsNullOrWhiteSpace(movingObject.StableId) &&
+                !(movingObject.ObjectType == MovingSpaceObject.SpaceObjectType.Obstacle && RoomSettings.IsObstacleMassMax()) &&
+                distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestObject = movingObject;
+                bestCrate = null;
+                continue;
+            }
+
+            DroppedCargoCrate crate = hit.GetComponentInParent<DroppedCargoCrate>();
+            if (crate != null && distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestObject = null;
+                bestCrate = crate;
+            }
+        }
+    }
+
+    float GetRemotePushProbeDistance()
+    {
+        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+        if (renderer == null)
+            return 0.78f;
+
+        return Mathf.Clamp(renderer.bounds.extents.y * 0.92f, 0.45f, 1.35f);
+    }
+
+    bool RequestMovingObjectImpulse(MovingSpaceObject movingObject, Vector2 playerVelocity, float strength)
+    {
+        if (movingObject == null || string.IsNullOrWhiteSpace(movingObject.StableId))
+            return false;
+
+        if (Time.time < nextMovingObjectImpulseRequestTime)
+            return false;
+
+        if (movingObject.ObjectType == MovingSpaceObject.SpaceObjectType.Obstacle && RoomSettings.IsObstacleMassMax())
+            return false;
+
+        if (playerVelocity.sqrMagnitude < 0.01f)
+            return false;
 
         int weightFactor = movingObject.ObjectType == MovingSpaceObject.SpaceObjectType.Obstacle
             ? RoomSettings.GetObstacleWeightFactor()
             : RoomSettings.GetTreasureWeightFactor();
         weightFactor = Mathf.Max(1, weightFactor);
 
-        Vector2 impulse = (playerVelocity * 1.25f) / weightFactor;
+        Vector2 impulse = (playerVelocity * Mathf.Max(0.1f, strength)) / weightFactor;
+        nextMovingObjectImpulseRequestTime = Time.time + MovingObjectImpulseRequestCooldown;
+        movingObject.ApplyRemotePushPrediction(impulse);
         SpaceObjectMotionSync.RequestImpulse(movingObject.StableId, impulse);
+        return true;
+    }
+
+    bool RequestDroppedCargoImpulse(DroppedCargoCrate crate, Vector2 playerVelocity, float strength)
+    {
+        if (crate == null || Time.time < nextMovingObjectImpulseRequestTime)
+            return false;
+
+        if (playerVelocity.sqrMagnitude < 0.01f)
+            return false;
+
+        if (!crate.TryRequestRemoteImpulse(playerVelocity * Mathf.Max(0.1f, strength)))
+            return false;
+
+        nextMovingObjectImpulseRequestTime = Time.time + MovingObjectImpulseRequestCooldown;
+        return true;
     }
 
     bool IsGameStarted()
