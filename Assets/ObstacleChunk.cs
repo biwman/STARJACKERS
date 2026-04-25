@@ -202,7 +202,7 @@ public class ObstacleChunk : MonoBehaviour
         if (string.IsNullOrWhiteSpace(key))
             return 1f;
 
-        int hash = key.GetHashCode();
+        uint hash = ComputeStableHash(key);
         float sampleX = Mathf.Abs(hash * 0.00013f) + 17.3f;
         float sampleY = Mathf.Abs(hash * 0.00029f) + 29.7f;
         float noise = Mathf.PerlinNoise(sampleX, sampleY);
@@ -217,8 +217,26 @@ public class ObstacleChunk : MonoBehaviour
         if (string.IsNullOrWhiteSpace(key))
             return 0;
 
-        int hash = key.GetHashCode();
-        return Mathf.Abs(hash) % spriteCount;
+        uint hash = ComputeStableHash(key);
+        return (int)(hash % (uint)spriteCount);
+    }
+
+    static uint ComputeStableHash(string value)
+    {
+        unchecked
+        {
+            uint hash = 2166136261u;
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                hash ^= (byte)(c & 0xFF);
+                hash *= 16777619u;
+                hash ^= (byte)(c >> 8);
+                hash *= 16777619u;
+            }
+
+            return hash;
+        }
     }
 
     static void FitRendererToTargetSize(SpriteRenderer renderer, float targetMaxWorldSize)

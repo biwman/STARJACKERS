@@ -26,6 +26,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;
+        props[RoomSettings.GadgetChargesStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
 
@@ -80,6 +81,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;
+        props[RoomSettings.GadgetChargesStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = RoundResultsTracker.SerializeSnapshot(snapshot);
         props[RoomSettings.RoundEndReasonKey] = snapshot != null ? snapshot.endReason : endReason;
 
@@ -138,6 +140,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;
+        props[RoomSettings.GadgetChargesStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
 

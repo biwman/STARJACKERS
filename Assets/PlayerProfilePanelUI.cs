@@ -71,6 +71,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
     TMP_Text shipInventoryLabelText;
     TMP_Text playerInventoryLabelText;
     TMP_Text shipPreviewTitleText;
+    TMP_Text shipPreviewStatsText;
     RectTransform shipPreviewRootRect;
     RectTransform[] equipmentSlotRects;
     Button[] equipmentSlotButtons;
@@ -287,7 +288,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             });
         }
 
-        shipPreviewTitleText = CreateText(panelObject.transform, "ShipPreviewTitle", "SHIP LOADOUT", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-304f, -506f), new Vector2(360f, 24f), 18f, TextAlignmentOptions.Left);
+        shipPreviewTitleText = CreateText(panelObject.transform, "ShipPreviewTitle", "SHIP", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-300f, -474f), new Vector2(460f, 38f), 30f, TextAlignmentOptions.Left);
         CreateShipPreview(panelObject.transform);
         CreateShipImageModal(panelObject.transform);
 
@@ -305,7 +306,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         CreateCraftingRecipeBrowser(panelObject.transform);
 
         exitGameButton = CreateButton(panelObject.transform, "ExitGameButton", "EXIT GAME", new Vector2(820f, -72f), new Vector2(210f, 54f), OnExitGameClicked);
-        saveAndRunButton = CreateButton(panelObject.transform, "SaveAndRunButton", "SAVE & RUN", new Vector2(296f, -816f), new Vector2(294f, 84f), OnSaveAndRunClicked);
+        saveAndRunButton = CreateButton(panelObject.transform, "SaveAndRunButton", "PLAY", new Vector2(296f, -816f), new Vector2(294f, 84f), OnSaveAndRunClicked);
         ApplySaveAndRunButtonStyle();
         statusText = CreateText(panelObject.transform, "ProfileStatusText", string.Empty, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(320f, 24f), 16f, TextAlignmentOptions.Center);
     }
@@ -352,6 +353,15 @@ public class PlayerProfilePanelUI : MonoBehaviour
         shipPreviewImage = imageObject.GetComponent<Image>();
         shipPreviewImage.preserveAspect = true;
         shipPreviewImage.raycastTarget = false;
+
+        shipPreviewStatsText = CreateText(parent, "ShipPreviewStats", string.Empty, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-280f, -526f), new Vector2(680f, 86f), 30f, TextAlignmentOptions.TopLeft);
+        if (shipPreviewStatsText != null)
+        {
+            shipPreviewStatsText.fontStyle = FontStyles.Normal;
+            shipPreviewStatsText.textWrappingMode = TextWrappingModes.Normal;
+            shipPreviewStatsText.lineSpacing = -18f;
+            shipPreviewStatsText.color = new Color(0.84f, 0.9f, 0.96f, 0.96f);
+        }
 
         equipmentSlotRects = new RectTransform[PlayerInventoryData.EquipmentSlotCount];
         equipmentSlotButtons = new Button[PlayerInventoryData.EquipmentSlotCount];
@@ -1799,6 +1809,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         TMP_Text text = saveAndRunButton.GetComponentInChildren<TMP_Text>(true);
         if (text != null)
         {
+            text.text = "PLAY";
             text.color = Color.white;
             text.fontSize = 30f;
             text.fontStyle = FontStyles.Bold;
@@ -1866,10 +1877,21 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void RefreshShipPreview()
     {
+        PlayerShipDefinition definition = ShipCatalog.GetShipDefinition(selectedSkin);
         if (shipPreviewTitleText != null)
         {
-            int capacity = ShipCatalog.GetShipInventoryCapacity(selectedSkin);
-            shipPreviewTitleText.text = ShipCatalog.GetShipTypeDisplayName(GetSelectedShipType()).ToUpperInvariant() + " LOADOUT  |  CARGO " + capacity;
+            shipPreviewTitleText.text = definition.DisplayName.ToUpperInvariant();
+        }
+
+        if (shipPreviewStatsText != null)
+        {
+            shipPreviewStatsText.text =
+                "HP " + definition.BaseHp +
+                "   SHIELD " + definition.BaseShield +
+                "   SPEED " + definition.BaseSpeed.ToString("0.0") +
+                "\nTURN x" + definition.TurnRateMultiplier.ToString("0.00") +
+                "   BOOST " + definition.BoosterDuration.ToString("0.0") + "s" +
+                "   CARGO " + definition.CargoCapacity;
         }
 
         UpdateEquipmentSlotLayout();
@@ -3358,6 +3380,14 @@ public class SessionBrowserPanelUI : MonoBehaviour
 
         bool shouldShow = visibleRequested && !PhotonNetwork.InRoom;
         panelObject.SetActive(shouldShow);
+        CanvasGroup canvasGroup = panelObject.GetComponent<CanvasGroup>();
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = shouldShow ? 1f : 0f;
+            canvasGroup.interactable = shouldShow;
+            canvasGroup.blocksRaycasts = shouldShow;
+        }
+
         if (shouldShow)
         {
             panelObject.transform.SetAsLastSibling();

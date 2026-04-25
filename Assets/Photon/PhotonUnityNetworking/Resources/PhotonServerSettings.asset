@@ -96,6 +96,10 @@ MonoBehaviour:
   - ResolveReservedWreckLoot
   - HandleBatteryShieldChargeRequest
   - PlayBatteryShieldChargeAudio
+  - RequestAuthoritativeGadgetUse
+  - PlayShieldHitVisual
+  - TakeDamageAt
+  - PlaySpaceTruckAlert
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

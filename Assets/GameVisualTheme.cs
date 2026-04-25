@@ -18,7 +18,8 @@ public class GameVisualTheme : MonoBehaviour
     const float ObstacleTargetSize = 3.0f;
     const float ExtractionTargetSize = 4.3f;
     const float BackgroundTileWorldSize = 8f;
-    const float RefreshInterval = 0.75f;
+    const float DesktopRefreshInterval = 0.75f;
+    const float MobileRefreshInterval = 1.35f;
 
     static GameVisualTheme instance;
 
@@ -149,16 +150,17 @@ public class GameVisualTheme : MonoBehaviour
             if (EditorApplication.timeSinceStartup < nextEditorRefreshTime)
                 return;
 
-            nextEditorRefreshTime = EditorApplication.timeSinceStartup + RefreshInterval;
+            nextEditorRefreshTime = EditorApplication.timeSinceStartup + DesktopRefreshInterval;
             ApplyThemeInEditor();
             return;
         }
 #endif
 
+        float refreshInterval = Application.isMobilePlatform ? MobileRefreshInterval : DesktopRefreshInterval;
         if (Time.unscaledTime < nextRefreshTime)
             return;
 
-        nextRefreshTime = Time.unscaledTime + RefreshInterval;
+        nextRefreshTime = Time.unscaledTime + refreshInterval;
         int currentSignature = CalculateRuntimeSignature();
         if (currentSignature == lastRuntimeSignature)
             return;
@@ -607,8 +609,8 @@ public class GameVisualTheme : MonoBehaviour
             ? movingObject.StableId
             : target.name;
 
-        int hash = stableKey.GetHashCode();
-        int index = Mathf.Abs(hash) % obstacleSprites.Length;
+        int index = ObstacleChunk.ComputeStableSpriteVariantIndex(stableKey, obstacleSprites.Length);
+        index = Mathf.Clamp(index, 0, obstacleSprites.Length - 1);
         return obstacleSprites[index];
     }
 
@@ -766,7 +768,7 @@ public class GameVisualTheme : MonoBehaviour
 
     Sprite LoadBackgroundSprite(int backgroundIndex)
     {
-        int clampedIndex = Mathf.Clamp(backgroundIndex, 1, 6);
+        int clampedIndex = Mathf.Clamp(backgroundIndex, 1, 12);
         string resourcesPath = "Visuals/Backgrounds/background" + clampedIndex + "_resource";
         Texture2D texture = Resources.Load<Texture2D>(resourcesPath);
         Sprite sprite = texture != null ? CreateSpriteFromTexture(texture) : null;

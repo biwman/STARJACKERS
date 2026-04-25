@@ -128,6 +128,7 @@ public static class InventoryItemCatalog
     public const string DroidScrapId = "droid_scrap";
     public const string CorsairSalvageId = "corsair_salvage";
     public const string SpaceMineWreckId = "space_mine_wreck";
+    public const string SpaceTruckWreckId = "space_truck_wreck";
     public const string PlasmaGunId = "plasma_gun";
     public const string FusionEngineId = "fusion_engine";
     public const string GadgetMineId = "gadget_mine";
@@ -301,6 +302,19 @@ public static class InventoryItemCatalog
                 IconResourcePath = "wrak_miny_resource",
                 ProjectFileName = "wrak_miny.png",
                 SalvageOutputs = new[] { AsteroidGoldId }
+            },
+            [SpaceTruckWreckId] = new InventoryItemDefinition
+            {
+                Id = SpaceTruckWreckId,
+                DisplayName = "Space Truck Wreck",
+                ShortLabel = "TRK",
+                Description = "Heavy salvage recovered from a destroyed Space Truck.",
+                ItemType = InventoryItemType.Resource,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 200,
+                IconResourcePath = "space_truck_wrak_resource",
+                ProjectFileName = "space_truck_wrak.png",
+                SalvageOutputs = new[] { AsteroidGoldId, AsteroidGoldId }
             },
             [PlasmaGunId] = new InventoryItemDefinition
             {

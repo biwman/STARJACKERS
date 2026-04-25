@@ -66,7 +66,7 @@ public class HideInNebulaTarget : MonoBehaviour
     void ApplyVisibility()
     {
         bool shouldHide = HasHiddenNebula();
-        bool keepLocallyVisible = photonView != null && photonView.IsMine && !ShouldForceSharedNebulaVisibility();
+        bool keepLocallyVisible = IsLocalHumanControlledCharacter();
         bool shouldBeVisible = !shouldHide || keepLocallyVisible || SharesNebulaWithLocalPlayer();
 
         for (int i = 0; i < renderers.Length; i++)
@@ -78,10 +78,12 @@ public class HideInNebulaTarget : MonoBehaviour
         }
     }
 
-    bool ShouldForceSharedNebulaVisibility()
+    bool IsLocalHumanControlledCharacter()
     {
-        EnemyBot bot = GetComponent<EnemyBot>();
-        return bot != null && bot.Kind == EnemyBotKind.SpaceMine;
+        return photonView != null &&
+               photonView.IsMine &&
+               playerHealth != null &&
+               !playerHealth.IsBotControlled;
     }
 
     bool HasHiddenNebula()
@@ -97,7 +99,7 @@ public class HideInNebulaTarget : MonoBehaviour
 
     void RefreshLocalNebulaCache()
     {
-        if (photonView == null || !photonView.IsMine)
+        if (!IsLocalHumanControlledCharacter())
             return;
 
         LocalPlayerNebulas.Clear();
@@ -105,6 +107,18 @@ public class HideInNebulaTarget : MonoBehaviour
         {
             if (state.Value)
                 LocalPlayerNebulas.Add(state.Key);
+        }
+
+        RefreshAllTargetVisibility();
+    }
+
+    static void RefreshAllTargetVisibility()
+    {
+        HideInNebulaTarget[] targets = FindObjectsByType<HideInNebulaTarget>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < targets.Length; i++)
+        {
+            if (targets[i] != null)
+                targets[i].ApplyVisibility();
         }
     }
 
@@ -116,6 +130,33 @@ public class HideInNebulaTarget : MonoBehaviour
         foreach (KeyValuePair<int, bool> state in hiddenNebulaStates)
         {
             if (state.Value && LocalPlayerNebulas.Contains(state.Key))
+                return true;
+        }
+
+        return false;
+    }
+
+    public bool IsHiddenFromLocalPlayer()
+    {
+        return HasHiddenNebula() && !SharesNebulaWithLocalPlayer();
+    }
+
+    public bool IsHiddenFromObserver(HideInNebulaTarget observer)
+    {
+        return HasHiddenNebula() && !SharesNebulaWith(observer);
+    }
+
+    public bool SharesNebulaWith(HideInNebulaTarget other)
+    {
+        if (other == null)
+            return false;
+
+        foreach (KeyValuePair<int, bool> state in hiddenNebulaStates)
+        {
+            if (!state.Value)
+                continue;
+
+            if (other.hiddenNebulaStates.TryGetValue(state.Key, out bool otherHidden) && otherHidden)
                 return true;
         }
 

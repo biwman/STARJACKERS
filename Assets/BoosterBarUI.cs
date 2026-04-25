@@ -7,11 +7,13 @@ using UnityEngine.UI;
 public class BoosterBarUI : MonoBehaviourPun
 {
     const string BoosterBarName = "Booster_Bar";
+    const string PercentName = "BoosterPercent";
 
     PlayerMovement movement;
     Slider boosterBar;
     Image fillImage;
     Image handleImage;
+    TextMeshProUGUI percentText;
     bool isVisible = true;
 
     void Start()
@@ -127,6 +129,12 @@ public class BoosterBarUI : MonoBehaviourPun
                 ? new Color(0.96f, 0.38f, 0.4f, 1f)
                 : new Color(0.6f, 0.64f, 0.7f, 1f);
         }
+
+        if (percentText != null)
+        {
+            percentText.text = Mathf.RoundToInt(normalized * 100f) + "%";
+            percentText.color = normalized > 0.2f ? Color.white : new Color(1f, 0.84f, 0.84f, 1f);
+        }
     }
 
     void UpdateVisibility()
@@ -205,6 +213,28 @@ public class BoosterBarUI : MonoBehaviourPun
         {
             text.font = referenceText.font;
             text.fontSharedMaterial = referenceText.fontSharedMaterial;
+        }
+
+        GameObject percentObject = new GameObject(PercentName, typeof(RectTransform), typeof(TextMeshProUGUI));
+        percentObject.transform.SetParent(parent, false);
+
+        RectTransform percentRect = percentObject.GetComponent<RectTransform>();
+        percentRect.anchorMin = new Vector2(1f, 0f);
+        percentRect.anchorMax = new Vector2(1f, 1f);
+        percentRect.pivot = new Vector2(1f, 0.5f);
+        percentRect.anchoredPosition = new Vector2(-12f, 0f);
+        percentRect.sizeDelta = new Vector2(120f, 0f);
+
+        percentText = percentObject.GetComponent<TextMeshProUGUI>();
+        percentText.text = "100%";
+        percentText.fontSize = 20f;
+        percentText.color = Color.white;
+        percentText.alignment = TextAlignmentOptions.Right;
+
+        if (referenceText != null)
+        {
+            percentText.font = referenceText.font;
+            percentText.fontSharedMaterial = referenceText.fontSharedMaterial;
         }
     }
 }

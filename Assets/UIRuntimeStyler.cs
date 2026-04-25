@@ -162,6 +162,9 @@ public class UIRuntimeStyler : MonoBehaviour
 
     void StyleButton(Button button)
     {
+        if (ShouldSkipManagedButtonStyle(button))
+            return;
+
         Image image = button.GetComponent<Image>();
         TMP_Text text = button.GetComponentInChildren<TMP_Text>(true);
         RectTransform rect = button.GetComponent<RectTransform>();
@@ -280,6 +283,35 @@ public class UIRuntimeStyler : MonoBehaviour
             return "reload";
 
         return "default";
+    }
+
+    bool ShouldSkipManagedButtonStyle(Button button)
+    {
+        if (button == null)
+            return true;
+
+        string name = button.gameObject.name;
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+
+        return name.StartsWith("PlayerSlot", System.StringComparison.Ordinal) ||
+               name.StartsWith("ShipSlot", System.StringComparison.Ordinal) ||
+               name.StartsWith("CraftingSlot", System.StringComparison.Ordinal) ||
+               name.StartsWith("MainGun", System.StringComparison.Ordinal) ||
+               name.StartsWith("Shield", System.StringComparison.Ordinal) ||
+               name.StartsWith("Engine", System.StringComparison.Ordinal) ||
+               name.StartsWith("Gadget", System.StringComparison.Ordinal) ||
+               name.StartsWith("ShipInventoryHudSlot", System.StringComparison.Ordinal) ||
+               name.StartsWith("RoomRow_", System.StringComparison.Ordinal) ||
+               name.StartsWith("BrowserBackButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("BrowserRefreshButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("BrowserNewRoundButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("ShipPreviewButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("CraftingCatalogButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("CraftingRecipeCloseButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("ItemPreviewSellButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("ItemPreviewSalvageButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("CraftButton", System.StringComparison.Ordinal);
     }
 
     void StyleJoysticks()

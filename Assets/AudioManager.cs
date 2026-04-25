@@ -27,6 +27,7 @@ public class AudioManager : MonoBehaviour
     AudioClip evacBuzzerClip;
     AudioClip extractionSequenceClip;
     AudioClip spaceMineBoomClip;
+    AudioClip spaceTruckAlertClip;
 
     AudioSource oneShotSource;
     AudioSource drillingLoopSource;
@@ -117,6 +118,7 @@ public class AudioManager : MonoBehaviour
         evacBuzzerClip = Resources.Load<AudioClip>("Audio/evac_buzzer_sound");
         extractionSequenceClip = Resources.Load<AudioClip>("Audio/extraction_4sekundy");
         spaceMineBoomClip = Resources.Load<AudioClip>("Audio/space_mine_boom_sound");
+        spaceTruckAlertClip = Resources.Load<AudioClip>("Audio/alert_3times");
     }
 
     void EnsureSources()
@@ -224,6 +226,11 @@ public class AudioManager : MonoBehaviour
     public void PlaySpaceMineBoomAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(spaceMineBoomClip != null ? spaceMineBoomClip : explosionClip, worldPosition, 0.92f);
+    }
+
+    public void PlaySpaceTruckAlertAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(spaceTruckAlertClip != null ? spaceTruckAlertClip : alarmClip, worldPosition, 0.92f);
     }
 
     public void PlayEvacBuzzerBurst()

@@ -18,6 +18,7 @@ public class Bullet : MonoBehaviourPun
     float maxTravelDistance;
     float visualScaleMultiplier = 1f;
     Color visualColor = Color.white;
+    bool destroyRequested;
 
     void Start()
     {
@@ -96,7 +97,8 @@ public class Bullet : MonoBehaviourPun
         PlayerHealth hp = collision.gameObject.GetComponentInParent<PlayerHealth>();
         if (hp != null && hp.photonView.ViewID != ownerViewID)
         {
-            hp.photonView.RPC("TakeDamage", RpcTarget.MasterClient, damage, ownerViewID);
+            Vector2 impactPoint = collision.contactCount > 0 ? collision.GetContact(0).point : (Vector2)transform.position;
+            hp.photonView.RPC("TakeDamageAt", RpcTarget.MasterClient, damage, ownerViewID, impactPoint.x, impactPoint.y);
         }
 
         ObstacleChunk obstacleChunk = collision.gameObject.GetComponentInParent<ObstacleChunk>();
@@ -161,6 +163,11 @@ public class Bullet : MonoBehaviourPun
 
     void DestroyBullet()
     {
+        if (destroyRequested)
+            return;
+
+        destroyRequested = true;
+
         if (PhotonNetwork.IsConnected && photonView != null)
         {
             if (photonView.IsMine)

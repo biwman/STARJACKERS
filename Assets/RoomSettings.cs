@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Photon.Pun;
 using UnityEngine;
 
@@ -28,6 +29,8 @@ public static class RoomSettings
     public const string TimeUpRetainPercentKey = "timeUpRetainPercent";
     public const string MapSizeKey = "mapSize";
     public const string MapBackgroundKey = "mapBackground";
+    public const string SelectedMapKey = "selectedMap";
+    public const string VisualEffectsEnabledKey = "visualEffectsEnabled";
     public const string MovingObjectsEnabledKey = "movingObjectsEnabled";
     public const string EnemyBotsEnabledKey = "enemyBotsEnabled";
     public const string CorsairEnabledKey = "corsairEnabled";
@@ -41,6 +44,7 @@ public static class RoomSettings
     public const string ShipSkinKey = "shipSkinIndex";
     public const string ShipInventoryStateKey = "shipInventoryState";
     public const string EquipmentStateKey = "equipmentState";
+    public const string GadgetChargesStateKey = "gadgetChargesState";
     public const string ScoreKey = "score";
 
     public const float DefaultRoundDuration = 180f;
@@ -54,13 +58,15 @@ public static class RoomSettings
     public const int DefaultAmmoCount = 15;
     public const int DefaultBoosterRecoveryDelay = 5;
     public const int DefaultMaxInputBoostPercent = 20;
-    public const bool DefaultShipDriftEnabled = true;
+    public const int DefaultShipDriftLevel = 1;
     public const int DefaultLastShipTimerMultiplier = 3;
     public const int DefaultKillRewardPercent = 50;
     public const int DefaultDeathRetainPercent = 25;
     public const int DefaultTimeUpRetainPercent = 25;
     public const string DefaultMapSize = "medium";
     public const int DefaultMapBackground = 5;
+    public const string DefaultLobbyMapId = "just_space";
+    public const bool DefaultVisualEffectsEnabled = true;
     public const bool DefaultMovingObjectsEnabled = true;
     public const bool DefaultEnemyBotsEnabled = true;
     public const bool DefaultCorsairEnabled = true;
@@ -72,6 +78,8 @@ public static class RoomSettings
     public const int MaxObstacleWeightFactor = 999;
     public const bool DefaultEnemyRespawnEnabled = false;
     public const int DefaultEnemyRespawnIntervalSeconds = 60;
+    public const int DefaultEnemyShield = 20;
+    public const float DefaultEnemySpeedMultiplier = 1f;
     public const string SessionStateInLobby = "in_lobby";
     public const string SessionStateInPlay = "in_play";
     public const string SessionStateClosingLobby = "closing_lobby";
@@ -182,16 +190,28 @@ public static class RoomSettings
         return GetInt(MaxInputBoostPercentKey, DefaultMaxInputBoostPercent, 0, 50);
     }
 
-    public static bool IsShipDriftEnabled()
+    public static int GetShipDriftLevel()
     {
         if (PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ShipDriftEnabledKey, out object value) &&
-            value is bool enabled)
+            value is int level)
         {
-            return enabled;
+            return Mathf.Clamp(level, 0, 10);
         }
 
-        return DefaultShipDriftEnabled;
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ShipDriftEnabledKey, out value) &&
+            value is bool enabled)
+        {
+            return enabled ? 1 : 0;
+        }
+
+        return DefaultShipDriftLevel;
+    }
+
+    public static bool IsShipDriftEnabled()
+    {
+        return GetShipDriftLevel() > 0;
     }
 
     public static int GetLastShipTimerMultiplier()
@@ -236,7 +256,32 @@ public static class RoomSettings
 
     public static int GetMapBackgroundIndex()
     {
-        return GetInt(MapBackgroundKey, DefaultMapBackground, 1, 6);
+        return GetInt(MapBackgroundKey, DefaultMapBackground, 1, 12);
+    }
+
+    public static string GetSelectedLobbyMapId()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(SelectedMapKey, out object value) &&
+            value is string mapId &&
+            !string.IsNullOrWhiteSpace(mapId))
+        {
+            return mapId;
+        }
+
+        return DefaultLobbyMapId;
+    }
+
+    public static bool AreVisualEffectsEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(VisualEffectsEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultVisualEffectsEnabled;
     }
 
     public static bool AreMovingObjectsEnabled()
@@ -328,6 +373,53 @@ public static class RoomSettings
         }
 
         return Mathf.Clamp(definition.DefaultHp, 20, 200);
+    }
+
+    public static int GetEnemyShield(EnemyBotKind kind)
+    {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return DefaultEnemyShield;
+
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.ShieldRoomKey))
+        {
+            return GetInt(definition.ShieldRoomKey, definition.DefaultShield, 0, 200);
+        }
+
+        return Mathf.Clamp(definition.DefaultShield, 0, 200);
+    }
+
+    public static float GetEnemySpeedMultiplier(EnemyBotKind kind)
+    {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return DefaultEnemySpeedMultiplier;
+
+        if (TryGetFloat(definition.SpeedRoomKey, out float speed))
+            return ClampEnemySpeedMultiplier(speed, definition.DefaultSpeedMultiplier);
+
+        return ClampEnemySpeedMultiplier(definition.DefaultSpeedMultiplier, DefaultEnemySpeedMultiplier);
+    }
+
+    static float ClampEnemySpeedMultiplier(float speed, float fallback)
+    {
+        if (speed <= 0f)
+            speed = fallback > 0f ? fallback : DefaultEnemySpeedMultiplier;
+
+        if (speed <= 0.375f)
+            return 0.25f;
+
+        if (speed <= 0.75f)
+            return 0.5f;
+
+        if (speed <= 1.25f)
+            return 1f;
+
+        if (speed <= 1.75f)
+            return 1.5f;
+
+        return 2f;
     }
 
     public static int GetEnemySpawnSecond(EnemyBotKind kind)
@@ -535,6 +627,56 @@ public enum ShipType
     Avenger = 2
 }
 
+public sealed class PlayerShipDefinition
+{
+    public ShipType Type { get; }
+    public string DisplayName { get; }
+    public int[] SkinIndices { get; }
+    public int CargoCapacity { get; }
+    public int MainGunSlots { get; }
+    public int ShieldSlots { get; }
+    public int EngineSlots { get; }
+    public int GadgetSlots { get; }
+    public int BaseHp { get; }
+    public int BaseShield { get; }
+    public float BaseSpeed { get; }
+    public float TurnRateMultiplier { get; }
+    public float BoosterDuration { get; }
+    public Vector2[] ThrusterOffsetFactors { get; }
+
+    public PlayerShipDefinition(
+        ShipType type,
+        string displayName,
+        int[] skinIndices,
+        int cargoCapacity,
+        int mainGunSlots,
+        int shieldSlots,
+        int engineSlots,
+        int gadgetSlots,
+        int baseHp,
+        int baseShield,
+        float baseSpeed,
+        float turnRateMultiplier,
+        float boosterDuration,
+        Vector2[] thrusterOffsetFactors)
+    {
+        Type = type;
+        DisplayName = displayName;
+        SkinIndices = skinIndices;
+        CargoCapacity = cargoCapacity;
+        MainGunSlots = mainGunSlots;
+        ShieldSlots = shieldSlots;
+        EngineSlots = engineSlots;
+        GadgetSlots = gadgetSlots;
+        BaseHp = baseHp;
+        BaseShield = baseShield;
+        BaseSpeed = baseSpeed;
+        TurnRateMultiplier = turnRateMultiplier;
+        BoosterDuration = boosterDuration;
+        ThrusterOffsetFactors = thrusterOffsetFactors;
+    }
+}
+
 public static class ShipCatalog
 {
     public const int ExplorerBasicSkinIndex = 0;
@@ -548,6 +690,75 @@ public static class ShipCatalog
     public const int AvengerNasaSkinIndex = 8;
     public const int MaxShipSkinIndex = AvengerNasaSkinIndex;
 
+    static readonly PlayerShipDefinition ExplorerDefinition = new PlayerShipDefinition(
+        ShipType.Explorer,
+        "Explorer",
+        new[] { ExplorerBasicSkinIndex, ExplorerSilverSkinIndex, ExplorerGildedSkinIndex },
+        8,
+        1,
+        1,
+        1,
+        1,
+        50,
+        50,
+        5f,
+        1f,
+        5f,
+        new[] { new Vector2(0f, 0.02f) });
+
+    static readonly PlayerShipDefinition ViperDefinition = new PlayerShipDefinition(
+        ShipType.Viper,
+        "Viper",
+        new[] { ViperStandardSkinIndex, ViperSnowSkinIndex, ViperNavySkinIndex },
+        10,
+        2,
+        1,
+        2,
+        0,
+        40,
+        35,
+        6f,
+        1.2f,
+        4f,
+        new[]
+        {
+            new Vector2(-2.24f, 0.34f),
+            new Vector2(2.24f, 0.34f)
+        });
+
+    static readonly PlayerShipDefinition AvengerDefinition = new PlayerShipDefinition(
+        ShipType.Avenger,
+        "Avenger",
+        new[] { AvengerDarkGreenSkinIndex, AvengerMilitarySkinIndex, AvengerNasaSkinIndex },
+        9,
+        2,
+        2,
+        0,
+        2,
+        65,
+        70,
+        4.2f,
+        0.82f,
+        6f,
+        new[] { new Vector2(0f, 0.02f) });
+
+    static readonly Dictionary<ShipType, PlayerShipDefinition> Definitions = new Dictionary<ShipType, PlayerShipDefinition>
+    {
+        { ShipType.Explorer, ExplorerDefinition },
+        { ShipType.Viper, ViperDefinition },
+        { ShipType.Avenger, AvengerDefinition }
+    };
+
+    public static PlayerShipDefinition GetShipDefinition(int skinIndex)
+    {
+        return GetShipDefinition(GetShipTypeFromSkinIndex(skinIndex));
+    }
+
+    public static PlayerShipDefinition GetShipDefinition(ShipType shipType)
+    {
+        return Definitions.TryGetValue(shipType, out PlayerShipDefinition definition) ? definition : ExplorerDefinition;
+    }
+
     public static ShipType GetShipTypeFromSkinIndex(int skinIndex)
     {
         return skinIndex switch
@@ -560,22 +771,12 @@ public static class ShipCatalog
 
     public static string GetShipTypeDisplayName(ShipType shipType)
     {
-        return shipType switch
-        {
-            ShipType.Viper => "Viper",
-            ShipType.Avenger => "Avenger",
-            _ => "Explorer"
-        };
+        return GetShipDefinition(shipType).DisplayName;
     }
 
     public static int[] GetSkinsForShipType(ShipType shipType)
     {
-        return shipType switch
-        {
-            ShipType.Viper => new[] { ViperStandardSkinIndex, ViperSnowSkinIndex, ViperNavySkinIndex },
-            ShipType.Avenger => new[] { AvengerDarkGreenSkinIndex, AvengerMilitarySkinIndex, AvengerNasaSkinIndex },
-            _ => new[] { ExplorerBasicSkinIndex, ExplorerSilverSkinIndex, ExplorerGildedSkinIndex }
-        };
+        return GetShipDefinition(shipType).SkinIndices;
     }
 
     public static string GetSkinDisplayName(int skinIndex)
@@ -597,47 +798,57 @@ public static class ShipCatalog
 
     public static int GetShipInventoryCapacity(int skinIndex)
     {
-        return GetShipTypeFromSkinIndex(skinIndex) switch
-        {
-            ShipType.Viper => 10,
-            ShipType.Avenger => 9,
-            _ => 8
-        };
+        return GetShipDefinition(skinIndex).CargoCapacity;
     }
 
     public static int GetMainGunSlots(int skinIndex)
     {
-        return GetShipTypeFromSkinIndex(skinIndex) switch
-        {
-            ShipType.Viper => 2,
-            ShipType.Avenger => 2,
-            _ => 1
-        };
+        return GetShipDefinition(skinIndex).MainGunSlots;
     }
 
     public static int GetShieldSlots(int skinIndex)
     {
-        return GetShipTypeFromSkinIndex(skinIndex) == ShipType.Avenger ? 2 : 1;
+        return GetShipDefinition(skinIndex).ShieldSlots;
     }
 
     public static int GetEngineSlots(int skinIndex)
     {
-        return GetShipTypeFromSkinIndex(skinIndex) switch
-        {
-            ShipType.Viper => 2,
-            ShipType.Avenger => 0,
-            _ => 1
-        };
+        return GetShipDefinition(skinIndex).EngineSlots;
     }
 
     public static int GetGadgetSlots(int skinIndex)
     {
-        return GetShipTypeFromSkinIndex(skinIndex) switch
-        {
-            ShipType.Viper => 0,
-            ShipType.Avenger => 2,
-            _ => 1
-        };
+        return GetShipDefinition(skinIndex).GadgetSlots;
+    }
+
+    public static int GetBaseHp(int skinIndex)
+    {
+        return GetShipDefinition(skinIndex).BaseHp;
+    }
+
+    public static int GetBaseShield(int skinIndex)
+    {
+        return GetShipDefinition(skinIndex).BaseShield;
+    }
+
+    public static float GetBaseSpeed(int skinIndex)
+    {
+        return GetShipDefinition(skinIndex).BaseSpeed;
+    }
+
+    public static float GetTurnRateMultiplier(int skinIndex)
+    {
+        return GetShipDefinition(skinIndex).TurnRateMultiplier;
+    }
+
+    public static float GetBoosterDuration(int skinIndex)
+    {
+        return GetShipDefinition(skinIndex).BoosterDuration;
+    }
+
+    public static Vector2[] GetThrusterOffsetFactors(int skinIndex)
+    {
+        return GetShipDefinition(skinIndex).ThrusterOffsetFactors;
     }
 
     public static bool IsEquipmentSlotEnabled(int slotIndex, int shipSkinIndex)

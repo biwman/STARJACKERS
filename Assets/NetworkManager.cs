@@ -207,6 +207,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                 return;
             }
 
+            if (PhotonNetwork.NetworkClientState == ClientState.JoiningLobby)
+            {
+                PublishBrowserStatus("Loading active rounds...");
+                return;
+            }
+
             PublishBrowserStatus("Loading active rounds...");
             PhotonNetwork.JoinLobby();
             return;
@@ -228,6 +234,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         if (SessionRequested)
         {
+            if (PhotonNetwork.NetworkClientState == ClientState.JoiningLobby || PhotonNetwork.InLobby)
+            {
+                PublishBrowserStatus("Loading active rounds...");
+                return;
+            }
+
             PublishBrowserStatus("Loading active rounds...");
             PhotonNetwork.JoinLobby();
         }
@@ -463,6 +475,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.RoundDurationKey] = RoomSettings.DefaultRoundDuration,
             [RoomSettings.StartTimeKey] = -1d,
             ["gameStarted"] = false,
+            [RoomSettings.GadgetChargesStateKey] = string.Empty,
             [RoomSettings.RoundResultsKey] = string.Empty,
             [RoomSettings.RoundEndReasonKey] = string.Empty
         };

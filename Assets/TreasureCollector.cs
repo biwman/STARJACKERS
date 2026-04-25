@@ -92,7 +92,8 @@ public class TreasureCollector : MonoBehaviourPun
         if (photonView.IsMine && Time.unscaledTime >= nextTreasureScanTime)
         {
             nextTreasureScanTime = Time.unscaledTime + TreasureScanInterval;
-            RefreshClosestCollectible();
+            if (!HasLockedCollectibleTarget())
+                RefreshClosestCollectible();
         }
 
         UpdateCollectionBeam();
@@ -186,7 +187,11 @@ public class TreasureCollector : MonoBehaviourPun
         if (IsAstronautMode())
             return;
 
-        RefreshClosestCollectible();
+        if (!HasLockedCollectibleTarget())
+            RefreshClosestCollectible();
+
+        if (!HasUsableCollectibleTarget())
+            ForceResolveCollectibleAtUsePress();
 
         if (!PlayerProfileService.Instance.HasFreeShipInventorySlot())
         {
@@ -541,6 +546,97 @@ public class TreasureCollector : MonoBehaviourPun
         {
             currentDroppedCargo.Highlight();
         }
+    }
+
+    bool HasLockedCollectibleTarget()
+    {
+        if (!isCollecting)
+            return false;
+
+        return currentTreasure != null || currentWreck != null || currentDroppedCargo != null;
+    }
+
+    bool HasUsableCollectibleTarget()
+    {
+        return (currentTreasure != null && IsTreasureInCollectRange(currentTreasure)) ||
+               (currentWreck != null && currentWreck.HasLoot && IsWreckInCollectRange(currentWreck)) ||
+               (currentDroppedCargo != null && currentDroppedCargo.HasLoot && IsDroppedCargoInCollectRange(currentDroppedCargo));
+    }
+
+    void ForceResolveCollectibleAtUsePress()
+    {
+        Vector2 tipPosition = GetShipTipPosition();
+        Collider2D[] hits = Physics2D.OverlapCircleAll(tipPosition, Treasure.CollectRange + 0.55f);
+        Treasure nextTreasure = null;
+        ShipWreck nextWreck = null;
+        DroppedCargoCrate nextDroppedCargo = null;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null)
+                continue;
+
+            Treasure treasure = hit.GetComponent<Treasure>() ?? hit.GetComponentInParent<Treasure>();
+            if (treasure != null)
+            {
+                float distance = GetDistanceFromTipToCollider(treasure.GetComponent<Collider2D>(), treasure.transform.position, tipPosition);
+                if (distance <= Treasure.CollectRange && distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    nextTreasure = treasure;
+                    nextWreck = null;
+                    nextDroppedCargo = null;
+                }
+
+                continue;
+            }
+
+            ShipWreck wreck = hit.GetComponent<ShipWreck>() ?? hit.GetComponentInParent<ShipWreck>();
+            if (wreck != null && wreck.HasLoot)
+            {
+                float wreckCollectRange = wreck.SourceShipSkinIndex < 0 ? Treasure.CollectRange + 0.45f : Treasure.CollectRange;
+                float distance = GetDistanceFromTipToCollider(wreck.GetComponent<Collider2D>(), wreck.transform.position, tipPosition);
+                if (distance <= wreckCollectRange && distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    nextTreasure = null;
+                    nextWreck = wreck;
+                    nextDroppedCargo = null;
+                }
+
+                continue;
+            }
+
+            DroppedCargoCrate crate = hit.GetComponent<DroppedCargoCrate>() ?? hit.GetComponentInParent<DroppedCargoCrate>();
+            if (crate != null && crate.HasLoot)
+            {
+                float distance = GetDistanceFromTipToCollider(crate.GetComponent<Collider2D>(), crate.transform.position, tipPosition);
+                if (distance <= Treasure.CollectRange && distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    nextTreasure = null;
+                    nextWreck = null;
+                    nextDroppedCargo = crate;
+                }
+            }
+        }
+
+        if (nextTreasure == null && nextWreck == null && nextDroppedCargo == null)
+            return;
+
+        ClearCurrentHighlight();
+        currentTreasure = nextTreasure;
+        currentWreck = nextWreck;
+        currentDroppedCargo = nextDroppedCargo;
+
+        if (currentTreasure != null)
+            currentTreasure.Highlight();
+        else if (currentWreck != null)
+            currentWreck.Highlight();
+        else if (currentDroppedCargo != null)
+            currentDroppedCargo.Highlight();
     }
 
     void ClearCurrentHighlight()

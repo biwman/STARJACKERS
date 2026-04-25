@@ -8,14 +8,16 @@ public enum EnemyBotKind
 {
     Drone,
     Corsair,
-    SpaceMine
+    SpaceMine,
+    SpaceTruck
 }
 
 public enum EnemyMovementModel
 {
     GuardAndChase,
     OrbitMap,
-    Drift
+    Drift,
+    RouteExtractionZones
 }
 
 public enum EnemySpawnPattern
@@ -28,7 +30,8 @@ public enum EnemyTrailVisualStyle
 {
     None,
     OrangeSmall,
-    RedLarge
+    RedLarge,
+    GreenTwin
 }
 
 [System.Serializable]
@@ -303,6 +306,7 @@ public class EnemyBotDefinition
     public float AngularDamping;
     public int DefaultHp;
     public int DefaultShield;
+    public float DefaultSpeedMultiplier = 1f;
     public bool DefaultEnabled;
     public int DefaultCount;
     public int DefaultSpawnSecond;
@@ -315,6 +319,8 @@ public class EnemyBotDefinition
     public string EnabledRoomKey => $"enemy.{Id}.enabled";
     public string CountRoomKey => $"enemy.{Id}.count";
     public string HpRoomKey => $"enemy.{Id}.hp";
+    public string ShieldRoomKey => $"enemy.{Id}.shield";
+    public string SpeedRoomKey => $"enemy.{Id}.speed";
     public string SpawnSecondRoomKey => $"enemy.{Id}.spawnSecond";
     public string RespawnEnabledRoomKey => $"enemy.{Id}.respawnEnabled";
     public string RespawnIntervalRoomKey => $"enemy.{Id}.respawnInterval";
@@ -412,7 +418,8 @@ public static class EnemyBotCatalog
             LinearDamping = 0.08f,
             AngularDamping = 0.22f,
             DefaultHp = 50,
-            DefaultShield = 50,
+            DefaultShield = 20,
+            DefaultSpeedMultiplier = 1f,
             DefaultEnabled = true,
             DefaultCount = 1,
             DefaultSpawnSecond = 0,
@@ -483,7 +490,8 @@ public static class EnemyBotCatalog
             LinearDamping = 0.16f,
             AngularDamping = 0.38f,
             DefaultHp = 200,
-            DefaultShield = 0,
+            DefaultShield = 20,
+            DefaultSpeedMultiplier = 1f,
             DefaultEnabled = true,
             DefaultCount = 1,
             DefaultSpawnSecond = 0,
@@ -556,7 +564,8 @@ public static class EnemyBotCatalog
             LinearDamping = 0.18f,
             AngularDamping = 0.42f,
             DefaultHp = 20,
-            DefaultShield = 0,
+            DefaultShield = 20,
+            DefaultSpeedMultiplier = 1f,
             DefaultEnabled = true,
             DefaultCount = 1,
             DefaultSpawnSecond = 0,
@@ -620,6 +629,77 @@ public static class EnemyBotCatalog
                 EditorAssetPath = "",
                 SoundId = "space_mine_boom"
             }
+        },
+        new EnemyBotDefinition
+        {
+            Kind = EnemyBotKind.SpaceTruck,
+            Id = "space_truck",
+            DisplayName = "Space Truck",
+            InstantiationMarker = "enemy_bot_space_truck",
+            VisualResourcePath = "space_truck_resource",
+            EditorAssetPath = "Assets/space_truck.png",
+            TargetSize = 4.2f,
+            PhysicsMass = 18f,
+            LinearDamping = 0.1f,
+            AngularDamping = 0.32f,
+            DefaultHp = 100,
+            DefaultShield = 50,
+            DefaultSpeedMultiplier = 1.5f,
+            DefaultEnabled = false,
+            DefaultCount = 1,
+            DefaultSpawnSecond = 0,
+            Movement = new EnemyMovementProfile
+            {
+                Model = EnemyMovementModel.RouteExtractionZones,
+                SpawnPattern = EnemySpawnPattern.WideCorners,
+                MoveSpeed = 1.9f,
+                TurnResponsiveness = 170f,
+                TargetRefreshInterval = 0.45f
+            },
+            Weapon = new EnemyWeaponProfile
+            {
+                AmmoCount = 0,
+                ReloadDuration = 0f,
+                FireRate = 0f,
+                Damage = 0,
+                BulletScaleMultiplier = 1f,
+                BulletColor = Color.white,
+                BulletSpeed = 0f,
+                MuzzleOffsetDistance = 0f,
+                InfiniteAmmo = true,
+                RotateTowardAim = false,
+                Range = 0f,
+                ShotSoundId = string.Empty
+            },
+            Wreck = new EnemyWreckProfile
+            {
+                Mass = 18f,
+                LinearDamping = 0.78f,
+                AngularDamping = 0.96f,
+                DriftSpeed = 0.08f,
+                AngularVelocityRange = 1.8f,
+                RewardItemId = InventoryItemCatalog.SpaceTruckWreckId,
+                DestroyWhenEmpty = false,
+                BaseColor = new Color(0.18f, 0.22f, 0.2f, 0.98f),
+                VisualResourcePath = "space_truck_wrak_resource",
+                EditorAssetPath = "Assets/space_truck_wrak.png"
+            },
+            Trails = new EnemyTrailProfile
+            {
+                RootOffsetFactors = new Vector2(0f, -0.48f),
+                RootRotationZ = 180f,
+                TrailOffsetFactors = new[]
+                {
+                    new Vector2(-0.36f, 0.02f),
+                    new Vector2(0.36f, 0.02f)
+                },
+                MinTrailTime = 0.5f,
+                MaxTrailTime = 1.25f,
+                MinTrailWidth = 0.08f,
+                MaxTrailWidth = 0.24f,
+                EmissionThreshold = 0.02f,
+                VisualStyle = EnemyTrailVisualStyle.GreenTwin
+            }
         }
     };
 
@@ -667,6 +747,7 @@ public static class EnemyBotCatalog
 public class EnemyBot : MonoBehaviourPun
 {
     const string PlayerPlacedMineMarker = "player_gadget_mine";
+    const string SummonedDroneMarker = "space_truck_summoned_drone";
 
     Rigidbody2D rb;
     PhotonView view;
@@ -678,15 +759,27 @@ public class EnemyBot : MonoBehaviourPun
     bool hasAppliedStats;
     bool hasDetonated;
     bool isPlayerPlacedMine;
+    bool isSummonedDrone;
+    bool spaceTruckFirstHitHandled;
+    bool spaceTruckHalfHpHandled;
+    float forcedSpeedMultiplier;
     int mineOwnerViewId;
 
     public EnemyBotKind Kind => kind;
     public EnemyBotDefinition Definition => EnemyBotCatalog.GetDefinition(kind);
     public bool IsCorsair => kind == EnemyBotKind.Corsair;
     public bool IsSpaceMine => kind == EnemyBotKind.SpaceMine;
+    public bool IsSpaceTruck => kind == EnemyBotKind.SpaceTruck;
     public bool IsPlayerPlacedMine => isPlayerPlacedMine;
+    public bool IsSummonedDrone => isSummonedDrone;
     public int MineOwnerViewId => mineOwnerViewId;
     public float VisualTargetSize => Definition != null ? Definition.TargetSize : 1.04f;
+    public float EffectiveMoveSpeed => Definition != null && Definition.Movement != null
+        ? Definition.Movement.MoveSpeed * EffectiveSpeedMultiplier
+        : 1f;
+    public float EffectiveSpeedMultiplier => forcedSpeedMultiplier > 0f
+        ? forcedSpeedMultiplier
+        : RoomSettings.GetEnemySpeedMultiplier(kind);
 
     public static bool IsBotObject(GameObject target)
     {
@@ -731,12 +824,17 @@ public class EnemyBot : MonoBehaviourPun
         health = GetComponent<PlayerHealth>();
         kind = GetKindFromInstantiationData(view != null ? view.InstantiationData : null);
         ResolveSpecialMineOwner(view != null ? view.InstantiationData : null);
+        ResolveSummonedDrone(view != null ? view.InstantiationData : null);
 
         DisablePlayerOnlySystems();
         EnsureBehavior();
         ApplyBotVisuals();
         ConfigurePhysics();
         ApplyMineOwnerCollisionIgnore();
+        if (GetComponent<EnemyBotHealthBarUI>() == null)
+        {
+            gameObject.AddComponent<EnemyBotHealthBarUI>();
+        }
         if (!hasAppliedStats)
         {
             ApplyBotStats();
@@ -800,7 +898,7 @@ public class EnemyBot : MonoBehaviourPun
         if (health == null || Definition == null)
             return;
 
-        health.ConfigureBaseStats(RoomSettings.GetEnemyHp(kind), Definition.DefaultShield);
+        health.ConfigureBaseStats(RoomSettings.GetEnemyHp(kind), RoomSettings.GetEnemyShield(kind));
     }
 
     void EnsureBehavior()
@@ -820,6 +918,9 @@ public class EnemyBot : MonoBehaviourPun
                         break;
                     case EnemyMovementModel.Drift:
                         behavior = gameObject.AddComponent<EnemyMineBehavior>();
+                        break;
+                    case EnemyMovementModel.RouteExtractionZones:
+                        behavior = gameObject.AddComponent<EnemySpaceTruckBehavior>();
                         break;
                     default:
                         behavior = gameObject.AddComponent<EnemyDroneBehavior>();
@@ -844,6 +945,7 @@ public class EnemyBot : MonoBehaviourPun
         {
             EnemyMovementModel.OrbitMap => existingBehavior is EnemyCorsairBehavior,
             EnemyMovementModel.Drift => existingBehavior is EnemyMineBehavior,
+            EnemyMovementModel.RouteExtractionZones => existingBehavior is EnemySpaceTruckBehavior,
             _ => existingBehavior is EnemyDroneBehavior
         };
     }
@@ -1021,6 +1123,17 @@ public class EnemyBot : MonoBehaviourPun
         }
     }
 
+    void ResolveSummonedDrone(object[] instantiationData)
+    {
+        isSummonedDrone = false;
+
+        if (kind != EnemyBotKind.Drone || instantiationData == null || instantiationData.Length < 2)
+            return;
+
+        isSummonedDrone = instantiationData[1] is string marker &&
+                          string.Equals(marker, SummonedDroneMarker, System.StringComparison.Ordinal);
+    }
+
     void ApplyMineOwnerCollisionIgnore()
     {
         if (!isPlayerPlacedMine || mineOwnerViewId <= 0)
@@ -1056,6 +1169,64 @@ public class EnemyBot : MonoBehaviourPun
 
         PhotonView candidateView = candidate.GetComponent<PhotonView>();
         return candidateView != null && candidateView.ViewID == mineOwnerViewId;
+    }
+
+    public void NotifyDamageTaken(int previousHp, int currentHp, int shieldDamage, int hpDamage)
+    {
+        if (!PhotonNetwork.IsMasterClient || kind != EnemyBotKind.SpaceTruck || health == null || health.IsWreck)
+            return;
+
+        bool wasHit = shieldDamage > 0 || hpDamage > 0;
+        if (!wasHit)
+            return;
+
+        if (!spaceTruckFirstHitHandled)
+        {
+            spaceTruckFirstHitHandled = true;
+            forcedSpeedMultiplier = 2f;
+            TriggerSpaceTruckAlarmAndDrone();
+        }
+
+        int halfHp = Mathf.CeilToInt(health.maxHP * 0.5f);
+        if (!spaceTruckHalfHpHandled && previousHp > halfHp && currentHp <= halfHp)
+        {
+            spaceTruckHalfHpHandled = true;
+            TriggerSpaceTruckAlarmAndDrone();
+        }
+    }
+
+    void TriggerSpaceTruckAlarmAndDrone()
+    {
+        Vector3 position = GetVisualCenterWorldPosition();
+        photonView.RPC(nameof(PlaySpaceTruckAlert), RpcTarget.All, position.x, position.y, position.z);
+        SpawnSummonedDroneNear(position);
+    }
+
+    void SpawnSummonedDroneNear(Vector3 sourcePosition)
+    {
+        EnemyBotDefinition droneDefinition = EnemyBotCatalog.GetDefinition(EnemyBotKind.Drone);
+        if (droneDefinition == null)
+            return;
+
+        Vector2 offset = new Vector2(
+            Mathf.Sin(Time.time * 3.7f + photonView.ViewID) > 0f ? 1.8f : -1.8f,
+            1.25f);
+        Vector3 spawnPosition = sourcePosition + (Vector3)offset;
+        GameObject droneObject = PhotonNetwork.Instantiate("Player", spawnPosition, Quaternion.identity, 0, new object[] { droneDefinition.InstantiationMarker, SummonedDroneMarker });
+        if (droneObject == null)
+            return;
+
+        EnemyBot drone = droneObject.GetComponent<EnemyBot>();
+        if (drone == null)
+            drone = droneObject.AddComponent<EnemyBot>();
+
+        drone.InitializeFromPhotonData();
+    }
+
+    [PunRPC]
+    void PlaySpaceTruckAlert(float x, float y, float z)
+    {
+        AudioManager.Instance.PlaySpaceTruckAlertAt(new Vector3(x, y, z));
     }
 
     public static Vector3 ResolveSpaceMineDetonationPosition(int sourceViewId, Vector3 fallbackWorldPosition)
@@ -1169,7 +1340,7 @@ public class EnemyDroneBehavior : EnemyBotBehaviorBase
             currentMoveDirection = CalculateMoveDirection(currentTarget.position);
         }
 
-        Vector2 desiredVelocity = currentMoveDirection * movement.MoveSpeed;
+        Vector2 desiredVelocity = currentMoveDirection * bot.EffectiveMoveSpeed;
         rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, 0.14f);
 
         Vector2 aimDirection = (Vector2)currentTarget.position - rb.position;
@@ -1188,7 +1359,7 @@ public class EnemyDroneBehavior : EnemyBotBehaviorBase
         if (rb.linearVelocity.sqrMagnitude < 0.05f)
         {
             Vector2 fallback = currentMoveDirection.sqrMagnitude > 0.001f ? currentMoveDirection : Vector2.up;
-            rb.linearVelocity = fallback.normalized * (movement.MoveSpeed * 0.36f);
+            rb.linearVelocity = fallback.normalized * (bot.EffectiveMoveSpeed * 0.36f);
         }
 
         float spin = Mathf.Sin(Time.time * 0.45f + view.ViewID * 0.23f) * movement.IdleDriftTurnSpeed;
@@ -1238,8 +1409,9 @@ public class EnemyDroneBehavior : EnemyBotBehaviorBase
         if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsBotControlled)
             return false;
 
-        HideInNebulaTarget nebulaState = candidate.GetComponent<HideInNebulaTarget>();
-        if (nebulaState != null && nebulaState.IsHiddenForOthers)
+        HideInNebulaTarget candidateNebulaState = candidate.GetComponent<HideInNebulaTarget>();
+        HideInNebulaTarget botNebulaState = GetComponent<HideInNebulaTarget>();
+        if (candidateNebulaState != null && candidateNebulaState.IsHiddenFromObserver(botNebulaState))
             return false;
 
         float distance = Vector2.Distance(transform.position, candidate.transform.position);
@@ -1356,7 +1528,7 @@ public class EnemyCorsairBehavior : EnemyBotBehaviorBase
             : new Vector2(radialDirection.y, -radialDirection.x);
 
         float radialError = orbitRadius - fromCenter.magnitude;
-        Vector2 desiredVelocity = tangentDirection * movement.MoveSpeed + radialDirection * (radialError * 1.35f);
+        Vector2 desiredVelocity = tangentDirection * bot.EffectiveMoveSpeed + radialDirection * (radialError * 1.35f);
         rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, 0.16f);
 
         if (desiredVelocity.sqrMagnitude > 0.001f)
@@ -1384,8 +1556,9 @@ public class EnemyCorsairBehavior : EnemyBotBehaviorBase
             if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsBotControlled)
                 continue;
 
-            HideInNebulaTarget nebulaState = candidate.GetComponent<HideInNebulaTarget>();
-            if (nebulaState != null && nebulaState.IsHiddenForOthers)
+            HideInNebulaTarget candidateNebulaState = candidate.GetComponent<HideInNebulaTarget>();
+            HideInNebulaTarget botNebulaState = GetComponent<HideInNebulaTarget>();
+            if (candidateNebulaState != null && candidateNebulaState.IsHiddenFromObserver(botNebulaState))
                 continue;
 
             float distance = Vector2.Distance(transform.position, candidate.transform.position);
@@ -1445,7 +1618,7 @@ public class EnemyMineBehavior : EnemyBotBehaviorBase
         if (health != null && health.IsWreck)
             return;
 
-        Vector2 desiredVelocity = driftDirection.normalized * movement.MoveSpeed;
+        Vector2 desiredVelocity = driftDirection.normalized * bot.EffectiveMoveSpeed;
         rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, 0.08f);
         rb.angularVelocity = Mathf.Lerp(rb.angularVelocity, 8f, 0.04f);
 
@@ -1478,5 +1651,121 @@ public class EnemyMineBehavior : EnemyBotBehaviorBase
         }
 
         return false;
+    }
+}
+
+[RequireComponent(typeof(EnemyBot))]
+public class EnemySpaceTruckBehavior : EnemyBotBehaviorBase
+{
+    Rigidbody2D rb;
+    PhotonView view;
+    PlayerHealth health;
+    EnemyMovementProfile movement;
+    ExtractionZone[] extractionZones = System.Array.Empty<ExtractionZone>();
+    int targetZoneIndex;
+    float nextZoneRefreshTime;
+
+    public override void Initialize(EnemyBot owner)
+    {
+        base.Initialize(owner);
+        rb = owner.GetComponent<Rigidbody2D>();
+        view = owner.GetComponent<PhotonView>();
+        health = owner.GetComponent<PlayerHealth>();
+        movement = owner.Definition != null ? owner.Definition.Movement : null;
+        RefreshExtractionZones(true);
+    }
+
+    public override void TickBehavior()
+    {
+        if (bot == null || view == null || !view.IsMine || rb == null || movement == null)
+            return;
+
+        if (health != null && health.IsWreck)
+            return;
+
+        if (Time.time >= nextZoneRefreshTime || extractionZones == null || extractionZones.Length == 0)
+            RefreshExtractionZones(false);
+
+        Vector2 desiredDirection = ResolveDesiredDirection();
+        Vector2 desiredVelocity = desiredDirection * bot.EffectiveMoveSpeed;
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, 0.13f);
+
+        if (desiredVelocity.sqrMagnitude > 0.001f)
+        {
+            float targetAngle = Mathf.Atan2(desiredVelocity.y, desiredVelocity.x) * Mathf.Rad2Deg + 270f;
+            float nextAngle = Mathf.MoveTowardsAngle(rb.rotation, targetAngle, movement.TurnResponsiveness * Time.fixedDeltaTime);
+            rb.MoveRotation(nextAngle);
+        }
+    }
+
+    void RefreshExtractionZones(bool chooseNearest)
+    {
+        nextZoneRefreshTime = Time.time + Mathf.Max(0.3f, movement != null ? movement.TargetRefreshInterval : 0.45f);
+        extractionZones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
+        if (extractionZones == null || extractionZones.Length == 0)
+            return;
+
+        if (chooseNearest)
+        {
+            targetZoneIndex = FindNearestZoneIndex();
+            AdvanceTargetZone();
+        }
+        else
+        {
+            targetZoneIndex = Mathf.Clamp(targetZoneIndex, 0, extractionZones.Length - 1);
+        }
+    }
+
+    Vector2 ResolveDesiredDirection()
+    {
+        if (extractionZones == null || extractionZones.Length == 0)
+            return rb.linearVelocity.sqrMagnitude > 0.01f ? rb.linearVelocity.normalized : Vector2.up;
+
+        ExtractionZone targetZone = extractionZones[Mathf.Clamp(targetZoneIndex, 0, extractionZones.Length - 1)];
+        if (targetZone == null)
+        {
+            AdvanceTargetZone();
+            return Vector2.up;
+        }
+
+        Vector2 toTarget = (Vector2)targetZone.transform.position - rb.position;
+        if (toTarget.magnitude <= 1.4f)
+        {
+            AdvanceTargetZone();
+            targetZone = extractionZones[Mathf.Clamp(targetZoneIndex, 0, extractionZones.Length - 1)];
+            if (targetZone != null)
+                toTarget = (Vector2)targetZone.transform.position - rb.position;
+        }
+
+        return toTarget.sqrMagnitude > 0.001f ? toTarget.normalized : Vector2.up;
+    }
+
+    int FindNearestZoneIndex()
+    {
+        int bestIndex = 0;
+        float bestDistance = float.MaxValue;
+        for (int i = 0; i < extractionZones.Length; i++)
+        {
+            ExtractionZone zone = extractionZones[i];
+            if (zone == null)
+                continue;
+
+            float distance = Vector2.Distance(rb.position, zone.transform.position);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestIndex = i;
+            }
+        }
+
+        return bestIndex;
+    }
+
+    void AdvanceTargetZone()
+    {
+        if (extractionZones == null || extractionZones.Length == 0)
+            return;
+
+        targetZoneIndex = (targetZoneIndex + 1) % extractionZones.Length;
     }
 }

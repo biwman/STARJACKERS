@@ -22,6 +22,7 @@ public class PlayerHealth : MonoBehaviourPun
     Slider hpBar;
     bool messageShowing;
     bool isEvacuationAnimating;
+    bool destroyRequested;
 
     public int CurrentHP => currentHP;
     public int CurrentShield => currentShield;
@@ -44,14 +45,25 @@ public class PlayerHealth : MonoBehaviourPun
         photonView.RPC(nameof(HandleBatteryShieldChargeRequest), RpcTarget.MasterClient);
     }
 
+    public bool TryBeginBatteryShieldChargeAuthority()
+    {
+        if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || currentShield >= maxShield)
+            return false;
+
+        photonView.RPC(nameof(PlayBatteryShieldChargeAudio), RpcTarget.All);
+        StartCoroutine(ApplyBatteryShieldChargeRoutine());
+        return true;
+    }
+
     void Start()
     {
         EnsureBotBootstrap();
 
         if (!IsAstronautControlled && !IsBotControlled)
         {
-            maxHP = DefaultPlayerHp;
-            maxShield = DefaultPlayerShield;
+            int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
+            maxHP = ShipCatalog.GetBaseHp(shipSkinIndex);
+            maxShield = ShipCatalog.GetBaseShield(shipSkinIndex);
         }
 
         currentHP = maxHP;
@@ -98,7 +110,13 @@ public class PlayerHealth : MonoBehaviourPun
     [PunRPC]
     public void TakeDamage(int dmg, int attackerViewID)
     {
-        ApplyDamageInternal(dmg, attackerViewID, true);
+        ApplyDamageInternal(dmg, attackerViewID, true, false, 0f, 0f);
+    }
+
+    [PunRPC]
+    public void TakeDamageAt(int dmg, int attackerViewID, float impactX, float impactY)
+    {
+        ApplyDamageInternal(dmg, attackerViewID, true, true, impactX, impactY);
     }
 
     void EnsureBotBootstrap()
@@ -116,14 +134,16 @@ public class PlayerHealth : MonoBehaviourPun
     [PunRPC]
     public void TakeEnvironmentalDamage(int dmg)
     {
-        ApplyDamageInternal(dmg, -1, false);
+        ApplyDamageInternal(dmg, -1, false, false, 0f, 0f);
     }
 
-    void ApplyDamageInternal(int dmg, int attackerViewID, bool playImpactAudio)
+    void ApplyDamageInternal(int dmg, int attackerViewID, bool playImpactAudio, bool hasImpactPosition, float impactX, float impactY)
     {
         if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating)
             return;
 
+        int previousHp = currentHP;
+        int previousShield = currentShield;
         int remainingDamage = Mathf.Max(0, dmg);
         int absorbed = 0;
         if (currentShield > 0)
@@ -141,15 +161,48 @@ public class PlayerHealth : MonoBehaviourPun
         photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
 
         if (playImpactAudio && absorbed > 0)
+        {
             photonView.RPC(nameof(PlayShieldHitAudio), RpcTarget.All);
+
+            Vector2 impactPosition = hasImpactPosition
+                ? new Vector2(impactX, impactY)
+                : ResolveDamageImpactPosition(attackerViewID);
+            photonView.RPC(nameof(PlayShieldHitVisual), RpcTarget.All, impactPosition.x, impactPosition.y);
+        }
 
         if (playImpactAudio && remainingDamage > 0)
             photonView.RPC(nameof(PlayHpHitAudio), RpcTarget.All);
+
+        if (IsBotControlled)
+        {
+            EnemyBot damagedBot = GetComponent<EnemyBot>();
+            if (damagedBot != null)
+                damagedBot.NotifyDamageTaken(previousHp, currentHP, Mathf.Max(0, previousShield - currentShield), Mathf.Max(0, previousHp - currentHP));
+        }
 
         if (currentHP <= 0)
         {
             HandleDeath(attackerViewID);
         }
+    }
+
+    Vector2 ResolveDamageImpactPosition(int attackerViewID)
+    {
+        Vector2 center = transform.position;
+        PhotonView attackerView = attackerViewID > 0 ? PhotonView.Find(attackerViewID) : null;
+        if (attackerView == null)
+            return center;
+
+        Vector2 attackerPosition = attackerView.transform.position;
+        Collider2D ownCollider = GetComponentInChildren<Collider2D>();
+        if (ownCollider != null)
+            return ownCollider.ClosestPoint(attackerPosition);
+
+        Vector2 direction = center - attackerPosition;
+        if (direction.sqrMagnitude < 0.0001f)
+            direction = Vector2.up;
+
+        return center - direction.normalized * 0.45f;
     }
 
     [PunRPC]
@@ -164,6 +217,7 @@ public class PlayerHealth : MonoBehaviourPun
     [PunRPC]
     void SyncVitals(int newHP, int newShield)
     {
+        int previousHp = currentHP;
         currentHP = newHP;
         currentShield = newShield;
 
@@ -172,16 +226,15 @@ public class PlayerHealth : MonoBehaviourPun
             hpBar.maxValue = maxHP;
             hpBar.value = currentHP;
         }
+
+        if (photonView.IsMine && newHP < previousHp)
+            TriggerShortDamageVibration();
     }
 
     [PunRPC]
     void HandleBatteryShieldChargeRequest()
     {
-        if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || currentShield >= maxShield)
-            return;
-
-        photonView.RPC(nameof(PlayBatteryShieldChargeAudio), RpcTarget.All);
-        StartCoroutine(ApplyBatteryShieldChargeRoutine());
+        TryBeginBatteryShieldChargeAuthority();
     }
 
     System.Collections.IEnumerator ApplyBatteryShieldChargeRoutine()
@@ -216,6 +269,10 @@ public class PlayerHealth : MonoBehaviourPun
 
     void HandleDeath(int attackerViewID)
     {
+        PlayerMovement localMovement = GetComponent<PlayerMovement>();
+        if (localMovement != null)
+            localMovement.StopEngineAudioImmediately();
+
         EnemyBot bot = IsBotControlled ? GetComponent<EnemyBot>() : null;
         bool useCustomBotDeath = bot != null && bot.HasCustomDeathExplosion();
         if (!useCustomBotDeath)
@@ -261,6 +318,44 @@ public class PlayerHealth : MonoBehaviourPun
         photonView.RPC(nameof(ClearLocalShipInventoryForWreck), photonView.Owner);
         photonView.RPC(nameof(SpawnAstronautAfterDestruction), photonView.Owner, astronautSpawnPosition.x, astronautSpawnPosition.y, transform.eulerAngles.z);
         photonView.RPC(nameof(BecomeWreck), RpcTarget.All, wreckLoot, shipSkinIndex);
+    }
+
+    void TriggerShortDamageVibration()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            using AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+            using AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+            if (currentActivity == null)
+                return;
+
+            using AndroidJavaObject vibrator = currentActivity.Call<AndroidJavaObject>("getSystemService", "vibrator");
+            if (vibrator == null)
+                return;
+
+            bool hasVibrator = vibrator.Call<bool>("hasVibrator");
+            if (!hasVibrator)
+                return;
+
+            using AndroidJavaClass versionClass = new AndroidJavaClass("android.os.Build$VERSION");
+            int sdkInt = versionClass.GetStatic<int>("SDK_INT");
+            if (sdkInt >= 26)
+            {
+                using AndroidJavaClass vibrationEffectClass = new AndroidJavaClass("android.os.VibrationEffect");
+                using AndroidJavaObject effect = vibrationEffectClass.CallStatic<AndroidJavaObject>("createOneShot", 35L, 180);
+                vibrator.Call("vibrate", effect);
+            }
+            else
+            {
+                vibrator.Call("vibrate", 35L);
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning("Damage vibration failed: " + ex.Message);
+        }
+#endif
     }
 
     Vector3 FindSafeAstronautSpawnPosition()
@@ -369,10 +464,7 @@ public class PlayerHealth : MonoBehaviourPun
         if (!photonView.IsMine)
             return;
 
-        if (gameObject != null)
-        {
-            PhotonNetwork.Destroy(gameObject);
-        }
+        TryDestroyOwnedPhotonObject();
     }
 
     IEnumerator EvacuationSequenceRoutine()
@@ -381,7 +473,10 @@ public class PlayerHealth : MonoBehaviourPun
 
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null)
+        {
+            movement.StopEngineAudioImmediately();
             movement.enabled = false;
+        }
 
         PlayerShooting shooting = GetComponent<PlayerShooting>();
         if (shooting != null)
@@ -433,10 +528,7 @@ public class PlayerHealth : MonoBehaviourPun
 
         if (photonView.IsMine)
         {
-            if (PhotonNetwork.IsConnected)
-                PhotonNetwork.Destroy(gameObject);
-            else
-                Destroy(gameObject);
+            TryDestroyOwnedPhotonObject();
         }
     }
 
@@ -483,7 +575,10 @@ public class PlayerHealth : MonoBehaviourPun
 
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null)
+        {
+            movement.StopEngineAudioImmediately();
             movement.enabled = false;
+        }
 
         PlayerShooting shooting = GetComponent<PlayerShooting>();
         if (shooting != null)
@@ -562,7 +657,10 @@ public class PlayerHealth : MonoBehaviourPun
 
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null)
+        {
+            movement.StopEngineAudioImmediately();
             movement.enabled = false;
+        }
 
         PlayerShooting shooting = GetComponent<PlayerShooting>();
         if (shooting != null)
@@ -660,6 +758,37 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
+    void PlayShieldHitVisual(float x, float y)
+    {
+        if (!RoomSettings.AreVisualEffectsEnabled())
+            return;
+
+        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+        Vector2 visualPosition = ResolveVisibleShieldHitPosition(new Vector2(x, y), renderer);
+        ShieldHitVfx.Spawn(new Vector3(visualPosition.x, visualPosition.y, 0f), renderer);
+    }
+
+    Vector2 ResolveVisibleShieldHitPosition(Vector2 requestedPosition, SpriteRenderer renderer)
+    {
+        Collider2D ownCollider = GetComponentInChildren<Collider2D>();
+        if (ownCollider != null)
+        {
+            Vector2 closestPoint = ownCollider.ClosestPoint(requestedPosition);
+            if (Vector2.Distance(closestPoint, transform.position) > 0.02f)
+                return closestPoint;
+        }
+
+        if (renderer != null)
+        {
+            Vector3 closestPoint = renderer.bounds.ClosestPoint(requestedPosition);
+            if (Vector2.Distance(closestPoint, transform.position) > 0.02f)
+                return closestPoint;
+        }
+
+        return transform.position;
+    }
+
+    [PunRPC]
     void PlayBatteryShieldChargeAudio()
     {
         AudioManager.Instance.PlayShieldChargeAt(transform.position);
@@ -696,7 +825,7 @@ public class PlayerHealth : MonoBehaviourPun
 
         if (photonView.IsMine)
         {
-            PhotonNetwork.Destroy(gameObject);
+            TryDestroyOwnedPhotonObject();
         }
     }
 
@@ -704,7 +833,10 @@ public class PlayerHealth : MonoBehaviourPun
     {
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null)
+        {
+            movement.StopEngineAudioImmediately();
             movement.enabled = false;
+        }
 
         PlayerShooting shooting = GetComponent<PlayerShooting>();
         if (shooting != null)
@@ -733,9 +865,26 @@ public class PlayerHealth : MonoBehaviourPun
         yield return null;
 
         if (PhotonNetwork.IsConnected && photonView.IsMine)
-            PhotonNetwork.Destroy(gameObject);
+            TryDestroyOwnedPhotonObject();
         else if (!PhotonNetwork.IsConnected)
             Destroy(gameObject);
+    }
+
+    void TryDestroyOwnedPhotonObject()
+    {
+        if (destroyRequested || gameObject == null)
+            return;
+
+        destroyRequested = true;
+
+        if (PhotonNetwork.IsConnected && photonView != null)
+        {
+            if (photonView.IsMine)
+                PhotonNetwork.Destroy(gameObject);
+            return;
+        }
+
+        Destroy(gameObject);
     }
 
     Sprite LoadPlayerWreckSprite(int shipSkinIndex)

@@ -59,6 +59,14 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         StartCoroutine(SendRuntimeStateToPlayerNextFrame(newPlayer.ActorNumber));
     }
 
+    public override void OnMasterClientSwitched(Player newMasterClient)
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        RebuildDynamicObstacleSequenceFromScene();
+    }
+
     IEnumerator SendRuntimeStateToPlayerNextFrame(int actorNumber)
     {
         yield return null;
@@ -213,6 +221,7 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         }
 
         dynamicObstacleSequence = Mathf.Max(dynamicObstacleSequence, obstacleIndex);
+        RebuildDynamicObstacleSequenceFromScene();
     }
 
     ObstacleChunk.RuntimeState CreateInitialRuntimeState(int obstacleIndex, Vector2 position)
@@ -522,7 +531,30 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
             CreateOrUpdateObstacleFromState(entry.Value, PhotonNetwork.IsMasterClient);
         }
 
+        RebuildDynamicObstacleSequenceFromScene();
         layoutApplied = true;
+    }
+
+    void RebuildDynamicObstacleSequenceFromScene()
+    {
+        const string DynamicPrefix = "obstacle_dynamic_";
+
+        ObstacleChunk[] chunks = FindObjectsByType<ObstacleChunk>(FindObjectsInactive.Exclude);
+        int nextSequence = dynamicObstacleSequence;
+        for (int i = 0; i < chunks.Length; i++)
+        {
+            ObstacleChunk chunk = chunks[i];
+            if (chunk == null || string.IsNullOrWhiteSpace(chunk.StableId) || !chunk.StableId.StartsWith(DynamicPrefix, System.StringComparison.Ordinal))
+                continue;
+
+            string suffix = chunk.StableId.Substring(DynamicPrefix.Length);
+            if (!int.TryParse(suffix, NumberStyles.Integer, CultureInfo.InvariantCulture, out int sequenceValue))
+                continue;
+
+            nextSequence = Mathf.Max(nextSequence, sequenceValue + 1);
+        }
+
+        dynamicObstacleSequence = Mathf.Max(nextSequence, 0);
     }
 
     Dictionary<string, ObstacleChunk.RuntimeState> ParseRuntimeStateSnapshot(string serializedState)

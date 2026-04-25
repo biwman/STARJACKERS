@@ -167,6 +167,7 @@ public class GameTimer : MonoBehaviourPun
         props[LoneShipModeStartTimeKey] = -1d;
         props[EvacuationPauseUntilKey] = -1d;
         props[EvacuationPauseRemainingKey] = -1f;
+        props[RoomSettings.GadgetChargesStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);

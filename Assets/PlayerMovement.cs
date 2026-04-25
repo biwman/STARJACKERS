@@ -29,13 +29,17 @@ public class PlayerMovement : MonoBehaviourPun
     private AudioSource engineAudioSource;
     private Vector3 lastAudioPosition;
     float baseSpeed = 5f;
+    float baseBoosterDuration = 5f;
+    float turnRateMultiplier = 1f;
     bool baseSpeedCaptured;
     bool fusionEngineEquipped;
     string lastAppliedEngineSignature = string.Empty;
+    const float BaseTurnDegreesPerSecond = 1080f;
     const float AccelerationResponsiveness = 18f;
     const float LowSpeedBrakeResponsiveness = 7.4f;
     const float HighSpeedBrakeResponsiveness = 1.15f;
     const float BrakeDriftResponsivenessMultiplier = 0.8f;
+    const float MaxDriftInertiaSlowdown = 4.2f;
     static PhysicsMaterial2D playerCollisionMaterial;
 
     public float BoosterNormalized => boosterCharge;
@@ -71,6 +75,11 @@ public class PlayerMovement : MonoBehaviourPun
         if (GetComponent<HideInNebulaTarget>() == null)
         {
             gameObject.AddComponent<HideInNebulaTarget>();
+        }
+
+        if (!isAstronaut && GetComponent<EnemyBot>() == null && GetComponent<PlayerNicknameUI>() == null)
+        {
+            gameObject.AddComponent<PlayerNicknameUI>();
         }
 
         if (GetComponent<EngineThrusterVFX>() == null)
@@ -181,8 +190,15 @@ public class PlayerMovement : MonoBehaviourPun
             ApplyVelocity(currentSpeed);
             ClampExcessCollisionBoost(currentSpeed);
             rb.angularVelocity = 0f;
-            rb.MoveRotation(targetRotationAngle);
+            float maxTurnDelta = BaseTurnDegreesPerSecond * Mathf.Max(0.1f, turnRateMultiplier) * Time.fixedDeltaTime;
+            float nextAngle = Mathf.MoveTowardsAngle(rb.rotation, targetRotationAngle, maxTurnDelta);
+            rb.MoveRotation(nextAngle);
         }
+    }
+
+    void OnDisable()
+    {
+        StopEngineAudioImmediately();
     }
 
     void OnTriggerEnter2D(Collider2D other)
@@ -200,6 +216,15 @@ public class PlayerMovement : MonoBehaviourPun
 
         float currentSpeed = IsBoosterDepleted ? speed * CurrentDepletedSpeedMultiplier : speed;
         ClampExcessCollisionBoost(currentSpeed);
+        TryRequestMovingObjectImpulse(collision);
+    }
+
+    void OnCollisionStay2D(Collision2D collision)
+    {
+        if (!photonView.IsMine || rb == null)
+            return;
+
+        TryRequestMovingObjectImpulse(collision);
     }
 
     void ClampExcessCollisionBoost(float currentSpeed)
@@ -215,6 +240,33 @@ public class PlayerMovement : MonoBehaviourPun
             return;
 
         rb.linearVelocity = rb.linearVelocity.normalized * hardCap;
+    }
+
+    void TryRequestMovingObjectImpulse(Collision2D collision)
+    {
+        if (PhotonNetwork.IsMasterClient || collision == null || GetComponent<AstronautSurvivor>() != null)
+            return;
+
+        MovingSpaceObject movingObject = collision.collider != null
+            ? collision.collider.GetComponentInParent<MovingSpaceObject>()
+            : null;
+        if (movingObject == null || string.IsNullOrWhiteSpace(movingObject.StableId))
+            return;
+
+        if (movingObject.ObjectType == MovingSpaceObject.SpaceObjectType.Obstacle && RoomSettings.IsObstacleMassMax())
+            return;
+
+        Vector2 playerVelocity = rb.linearVelocity;
+        if (playerVelocity.sqrMagnitude < 0.01f)
+            return;
+
+        int weightFactor = movingObject.ObjectType == MovingSpaceObject.SpaceObjectType.Obstacle
+            ? RoomSettings.GetObstacleWeightFactor()
+            : RoomSettings.GetTreasureWeightFactor();
+        weightFactor = Mathf.Max(1, weightFactor);
+
+        Vector2 impulse = (playerVelocity * 1.25f) / weightFactor;
+        SpaceObjectMotionSync.RequestImpulse(movingObject.StableId, impulse);
     }
 
     bool IsGameStarted()
@@ -240,20 +292,25 @@ public class PlayerMovement : MonoBehaviourPun
             return;
         }
 
-        bool usingBooster = effectiveMoveInput.magnitude >= maxSpeedThreshold && !boosterExhausted;
+        bool usingFullAcceleration = effectiveMoveInput.magnitude >= maxSpeedThreshold;
+        bool usingBooster = usingFullAcceleration && !boosterExhausted;
 
         if (usingBooster)
         {
             boosterCharge -= deltaTime / boosterDuration;
             boosterRecoveryDelayTimer = GetCurrentBoosterRecoveryDelay();
         }
-        else if (!boosterExhausted || boosterRecoveryDelayTimer <= 0f)
+        else if (usingFullAcceleration)
         {
-            boosterCharge += deltaTime / boosterDuration;
+            boosterRecoveryDelayTimer = GetCurrentBoosterRecoveryDelay();
+        }
+        else if (boosterRecoveryDelayTimer > 0f)
+        {
+            boosterRecoveryDelayTimer -= deltaTime;
         }
         else
         {
-            boosterRecoveryDelayTimer -= deltaTime;
+            boosterCharge += deltaTime / (boosterDuration * 2f);
         }
 
         boosterCharge = Mathf.Clamp01(boosterCharge);
@@ -282,14 +339,18 @@ public class PlayerMovement : MonoBehaviourPun
 
     float GetMaxInputSpeedBoostMultiplier()
     {
+        if (boosterCharge < 0.01f)
+            return 1f;
+
         return 1f + (RoomSettings.GetMaxInputBoostPercent() / 100f);
     }
 
     void ApplyVelocity(float currentSpeed)
     {
         Vector2 targetVelocity = effectiveMoveInput * currentSpeed;
+        int driftLevel = RoomSettings.GetShipDriftLevel();
 
-        if (!RoomSettings.IsShipDriftEnabled())
+        if (driftLevel <= 0)
         {
             rb.linearVelocity = targetVelocity;
             return;
@@ -305,15 +366,28 @@ public class PlayerMovement : MonoBehaviourPun
         if (braking)
         {
             float driftWeight = speedRatio * speedRatio;
-            float brakeResponsiveness = Mathf.Lerp(LowSpeedBrakeResponsiveness, HighSpeedBrakeResponsiveness, driftWeight) * BrakeDriftResponsivenessMultiplier;
+            float driftSlowdown = GetDriftSlowdownMultiplier(driftLevel);
+            float brakeResponsiveness = Mathf.Lerp(LowSpeedBrakeResponsiveness, HighSpeedBrakeResponsiveness, driftWeight) *
+                                        BrakeDriftResponsivenessMultiplier *
+                                        driftSlowdown;
             float releaseDriftMultiplier = effectiveMoveInput == Vector2.zero ? 0.86f : 1f;
             float maxDelta = brakeResponsiveness * speed * releaseDriftMultiplier * Time.fixedDeltaTime;
             rb.linearVelocity = Vector2.MoveTowards(currentVelocity, targetVelocity, maxDelta);
             return;
         }
 
-        float accelerationDelta = AccelerationResponsiveness * speed * Time.fixedDeltaTime;
+        float accelerationDelta = AccelerationResponsiveness * speed * GetDriftSlowdownMultiplier(driftLevel) * Time.fixedDeltaTime;
         rb.linearVelocity = Vector2.MoveTowards(currentVelocity, targetVelocity, accelerationDelta);
+    }
+
+    float GetDriftSlowdownMultiplier(int driftLevel)
+    {
+        if (driftLevel <= 1)
+            return 1f;
+
+        float t = Mathf.InverseLerp(1f, 10f, driftLevel);
+        float slowdown = Mathf.Lerp(1f, MaxDriftInertiaSlowdown, t);
+        return 1f / slowdown;
     }
 
     void UpdateFacingDirection()
@@ -341,7 +415,9 @@ public class PlayerMovement : MonoBehaviourPun
 
         if (rb == null)
         {
-            transform.rotation = Quaternion.Euler(0f, 0f, targetRotationAngle);
+            float maxTurnDelta = BaseTurnDegreesPerSecond * Mathf.Max(0.1f, turnRateMultiplier) * Time.deltaTime;
+            float nextAngle = Mathf.MoveTowardsAngle(transform.eulerAngles.z, targetRotationAngle, maxTurnDelta);
+            transform.rotation = Quaternion.Euler(0f, 0f, nextAngle);
         }
     }
 
@@ -419,6 +495,12 @@ public class PlayerMovement : MonoBehaviourPun
         engineAudioSource.pitch = Mathf.Lerp(0.88f, 1.24f, normalizedSpeed);
     }
 
+    public void StopEngineAudioImmediately()
+    {
+        if (engineAudioSource != null && engineAudioSource.isPlaying)
+            engineAudioSource.Stop();
+    }
+
     float GetAudioSpeedRatio(float speedReference)
     {
         if (photonView.IsMine)
@@ -456,6 +538,7 @@ public class PlayerMovement : MonoBehaviourPun
             return;
 
         baseSpeed = Mathf.Max(0.1f, speed);
+        baseBoosterDuration = Mathf.Max(0.1f, boosterDuration);
         baseSpeedCaptured = true;
     }
 
@@ -475,8 +558,16 @@ public class PlayerMovement : MonoBehaviourPun
         if (!forceRefresh && signature == lastAppliedEngineSignature)
             return;
 
+        float baseShipSpeed = ShipCatalog.GetBaseSpeed(shipSkinIndex);
+        float baseShipBoosterDuration = ShipCatalog.GetBoosterDuration(shipSkinIndex);
+        float baseShipTurnRate = ShipCatalog.GetTurnRateMultiplier(shipSkinIndex);
+
         fusionEngineEquipped = hasFusion;
+        baseSpeed = Mathf.Max(0.1f, baseShipSpeed);
+        baseBoosterDuration = Mathf.Max(0.1f, baseShipBoosterDuration);
+        turnRateMultiplier = Mathf.Max(0.1f, baseShipTurnRate);
         speed = baseSpeed * (fusionEngineEquipped ? 1.2f : 1f);
+        boosterDuration = baseBoosterDuration;
         lastAppliedEngineSignature = signature;
         SyncEngineAudioClip();
 
@@ -575,9 +666,9 @@ public class EngineThrusterVFX : MonoBehaviour
     float referenceSpeed = 5f;
     bool isEnemyBot;
     bool isAstronaut;
-    bool isViper;
     bool fusionTrailEquipped;
     EnemyTrailProfile enemyTrailProfile;
+    Vector2[] playerThrusterOffsetFactors = new[] { new Vector2(0f, 0.02f) };
 
     void Start()
     {
@@ -601,7 +692,9 @@ public class EngineThrusterVFX : MonoBehaviour
 
         PhotonView view = GetComponent<PhotonView>();
         int skinIndex = view != null && view.Owner != null ? RoomSettings.GetPlayerShipSkin(view.Owner, 0) : 0;
-        isViper = !isEnemyBot && !isAstronaut && ShipCatalog.GetShipTypeFromSkinIndex(skinIndex) == ShipType.Viper;
+        playerThrusterOffsetFactors = !isEnemyBot && !isAstronaut
+            ? ShipCatalog.GetThrusterOffsetFactors(skinIndex)
+            : new[] { new Vector2(0f, 0.02f) };
 
         ReapplyTrailAppearance();
     }
@@ -654,13 +747,7 @@ public class EngineThrusterVFX : MonoBehaviour
 
         Vector3[] offsets = enemyTrailProfile != null
             ? BuildEnemyTrailOffsets(enemyTrailProfile, shipWidth, shipHeight)
-            : isViper
-            ? new[]
-            {
-                new Vector3(-shipWidth * 0.60f, 0.34f, 0f),
-                new Vector3(shipWidth * 0.60f, 0.34f, 0f)
-            }
-            : new[] { new Vector3(0f, 0.02f, 0f) };
+            : BuildPlayerTrailOffsets(shipWidth, shipHeight);
 
         trailRenderers = new TrailRenderer[offsets.Length];
         for (int i = 0; i < offsets.Length; i++)
@@ -687,6 +774,21 @@ public class EngineThrusterVFX : MonoBehaviour
         trail.material = CreateSpritesMaterial();
         trail.generateLightingData = false;
         ApplyTrailAppearance(trail);
+    }
+
+    Vector3[] BuildPlayerTrailOffsets(float shipWidth, float shipHeight)
+    {
+        Vector2[] factors = playerThrusterOffsetFactors != null && playerThrusterOffsetFactors.Length > 0
+            ? playerThrusterOffsetFactors
+            : new[] { new Vector2(0f, 0.02f) };
+
+        Vector3[] offsets = new Vector3[factors.Length];
+        for (int i = 0; i < factors.Length; i++)
+        {
+            offsets[i] = new Vector3(factors[i].x * shipWidth, factors[i].y * shipHeight, 0f);
+        }
+
+        return offsets;
     }
 
     void ApplyTrailAppearance(TrailRenderer trail)
@@ -722,6 +824,24 @@ public class EngineThrusterVFX : MonoBehaviour
                     new GradientColorKey(new Color(1f, 0.32f, 0.22f), 0.18f),
                     new GradientColorKey(new Color(0.9f, 0.04f, 0.04f), 0.58f),
                     new GradientColorKey(new Color(0.34f, 0.01f, 0.01f), 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0.96f, 0f),
+                    new GradientAlphaKey(0.72f, 0.24f),
+                    new GradientAlphaKey(0.28f, 0.7f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+        }
+        else if (enemyTrailProfile != null && enemyTrailProfile.VisualStyle == EnemyTrailVisualStyle.GreenTwin)
+        {
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(0.86f, 1f, 0.72f), 0f),
+                    new GradientColorKey(new Color(0.22f, 1f, 0.36f), 0.18f),
+                    new GradientColorKey(new Color(0.02f, 0.72f, 0.18f), 0.58f),
+                    new GradientColorKey(new Color(0f, 0.18f, 0.04f), 1f)
                 },
                 new[]
                 {
@@ -832,7 +952,7 @@ public class EngineThrusterVFX : MonoBehaviour
     {
         HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>();
         PhotonView view = GetComponent<PhotonView>();
-        bool hideForOthers = nebulaTarget != null && nebulaTarget.IsHiddenForOthers && view != null && !view.IsMine;
+        bool hideForOthers = nebulaTarget != null && nebulaTarget.IsHiddenFromLocalPlayer() && view != null && !view.IsMine;
         if (hideForOthers)
         {
             DisableEmission();
