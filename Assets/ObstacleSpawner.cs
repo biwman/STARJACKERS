@@ -404,7 +404,14 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         angularVelocityA = 0f;
         angularVelocityB = 0f;
 
-        if (!RoomSettings.AreMovingObjectsEnabled() || sourceState.Velocity.sqrMagnitude < 0.0001f)
+        if (!RoomSettings.ShouldMovingObjectsRotate())
+            return;
+
+        float spinBase = Mathf.Max(14f, Mathf.Abs(sourceState.AngularVelocity));
+        angularVelocityA = spinBase * Random.Range(0.75f, 1.1f) * (Random.value < 0.5f ? -1f : 1f);
+        angularVelocityB = -angularVelocityA;
+
+        if (!RoomSettings.ShouldMovingObjectsTranslate() || sourceState.Velocity.sqrMagnitude < 0.0001f)
             return;
 
         Vector2 direction = Random.insideUnitCircle.normalized;
@@ -414,10 +421,6 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         float speed = Mathf.Max(0.35f, sourceState.Velocity.magnitude) * Random.Range(0.85f, 1.15f);
         velocityA = direction * speed;
         velocityB = -direction * speed;
-
-        float spinBase = Mathf.Max(14f, Mathf.Abs(sourceState.AngularVelocity));
-        angularVelocityA = spinBase * Random.Range(0.75f, 1.1f) * (Random.value < 0.5f ? -1f : 1f);
-        angularVelocityB = -angularVelocityA;
     }
 
     bool TryResolveChildPositions(ObstacleChunk source, ObstacleChunk.RuntimeState sourceState, out Vector2 childPosA, out Vector2 childPosB)

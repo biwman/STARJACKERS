@@ -28,6 +28,8 @@ public class AudioManager : MonoBehaviour
     AudioClip extractionSequenceClip;
     AudioClip spaceMineBoomClip;
     AudioClip spaceTruckAlertClip;
+    AudioClip mothershipEngineClip;
+    AudioClip shieldFullPowerClip;
 
     AudioSource oneShotSource;
     AudioSource drillingLoopSource;
@@ -46,6 +48,7 @@ public class AudioManager : MonoBehaviour
 
     public AudioClip EngineClip => engineClip;
     public AudioClip FusionEngineClip => fusionEngineClip != null ? fusionEngineClip : engineClip;
+    public AudioClip MothershipEngineClip => mothershipEngineClip != null ? mothershipEngineClip : engineClip;
     public AudioClip DrillingClip => drillingClip;
     public AudioClip AlarmClip => alarmClip;
     public AudioClip CorsairLaserClip => corsairLaserClip;
@@ -119,6 +122,8 @@ public class AudioManager : MonoBehaviour
         extractionSequenceClip = Resources.Load<AudioClip>("Audio/extraction_4sekundy");
         spaceMineBoomClip = Resources.Load<AudioClip>("Audio/space_mine_boom_sound");
         spaceTruckAlertClip = Resources.Load<AudioClip>("Audio/alert_3times");
+        mothershipEngineClip = Resources.Load<AudioClip>("Audio/mother_ship_sound");
+        shieldFullPowerClip = Resources.Load<AudioClip>("Audio/Shield At Full Power");
     }
 
     void EnsureSources()
@@ -231,6 +236,11 @@ public class AudioManager : MonoBehaviour
     public void PlaySpaceTruckAlertAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(spaceTruckAlertClip != null ? spaceTruckAlertClip : alarmClip, worldPosition, 0.92f);
+    }
+
+    public void PlayShieldFullPowerAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(shieldFullPowerClip != null ? shieldFullPowerClip : shieldChargeClip, worldPosition, 0.82f);
     }
 
     public void PlayEvacBuzzerBurst()

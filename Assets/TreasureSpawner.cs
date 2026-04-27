@@ -14,6 +14,12 @@ public class TreasureSpawner : MonoBehaviourPun
     const float MinDistanceFromExtraction = 3f;
     const float MinDistanceFromObstacle = 2.6f;
     const float MinDistanceFromNebula = 2.8f;
+    static readonly float[] VeryLowRichnessWeights = { 70f, 21f, 7f, 1f, 0.8f, 0.2f };
+    static readonly float[] LowRichnessWeights = { 60f, 25f, 10f, 3f, 1.5f, 0.5f };
+    static readonly float[] MediumRichnessWeights = { 50f, 25f, 13f, 7f, 4f, 1f };
+    static readonly float[] HighRichnessWeights = { 40f, 28f, 15f, 10f, 5f, 2f };
+    static readonly float[] VeryHighRichnessWeights = { 30f, 29f, 17f, 15f, 6f, 3f };
+    static readonly float[] ExtremeRichnessWeights = { 20f, 30f, 20f, 17f, 8f, 5f };
 
     public int treasureCount = 10;
     public float mapSizeX = 25f;
@@ -153,14 +159,63 @@ public class TreasureSpawner : MonoBehaviourPun
 
     string RollTreasureItemId()
     {
-        float roll = Random.value;
-        if (roll < 0.1f)
-            return InventoryItemCatalog.AsteroidRareId;
+        float[] weights = GetResourceRichnessWeights();
+        float total = 0f;
+        for (int i = 0; i < weights.Length; i++)
+            total += Mathf.Max(0f, weights[i]);
 
-        if (roll < 0.4f)
+        if (total <= 0f)
+            return InventoryItemCatalog.AsteroidResourceId;
+
+        float roll = Random.Range(0f, total);
+        if (ConsumeWeight(ref roll, weights, 0))
+            return InventoryItemCatalog.AsteroidResourceId;
+
+        if (ConsumeWeight(ref roll, weights, 1))
             return InventoryItemCatalog.AsteroidGoldId;
 
-        return InventoryItemCatalog.AsteroidResourceId;
+        if (ConsumeWeight(ref roll, weights, 2))
+            return InventoryItemCatalog.AsteroidRareId;
+
+        if (ConsumeWeight(ref roll, weights, 3))
+            return InventoryItemCatalog.RichAsteroidId;
+
+        if (ConsumeWeight(ref roll, weights, 4))
+            return InventoryItemCatalog.SpaceJunkId;
+
+        return InventoryItemCatalog.AsteroidLegendaryId;
+    }
+
+    float[] GetResourceRichnessWeights()
+    {
+        switch (RoomSettings.GetResourceRichness())
+        {
+            case RoomSettings.ResourceRichnessVeryLow:
+                return VeryLowRichnessWeights;
+            case RoomSettings.ResourceRichnessLow:
+                return LowRichnessWeights;
+            case RoomSettings.ResourceRichnessHigh:
+                return HighRichnessWeights;
+            case RoomSettings.ResourceRichnessVeryHigh:
+                return VeryHighRichnessWeights;
+            case RoomSettings.ResourceRichnessExtreme:
+                return ExtremeRichnessWeights;
+            default:
+                return MediumRichnessWeights;
+        }
+    }
+
+    bool ConsumeWeight(ref float roll, float[] weights, int index)
+    {
+        if (weights == null || index < 0 || index >= weights.Length)
+            return false;
+
+        float weight = Mathf.Max(0f, weights[index]);
+        if (roll < weight)
+            return true;
+
+        roll -= weight;
+        return false;
     }
 
     bool IsRoundStarted()

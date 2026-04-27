@@ -7,6 +7,7 @@ public class PlayerHealth : MonoBehaviourPun
 {
     const int DefaultPlayerHp = 50;
     const int DefaultPlayerShield = 50;
+    const int ShieldReactorShieldBonus = 30;
     const int BatteryShieldPerTick = 5;
     const int BatteryTickCount = 5;
     const float BatteryTickInterval = 1f;
@@ -27,6 +28,7 @@ public class PlayerHealth : MonoBehaviourPun
     public int CurrentHP => currentHP;
     public int CurrentShield => currentShield;
     public int MaxShield => maxShield;
+    public bool HasBrokenShield => maxShield > 0 && currentShield <= 0;
     public bool IsWreck { get; private set; }
     public bool IsBotControlled => GetComponent<EnemyBot>() != null;
     public bool IsAstronautControlled => GetComponent<AstronautSurvivor>() != null;
@@ -63,7 +65,7 @@ public class PlayerHealth : MonoBehaviourPun
         {
             int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
             maxHP = ShipCatalog.GetBaseHp(shipSkinIndex);
-            maxShield = ShipCatalog.GetBaseShield(shipSkinIndex);
+            maxShield = ShipCatalog.GetBaseShield(shipSkinIndex) + CountEquippedShieldReactors(shipSkinIndex) * ShieldReactorShieldBonus;
         }
 
         currentHP = maxHP;
@@ -94,6 +96,30 @@ public class PlayerHealth : MonoBehaviourPun
                 }
             }
         }
+    }
+
+    int CountEquippedShieldReactors(int shipSkinIndex)
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        int count = 0;
+
+        if (IsShieldReactorEquipped(equipmentSlots, 2, shipSkinIndex))
+            count++;
+
+        if (IsShieldReactorEquipped(equipmentSlots, 3, shipSkinIndex))
+            count++;
+
+        return count;
+    }
+
+    bool IsShieldReactorEquipped(string[] equipmentSlots, int slotIndex, int shipSkinIndex)
+    {
+        return equipmentSlots != null &&
+               slotIndex >= 0 &&
+               slotIndex < equipmentSlots.Length &&
+               ShipCatalog.IsEquipmentSlotEnabled(slotIndex, shipSkinIndex) &&
+               string.Equals(equipmentSlots[slotIndex], InventoryItemCatalog.ShieldReactorId, System.StringComparison.Ordinal);
     }
 
     void OnDestroy()
@@ -158,26 +184,38 @@ public class PlayerHealth : MonoBehaviourPun
             currentHP = Mathf.Max(0, currentHP - remainingDamage);
         }
 
+        int hpDamage = Mathf.Max(0, previousHp - currentHP);
+        Vector2 impactPosition = Vector2.zero;
+        bool hasResolvedImpactPosition = false;
+        if (playImpactAudio && (absorbed > 0 || hpDamage > 0))
+        {
+            impactPosition = hasImpactPosition
+                ? new Vector2(impactX, impactY)
+                : ResolveDamageImpactPosition(attackerViewID);
+            hasResolvedImpactPosition = true;
+        }
+
         photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
 
         if (playImpactAudio && absorbed > 0)
         {
             photonView.RPC(nameof(PlayShieldHitAudio), RpcTarget.All);
 
-            Vector2 impactPosition = hasImpactPosition
-                ? new Vector2(impactX, impactY)
-                : ResolveDamageImpactPosition(attackerViewID);
             photonView.RPC(nameof(PlayShieldHitVisual), RpcTarget.All, impactPosition.x, impactPosition.y);
         }
 
-        if (playImpactAudio && remainingDamage > 0)
+        if (playImpactAudio && hpDamage > 0)
+        {
             photonView.RPC(nameof(PlayHpHitAudio), RpcTarget.All);
+            if (hasResolvedImpactPosition)
+                photonView.RPC(nameof(PlayHpHitVisual), RpcTarget.All, impactPosition.x, impactPosition.y);
+        }
 
         if (IsBotControlled)
         {
             EnemyBot damagedBot = GetComponent<EnemyBot>();
             if (damagedBot != null)
-                damagedBot.NotifyDamageTaken(previousHp, currentHP, Mathf.Max(0, previousShield - currentShield), Mathf.Max(0, previousHp - currentHP));
+                damagedBot.NotifyDamageTaken(previousHp, currentHP, Mathf.Max(0, previousShield - currentShield), hpDamage, attackerViewID);
         }
 
         if (currentHP <= 0)
@@ -265,6 +303,21 @@ public class PlayerHealth : MonoBehaviourPun
         {
             photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
         }
+    }
+
+    public bool TryRestoreShieldAuthority(float amount, bool playFullPowerAudio)
+    {
+        if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || maxShield <= 0 || currentShield <= 0 || currentShield >= maxShield)
+            return false;
+
+        int previousShield = currentShield;
+        currentShield = Mathf.Min(maxShield, currentShield + Mathf.Max(1, Mathf.RoundToInt(amount)));
+        photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
+
+        if (playFullPowerAudio && previousShield < maxShield && currentShield >= maxShield)
+            photonView.RPC(nameof(PlayShieldFullPowerAudio), RpcTarget.All);
+
+        return currentShield > previousShield;
     }
 
     void HandleDeath(int attackerViewID)
@@ -679,7 +732,12 @@ public class PlayerHealth : MonoBehaviourPun
 
         EnemyBot bot = GetComponent<EnemyBot>();
         if (bot != null)
+        {
+            if ((EnemyBotKind)kindValue == EnemyBotKind.Mothership)
+                bot.ConvertMothershipTurretsToWreckVisuals();
+
             bot.enabled = false;
+        }
 
         TreasureCollector collector = GetComponent<TreasureCollector>();
         if (collector != null)
@@ -728,7 +786,13 @@ public class PlayerHealth : MonoBehaviourPun
 
         SpriteRenderer renderer = GetComponent<SpriteRenderer>();
         if (renderer != null)
+        {
+            Sprite wreckSprite = wreckProfile != null ? wreckProfile.GetVisualSprite() : null;
+            if (wreckSprite != null)
+                renderer.sprite = wreckSprite;
+
             renderer.color = baseColor;
+        }
     }
 
     [PunRPC]
@@ -806,9 +870,26 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
+    void PlayShieldFullPowerAudio()
+    {
+        AudioManager.Instance.PlayShieldFullPowerAt(transform.position);
+    }
+
+    [PunRPC]
     void PlayHpHitAudio()
     {
         AudioManager.Instance.PlayHpHitAt(transform.position);
+    }
+
+    [PunRPC]
+    void PlayHpHitVisual(float x, float y)
+    {
+        if (!RoomSettings.AreVisualEffectsEnabled())
+            return;
+
+        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+        Vector2 visualPosition = ResolveVisibleShieldHitPosition(new Vector2(x, y), renderer);
+        HpHitSparksVfx.Spawn(new Vector3(visualPosition.x, visualPosition.y, 0f), transform.position, renderer);
     }
 
     [PunRPC]

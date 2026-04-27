@@ -16,6 +16,7 @@ public static class RoomSettings
     public const string ObstacleSizePercentKey = "obstacleSizePercent";
     public const string ObstacleNoBordersKey = "obstacleNoBorders";
     public const string TreasureDensityKey = "treasureDensity";
+    public const string ResourceRichnessKey = "resourceRichness";
     public const string NebulaDensityKey = "nebulaDensity";
     public const string ExtractionCountKey = "extractionCount";
     public const string BoosterSlowdownKey = "boosterSlowdownPercent";
@@ -59,7 +60,7 @@ public static class RoomSettings
     public const int DefaultBoosterRecoveryDelay = 5;
     public const int DefaultMaxInputBoostPercent = 20;
     public const int DefaultShipDriftLevel = 1;
-    public const int DefaultLastShipTimerMultiplier = 3;
+    public const float DefaultLastShipTimerMultiplier = 3f;
     public const int DefaultKillRewardPercent = 50;
     public const int DefaultDeathRetainPercent = 25;
     public const int DefaultTimeUpRetainPercent = 25;
@@ -84,6 +85,17 @@ public static class RoomSettings
     public const string SessionStateInPlay = "in_play";
     public const string SessionStateClosingLobby = "closing_lobby";
     public const string SessionStateSummary = "summary";
+    public const string MovingObjectsModeOn = "on";
+    public const string MovingObjectsModeOff = "off";
+    public const string MovingObjectsModeOnlyRotate = "only_rotate";
+    public const string DefaultMovingObjectsMode = MovingObjectsModeOn;
+    public const string ResourceRichnessVeryLow = "very_low";
+    public const string ResourceRichnessLow = "low";
+    public const string ResourceRichnessMedium = "medium";
+    public const string ResourceRichnessHigh = "high";
+    public const string ResourceRichnessVeryHigh = "very_high";
+    public const string ResourceRichnessExtreme = "extreme";
+    public const string DefaultResourceRichness = ResourceRichnessMedium;
 
     public static float GetRoundDuration()
     {
@@ -214,9 +226,12 @@ public static class RoomSettings
         return GetShipDriftLevel() > 0;
     }
 
-    public static int GetLastShipTimerMultiplier()
+    public static float GetLastShipTimerMultiplier()
     {
-        return GetInt(LastShipTimerMultiplierKey, DefaultLastShipTimerMultiplier, 1, 5);
+        if (TryGetFloat(LastShipTimerMultiplierKey, out float value))
+            return Mathf.Clamp(value, 1f, 5f);
+
+        return DefaultLastShipTimerMultiplier;
     }
 
     public static int GetKillRewardPercent()
@@ -284,16 +299,91 @@ public static class RoomSettings
         return DefaultVisualEffectsEnabled;
     }
 
+    public static string GetResourceRichness()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ResourceRichnessKey, out object value) &&
+            value is string richness)
+        {
+            return NormalizeResourceRichness(richness);
+        }
+
+        return DefaultResourceRichness;
+    }
+
+    public static string NormalizeResourceRichness(string richness)
+    {
+        string normalized = string.IsNullOrWhiteSpace(richness)
+            ? DefaultResourceRichness
+            : richness.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case ResourceRichnessVeryLow:
+            case ResourceRichnessLow:
+            case ResourceRichnessMedium:
+            case ResourceRichnessHigh:
+            case ResourceRichnessVeryHigh:
+            case ResourceRichnessExtreme:
+                return normalized;
+            default:
+                return DefaultResourceRichness;
+        }
+    }
+
     public static bool AreMovingObjectsEnabled()
+    {
+        return GetMovingObjectsMode() != MovingObjectsModeOff;
+    }
+
+    public static bool ShouldMovingObjectsTranslate()
+    {
+        return GetMovingObjectsMode() == MovingObjectsModeOn;
+    }
+
+    public static bool ShouldMovingObjectsRotate()
+    {
+        return GetMovingObjectsMode() != MovingObjectsModeOff;
+    }
+
+    public static string GetMovingObjectsMode()
     {
         if (PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(MovingObjectsEnabledKey, out object value) &&
             value is bool enabled)
         {
-            return enabled;
+            return enabled ? MovingObjectsModeOn : MovingObjectsModeOff;
         }
 
-        return DefaultMovingObjectsEnabled;
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(MovingObjectsEnabledKey, out value) &&
+            value is string mode)
+        {
+            switch (mode)
+            {
+                case MovingObjectsModeOn:
+                case MovingObjectsModeOff:
+                case MovingObjectsModeOnlyRotate:
+                    return mode;
+            }
+        }
+
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(MovingObjectsEnabledKey, out value) &&
+            value is int modeIndex)
+        {
+            switch (modeIndex)
+            {
+                case 0:
+                    return MovingObjectsModeOff;
+                case 2:
+                    return MovingObjectsModeOnlyRotate;
+                default:
+                    return MovingObjectsModeOn;
+            }
+        }
+
+        return DefaultMovingObjectsMode;
     }
 
     public static int GetObstacleWeightFactor()
@@ -388,6 +478,21 @@ public static class RoomSettings
         }
 
         return Mathf.Clamp(definition.DefaultShield, 0, 200);
+    }
+
+    public static int GetEnemyDamage(EnemyBotKind kind)
+    {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return 0;
+
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.DamageRoomKey))
+        {
+            return GetInt(definition.DamageRoomKey, definition.DefaultDamage, 0, 200);
+        }
+
+        return Mathf.Clamp(definition.DefaultDamage, 0, 200);
     }
 
     public static float GetEnemySpeedMultiplier(EnemyBotKind kind)
@@ -624,7 +729,8 @@ public enum ShipType
 {
     Explorer = 0,
     Viper = 1,
-    Avenger = 2
+    Avenger = 2,
+    Arrow = 3
 }
 
 public sealed class PlayerShipDefinition
@@ -688,7 +794,10 @@ public static class ShipCatalog
     public const int AvengerDarkGreenSkinIndex = 6;
     public const int AvengerMilitarySkinIndex = 7;
     public const int AvengerNasaSkinIndex = 8;
-    public const int MaxShipSkinIndex = AvengerNasaSkinIndex;
+    public const int ArrowSmoothSkinIndex = 9;
+    public const int ArrowSportySkinIndex = 10;
+    public const int ArrowSharkSkinIndex = 11;
+    public const int MaxShipSkinIndex = ArrowSharkSkinIndex;
 
     static readonly PlayerShipDefinition ExplorerDefinition = new PlayerShipDefinition(
         ShipType.Explorer,
@@ -742,11 +851,33 @@ public static class ShipCatalog
         6f,
         new[] { new Vector2(0f, 0.02f) });
 
+    static readonly PlayerShipDefinition ArrowDefinition = new PlayerShipDefinition(
+        ShipType.Arrow,
+        "Arrow",
+        new[] { ArrowSmoothSkinIndex, ArrowSportySkinIndex, ArrowSharkSkinIndex },
+        6,
+        1,
+        1,
+        2,
+        1,
+        42,
+        28,
+        6.8f,
+        1.45f,
+        3.6f,
+        new[]
+        {
+            new Vector2(-1.82f, 0.28f),
+            new Vector2(0f, 0.2f),
+            new Vector2(1.82f, 0.28f)
+        });
+
     static readonly Dictionary<ShipType, PlayerShipDefinition> Definitions = new Dictionary<ShipType, PlayerShipDefinition>
     {
         { ShipType.Explorer, ExplorerDefinition },
         { ShipType.Viper, ViperDefinition },
-        { ShipType.Avenger, AvengerDefinition }
+        { ShipType.Avenger, AvengerDefinition },
+        { ShipType.Arrow, ArrowDefinition }
     };
 
     public static PlayerShipDefinition GetShipDefinition(int skinIndex)
@@ -763,6 +894,7 @@ public static class ShipCatalog
     {
         return skinIndex switch
         {
+            >= ArrowSmoothSkinIndex => ShipType.Arrow,
             >= AvengerDarkGreenSkinIndex => ShipType.Avenger,
             >= ViperStandardSkinIndex => ShipType.Viper,
             _ => ShipType.Explorer
@@ -792,6 +924,9 @@ public static class ShipCatalog
             case AvengerDarkGreenSkinIndex: return "Darkgreen";
             case AvengerMilitarySkinIndex: return "Military";
             case AvengerNasaSkinIndex: return "NASA";
+            case ArrowSmoothSkinIndex: return "Smooth";
+            case ArrowSportySkinIndex: return "Sporty";
+            case ArrowSharkSkinIndex: return "Shark";
             default: return "Skin";
         }
     }
@@ -896,6 +1031,9 @@ public static class ShipCatalog
             AvengerDarkGreenSkinIndex => "Visuals/Ships/avenger_darkgreen_resource",
             AvengerMilitarySkinIndex => "Visuals/Ships/avenger_military_resource",
             AvengerNasaSkinIndex => "Visuals/Ships/avenger_nasa_resource",
+            ArrowSmoothSkinIndex => "Visuals/Ships/arrow_skin_smooth_resource",
+            ArrowSportySkinIndex => "Visuals/Ships/arrow_skin_sporty_resource",
+            ArrowSharkSkinIndex => "Visuals/Ships/arrow_skin_shark_resource",
             _ => "Visuals/Ships/ship1_resource"
         };
     }
@@ -913,6 +1051,9 @@ public static class ShipCatalog
             AvengerDarkGreenSkinIndex => "Assets/Resources/Visuals/Ships/avenger_darkgreen_resource.png",
             AvengerMilitarySkinIndex => "Assets/Resources/Visuals/Ships/avenger_military_resource.png",
             AvengerNasaSkinIndex => "Assets/Resources/Visuals/Ships/avenger_nasa_resource.png",
+            ArrowSmoothSkinIndex => "Assets/Resources/Visuals/Ships/arrow_skin_smooth_resource.png",
+            ArrowSportySkinIndex => "Assets/Resources/Visuals/Ships/arrow_skin_sporty_resource.png",
+            ArrowSharkSkinIndex => "Assets/Resources/Visuals/Ships/arrow_skin_shark_resource.png",
             _ => "Assets/Resources/Visuals/Ships/ship1_resource.png"
         };
     }
@@ -930,6 +1071,9 @@ public static class ShipCatalog
             AvengerDarkGreenSkinIndex => "Assets/Avenger_skin_darkgreen.png",
             AvengerMilitarySkinIndex => "Assets/Avenger_skin_military.png",
             AvengerNasaSkinIndex => "Assets/Avenger_skin_nasa.png",
+            ArrowSmoothSkinIndex => "Assets/arrow_skin_smooth.png",
+            ArrowSportySkinIndex => "Assets/arrow_skin_sporty.png",
+            ArrowSharkSkinIndex => "Assets/arrow_skin_shark.png",
             _ => "Assets/ship1.png"
         };
     }
@@ -940,6 +1084,7 @@ public static class ShipCatalog
         {
             ShipType.Viper => "wrak2_resource",
             ShipType.Avenger => "wrak3_resource",
+            ShipType.Arrow => "Visuals/Ships/arrow_ship_wreck_resource",
             _ => "wrak1_resource"
         };
     }
@@ -950,6 +1095,7 @@ public static class ShipCatalog
         {
             ShipType.Viper => "Assets/Resources/wrak2_resource.png",
             ShipType.Avenger => "Assets/Resources/wrak3_resource.png",
+            ShipType.Arrow => "Assets/Resources/Visuals/Ships/arrow_ship_wreck_resource.png",
             _ => "Assets/Resources/wrak1_resource.png"
         };
     }
@@ -960,6 +1106,7 @@ public static class ShipCatalog
         {
             ShipType.Viper => "Assets/wrak2.png",
             ShipType.Avenger => "Assets/wrak3.png",
+            ShipType.Arrow => "Assets/arrow_ship_wreck.png",
             _ => "Assets/wrak1.png"
         };
     }

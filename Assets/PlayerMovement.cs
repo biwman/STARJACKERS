@@ -733,6 +733,10 @@ public class PlayerMovement : MonoBehaviourPun
 
     AudioClip ResolveEngineAudioClip()
     {
+        EnemyBot enemyBot = GetComponent<EnemyBot>();
+        if (enemyBot != null && enemyBot.Kind == EnemyBotKind.Mothership)
+            return AudioManager.Instance.MothershipEngineClip;
+
         return fusionEngineEquipped ? AudioManager.Instance.FusionEngineClip : AudioManager.Instance.EngineClip;
     }
 

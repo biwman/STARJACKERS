@@ -40,8 +40,23 @@ public class PlayerProfilePanelUI : MonoBehaviour
     {
         ShipType.Explorer,
         ShipType.Viper,
-        ShipType.Avenger
+        ShipType.Avenger,
+        ShipType.Arrow
     };
+
+    static readonly Vector2 ShipPreviewImagePosition = new Vector2(0f, 22f);
+    static readonly Vector2[] EquipmentSlotLayoutPositions =
+    {
+        new Vector2(-258f, -22f),
+        new Vector2(258f, -22f),
+        new Vector2(-258f, -138f),
+        new Vector2(258f, -138f),
+        new Vector2(-58f, -268f),
+        new Vector2(58f, -268f),
+        new Vector2(-258f, -254f),
+        new Vector2(258f, -254f)
+    };
+    const float EquipmentSlotPreviewSize = 104f;
 
     static PlayerProfilePanelUI instance;
     readonly Dictionary<string, GameObject> gameplayHudObjectsByName = new Dictionary<string, GameObject>();
@@ -177,6 +192,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         RefreshVisibility();
         UpdateSkinButtonVisuals();
         ApplySaveAndRunButtonStyle();
+        ApplyItemPreviewLayout();
     }
 
     void EnsurePanel()
@@ -263,17 +279,21 @@ public class PlayerProfilePanelUI : MonoBehaviour
         shipTypeLabelText = CreateText(panelObject.transform, "ShipTypeLabel", "SHIP", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-304f, -214f), new Vector2(260f, 24f), 18f, TextAlignmentOptions.Left);
 
         shipTypeButtons = new Button[SelectableShipTypes.Length];
-        shipTypeButtons[0] = CreateButton(panelObject.transform, "ExplorerShipButton", "EXPLORER", new Vector2(404f, -242f), new Vector2(156f, 40f), () =>
+        shipTypeButtons[0] = CreateButton(panelObject.transform, "ExplorerShipButton", "EXPLORER", new Vector2(356f, -242f), new Vector2(136f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Explorer);
         });
-        shipTypeButtons[1] = CreateButton(panelObject.transform, "ViperShipButton", "VIPER", new Vector2(580f, -242f), new Vector2(156f, 40f), () =>
+        shipTypeButtons[1] = CreateButton(panelObject.transform, "ViperShipButton", "VIPER", new Vector2(508f, -242f), new Vector2(136f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Viper);
         });
-        shipTypeButtons[2] = CreateButton(panelObject.transform, "AvengerShipButton", "AVENGER", new Vector2(756f, -242f), new Vector2(156f, 40f), () =>
+        shipTypeButtons[2] = CreateButton(panelObject.transform, "AvengerShipButton", "AVENGER", new Vector2(660f, -242f), new Vector2(136f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Avenger);
+        });
+        shipTypeButtons[3] = CreateButton(panelObject.transform, "ArrowShipButton", "ARROW", new Vector2(812f, -242f), new Vector2(136f, 40f), () =>
+        {
+            SetSelectedShipType(ShipType.Arrow);
         });
 
         shipSkinLabelText = CreateText(panelObject.transform, "SkinLabel", "SHIP SKIN", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-304f, -294f), new Vector2(300f, 24f), 18f, TextAlignmentOptions.Left);
@@ -306,7 +326,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         CreateCraftingRecipeBrowser(panelObject.transform);
 
         exitGameButton = CreateButton(panelObject.transform, "ExitGameButton", "EXIT GAME", new Vector2(820f, -72f), new Vector2(210f, 54f), OnExitGameClicked);
-        saveAndRunButton = CreateButton(panelObject.transform, "SaveAndRunButton", "PLAY", new Vector2(296f, -816f), new Vector2(294f, 84f), OnSaveAndRunClicked);
+        saveAndRunButton = CreateButton(panelObject.transform, "SaveAndRunButton", "PLAY", new Vector2(224f, -800f), new Vector2(108f, 108f), OnSaveAndRunClicked);
         ApplySaveAndRunButtonStyle();
         statusText = CreateText(panelObject.transform, "ProfileStatusText", string.Empty, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(320f, 24f), 16f, TextAlignmentOptions.Center);
     }
@@ -348,7 +368,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         imageRect.anchorMin = new Vector2(0.5f, 0.5f);
         imageRect.anchorMax = new Vector2(0.5f, 0.5f);
         imageRect.pivot = new Vector2(0.5f, 0.5f);
-        imageRect.anchoredPosition = new Vector2(0f, 0f);
+        imageRect.anchoredPosition = ShipPreviewImagePosition;
         imageRect.sizeDelta = new Vector2(294f, 188f);
         shipPreviewImage = imageObject.GetComponent<Image>();
         shipPreviewImage.preserveAspect = true;
@@ -481,7 +501,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         rect.anchorMin = new Vector2(0.5f, 0.5f);
         rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = new Vector2(0f, 112f);
+        rect.anchoredPosition = new Vector2(0f, 172f);
         rect.sizeDelta = new Vector2(300f, 320f);
 
         Image background = itemPreviewPanelObject.GetComponent<Image>();
@@ -515,8 +535,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         rect.anchorMin = new Vector2(0.5f, 0.5f);
         rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = new Vector2(0f, -234f);
-        rect.sizeDelta = new Vector2(330f, 350f);
+        rect.anchoredPosition = new Vector2(0f, -198f);
+        rect.sizeDelta = new Vector2(330f, 430f);
 
         Image background = craftingPanelObject.GetComponent<Image>();
         background.color = new Color(0.07f, 0.1f, 0.14f, 0.94f);
@@ -558,8 +578,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         {
             new Vector2(-66f, -98f),
             new Vector2(66f, -98f),
-            new Vector2(-66f, -230f),
-            new Vector2(66f, -230f)
+            new Vector2(-66f, -226f),
+            new Vector2(66f, -226f)
         };
 
         for (int i = 0; i < craftingSlotButtons.Length; i++)
@@ -573,7 +593,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 out craftingSlotIcons[i]);
         }
 
-        craftButton = CreateButton(craftingPanelObject.transform, "CraftButton", "CRAFT", new Vector2(0f, -300f), new Vector2(190f, 52f), OnCraftButtonClicked);
+        craftButton = CreateButton(craftingPanelObject.transform, "CraftButton", "CRAFT", new Vector2(0f, -362f), new Vector2(190f, 52f), OnCraftButtonClicked);
     }
 
     void CreateCraftingRecipeBrowser(Transform parent)
@@ -1784,8 +1804,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
             rect.anchorMin = new Vector2(0.5f, 1f);
             rect.anchorMax = new Vector2(0.5f, 1f);
             rect.pivot = new Vector2(0.5f, 1f);
-            rect.anchoredPosition = new Vector2(296f, -816f);
-            rect.sizeDelta = new Vector2(294f, 84f);
+            rect.anchoredPosition = new Vector2(224f, -800f);
+            rect.sizeDelta = new Vector2(108f, 108f);
         }
 
         Image image = saveAndRunButton.GetComponent<Image>();
@@ -1818,50 +1838,28 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
     }
 
+    void ApplyItemPreviewLayout()
+    {
+        if (itemPreviewPanelObject == null)
+            return;
+
+        RectTransform rect = itemPreviewPanelObject.GetComponent<RectTransform>();
+        if (rect == null)
+            return;
+
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = new Vector2(0f, 172f);
+        rect.sizeDelta = new Vector2(300f, 320f);
+    }
+
     void UpdateEquipmentSlotLayout()
     {
         if (equipmentSlotRects == null || equipmentSlotRects.Length < PlayerInventoryData.EquipmentSlotCount)
             return;
 
-        ShipType shipType = GetSelectedShipType();
-        Vector2[] positions = shipType switch
-        {
-            ShipType.Viper => new[]
-            {
-                new Vector2(-186f, -26f),
-                new Vector2(186f, -26f),
-                new Vector2(0f, -258f),
-                new Vector2(-186f, -118f),
-                new Vector2(-186f, -258f),
-                new Vector2(186f, -258f),
-                new Vector2(186f, -118f),
-                new Vector2(0f, -118f)
-            },
-            ShipType.Avenger => new[]
-            {
-                new Vector2(-186f, -26f),
-                new Vector2(186f, -26f),
-                new Vector2(-186f, -118f),
-                new Vector2(186f, -118f),
-                new Vector2(-62f, -258f),
-                new Vector2(62f, -258f),
-                new Vector2(-186f, -258f),
-                new Vector2(186f, -258f)
-            },
-            _ => new[]
-            {
-                new Vector2(0f, -26f),
-                new Vector2(186f, -26f),
-                new Vector2(-186f, -118f),
-                new Vector2(-186f, -258f),
-                new Vector2(0f, -258f),
-                new Vector2(186f, -258f),
-                new Vector2(186f, -118f),
-                new Vector2(0f, -118f)
-            }
-        };
-
-        for (int i = 0; i < equipmentSlotRects.Length && i < positions.Length; i++)
+        for (int i = 0; i < equipmentSlotRects.Length && i < EquipmentSlotLayoutPositions.Length; i++)
         {
             RectTransform rect = equipmentSlotRects[i];
             if (rect == null)
@@ -1870,8 +1868,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
             rect.anchorMin = new Vector2(0.5f, 1f);
             rect.anchorMax = new Vector2(0.5f, 1f);
             rect.pivot = new Vector2(0.5f, 1f);
-            rect.anchoredPosition = positions[i];
-            rect.sizeDelta = new Vector2(120f, 120f);
+            rect.anchoredPosition = EquipmentSlotLayoutPositions[i];
+            rect.sizeDelta = new Vector2(EquipmentSlotPreviewSize, EquipmentSlotPreviewSize);
         }
     }
 

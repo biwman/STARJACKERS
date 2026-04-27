@@ -12,6 +12,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     const float BrowserRecoveryPollSeconds = 1f;
     const float LeaveRoomRetryPollSeconds = 0.5f;
     const float LeaveRoomRetryTimeoutSeconds = 6f;
+    const string RememberedLobbySettingsPrefsKey = "BrawlRaiders.LastLobbySettings.v1";
 
     enum PendingBrowserAction
     {
@@ -31,6 +32,23 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         public double CreatedAt;
         public float? RemainingTimeSeconds;
         public bool CanJoin;
+    }
+
+    [Serializable]
+    sealed class RememberedLobbySettingsData
+    {
+        public RememberedLobbySettingEntry[] entries;
+    }
+
+    [Serializable]
+    sealed class RememberedLobbySettingEntry
+    {
+        public string key;
+        public string type;
+        public string stringValue;
+        public int intValue;
+        public float floatValue;
+        public bool boolValue;
     }
 
     static readonly string[] LobbyVisibleRoomKeys =
@@ -181,6 +199,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public static void ReturnToSessionBrowserFromLobby()
     {
+        RememberCurrentLobbySettings();
+
         SessionRequested = true;
         if (instance == null)
             instance = FindAnyObjectByType<NetworkManager>();
@@ -197,6 +217,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public static void ReturnToSessionBrowserFromRound()
     {
+        RememberCurrentLobbySettings();
+
         SessionRequested = true;
         if (instance == null)
             instance = FindAnyObjectByType<NetworkManager>();
@@ -209,6 +231,33 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         SessionBrowserPanelUI.ShowBrowser();
         instance.LeaveCurrentRoomToSessionBrowser("Returning to active rounds...");
+    }
+
+    public static void RememberCurrentLobbySettings()
+    {
+        if (PhotonNetwork.CurrentRoom == null)
+            return;
+
+        List<RememberedLobbySettingEntry> entries = new List<RememberedLobbySettingEntry>();
+        foreach (System.Collections.DictionaryEntry entry in PhotonNetwork.CurrentRoom.CustomProperties)
+        {
+            if (entry.Key is not string key || !IsRememberedLobbySettingKey(key))
+                continue;
+
+            if (TryCreateRememberedLobbySettingEntry(key, entry.Value, out RememberedLobbySettingEntry rememberedEntry))
+                entries.Add(rememberedEntry);
+        }
+
+        if (entries.Count == 0)
+            return;
+
+        RememberedLobbySettingsData data = new RememberedLobbySettingsData
+        {
+            entries = entries.ToArray()
+        };
+
+        PlayerPrefs.SetString(RememberedLobbySettingsPrefsKey, JsonUtility.ToJson(data));
+        PlayerPrefs.Save();
     }
 
     void Awake()
@@ -560,6 +609,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.SessionHostNameKey] = hostName,
             [RoomSettings.SessionCreatedAtKey] = PhotonNetwork.Time,
             [RoomSettings.RoundDurationKey] = RoomSettings.DefaultRoundDuration,
+            [RoomSettings.ResourceRichnessKey] = RoomSettings.DefaultResourceRichness,
             [RoomSettings.StartTimeKey] = -1d,
             ["gameStarted"] = false,
             [RoomSettings.GadgetChargesStateKey] = string.Empty,
@@ -567,7 +617,140 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.RoundEndReasonKey] = string.Empty
         };
 
+        ApplyRememberedLobbySettings(props);
         return props;
+    }
+
+    static void ApplyRememberedLobbySettings(Hashtable props)
+    {
+        if (props == null || !PlayerPrefs.HasKey(RememberedLobbySettingsPrefsKey))
+            return;
+
+        string raw = PlayerPrefs.GetString(RememberedLobbySettingsPrefsKey, string.Empty);
+        if (string.IsNullOrWhiteSpace(raw))
+            return;
+
+        RememberedLobbySettingsData data;
+        try
+        {
+            data = JsonUtility.FromJson<RememberedLobbySettingsData>(raw);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("NetworkManager: failed to load remembered lobby settings: " + ex.Message);
+            return;
+        }
+
+        if (data?.entries == null)
+            return;
+
+        for (int i = 0; i < data.entries.Length; i++)
+        {
+            RememberedLobbySettingEntry entry = data.entries[i];
+            if (entry == null || string.IsNullOrWhiteSpace(entry.key) || !IsRememberedLobbySettingKey(entry.key))
+                continue;
+
+            if (TryGetRememberedLobbySettingValue(entry, out object value))
+                props[entry.key] = value;
+        }
+    }
+
+    static bool TryCreateRememberedLobbySettingEntry(string key, object value, out RememberedLobbySettingEntry entry)
+    {
+        entry = new RememberedLobbySettingEntry { key = key };
+
+        switch (value)
+        {
+            case bool boolValue:
+                entry.type = "bool";
+                entry.boolValue = boolValue;
+                return true;
+            case int intValue:
+                entry.type = "int";
+                entry.intValue = intValue;
+                return true;
+            case float floatValue:
+                entry.type = "float";
+                entry.floatValue = floatValue;
+                return true;
+            case double doubleValue:
+                entry.type = "float";
+                entry.floatValue = (float)doubleValue;
+                return true;
+            case string stringValue:
+                entry.type = "string";
+                entry.stringValue = stringValue;
+                return true;
+            default:
+                entry = null;
+                return false;
+        }
+    }
+
+    static bool TryGetRememberedLobbySettingValue(RememberedLobbySettingEntry entry, out object value)
+    {
+        value = null;
+        switch (entry.type)
+        {
+            case "bool":
+                value = entry.boolValue;
+                return true;
+            case "int":
+                value = entry.intValue;
+                return true;
+            case "float":
+                value = entry.floatValue;
+                return true;
+            case "string":
+                value = entry.stringValue ?? string.Empty;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    static bool IsRememberedLobbySettingKey(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
+
+        if (key.StartsWith("enemy.", StringComparison.Ordinal))
+            return true;
+
+        switch (key)
+        {
+            case RoomSettings.SelectedMapKey:
+            case RoomSettings.RoundDurationKey:
+            case RoomSettings.MapSizeKey:
+            case RoomSettings.MapBackgroundKey:
+            case RoomSettings.VisualEffectsEnabledKey:
+            case RoomSettings.ObstacleDensityKey:
+            case RoomSettings.ObstacleDestroyEnabledKey:
+            case RoomSettings.ObstacleHpKey:
+            case RoomSettings.ObstacleSizePercentKey:
+            case RoomSettings.ObstacleNoBordersKey:
+            case RoomSettings.TreasureDensityKey:
+            case RoomSettings.ResourceRichnessKey:
+            case RoomSettings.NebulaDensityKey:
+            case RoomSettings.ExtractionCountKey:
+            case RoomSettings.BoosterSlowdownKey:
+            case RoomSettings.AmmoCountKey:
+            case RoomSettings.BoosterRecoveryDelayKey:
+            case RoomSettings.MaxInputBoostPercentKey:
+            case RoomSettings.ShipDriftEnabledKey:
+            case RoomSettings.LastShipTimerMultiplierKey:
+            case RoomSettings.MovingObjectsEnabledKey:
+            case RoomSettings.EnemyBotsEnabledKey:
+            case RoomSettings.CorsairEnabledKey:
+            case RoomSettings.CorsairSpawnSecondKey:
+            case RoomSettings.CorsairHpKey:
+            case RoomSettings.BulletPushMultiplierKey:
+            case RoomSettings.ObstacleWeightFactorKey:
+            case RoomSettings.TreasureWeightFactorKey:
+                return true;
+            default:
+                return false;
+        }
     }
 
     string GetLocalDisplayName()

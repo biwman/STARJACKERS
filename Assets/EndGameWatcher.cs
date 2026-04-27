@@ -4,6 +4,7 @@ using Photon.Realtime;
 using TMPro;
 using UnityEngine;
 using System.Linq;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public class EndGameWatcher : MonoBehaviour
@@ -166,6 +167,8 @@ public class EndGameWatcher : MonoBehaviour
         GameObject messageObject = FindObjectEvenIfDisabled("EndMessage");
         if (messageObject != null)
         {
+            DisableEndMessageInput(messageObject);
+
             RectTransform rect = messageObject.GetComponent<RectTransform>();
             if (rect != null)
             {
@@ -188,6 +191,7 @@ public class EndGameWatcher : MonoBehaviour
                 messageText.color = new Color(0.15f, 0.18f, 0.24f, 1f);
                 messageText.alignment = TextAlignmentOptions.Center;
                 messageText.characterSpacing = 2f;
+                messageText.raycastTarget = false;
             }
         }
 
@@ -213,6 +217,28 @@ public class EndGameWatcher : MonoBehaviour
         {
             restartButton.SetActive(false);
         }
+    }
+
+    void DisableEndMessageInput(GameObject messageObject)
+    {
+        TMP_InputField input = messageObject != null ? messageObject.GetComponent<TMP_InputField>() : null;
+        if (input != null)
+        {
+            input.DeactivateInputField();
+            input.readOnly = true;
+            input.interactable = false;
+            input.enabled = false;
+        }
+
+        Graphic[] graphics = messageObject.GetComponentsInChildren<Graphic>(true);
+        for (int i = 0; i < graphics.Length; i++)
+        {
+            if (graphics[i] != null)
+                graphics[i].raycastTarget = false;
+        }
+
+        if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == messageObject)
+            EventSystem.current.SetSelectedGameObject(null);
     }
 
     void EnsureBackButton(EndScreenUI ui)

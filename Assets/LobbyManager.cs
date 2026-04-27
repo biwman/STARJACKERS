@@ -22,7 +22,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     const float LeftViewportWidth = 760f;
     const float LeftViewportHeight = 960f;
     const float LeftColumnX = -560f;
-    const float LeftColumnTopY = -170f;
+    const float LeftColumnTopY = -220f;
     const float RightTableWidth = 1240f;
     const float RightTableHeight = 760f;
     const float RightTableX = 330f;
@@ -32,7 +32,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     const float MapSelectionButtonWidth = 330f;
     const float MapSelectionButtonHeight = 180f;
     const float EnemyNameColumnWidth = 180f;
-    const float EnemyColumnWidth = 118f;
+    const float EnemyColumnWidth = 106f;
     const float EnemyRowHeight = 96f;
 
     static readonly string[] GameplayHudObjectNames =
@@ -52,6 +52,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     static readonly float[] RoundDurationOptions = { 60f, 90f, 120f, 150f, 180f, 210f, 240f };
     static readonly string[] DensityOptions = { "none", "low", "medium", "high" };
+    static readonly string[] ResourceRichnessOptions =
+    {
+        RoomSettings.ResourceRichnessVeryLow,
+        RoomSettings.ResourceRichnessLow,
+        RoomSettings.ResourceRichnessMedium,
+        RoomSettings.ResourceRichnessHigh,
+        RoomSettings.ResourceRichnessVeryHigh,
+        RoomSettings.ResourceRichnessExtreme
+    };
     static readonly string[] MapSizeOptions = { "small", "medium", "large", "very_large", "super_large" };
     static readonly int[] MapBackgroundOptions = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
     static readonly int[] ObstacleHpOptions = { 50, 100, 150, 200, 250, 300 };
@@ -61,11 +70,13 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     static readonly int[] AmmoCountOptions = { 5, 10, 15, 20, 25, 30 };
     static readonly int[] BoosterRecoveryDelayOptions = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
     static readonly int[] MaxInputBoostPercentOptions = { 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50 };
-    static readonly int[] LastShipTimerMultiplierOptions = { 1, 2, 3, 4, 5 };
+    static readonly float[] LastShipTimerMultiplierOptions = { 1f, 1.5f, 2f, 3f, 4f, 5f };
+    static readonly string[] MovingObjectsModeOptions = { RoomSettings.MovingObjectsModeOn, RoomSettings.MovingObjectsModeOff, RoomSettings.MovingObjectsModeOnlyRotate };
     static readonly int[] EnemyCountOptions = { 1, 2, 3, 4, 5 };
     static readonly int[] SpaceMineCountOptions = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 };
     static readonly int[] EnemyHpOptions = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200 };
     static readonly int[] EnemyShieldOptions = { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200 };
+    static readonly int[] EnemyDamageOptions = { 0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200 };
     static readonly float[] EnemySpeedOptions = { 0.25f, 0.5f, 1f, 1.5f, 2f };
     static readonly int[] EnemySpawnSecondOptions = { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120 };
     static readonly int[] EnemyRespawnIntervalOptions = { 15, 30, 60, 90, 120, 150 };
@@ -86,6 +97,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text obstacleSizeSettingText;
     public TMP_Text obstacleNoBordersSettingText;
     public TMP_Text treasureSettingText;
+    public TMP_Text resourceRichnessSettingText;
     public TMP_Text nebulaSettingText;
     public TMP_Text extractionSettingText;
     public TMP_Text boosterSettingText;
@@ -112,6 +124,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button obstacleSizeSettingButton;
     public Button obstacleNoBordersSettingButton;
     public Button treasureSettingButton;
+    public Button resourceRichnessSettingButton;
     public Button nebulaSettingButton;
     public Button extractionSettingButton;
     public Button boosterSettingButton;
@@ -282,30 +295,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             CheckAllReady();
         }
 
-        if (changedProps.ContainsKey(RoomSettings.RoundDurationKey) ||
-            changedProps.ContainsKey(RoomSettings.MapSizeKey) ||
-            changedProps.ContainsKey(RoomSettings.MapBackgroundKey) ||
-            changedProps.ContainsKey(RoomSettings.SelectedMapKey) ||
-            changedProps.ContainsKey(RoomSettings.VisualEffectsEnabledKey) ||
-            changedProps.ContainsKey(RoomSettings.ObstacleDensityKey) ||
-            changedProps.ContainsKey(RoomSettings.ObstacleDestroyEnabledKey) ||
-            changedProps.ContainsKey(RoomSettings.ObstacleHpKey) ||
-            changedProps.ContainsKey(RoomSettings.ObstacleSizePercentKey) ||
-            changedProps.ContainsKey(RoomSettings.ObstacleNoBordersKey) ||
-            changedProps.ContainsKey(RoomSettings.TreasureDensityKey) ||
-            changedProps.ContainsKey(RoomSettings.NebulaDensityKey) ||
-            changedProps.ContainsKey(RoomSettings.ExtractionCountKey) ||
-            changedProps.ContainsKey(RoomSettings.BoosterSlowdownKey) ||
-            changedProps.ContainsKey(RoomSettings.AmmoCountKey) ||
-            changedProps.ContainsKey(RoomSettings.BoosterRecoveryDelayKey) ||
-            changedProps.ContainsKey(RoomSettings.MaxInputBoostPercentKey) ||
-            changedProps.ContainsKey(RoomSettings.ShipDriftEnabledKey) ||
-            changedProps.ContainsKey(RoomSettings.LastShipTimerMultiplierKey) ||
-            changedProps.ContainsKey(RoomSettings.MovingObjectsEnabledKey) ||
-            ContainsEnemyRoomSettingChange(changedProps) ||
-            changedProps.ContainsKey(RoomSettings.BulletPushMultiplierKey) ||
-            changedProps.ContainsKey(RoomSettings.ObstacleWeightFactorKey) ||
-            changedProps.ContainsKey(RoomSettings.TreasureWeightFactorKey))
+        if (ContainsLobbySettingChange(changedProps))
         {
             RefreshHostSettingsUi();
         }
@@ -351,37 +341,16 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     void StartGame()
     {
         Debug.Log("START GRY");
+        NetworkManager.RememberCurrentLobbySettings();
         GameTimer.StartGame();
     }
 
     public override void OnRoomPropertiesUpdate(Hashtable propertiesThatChanged)
     {
-        if (propertiesThatChanged.ContainsKey(RoomSettings.RoundDurationKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.MapSizeKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.MapBackgroundKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.SelectedMapKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.VisualEffectsEnabledKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.ObstacleDensityKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.ObstacleDestroyEnabledKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.ObstacleHpKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.ObstacleSizePercentKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.ObstacleNoBordersKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.TreasureDensityKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.NebulaDensityKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.ExtractionCountKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.BoosterSlowdownKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.AmmoCountKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.BoosterRecoveryDelayKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.MaxInputBoostPercentKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.ShipDriftEnabledKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.LastShipTimerMultiplierKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.MovingObjectsEnabledKey) ||
-            ContainsEnemyRoomSettingChange(propertiesThatChanged) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.BulletPushMultiplierKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.ObstacleWeightFactorKey) ||
-            propertiesThatChanged.ContainsKey(RoomSettings.TreasureWeightFactorKey))
+        if (ContainsLobbySettingChange(propertiesThatChanged))
         {
             RefreshHostSettingsUi();
+            NetworkManager.RememberCurrentLobbySettings();
         }
 
         if (!propertiesThatChanged.ContainsKey("gameStarted"))
@@ -573,6 +542,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         obstacleSizeSettingButton = EnsureSettingButton(ref obstacleSizeSettingText, obstacleSizeSettingButton, "ObstacleSizeSettingButton", "ObstacleSizeSettingText", Vector2.zero, CycleObstacleSizePercent);
         obstacleNoBordersSettingButton = EnsureSettingButton(ref obstacleNoBordersSettingText, obstacleNoBordersSettingButton, "ObstacleNoBordersSettingButton", "ObstacleNoBordersSettingText", Vector2.zero, CycleObstacleNoBorders);
         treasureSettingButton = EnsureSettingButton(ref treasureSettingText, treasureSettingButton, "TreasureSettingButton", "TreasureSettingText", Vector2.zero, CycleTreasureDensity);
+        resourceRichnessSettingButton = EnsureSettingButton(ref resourceRichnessSettingText, resourceRichnessSettingButton, "ResourceRichnessSettingButton", "ResourceRichnessSettingText", Vector2.zero, CycleResourceRichness);
         nebulaSettingButton = EnsureSettingButton(ref nebulaSettingText, nebulaSettingButton, "NebulaSettingButton", "NebulaSettingText", Vector2.zero, CycleNebulaDensity);
         extractionSettingButton = EnsureSettingButton(ref extractionSettingText, extractionSettingButton, "ExtractionSettingButton", "ExtractionSettingText", Vector2.zero, CycleExtractionCount);
         boosterSettingButton = EnsureSettingButton(ref boosterSettingText, boosterSettingButton, "BoosterSettingButton", "BoosterSettingText", Vector2.zero, CycleBoosterSlowdown);
@@ -596,6 +566,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(obstacleSizeSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(obstacleNoBordersSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(treasureSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(resourceRichnessSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(nebulaSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(extractionSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(movingObjectsSettingButton, "ENVIRONMENT");
@@ -1008,9 +979,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             EnsureEnemySettingButton(definition, "respawn", GetEnemyCellPosition(2, rowY), () => CycleEnemyRespawnEnabled(definition.Kind));
             EnsureEnemySettingButton(definition, "hp", GetEnemyCellPosition(3, rowY), () => CycleEnemyHp(definition.Kind));
             EnsureEnemySettingButton(definition, "shield", GetEnemyCellPosition(4, rowY), () => CycleEnemyShield(definition.Kind));
-            EnsureEnemySettingButton(definition, "speed", GetEnemyCellPosition(5, rowY), () => CycleEnemySpeed(definition.Kind));
-            EnsureEnemySettingButton(definition, "time", GetEnemyCellPosition(6, rowY), () => CycleEnemySpawnSecond(definition.Kind));
-            EnsureEnemySettingButton(definition, "respawnTime", GetEnemyCellPosition(7, rowY), () => CycleEnemyRespawnInterval(definition.Kind));
+            EnsureEnemySettingButton(definition, "damage", GetEnemyCellPosition(5, rowY), () => CycleEnemyDamage(definition.Kind));
+            EnsureEnemySettingButton(definition, "speed", GetEnemyCellPosition(6, rowY), () => CycleEnemySpeed(definition.Kind));
+            EnsureEnemySettingButton(definition, "time", GetEnemyCellPosition(7, rowY), () => CycleEnemySpawnSecond(definition.Kind));
+            EnsureEnemySettingButton(definition, "respawnTime", GetEnemyCellPosition(8, rowY), () => CycleEnemyRespawnInterval(definition.Kind));
         }
     }
 
@@ -1057,15 +1029,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     void EnsureSettingsLayoutContainers()
     {
         if (leftSettingsViewportRect != null && leftSettingsViewportRect.gameObject.scene.IsValid())
+        {
+            ApplyLeftSettingsViewportLayout();
             return;
+        }
 
         GameObject viewportObject = FindOrCreateChild(gameObject, "LobbySettingsViewport", typeof(RectTransform), typeof(Image), typeof(Mask), typeof(ScrollRect));
         leftSettingsViewportRect = viewportObject.GetComponent<RectTransform>();
         leftSettingsViewportRect.anchorMin = new Vector2(0.5f, 1f);
         leftSettingsViewportRect.anchorMax = new Vector2(0.5f, 1f);
         leftSettingsViewportRect.pivot = new Vector2(0.5f, 1f);
-        leftSettingsViewportRect.anchoredPosition = new Vector2(LeftColumnX, LeftColumnTopY);
-        leftSettingsViewportRect.sizeDelta = new Vector2(LeftViewportWidth, LeftViewportHeight);
+        ApplyLeftSettingsViewportLayout();
 
         Image viewportImage = viewportObject.GetComponent<Image>();
         viewportImage.color = new Color(0.06f, 0.09f, 0.13f, 0.72f);
@@ -1110,6 +1084,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         EnsureLeftSectionContainer("FEELING");
     }
 
+    void ApplyLeftSettingsViewportLayout()
+    {
+        if (leftSettingsViewportRect == null)
+            return;
+
+        leftSettingsViewportRect.anchoredPosition = new Vector2(LeftColumnX, LeftColumnTopY);
+        leftSettingsViewportRect.sizeDelta = new Vector2(LeftViewportWidth, LeftViewportHeight);
+    }
+
     void EnsureEnemyTableUiExists()
     {
         if (enemyTableRootRect != null && enemyTableRootRect.gameObject.scene.IsValid())
@@ -1132,9 +1115,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         EnsureTableHeaderLabel("EnemyHeader_RESPAWN", "RESPAWN", GetEnemyHeaderPosition(2), new Vector2(EnemyColumnWidth - 8f, 26f), 16f, TextAlignmentOptions.Center);
         EnsureTableHeaderLabel("EnemyHeader_HP", "HP", GetEnemyHeaderPosition(3), new Vector2(EnemyColumnWidth - 8f, 26f), 16f, TextAlignmentOptions.Center);
         EnsureTableHeaderLabel("EnemyHeader_SHIELD", "SHIELD", GetEnemyHeaderPosition(4), new Vector2(EnemyColumnWidth - 8f, 26f), 16f, TextAlignmentOptions.Center);
-        EnsureTableHeaderLabel("EnemyHeader_SPEED", "SPEED", GetEnemyHeaderPosition(5), new Vector2(EnemyColumnWidth - 8f, 26f), 16f, TextAlignmentOptions.Center);
-        EnsureTableHeaderLabel("EnemyHeader_FIRSTRESPAWN", "FIRST\nRESPAWN", GetEnemyHeaderPosition(6), new Vector2(EnemyColumnWidth - 8f, 42f), 15f, TextAlignmentOptions.Center);
-        EnsureTableHeaderLabel("EnemyHeader_RESPAWNLOOP", "RESPAWN\nLOOP", GetEnemyHeaderPosition(7), new Vector2(EnemyColumnWidth - 8f, 42f), 15f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_DAMAGE", "DAMAGE", GetEnemyHeaderPosition(5), new Vector2(EnemyColumnWidth - 8f, 26f), 15f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_SPEED", "SPEED", GetEnemyHeaderPosition(6), new Vector2(EnemyColumnWidth - 8f, 26f), 16f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_FIRSTRESPAWN", "FIRST\nRESPAWN", GetEnemyHeaderPosition(7), new Vector2(EnemyColumnWidth - 8f, 42f), 14f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_RESPAWNLOOP", "RESPAWN\nLOOP", GetEnemyHeaderPosition(8), new Vector2(EnemyColumnWidth - 8f, 42f), 14f, TextAlignmentOptions.Center);
     }
 
     Vector2 GetEnemyHeaderPosition(int columnIndex)
@@ -1463,6 +1447,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ResourceRichnessKey))
+        {
+            props[RoomSettings.ResourceRichnessKey] = RoomSettings.DefaultResourceRichness;
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.NebulaDensityKey))
         {
             props[RoomSettings.NebulaDensityKey] = "medium";
@@ -1513,7 +1503,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.MovingObjectsEnabledKey))
         {
-            props[RoomSettings.MovingObjectsEnabledKey] = RoomSettings.DefaultMovingObjectsEnabled;
+            props[RoomSettings.MovingObjectsEnabledKey] = RoomSettings.DefaultMovingObjectsMode;
             changed = true;
         }
 
@@ -1565,6 +1555,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.ShieldRoomKey))
             {
                 props[definition.ShieldRoomKey] = definition.DefaultShield;
+                changed = true;
+            }
+
+            if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.DamageRoomKey))
+            {
+                props[definition.DamageRoomKey] = definition.DefaultDamage;
                 changed = true;
             }
 
@@ -1794,6 +1790,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         CycleDensitySetting(RoomSettings.TreasureDensityKey, GetTreasureDensity());
     }
 
+    void CycleResourceRichness()
+    {
+        CycleStringSetting(RoomSettings.ResourceRichnessKey, ResourceRichnessOptions, GetResourceRichness(), RoomSettings.DefaultResourceRichness);
+    }
+
     void CycleNebulaDensity()
     {
         CycleDensitySetting(RoomSettings.NebulaDensityKey, GetNebulaDensity());
@@ -1876,7 +1877,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void CycleLastShipTimerMultiplier()
     {
-        CycleIntSetting(RoomSettings.LastShipTimerMultiplierKey, LastShipTimerMultiplierOptions, GetLastShipTimerMultiplier(), RoomSettings.DefaultLastShipTimerMultiplier);
+        CycleFloatSetting(RoomSettings.LastShipTimerMultiplierKey, LastShipTimerMultiplierOptions, GetLastShipTimerMultiplier(), RoomSettings.DefaultLastShipTimerMultiplier);
     }
 
     void CycleMovingObjectsEnabled()
@@ -1884,8 +1885,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
             return;
 
+        string current = GetMovingObjectsMode();
+        int index = System.Array.IndexOf(MovingObjectsModeOptions, current);
+        if (index < 0)
+            index = 0;
+
+        int nextIndex = (index + 1) % MovingObjectsModeOptions.Length;
+
         Hashtable props = new Hashtable();
-        props[RoomSettings.MovingObjectsEnabledKey] = !AreMovingObjectsEnabled();
+        props[RoomSettings.MovingObjectsEnabledKey] = MovingObjectsModeOptions[nextIndex];
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RefreshHostSettingsUi();
     }
@@ -1963,6 +1971,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             return;
 
         CycleIntSetting(definition.ShieldRoomKey, EnemyShieldOptions, RoomSettings.GetEnemyShield(kind), definition.DefaultShield);
+    }
+
+    void CycleEnemyDamage(EnemyBotKind kind)
+    {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return;
+
+        CycleIntSetting(definition.DamageRoomKey, EnemyDamageOptions, RoomSettings.GetEnemyDamage(kind), definition.DefaultDamage);
     }
 
     void CycleEnemySpeed(EnemyBotKind kind)
@@ -2045,6 +2062,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     }
 
     void CycleIntSetting(string key, int[] options, int current, int fallbackIndexValue)
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[key] = GetNextOptionValue(options, current, fallbackIndexValue);
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
+    void CycleFloatSetting(string key, float[] options, float current, float fallbackIndexValue)
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
             return;
@@ -2139,6 +2167,27 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RefreshHostSettingsUi();
     }
 
+    void CycleStringSetting(string key, string[] options, string current, string fallbackValue)
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null || options == null || options.Length == 0)
+            return;
+
+        int index = System.Array.IndexOf(options, current);
+        if (index < 0)
+        {
+            index = System.Array.IndexOf(options, fallbackValue);
+            if (index < 0)
+                index = 0;
+        }
+
+        int nextIndex = (index + 1) % options.Length;
+
+        Hashtable props = new Hashtable();
+        props[key] = options[nextIndex];
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
     void RefreshHostSettingsUi()
     {
         EnsureHostSettingsUiExists();
@@ -2177,6 +2226,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (treasureSettingText != null)
             treasureSettingText.text = "RESOURCES DENSITY: " + FormatDensity(GetTreasureDensity());
 
+        if (resourceRichnessSettingText != null)
+            resourceRichnessSettingText.text = "RESOURCES RICHNESS: " + FormatResourceRichness(GetResourceRichness());
+
         if (nebulaSettingText != null)
             nebulaSettingText.text = "NEBULA DENSITY: " + FormatDensity(GetNebulaDensity());
 
@@ -2199,10 +2251,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             shipDriftSettingText.text = "BRAKING DRIFT: " + GetShipDriftLevel();
 
         if (deathTimerSettingText != null)
-            deathTimerSettingText.text = "LONE SHIP TIMER: X" + GetLastShipTimerMultiplier();
+            deathTimerSettingText.text = "LONE SHIP TIMER: " + FormatLastShipTimerMultiplier(GetLastShipTimerMultiplier());
 
         if (movingObjectsSettingText != null)
-            movingObjectsSettingText.text = "MOVING OBJECTS: " + (AreMovingObjectsEnabled() ? "ON" : "OFF");
+            movingObjectsSettingText.text = "MOVING OBJECTS: " + FormatMovingObjectsMode(GetMovingObjectsMode());
 
         if (bulletPushSettingText != null)
             bulletPushSettingText.text = "BULLET PUSH: X" + GetBulletPushMultiplier();
@@ -2223,6 +2275,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(obstacleSizeSettingButton, isHost);
         SetSettingButtonState(obstacleNoBordersSettingButton, isHost);
         SetSettingButtonState(treasureSettingButton, isHost);
+        SetSettingButtonState(resourceRichnessSettingButton, isHost);
         SetSettingButtonState(nebulaSettingButton, isHost);
         SetSettingButtonState(extractionSettingButton, isHost);
         SetSettingButtonState(boosterSettingButton, isHost);
@@ -2294,6 +2347,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             SetEnemySettingText(definition.Kind, "respawn", RoomSettings.GetEnemyRespawnEnabled(definition.Kind) ? "YES" : "NO");
             SetEnemySettingText(definition.Kind, "hp", RoomSettings.GetEnemyHp(definition.Kind).ToString());
             SetEnemySettingText(definition.Kind, "shield", RoomSettings.GetEnemyShield(definition.Kind).ToString());
+            SetEnemySettingText(definition.Kind, "damage", RoomSettings.GetEnemyDamage(definition.Kind).ToString());
             SetEnemySettingText(definition.Kind, "speed", FormatEnemySpeed(RoomSettings.GetEnemySpeedMultiplier(definition.Kind)));
             SetEnemySettingText(definition.Kind, "time", RoomSettings.GetEnemySpawnSecond(definition.Kind) + "s");
             SetEnemySettingText(definition.Kind, "respawnTime", RoomSettings.GetEnemyRespawnIntervalSeconds(definition.Kind) + "s");
@@ -2303,6 +2357,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             SetSettingButtonState(GetEnemySettingButton(definition.Kind, "respawn"), isHost);
             SetSettingButtonState(GetEnemySettingButton(definition.Kind, "hp"), isHost);
             SetSettingButtonState(GetEnemySettingButton(definition.Kind, "shield"), isHost);
+            SetSettingButtonState(GetEnemySettingButton(definition.Kind, "damage"), isHost);
             SetSettingButtonState(GetEnemySettingButton(definition.Kind, "speed"), isHost);
             SetSettingButtonState(GetEnemySettingButton(definition.Kind, "time"), isHost);
             SetSettingButtonState(GetEnemySettingButton(definition.Kind, "respawnTime"), isHost);
@@ -2324,6 +2379,27 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             return "x2";
 
         return "x1";
+    }
+
+    string FormatLastShipTimerMultiplier(float value)
+    {
+        if (Mathf.Abs(value - Mathf.Round(value)) < 0.01f)
+            return "X" + Mathf.RoundToInt(value);
+
+        return "X" + value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    string FormatMovingObjectsMode(string mode)
+    {
+        switch (mode)
+        {
+            case RoomSettings.MovingObjectsModeOff:
+                return "OFF";
+            case RoomSettings.MovingObjectsModeOnlyRotate:
+                return "ONLY ROTATE";
+            default:
+                return "ON";
+        }
     }
 
     void SetEnemySettingText(EnemyBotKind kind, string suffix, string text)
@@ -2363,6 +2439,38 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         }
 
         return false;
+    }
+
+    bool ContainsLobbySettingChange(Hashtable changedProps)
+    {
+        if (changedProps == null)
+            return false;
+
+        return changedProps.ContainsKey(RoomSettings.RoundDurationKey) ||
+               changedProps.ContainsKey(RoomSettings.MapSizeKey) ||
+               changedProps.ContainsKey(RoomSettings.MapBackgroundKey) ||
+               changedProps.ContainsKey(RoomSettings.SelectedMapKey) ||
+               changedProps.ContainsKey(RoomSettings.VisualEffectsEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.ObstacleDensityKey) ||
+               changedProps.ContainsKey(RoomSettings.ObstacleDestroyEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.ObstacleHpKey) ||
+               changedProps.ContainsKey(RoomSettings.ObstacleSizePercentKey) ||
+               changedProps.ContainsKey(RoomSettings.ObstacleNoBordersKey) ||
+               changedProps.ContainsKey(RoomSettings.TreasureDensityKey) ||
+               changedProps.ContainsKey(RoomSettings.ResourceRichnessKey) ||
+               changedProps.ContainsKey(RoomSettings.NebulaDensityKey) ||
+               changedProps.ContainsKey(RoomSettings.ExtractionCountKey) ||
+               changedProps.ContainsKey(RoomSettings.BoosterSlowdownKey) ||
+               changedProps.ContainsKey(RoomSettings.AmmoCountKey) ||
+               changedProps.ContainsKey(RoomSettings.BoosterRecoveryDelayKey) ||
+               changedProps.ContainsKey(RoomSettings.MaxInputBoostPercentKey) ||
+               changedProps.ContainsKey(RoomSettings.ShipDriftEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.LastShipTimerMultiplierKey) ||
+               changedProps.ContainsKey(RoomSettings.MovingObjectsEnabledKey) ||
+               ContainsEnemyRoomSettingChange(changedProps) ||
+               changedProps.ContainsKey(RoomSettings.BulletPushMultiplierKey) ||
+               changedProps.ContainsKey(RoomSettings.ObstacleWeightFactorKey) ||
+               changedProps.ContainsKey(RoomSettings.TreasureWeightFactorKey);
     }
 
     float GetRoundDuration()
@@ -2422,6 +2530,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return GetDensitySetting(RoomSettings.TreasureDensityKey);
     }
 
+    string GetResourceRichness()
+    {
+        return RoomSettings.GetResourceRichness();
+    }
+
     string GetNebulaDensity()
     {
         return GetDensitySetting(RoomSettings.NebulaDensityKey);
@@ -2457,7 +2570,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return RoomSettings.GetShipDriftLevel();
     }
 
-    int GetLastShipTimerMultiplier()
+    float GetLastShipTimerMultiplier()
     {
         return RoomSettings.GetLastShipTimerMultiplier();
     }
@@ -2465,6 +2578,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     bool AreMovingObjectsEnabled()
     {
         return RoomSettings.AreMovingObjectsEnabled();
+    }
+
+    string GetMovingObjectsMode()
+    {
+        return RoomSettings.GetMovingObjectsMode();
     }
 
     bool AreEnemyBotsEnabled()
@@ -2524,6 +2642,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     string FormatDensity(string density)
     {
         return density.ToUpperInvariant();
+    }
+
+    string FormatResourceRichness(string richness)
+    {
+        return RoomSettings.NormalizeResourceRichness(richness).Replace("_", " ").ToUpperInvariant();
     }
 
     string FormatMapSize(string mapSize)

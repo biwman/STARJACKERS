@@ -9,6 +9,7 @@ public sealed class LobbyEnemyMapPreset
     public bool RespawnEnabled { get; }
     public int Hp { get; }
     public int Shield { get; }
+    public int Damage { get; }
     public float SpeedMultiplier { get; }
     public int FirstRespawnSeconds { get; }
     public int RespawnLoopSeconds { get; }
@@ -18,7 +19,7 @@ public sealed class LobbyEnemyMapPreset
     {
     }
 
-    public LobbyEnemyMapPreset(EnemyBotKind kind, bool enabled, int count, bool respawnEnabled, int hp, int shield, float speedMultiplier, int firstRespawnSeconds, int respawnLoopSeconds)
+    public LobbyEnemyMapPreset(EnemyBotKind kind, bool enabled, int count, bool respawnEnabled, int hp, int shield, float speedMultiplier, int firstRespawnSeconds, int respawnLoopSeconds, int damage = -1)
     {
         Kind = kind;
         Enabled = enabled;
@@ -26,6 +27,7 @@ public sealed class LobbyEnemyMapPreset
         RespawnEnabled = respawnEnabled;
         Hp = hp;
         Shield = shield;
+        Damage = damage;
         SpeedMultiplier = speedMultiplier;
         FirstRespawnSeconds = firstRespawnSeconds;
         RespawnLoopSeconds = respawnLoopSeconds;
@@ -38,7 +40,7 @@ public sealed class LobbyMapDefinition
     public string DisplayName { get; }
     public float RoundDurationSeconds { get; }
     public string MapSize { get; }
-    public int LoneShipTimerMultiplier { get; }
+    public float LoneShipTimerMultiplier { get; }
     public string ObstacleDensity { get; }
     public bool ObstaclesDestroyEnabled { get; }
     public int ObstacleHp { get; }
@@ -59,7 +61,7 @@ public sealed class LobbyMapDefinition
         string displayName,
         float roundDurationSeconds,
         string mapSize,
-        int loneShipTimerMultiplier,
+        float loneShipTimerMultiplier,
         string obstacleDensity,
         bool obstaclesDestroyEnabled,
         int obstacleHp,
@@ -106,7 +108,7 @@ public static class LobbyMapCatalog
             "JUST SPACE",
             180f,
             "very_large",
-            1,
+            1f,
             "medium",
             true,
             300,
@@ -123,13 +125,14 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Drone, true, 1, true, 50, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, true, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, false, 30, false, 60, 20, 1f, 0, 60),
-            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90)),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
         new LobbyMapDefinition(
             "minefield",
             "MINEFIELD",
             180f,
             "medium",
-            2,
+            1.5f,
             "high",
             true,
             300,
@@ -146,13 +149,14 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Drone, false, 1, false, 50, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 30, true, 60, 20, 1f, 0, 90),
-            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90)),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
         new LobbyMapDefinition(
             "pirate_bay",
             "PIRATE BAY",
             180f,
             "large",
-            2,
+            1f,
             "medium",
             true,
             200,
@@ -169,7 +173,32 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Drone, true, 3, true, 100, 20, 1f, 0, 90),
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, true, 1, true, 250, 20, 1f, 0, 90),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 10, false, 20, 20, 1f, 20, 120),
-            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90))
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
+        new LobbyMapDefinition(
+            "mothership",
+            "MOTHERSHIP",
+            180f,
+            "large",
+            1f,
+            "medium",
+            true,
+            200,
+            100,
+            false,
+            "high",
+            "low",
+            2,
+            true,
+            12,
+            RoomSettings.DefaultTreasureWeightFactor,
+            6,
+            true,
+            new LobbyEnemyMapPreset(EnemyBotKind.Drone, false, 3, true, 100, 20, 1f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, true, 250, 20, 1f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, false, 10, false, 20, 20, 1f, 20, 120),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, true, 1, false, 200, 200, 1f, 0, 90))
     };
 
     static readonly Dictionary<string, LobbyMapDefinition> MapsById = BuildMapsById();
@@ -223,6 +252,7 @@ public static class LobbyMapCatalog
             props[definition.CountRoomKey] = enemyPreset.Count;
             props[definition.HpRoomKey] = enemyPreset.Hp;
             props[definition.ShieldRoomKey] = enemyPreset.Shield;
+            props[definition.DamageRoomKey] = enemyPreset.Damage >= 0 ? enemyPreset.Damage : definition.DefaultDamage;
             props[definition.SpeedRoomKey] = enemyPreset.SpeedMultiplier;
             props[definition.SpawnSecondRoomKey] = enemyPreset.FirstRespawnSeconds;
             props[definition.RespawnEnabledRoomKey] = enemyPreset.RespawnEnabled;

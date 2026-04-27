@@ -31,6 +31,9 @@ public class GameVisualTheme : MonoBehaviour
     Sprite treasureSprite;
     Sprite goldTreasureSprite;
     Sprite rareTreasureSprite;
+    Sprite richTreasureSprite;
+    Sprite spaceJunkWorldSprite;
+    Sprite legendaryTreasureSprite;
     Sprite[] obstacleSprites;
     Sprite extractionSprite;
     Sprite backgroundSprite;
@@ -214,16 +217,21 @@ public class GameVisualTheme : MonoBehaviour
         corsairSprite = LoadSpriteFromResourcesOrEditor("statek_duzy_resource", "Assets/Resources/statek_duzy_resource.png", "Assets/statek_duzy.png");
         astronautSprite = LoadSpriteFromResourcesOrEditor("kosmonauta_resource", "Assets/Resources/kosmonauta_resource.png", "Assets/kosmonauta.png");
 
-        treasureSprite = LoadSpriteFromResourcesOrEditor("Visuals/Treasures/asteroid_treasure_resource", "Assets/Resources/Visuals/Treasures/asteroid_treasure_resource.png", "Assets/asteroida_treasure.png");
-        goldTreasureSprite = LoadSpriteFromResourcesOrEditor("asteroida_zloto_clean_resource", "Assets/Resources/asteroida_zloto_clean_resource.png", "Assets/asteroida_zloto_clean.png");
-        rareTreasureSprite = LoadSpriteFromResourcesOrEditor("asteroida_rare_clean_resource", "Assets/Resources/asteroida_rare_clean_resource.png", "Assets/asteroida_rare_clean.png");
+        treasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_white_common_resource", "Assets/Resources/treasure_asteroid_white_common_resource.png", "Assets/treasure_asteroid_white_common.png");
+        goldTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_green_uncommon_resource", "Assets/Resources/treasure_asteroid_green_uncommon_resource.png", "Assets/treasure_asteroid_green_uncommon.png");
+        rareTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_blue_rare_resource", "Assets/Resources/treasure_asteroid_blue_rare_resource.png", "Assets/treasure_asteroid_blue_rare.png");
+        richTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_violet_rare_resource", "Assets/Resources/treasure_asteroid_violet_rare_resource.png", "Assets/treasure_asteroid_violet_rare.png");
+        spaceJunkWorldSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_burgundy_epic_resource", "Assets/Resources/treasure_asteroid_burgundy_epic_resource.png", "Assets/treasure_asteroid_burgundy_epic.png");
+        legendaryTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_gold_legendary_resource", "Assets/Resources/treasure_asteroid_gold_legendary_resource.png", "Assets/treasure_asteroid_gold_legendary.png");
         obstacleSprites = new[]
         {
             LoadObstacleSprite("asteroida_1_clean_resource", "Assets/Resources/asteroida_1_clean_resource.png", "Assets/asteroida_1_clean.png"),
             LoadObstacleSprite("asteroida_2_clean_resource", "Assets/Resources/asteroida_2_clean_resource.png", "Assets/asteroida_2_clean.png"),
             LoadObstacleSprite("asteroida_3_clean_resource", "Assets/Resources/asteroida_3_clean_resource.png", "Assets/asteroida_3_clean.png"),
             LoadObstacleSprite("asteroida_podluzna_1_clean_resource", "Assets/Resources/asteroida_podluzna_1_clean_resource.png", "Assets/asteroida_podluzna_1_clean.png"),
-            LoadObstacleSprite("asteroida_podluzna_2_clean_resource", "Assets/Resources/asteroida_podluzna_2_clean_resource.png", "Assets/asteroida_podluzna_2_clean.png")
+            LoadObstacleSprite("asteroida_podluzna_2_clean_resource", "Assets/Resources/asteroida_podluzna_2_clean_resource.png", "Assets/asteroida_podluzna_2_clean.png"),
+            LoadObstacleSprite("asteroida_nadkruszona_resource", "Assets/Resources/asteroida_nadkruszona_resource.png", "Assets/asteroida_nadkruszona.png"),
+            LoadObstacleSprite("asteroida_ziemniak_resource", "Assets/Resources/asteroida_ziemniak_resource.png", "Assets/asteroida_ziemniak.png")
         };
         extractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/base1_resource", "Assets/Resources/Visuals/Bases/base1_resource.png", "Assets/baza1.png");
         backgroundSprite = LoadBackgroundSprite(RoomSettings.GetMapBackgroundIndex());
@@ -448,6 +456,12 @@ public class GameVisualTheme : MonoBehaviour
                 return goldTreasureSprite != null ? goldTreasureSprite : treasureSprite;
             case InventoryItemCatalog.AsteroidRareId:
                 return rareTreasureSprite != null ? rareTreasureSprite : treasureSprite;
+            case InventoryItemCatalog.RichAsteroidId:
+                return richTreasureSprite != null ? richTreasureSprite : treasureSprite;
+            case InventoryItemCatalog.SpaceJunkId:
+                return spaceJunkWorldSprite != null ? spaceJunkWorldSprite : treasureSprite;
+            case InventoryItemCatalog.AsteroidLegendaryId:
+                return legendaryTreasureSprite != null ? legendaryTreasureSprite : treasureSprite;
             default:
                 return treasureSprite;
         }

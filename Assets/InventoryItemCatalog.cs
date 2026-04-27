@@ -125,14 +125,23 @@ public static class InventoryItemCatalog
     public const string AsteroidResourceId = "asteroid_resource";
     public const string AsteroidGoldId = "asteroid_gold_resource";
     public const string AsteroidRareId = "asteroid_rare_resource";
+    public const string RichAsteroidId = "rich_asteroid_resource";
+    public const string SpaceJunkId = "space_junk";
+    public const string AsteroidLegendaryId = "asteroid_legendary_resource";
+    public const string AsteroidCommonId = AsteroidResourceId;
+    public const string AsteroidUncommonId = AsteroidGoldId;
+    public const string AsteroidVeryRareId = RichAsteroidId;
+    public const string AsteroidEpicId = SpaceJunkId;
     public const string DroidScrapId = "droid_scrap";
     public const string CorsairSalvageId = "corsair_salvage";
     public const string SpaceMineWreckId = "space_mine_wreck";
     public const string SpaceTruckWreckId = "space_truck_wreck";
+    public const string MothershipCoreId = "mothership_core";
     public const string PlasmaGunId = "plasma_gun";
     public const string FusionEngineId = "fusion_engine";
     public const string GadgetMineId = "gadget_mine";
     public const string BatteryId = "battery";
+    public const string ShieldReactorId = "shield_reactor";
 
     static readonly Dictionary<string, InventoryItemDefinition> Definitions = BuildDefinitions();
 
@@ -212,12 +221,12 @@ public static class InventoryItemCatalog
     {
         switch (rarity)
         {
-            case InventoryItemRarity.Uncommon: return new Color(0.2f, 0.62f, 0.24f, 0.98f);
-            case InventoryItemRarity.Rare: return new Color(0.18f, 0.42f, 0.92f, 0.98f);
-            case InventoryItemRarity.VeryRare: return new Color(0.48f, 0.22f, 0.78f, 0.98f);
-            case InventoryItemRarity.Epic: return new Color(0.46f, 0.08f, 0.14f, 0.98f);
-            case InventoryItemRarity.Legendary: return new Color(0.83f, 0.63f, 0.12f, 0.98f);
-            default: return new Color(0.95f, 0.95f, 0.95f, 0.98f);
+            case InventoryItemRarity.Uncommon: return new Color(0.18f, 0.64f, 0.24f, 0.98f);
+            case InventoryItemRarity.Rare: return new Color(0.16f, 0.42f, 0.94f, 0.98f);
+            case InventoryItemRarity.VeryRare: return new Color(0.48f, 0.2f, 0.8f, 0.98f);
+            case InventoryItemRarity.Epic: return new Color(0.5f, 0.05f, 0.16f, 0.98f);
+            case InventoryItemRarity.Legendary: return new Color(0.92f, 0.68f, 0.08f, 0.98f);
+            default: return new Color(1f, 1f, 1f, 0.98f);
         }
     }
 
@@ -229,26 +238,26 @@ public static class InventoryItemCatalog
             {
                 Id = AsteroidResourceId,
                 DisplayName = "Common Asteroid",
-                ShortLabel = "AST",
-                Description = "A common asteroid fragment.",
+                ShortLabel = "COM",
+                Description = "A common collectible asteroid resource.",
                 ItemType = InventoryItemType.Resource,
                 Rarity = InventoryItemRarity.Common,
-                SellValueAstrons = 10,
-                IconResourcePath = "Visuals/Treasures/asteroid_treasure_resource",
-                ProjectFileName = "asteroida_treasure.png",
+                SellValueAstrons = 100,
+                IconResourcePath = "treasure_asteroid_white_common_resource",
+                ProjectFileName = "treasure_asteroid_white_common.png",
                 SalvageOutputs = new[] { AsteroidResourceId }
             },
             [AsteroidGoldId] = new InventoryItemDefinition
             {
                 Id = AsteroidGoldId,
-                DisplayName = "Golden Asteroid",
-                ShortLabel = "GLD",
-                Description = "A richer asteroid vein with a higher resale value.",
+                DisplayName = "Uncommon Asteroid",
+                ShortLabel = "UNC",
+                Description = "An uncommon collectible asteroid resource.",
                 ItemType = InventoryItemType.Resource,
-                Rarity = InventoryItemRarity.Legendary,
-                SellValueAstrons = 30,
-                IconResourcePath = "asteroida_zloto_clean_resource",
-                ProjectFileName = "asteroida_zloto_clean.png",
+                Rarity = InventoryItemRarity.Uncommon,
+                SellValueAstrons = 200,
+                IconResourcePath = "treasure_asteroid_green_uncommon_resource",
+                ProjectFileName = "treasure_asteroid_green_uncommon.png",
                 SalvageOutputs = new[] { AsteroidResourceId, AsteroidResourceId }
             },
             [AsteroidRareId] = new InventoryItemDefinition
@@ -256,13 +265,52 @@ public static class InventoryItemCatalog
                 Id = AsteroidRareId,
                 DisplayName = "Rare Asteroid",
                 ShortLabel = "RAR",
-                Description = "A rare asteroid sample shimmering with unusual energy.",
+                Description = "A rare collectible asteroid resource.",
+                ItemType = InventoryItemType.Resource,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 400,
+                IconResourcePath = "treasure_asteroid_blue_rare_resource",
+                ProjectFileName = "treasure_asteroid_blue_rare.png",
+                SalvageOutputs = new[] { AsteroidGoldId, AsteroidGoldId }
+            },
+            [RichAsteroidId] = new InventoryItemDefinition
+            {
+                Id = RichAsteroidId,
+                DisplayName = "Very Rare Asteroid",
+                ShortLabel = "VRA",
+                Description = "A very rare collectible asteroid resource.",
                 ItemType = InventoryItemType.Resource,
                 Rarity = InventoryItemRarity.VeryRare,
-                SellValueAstrons = 60,
-                IconResourcePath = "asteroida_rare_clean_resource",
-                ProjectFileName = "asteroida_rare_clean.png",
-                SalvageOutputs = new[] { AsteroidGoldId, AsteroidGoldId }
+                SellValueAstrons = 800,
+                IconResourcePath = "treasure_asteroid_violet_rare_resource",
+                ProjectFileName = "treasure_asteroid_violet_rare.png",
+                SalvageOutputs = new[] { AsteroidRareId, AsteroidRareId }
+            },
+            [SpaceJunkId] = new InventoryItemDefinition
+            {
+                Id = SpaceJunkId,
+                DisplayName = "Epic Asteroid",
+                ShortLabel = "EPI",
+                Description = "An epic collectible asteroid resource.",
+                ItemType = InventoryItemType.Resource,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 1600,
+                IconResourcePath = "treasure_asteroid_burgundy_epic_resource",
+                ProjectFileName = "treasure_asteroid_burgundy_epic.png",
+                SalvageOutputs = new[] { RichAsteroidId, RichAsteroidId }
+            },
+            [AsteroidLegendaryId] = new InventoryItemDefinition
+            {
+                Id = AsteroidLegendaryId,
+                DisplayName = "Legendary Asteroid",
+                ShortLabel = "LEG",
+                Description = "A legendary collectible asteroid resource.",
+                ItemType = InventoryItemType.Resource,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 3200,
+                IconResourcePath = "treasure_asteroid_gold_legendary_resource",
+                ProjectFileName = "treasure_asteroid_gold_legendary.png",
+                SalvageOutputs = new[] { SpaceJunkId, SpaceJunkId }
             },
             [DroidScrapId] = new InventoryItemDefinition
             {
@@ -316,6 +364,19 @@ public static class InventoryItemCatalog
                 ProjectFileName = "space_truck_wrak.png",
                 SalvageOutputs = new[] { AsteroidGoldId, AsteroidGoldId }
             },
+            [MothershipCoreId] = new InventoryItemDefinition
+            {
+                Id = MothershipCoreId,
+                DisplayName = "Mothership Core",
+                ShortLabel = "MTH",
+                Description = "A legendary command core recovered from a destroyed Mothership.",
+                ItemType = InventoryItemType.Resource,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 500,
+                IconResourcePath = "mother_ship_wrak_resource",
+                ProjectFileName = "mother_ship_wrak.png",
+                SalvageOutputs = new[] { AsteroidRareId, AsteroidRareId }
+            },
             [PlasmaGunId] = new InventoryItemDefinition
             {
                 Id = PlasmaGunId,
@@ -367,6 +428,19 @@ public static class InventoryItemCatalog
                 IconResourcePath = "battery_charge_resource",
                 ProjectFileName = "battery_charge.png",
                 SalvageOutputs = new[] { AsteroidResourceId, AsteroidResourceId }
+            },
+            [ShieldReactorId] = new InventoryItemDefinition
+            {
+                Id = ShieldReactorId,
+                DisplayName = "Shield Reactor",
+                ShortLabel = "SHR",
+                Description = "A defensive reactor that increases maximum shield capacity when installed in a shield slot.",
+                ItemType = InventoryItemType.Equipment,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 150,
+                IconResourcePath = "shield_reactor_resource",
+                ProjectFileName = "shield_reactor.png",
+                SalvageOutputs = new[] { AsteroidResourceId, AsteroidGoldId }
             }
         };
     }

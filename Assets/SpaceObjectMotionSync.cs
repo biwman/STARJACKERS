@@ -53,9 +53,14 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         PhotonNetwork.RemoveCallbackTarget(this);
     }
 
+    static bool CanRaiseRoomEvent()
+    {
+        return PhotonNetwork.IsConnected && PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null;
+    }
+
     public static void BroadcastState(string stableId, Vector2 position, Vector2 velocity, float rotation, float angularVelocity)
     {
-        if (string.IsNullOrWhiteSpace(stableId) || !PhotonNetwork.IsConnected || !PhotonNetwork.IsMasterClient)
+        if (string.IsNullOrWhiteSpace(stableId) || !CanRaiseRoomEvent() || !PhotonNetwork.IsMasterClient)
             return;
 
         object[] payload = { stableId, position.x, position.y, velocity.x, velocity.y, rotation, angularVelocity };
@@ -68,7 +73,7 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         if (string.IsNullOrWhiteSpace(stableId))
             return;
 
-        if (!PhotonNetwork.IsConnected || PhotonNetwork.IsMasterClient)
+        if (!CanRaiseRoomEvent() || PhotonNetwork.IsMasterClient)
         {
             MovingSpaceObject localTarget = MovingSpaceObject.Find(stableId);
             if (localTarget != null)
@@ -88,17 +93,21 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         PhotonNetwork.RaiseEvent(ImpulseRequestEventCode, payload, options, SendOptions.SendUnreliable);
     }
 
-    public static void BroadcastSpaceMineDetonation(int sourceViewId, Vector3 worldPosition)
+    public static void BroadcastSpaceMineDetonation(Vector3 worldPosition, float radius)
     {
-        if (!PhotonNetwork.IsConnected)
+        float resolvedRadius = Mathf.Max(0.1f, radius);
+
+        if (!CanRaiseRoomEvent())
         {
-            EnemyBot.SpawnSpaceMineDetonationEffects(worldPosition);
+            EnemyBot.SpawnSpaceMineDetonationEffects(worldPosition, resolvedRadius);
             return;
         }
 
-        object[] payload = { sourceViewId, worldPosition.x, worldPosition.y, worldPosition.z };
+        object[] payload = { worldPosition.x, worldPosition.y, worldPosition.z, resolvedRadius };
         RaiseEventOptions options = new RaiseEventOptions { Receivers = ReceiverGroup.All };
-        PhotonNetwork.RaiseEvent(SpaceMineDetonationEventCode, payload, options, SendOptions.SendReliable);
+        bool raised = PhotonNetwork.RaiseEvent(SpaceMineDetonationEventCode, payload, options, SendOptions.SendReliable);
+        if (!raised)
+            EnemyBot.SpawnSpaceMineDetonationEffects(worldPosition, resolvedRadius);
     }
 
     public static void RequestObstacleDamage(string stableId, int damage)
@@ -106,7 +115,7 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         if (string.IsNullOrWhiteSpace(stableId) || damage <= 0)
             return;
 
-        if (!PhotonNetwork.IsConnected || PhotonNetwork.IsMasterClient)
+        if (!CanRaiseRoomEvent() || PhotonNetwork.IsMasterClient)
         {
             ObstacleSpawner.ApplyObstacleDamage(stableId, damage);
             return;
@@ -123,7 +132,7 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
 
     public static void BroadcastObstacleState(string serializedState, int[] targetActors = null)
     {
-        if (!PhotonNetwork.IsConnected)
+        if (!CanRaiseRoomEvent())
         {
             ObstacleSpawner.ApplyRuntimeStateSnapshot(serializedState);
             return;
@@ -141,7 +150,7 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         if (string.IsNullOrWhiteSpace(sourceStableId))
             return;
 
-        if (!PhotonNetwork.IsConnected)
+        if (!CanRaiseRoomEvent())
         {
             ObstacleSpawner.ApplyObstacleSplitDelta(sourceStableId, childAState, childBState);
             return;
@@ -229,14 +238,13 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         if (payload == null || payload.Length < 4)
             return;
 
-        int sourceViewId = ConvertToInt(payload[0]);
-        Vector3 fallbackWorldPosition = new Vector3(
+        Vector3 worldPosition = new Vector3(
+            ConvertToFloat(payload[0]),
             ConvertToFloat(payload[1]),
-            ConvertToFloat(payload[2]),
-            ConvertToFloat(payload[3]));
+            ConvertToFloat(payload[2]));
+        float radius = ConvertToFloat(payload[3]);
 
-        Vector3 resolvedWorldPosition = EnemyBot.ResolveSpaceMineDetonationPosition(sourceViewId, fallbackWorldPosition);
-        EnemyBot.SpawnSpaceMineDetonationEffects(resolvedWorldPosition);
+        EnemyBot.SpawnSpaceMineDetonationEffects(worldPosition, radius);
     }
 
     void ApplyObstacleDamageRequest(object[] payload)

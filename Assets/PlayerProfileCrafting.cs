@@ -25,7 +25,7 @@ public static class PlayerProfileCraftingCatalog
     {
         new PlayerProfileCraftingRecipe
         {
-            Id = "common_to_gold_asteroid",
+            Id = "common_to_uncommon_asteroid",
             Inputs = new[]
             {
                 InventoryItemCatalog.AsteroidResourceId,
@@ -38,7 +38,7 @@ public static class PlayerProfileCraftingCatalog
         },
         new PlayerProfileCraftingRecipe
         {
-            Id = "gold_to_rare_asteroid",
+            Id = "uncommon_to_rare_asteroid",
             Inputs = new[]
             {
                 InventoryItemCatalog.AsteroidGoldId,
@@ -47,6 +47,45 @@ public static class PlayerProfileCraftingCatalog
                 InventoryItemCatalog.AsteroidGoldId
             },
             OutputItemId = InventoryItemCatalog.AsteroidRareId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "rare_to_very_rare_asteroid",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.RichAsteroidId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "very_rare_to_epic_asteroid",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.RichAsteroidId,
+                InventoryItemCatalog.RichAsteroidId,
+                InventoryItemCatalog.RichAsteroidId,
+                InventoryItemCatalog.RichAsteroidId
+            },
+            OutputItemId = InventoryItemCatalog.SpaceJunkId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "epic_to_legendary_asteroid",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceJunkId,
+                InventoryItemCatalog.SpaceJunkId,
+                InventoryItemCatalog.SpaceJunkId,
+                InventoryItemCatalog.SpaceJunkId
+            },
+            OutputItemId = InventoryItemCatalog.AsteroidLegendaryId,
             OutputCount = 1
         },
         new PlayerProfileCraftingRecipe
@@ -99,6 +138,19 @@ public static class PlayerProfileCraftingCatalog
                 InventoryItemCatalog.AsteroidGoldId
             },
             OutputItemId = InventoryItemCatalog.BatteryId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "shield_reactor_from_truck_wreck",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceTruckWreckId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidGoldId
+            },
+            OutputItemId = InventoryItemCatalog.ShieldReactorId,
             OutputCount = 1
         }
     };

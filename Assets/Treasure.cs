@@ -60,12 +60,18 @@ public class Treasure : MonoBehaviourPun
 
     public float GetColliderSizeMultiplier()
     {
-        switch (itemId)
+        switch (InventoryItemCatalog.GetRarity(itemId))
         {
-            case InventoryItemCatalog.AsteroidGoldId:
+            case InventoryItemRarity.Uncommon:
+                return 0.72f;
+            case InventoryItemRarity.Rare:
                 return 0.76f;
-            case InventoryItemCatalog.AsteroidRareId:
-                return 0.78f;
+            case InventoryItemRarity.VeryRare:
+                return 0.8f;
+            case InventoryItemRarity.Epic:
+                return 0.84f;
+            case InventoryItemRarity.Legendary:
+                return 0.86f;
             default:
                 return 0.68f;
         }

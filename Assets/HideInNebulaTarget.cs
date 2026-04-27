@@ -37,6 +37,7 @@ public class HideInNebulaTarget : MonoBehaviour
 
     public void UpdateNebulaState(int nebulaId, bool shouldHide, bool shouldDamage)
     {
+        shouldDamage &= !IsNebulaImmuneMothership();
         CacheRenderers();
         hiddenNebulaStates[nebulaId] = shouldHide;
         if (shouldDamage)
@@ -169,7 +170,7 @@ public class HideInNebulaTarget : MonoBehaviour
             }
 
             bool shouldHide = field.ShouldHide(this);
-            bool shouldDamage = field.ShouldDamage(this);
+            bool shouldDamage = field.ShouldDamage(this) && !IsNebulaImmuneMothership();
 
             if (!hiddenNebulaStates.TryGetValue(nebulaId, out bool previousHide) || previousHide != shouldHide)
             {
@@ -272,5 +273,11 @@ public class HideInNebulaTarget : MonoBehaviour
         }
 
         damageRoutine = null;
+    }
+
+    bool IsNebulaImmuneMothership()
+    {
+        EnemyBot bot = GetComponent<EnemyBot>();
+        return bot != null && bot.Kind == EnemyBotKind.Mothership;
     }
 }

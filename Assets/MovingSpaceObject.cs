@@ -42,6 +42,8 @@ public class MovingSpaceObject : MonoBehaviour
     float nextImpulseRequestTime;
     bool isAuthority;
     bool movingEnabled;
+    bool translateEnabled;
+    bool rotateEnabled;
     Vector2 networkPosition;
     Vector2 networkVelocity;
     float networkRotation;
@@ -184,9 +186,15 @@ public class MovingSpaceObject : MonoBehaviour
         if (!isAuthority)
             return;
 
-        EnsureDynamicBody();
-        rb.linearVelocity += impulse * 0.7f;
-        if (Mathf.Abs(impulse.x) + Mathf.Abs(impulse.y) > 0.05f)
+        if (!movingEnabled)
+            return;
+
+        if (translateEnabled)
+            rb.linearVelocity += impulse * 0.7f;
+        else
+            rb.linearVelocity = Vector2.zero;
+
+        if (rotateEnabled && Mathf.Abs(impulse.x) + Mathf.Abs(impulse.y) > 0.05f)
         {
             float torqueDirection = Mathf.Sign(Vector3.Cross(cruiseDirection, impulse).z);
             if (Mathf.Abs(torqueDirection) < 0.1f)
@@ -247,14 +255,14 @@ public class MovingSpaceObject : MonoBehaviour
         ApplySimulationMode();
 
         if (authorityState)
-            EnsureDynamicBody();
+            ApplySimulationMode();
 
         rb.position = position;
         rb.rotation = rotation;
-        rb.linearVelocity = velocity;
-        rb.angularVelocity = angularVelocity;
+        rb.linearVelocity = RoomSettings.ShouldMovingObjectsTranslate() ? velocity : Vector2.zero;
+        rb.angularVelocity = RoomSettings.ShouldMovingObjectsRotate() ? angularVelocity : 0f;
 
-        if (velocity.sqrMagnitude > 0.0001f)
+        if (RoomSettings.ShouldMovingObjectsTranslate() && velocity.sqrMagnitude > 0.0001f)
             cruiseDirection = velocity.normalized;
 
         networkPosition = position;
@@ -319,6 +327,8 @@ public class MovingSpaceObject : MonoBehaviour
     void ApplySimulationMode()
     {
         movingEnabled = RoomSettings.AreMovingObjectsEnabled();
+        translateEnabled = RoomSettings.ShouldMovingObjectsTranslate();
+        rotateEnabled = RoomSettings.ShouldMovingObjectsRotate();
         isAuthority = !PhotonNetwork.IsConnected || PhotonNetwork.IsMasterClient;
 
         if (rb == null)
@@ -333,21 +343,21 @@ public class MovingSpaceObject : MonoBehaviour
         if (isAuthority && movingEnabled)
         {
             EnsureDynamicBody();
+            if (!translateEnabled)
+            {
+                rb.constraints = RigidbodyConstraints2D.FreezePositionX | RigidbodyConstraints2D.FreezePositionY;
+                rb.linearVelocity = Vector2.zero;
+            }
+
+            if (!rotateEnabled)
+                rb.angularVelocity = 0f;
         }
         else
         {
-            if (movingEnabled)
-            {
-                rb.bodyType = RigidbodyType2D.Kinematic;
-                rb.linearVelocity = Vector2.zero;
-                rb.angularVelocity = 0f;
-            }
-            else
-            {
-                rb.bodyType = RigidbodyType2D.Kinematic;
-                rb.linearVelocity = Vector2.zero;
-                rb.angularVelocity = 0f;
-            }
+            rb.bodyType = RigidbodyType2D.Kinematic;
+            rb.constraints = RigidbodyConstraints2D.None;
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
         }
     }
 
@@ -414,6 +424,7 @@ public class MovingSpaceObject : MonoBehaviour
     void EnsureDynamicBody()
     {
         rb.bodyType = RigidbodyType2D.Dynamic;
+        rb.constraints = RigidbodyConstraints2D.None;
         rb.mass = Mathf.Max(1f, GetMassFactor());
         rb.linearDamping = VelocityDamping;
         rb.angularDamping = 0.18f;
@@ -423,6 +434,13 @@ public class MovingSpaceObject : MonoBehaviour
     {
         if (!movingEnabled || rb == null)
             return;
+
+        if (!translateEnabled)
+        {
+            rb.linearVelocity = Vector2.zero;
+            MaintainAuthoritySpin();
+            return;
+        }
 
         float baseSpeed = GetBaseSpeed();
         float minCruiseSpeed = baseSpeed * MinCruiseSpeedFactor;
@@ -447,13 +465,25 @@ public class MovingSpaceObject : MonoBehaviour
             rb.linearVelocity = rb.linearVelocity.normalized * maxSpeed;
         }
 
+        MaintainAuthoritySpin();
+
+        KeepInsideMapBounds();
+    }
+
+    void MaintainAuthoritySpin()
+    {
+        if (!rotateEnabled || rb == null)
+        {
+            if (rb != null)
+                rb.angularVelocity = 0f;
+            return;
+        }
+
         if (Mathf.Abs(rb.angularVelocity) < Mathf.Abs(baseAngularSpeed) * 0.82f)
         {
             float angularStep = Mathf.Sign(baseAngularSpeed) * 22f * Time.fixedDeltaTime;
             rb.angularVelocity += angularStep;
         }
-
-        KeepInsideMapBounds();
     }
 
     void BroadcastSnapshotIfNeeded()

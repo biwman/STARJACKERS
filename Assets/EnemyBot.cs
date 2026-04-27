@@ -9,7 +9,8 @@ public enum EnemyBotKind
     Drone,
     Corsair,
     SpaceMine,
-    SpaceTruck
+    SpaceTruck,
+    Mothership
 }
 
 public enum EnemyMovementModel
@@ -17,7 +18,8 @@ public enum EnemyMovementModel
     GuardAndChase,
     OrbitMap,
     Drift,
-    RouteExtractionZones
+    RouteExtractionZones,
+    Mothership
 }
 
 public enum EnemySpawnPattern
@@ -320,10 +322,12 @@ public class EnemyBotDefinition
     public string CountRoomKey => $"enemy.{Id}.count";
     public string HpRoomKey => $"enemy.{Id}.hp";
     public string ShieldRoomKey => $"enemy.{Id}.shield";
+    public string DamageRoomKey => $"enemy.{Id}.damage";
     public string SpeedRoomKey => $"enemy.{Id}.speed";
     public string SpawnSecondRoomKey => $"enemy.{Id}.spawnSecond";
     public string RespawnEnabledRoomKey => $"enemy.{Id}.respawnEnabled";
     public string RespawnIntervalRoomKey => $"enemy.{Id}.respawnInterval";
+    public int DefaultDamage => Explosion != null ? Explosion.Damage : Weapon != null ? Weapon.Damage : 0;
 
     public Sprite GetVisualSprite()
     {
@@ -700,6 +704,86 @@ public static class EnemyBotCatalog
                 EmissionThreshold = 0.02f,
                 VisualStyle = EnemyTrailVisualStyle.GreenTwin
             }
+        },
+        new EnemyBotDefinition
+        {
+            Kind = EnemyBotKind.Mothership,
+            Id = "mothership",
+            DisplayName = "Mothership",
+            InstantiationMarker = "enemy_bot_mothership",
+            VisualResourcePath = "mother_ship_resource",
+            EditorAssetPath = "Assets/mother_ship.png",
+            TargetSize = 7.28f,
+            PhysicsMass = 95f,
+            LinearDamping = 0.08f,
+            AngularDamping = 0.42f,
+            DefaultHp = 200,
+            DefaultShield = 200,
+            DefaultSpeedMultiplier = 1f,
+            DefaultEnabled = false,
+            DefaultCount = 1,
+            DefaultSpawnSecond = 0,
+            Movement = new EnemyMovementProfile
+            {
+                Model = EnemyMovementModel.Mothership,
+                SpawnPattern = EnemySpawnPattern.WideCorners,
+                MoveSpeed = 0.82f,
+                TurnResponsiveness = 28f,
+                DetectionRadius = 13.5f,
+                DisengageRadius = 22f,
+                PreferredDistance = 6.8f,
+                RepathInterval = 0.45f,
+                TargetRefreshInterval = 0.35f,
+                OrbitRadiusFactor = 0.38f,
+                OrbitAngularSpeed = 0.18f
+            },
+            Weapon = new EnemyWeaponProfile
+            {
+                AmmoCount = 10,
+                ReloadDuration = 3f,
+                FireRate = 0.28f,
+                Damage = 10,
+                BulletScaleMultiplier = 1f,
+                BulletColor = Color.white,
+                BulletSpeed = 10f,
+                MuzzleOffsetDistance = 0.38f,
+                InfiniteAmmo = false,
+                RotateTowardAim = false,
+                Range = 18f,
+                ShotSoundId = string.Empty
+            },
+            Wreck = new EnemyWreckProfile
+            {
+                Mass = 120f,
+                LinearDamping = 0.94f,
+                AngularDamping = 1.4f,
+                DriftSpeed = 0.045f,
+                AngularVelocityRange = 0.7f,
+                RewardItemId = InventoryItemCatalog.MothershipCoreId,
+                DestroyWhenEmpty = false,
+                BaseColor = new Color(0.52f, 0.55f, 0.58f, 0.98f),
+                VisualResourcePath = "mother_ship_wrak_resource",
+                EditorAssetPath = "Assets/mother_ship_wrak.png"
+            },
+            Trails = new EnemyTrailProfile
+            {
+                RootOffsetFactors = new Vector2(-0.6f, 0f),
+                RootRotationZ = 0f,
+                TrailOffsetFactors = new[]
+                {
+                    new Vector2(0f, -0.54f),
+                    new Vector2(0f, -0.27f),
+                    new Vector2(0f, 0f),
+                    new Vector2(0f, 0.27f),
+                    new Vector2(0f, 0.54f)
+                },
+                MinTrailTime = 3.1f,
+                MaxTrailTime = 6.2f,
+                MinTrailWidth = 0.56f,
+                MaxTrailWidth = 1.35f,
+                EmissionThreshold = 0f,
+                VisualStyle = EnemyTrailVisualStyle.RedLarge
+            }
         }
     };
 
@@ -758,6 +842,7 @@ public class EnemyBot : MonoBehaviourPun
     bool hasInitialized;
     bool hasAppliedStats;
     bool hasDetonated;
+    bool spawnTeleportVfxPlayed;
     bool isPlayerPlacedMine;
     bool isSummonedDrone;
     bool spaceTruckFirstHitHandled;
@@ -770,6 +855,7 @@ public class EnemyBot : MonoBehaviourPun
     public bool IsCorsair => kind == EnemyBotKind.Corsair;
     public bool IsSpaceMine => kind == EnemyBotKind.SpaceMine;
     public bool IsSpaceTruck => kind == EnemyBotKind.SpaceTruck;
+    public bool IsMothership => kind == EnemyBotKind.Mothership;
     public bool IsPlayerPlacedMine => isPlayerPlacedMine;
     public bool IsSummonedDrone => isSummonedDrone;
     public int MineOwnerViewId => mineOwnerViewId;
@@ -829,7 +915,9 @@ public class EnemyBot : MonoBehaviourPun
         DisablePlayerOnlySystems();
         EnsureBehavior();
         ApplyBotVisuals();
+        PlaySpawnTeleportVfx();
         ConfigurePhysics();
+        ConfigureColliderToVisual();
         ApplyMineOwnerCollisionIgnore();
         if (GetComponent<EnemyBotHealthBarUI>() == null)
         {
@@ -842,6 +930,22 @@ public class EnemyBot : MonoBehaviourPun
         }
 
         hasInitialized = true;
+    }
+
+    void PlaySpawnTeleportVfx()
+    {
+        if (spawnTeleportVfxPlayed || !IsGameStarted() || isPlayerPlacedMine)
+            return;
+
+        spawnTeleportVfxPlayed = true;
+        if (cachedRenderer == null)
+            cachedRenderer = GetComponent<SpriteRenderer>();
+
+        float radius = VisualTargetSize * 0.62f;
+        if (cachedRenderer != null)
+            radius = Mathf.Max(radius, Mathf.Max(cachedRenderer.bounds.size.x, cachedRenderer.bounds.size.y) * 0.58f);
+
+        EnemySpawnTeleportVfx.Spawn(transform.position, cachedRenderer, radius);
     }
 
     void Awake()
@@ -893,6 +997,38 @@ public class EnemyBot : MonoBehaviourPun
         rb.angularDamping = Definition.AngularDamping;
     }
 
+    void ConfigureColliderToVisual()
+    {
+        if (kind != EnemyBotKind.Mothership)
+            return;
+
+        if (cachedRenderer == null)
+            cachedRenderer = GetComponent<SpriteRenderer>();
+
+        if (cachedRenderer == null)
+            return;
+
+        Bounds bounds = cachedRenderer.bounds;
+        BoxCollider2D boxCollider = GetComponent<BoxCollider2D>();
+        if (boxCollider != null)
+        {
+            SetWorldBoxSize(boxCollider, new Vector2(bounds.size.x * 0.82f, bounds.size.y * 0.72f));
+        }
+
+        CircleCollider2D circleCollider = GetComponent<CircleCollider2D>();
+        if (circleCollider != null)
+            circleCollider.enabled = false;
+    }
+
+    void SetWorldBoxSize(BoxCollider2D collider2D, Vector2 worldSize)
+    {
+        Vector3 scale = collider2D.transform.lossyScale;
+        float safeX = Mathf.Abs(scale.x) > 0.0001f ? Mathf.Abs(scale.x) : 1f;
+        float safeY = Mathf.Abs(scale.y) > 0.0001f ? Mathf.Abs(scale.y) : 1f;
+        collider2D.size = new Vector2(worldSize.x / safeX, worldSize.y / safeY);
+        collider2D.offset = Vector2.zero;
+    }
+
     void ApplyBotStats()
     {
         if (health == null || Definition == null)
@@ -922,6 +1058,9 @@ public class EnemyBot : MonoBehaviourPun
                     case EnemyMovementModel.RouteExtractionZones:
                         behavior = gameObject.AddComponent<EnemySpaceTruckBehavior>();
                         break;
+                    case EnemyMovementModel.Mothership:
+                        behavior = gameObject.AddComponent<EnemyMothershipBehavior>();
+                        break;
                     default:
                         behavior = gameObject.AddComponent<EnemyDroneBehavior>();
                         break;
@@ -946,6 +1085,7 @@ public class EnemyBot : MonoBehaviourPun
             EnemyMovementModel.OrbitMap => existingBehavior is EnemyCorsairBehavior,
             EnemyMovementModel.Drift => existingBehavior is EnemyMineBehavior,
             EnemyMovementModel.RouteExtractionZones => existingBehavior is EnemySpaceTruckBehavior,
+            EnemyMovementModel.Mothership => existingBehavior is EnemyMothershipBehavior,
             _ => existingBehavior is EnemyDroneBehavior
         };
     }
@@ -1020,14 +1160,29 @@ public class EnemyBot : MonoBehaviourPun
 
     public void RequestDetonation()
     {
-        if (hasDetonated || !PhotonNetwork.IsMasterClient || Definition == null || Definition.Explosion == null)
+        if (hasDetonated || !CanRequestDetonation() || Definition == null || Definition.Explosion == null)
             return;
 
+        EnemyExplosionProfile explosion = Definition.Explosion;
         hasDetonated = true;
         Vector3 detonationPosition = GetVisualCenterWorldPosition();
-        DetonateNearbyTargets(Definition.Explosion);
-        SpaceObjectMotionSync.BroadcastSpaceMineDetonation(photonView != null ? photonView.ViewID : 0, detonationPosition);
-        PhotonNetwork.Destroy(gameObject);
+        SpaceObjectMotionSync.BroadcastSpaceMineDetonation(detonationPosition, explosion.TriggerRadius);
+        DetonateNearbyTargets(explosion);
+        if (PhotonNetwork.CurrentRoom != null && photonView != null)
+            PhotonNetwork.Destroy(gameObject);
+        else
+            Destroy(gameObject);
+    }
+
+    bool CanRequestDetonation()
+    {
+        if (PhotonNetwork.CurrentRoom == null)
+            return true;
+
+        if (PhotonNetwork.IsMasterClient)
+            return true;
+
+        return isPlayerPlacedMine && view != null && view.IsMine;
     }
 
     void DetonateNearbyTargets(EnemyExplosionProfile explosion)
@@ -1052,7 +1207,7 @@ public class EnemyBot : MonoBehaviourPun
 
             PhotonView targetView = candidate.GetComponent<PhotonView>();
             if (targetView != null)
-                targetView.RPC(nameof(PlayerHealth.TakeDamage), RpcTarget.MasterClient, explosion.Damage, photonView.ViewID);
+                targetView.RPC(nameof(PlayerHealth.TakeDamage), RpcTarget.MasterClient, RoomSettings.GetEnemyDamage(kind), photonView.ViewID);
         }
     }
 
@@ -1171,13 +1326,31 @@ public class EnemyBot : MonoBehaviourPun
         return candidateView != null && candidateView.ViewID == mineOwnerViewId;
     }
 
-    public void NotifyDamageTaken(int previousHp, int currentHp, int shieldDamage, int hpDamage)
+    public void ConvertMothershipTurretsToWreckVisuals()
     {
-        if (!PhotonNetwork.IsMasterClient || kind != EnemyBotKind.SpaceTruck || health == null || health.IsWreck)
+        if (kind != EnemyBotKind.Mothership)
+            return;
+
+        EnemyMothershipBehavior mothershipBehavior = behavior as EnemyMothershipBehavior;
+        if (mothershipBehavior == null)
+            mothershipBehavior = GetComponent<EnemyMothershipBehavior>();
+
+        mothershipBehavior?.ConvertTurretsToWreckVisuals();
+    }
+
+    public void NotifyDamageTaken(int previousHp, int currentHp, int shieldDamage, int hpDamage, int attackerViewID)
+    {
+        if (!PhotonNetwork.IsMasterClient || health == null || health.IsWreck)
             return;
 
         bool wasHit = shieldDamage > 0 || hpDamage > 0;
         if (!wasHit)
+            return;
+
+        if (kind == EnemyBotKind.Mothership && behavior is EnemyMothershipBehavior mothershipBehavior)
+            mothershipBehavior.NotifyDamageSource(attackerViewID);
+
+        if (kind != EnemyBotKind.SpaceTruck)
             return;
 
         if (!spaceTruckFirstHitHandled)
@@ -1251,8 +1424,18 @@ public class EnemyBot : MonoBehaviourPun
     {
         EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(EnemyBotKind.SpaceMine);
         EnemyExplosionProfile explosion = definition != null ? definition.Explosion : null;
+        SpawnSpaceMineDetonationEffects(worldPosition, explosion != null ? explosion.TriggerRadius : 0f);
+    }
+
+    public static void SpawnSpaceMineDetonationEffects(Vector3 worldPosition, float radius)
+    {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(EnemyBotKind.SpaceMine);
+        EnemyExplosionProfile explosion = definition != null ? definition.Explosion : null;
         if (explosion == null)
             return;
+
+        float effectRadius = radius > 0.1f ? radius : explosion.TriggerRadius;
+        SpaceMineExplosionVfx.Spawn(worldPosition, effectRadius);
 
         if (explosion.SoundId == "space_mine_boom")
             AudioManager.Instance.PlaySpaceMineBoomAt(worldPosition);
@@ -1303,7 +1486,7 @@ public class EnemyDroneBehavior : EnemyBotBehaviorBase
                 weapon.FireRate,
                 Mathf.Max(weapon.AmmoCount, 1),
                 weapon.ReloadDuration,
-                weapon.Damage,
+                RoomSettings.GetEnemyDamage(owner.Kind),
                 weapon.BulletScaleMultiplier,
                 weapon.BulletColor,
                 weapon.MuzzleOffsetDistance,
@@ -1498,7 +1681,7 @@ public class EnemyCorsairBehavior : EnemyBotBehaviorBase
                 weapon.FireRate,
                 9999,
                 weapon.ReloadDuration,
-                weapon.Damage,
+                RoomSettings.GetEnemyDamage(owner.Kind),
                 weapon.BulletScaleMultiplier,
                 weapon.BulletColor,
                 weapon.MuzzleOffsetDistance,
@@ -1577,6 +1760,479 @@ public class EnemyCorsairBehavior : EnemyBotBehaviorBase
             return;
 
         shooting.TryFireBot(shootDirection.normalized);
+    }
+}
+
+[RequireComponent(typeof(EnemyBot))]
+public class EnemyMothershipBehavior : EnemyBotBehaviorBase
+{
+    sealed class TurretRuntime
+    {
+        public Transform Root;
+        public int Ammo;
+        public float NextFireTime;
+        public float ReloadFinishTime;
+        public bool Reloading;
+    }
+
+    const float TurretFullTurnDuration = 4f;
+    const float DamageSourceChaseDuration = 5f;
+    const float ShieldRegenPerSecond = 2f;
+    const float TurretPivotOffsetFromCenterFactor = 1f / 6f;
+    const float TurretTargetSizeFactor = 0.285f;
+    const float TurretMinimumTargetSize = 1.02f;
+
+    static Sprite cachedTurretSprite;
+    static Sprite cachedTurretWreckSprite;
+
+    readonly TurretRuntime[] turrets = new TurretRuntime[6];
+    readonly Vector2[] turretOffsetFactors =
+    {
+        new Vector2(0.28f, -0.01f),
+        new Vector2(0.1f, 0.14f),
+        new Vector2(0.11f, -0.13f),
+        new Vector2(-0.16f, 0.23f),
+        new Vector2(-0.25f, -0.01f),
+        new Vector2(-0.16f, -0.23f)
+    };
+
+    Rigidbody2D rb;
+    PhotonView view;
+    PlayerShooting shooting;
+    PlayerHealth health;
+    EnemyMovementProfile movement;
+    EnemyWeaponProfile weapon;
+    SpriteRenderer mothershipRenderer;
+    Vector2 orbitCenter;
+    float orbitRadius;
+    float orbitAngle;
+    float orbitDirection = 1f;
+    float nextTargetRefreshTime;
+    float forcedDirectionUntil;
+    float shieldRegenAccumulator;
+    Transform currentTarget;
+    Vector2 forcedMoveDirection;
+
+    public override void Initialize(EnemyBot owner)
+    {
+        base.Initialize(owner);
+        rb = owner.GetComponent<Rigidbody2D>();
+        view = owner.GetComponent<PhotonView>();
+        shooting = owner.GetComponent<PlayerShooting>();
+        health = owner.GetComponent<PlayerHealth>();
+        mothershipRenderer = owner.GetComponent<SpriteRenderer>();
+        movement = owner.Definition != null ? owner.Definition.Movement : null;
+        weapon = owner.Definition != null ? owner.Definition.Weapon : null;
+
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        orbitCenter = Vector2.zero;
+        orbitRadius = Mathf.Max(7f, Mathf.Min(mapSize.x, mapSize.y) * (movement != null ? movement.OrbitRadiusFactor : 0.38f));
+        int seed = view != null ? view.ViewID : 1;
+        orbitAngle = Mathf.Abs(seed * 0.119f) % (Mathf.PI * 2f);
+        orbitDirection = seed % 2 == 0 ? 1f : -1f;
+
+        if (shooting != null && weapon != null)
+        {
+            shooting.ConfigureWeaponProfile(
+                weapon.FireRate,
+                weapon.AmmoCount,
+                weapon.ReloadDuration,
+                RoomSettings.GetEnemyDamage(owner.Kind),
+                weapon.BulletScaleMultiplier,
+                weapon.BulletColor,
+                weapon.MuzzleOffsetDistance,
+                weapon.InfiniteAmmo,
+                weapon.BulletSpeed,
+                weapon.ShotSoundId,
+                weapon.Range);
+        }
+
+        EnsureTurrets();
+    }
+
+    public override void TickBehavior()
+    {
+        if (bot == null || view == null || !view.IsMine || rb == null || movement == null)
+            return;
+
+        if (health != null && health.IsWreck)
+            return;
+
+        EnsureTurrets();
+        RegenerateShield();
+
+        if (Time.time >= nextTargetRefreshTime)
+        {
+            nextTargetRefreshTime = Time.time + Mathf.Max(0.15f, movement.TargetRefreshInterval);
+            currentTarget = ResolveTarget();
+        }
+
+        Vector2 desiredDirection = ResolveMoveDirection();
+        Vector2 desiredVelocity = desiredDirection * bot.EffectiveMoveSpeed;
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, 0.1f);
+        RotateHullToward(desiredVelocity);
+        TickTurrets();
+    }
+
+    public void NotifyDamageSource(int attackerViewID)
+    {
+        if (rb == null)
+            rb = GetComponent<Rigidbody2D>();
+
+        Vector2 sourcePosition = rb != null ? rb.position - Vector2.right : (Vector2)transform.position - Vector2.right;
+        PhotonView attackerView = attackerViewID > 0 ? PhotonView.Find(attackerViewID) : null;
+        if (attackerView != null)
+            sourcePosition = attackerView.transform.position;
+
+        Vector2 fromShipToSource = sourcePosition - (Vector2)transform.position;
+        if (fromShipToSource.sqrMagnitude < 0.001f)
+            fromShipToSource = rb != null && rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity : Vector2.right;
+
+        forcedMoveDirection = fromShipToSource.normalized;
+        forcedDirectionUntil = Time.time + DamageSourceChaseDuration;
+    }
+
+    public void ConvertTurretsToWreckVisuals()
+    {
+        Sprite wreckSprite = LoadTurretWreckSprite();
+        if (wreckSprite == null)
+            return;
+
+        Transform[] children = GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < children.Length; i++)
+        {
+            Transform child = children[i];
+            if (child == null || child.name != "TurretVisual")
+                continue;
+
+            SpriteRenderer renderer = child.GetComponent<SpriteRenderer>();
+            if (renderer != null)
+                renderer.sprite = wreckSprite;
+        }
+    }
+
+    Vector2 ResolveMoveDirection()
+    {
+        if (Time.time < forcedDirectionUntil && forcedMoveDirection.sqrMagnitude > 0.001f)
+            return forcedMoveDirection.normalized;
+
+        if (currentTarget != null)
+        {
+            Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
+            if (toTarget.sqrMagnitude > 0.001f)
+                return toTarget.normalized;
+        }
+
+        orbitAngle += orbitDirection * movement.OrbitAngularSpeed * Time.fixedDeltaTime;
+        Vector2 fromCenter = rb.position - orbitCenter;
+        if (fromCenter.sqrMagnitude < 0.01f)
+            fromCenter = new Vector2(Mathf.Cos(orbitAngle), Mathf.Sin(orbitAngle));
+
+        Vector2 radial = fromCenter.normalized;
+        Vector2 tangent = orbitDirection > 0f
+            ? new Vector2(-radial.y, radial.x)
+            : new Vector2(radial.y, -radial.x);
+        float radialError = orbitRadius - fromCenter.magnitude;
+        Vector2 orbitVelocity = tangent + radial * Mathf.Clamp(radialError * 0.12f, -0.5f, 0.5f);
+        return orbitVelocity.sqrMagnitude > 0.001f ? orbitVelocity.normalized : Vector2.right;
+    }
+
+    void RotateHullToward(Vector2 desiredVelocity)
+    {
+        if (desiredVelocity.sqrMagnitude <= 0.001f)
+            return;
+
+        float targetAngle = Mathf.Atan2(desiredVelocity.y, desiredVelocity.x) * Mathf.Rad2Deg;
+        float nextAngle = Mathf.MoveTowardsAngle(rb.rotation, targetAngle, movement.TurnResponsiveness * Time.fixedDeltaTime);
+        rb.MoveRotation(nextAngle);
+    }
+
+    Transform ResolveTarget()
+    {
+        if (currentTarget != null)
+        {
+            PlayerHealth currentHealth = currentTarget.GetComponent<PlayerHealth>();
+            if (IsValidVisibleTarget(currentHealth, movement.DisengageRadius))
+                return currentTarget;
+        }
+
+        return FindClosestVisibleHumanTarget(movement.DetectionRadius);
+    }
+
+    Transform FindClosestVisibleHumanTarget(float maxDistance)
+    {
+        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        Transform bestTarget = null;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < players.Length; i++)
+        {
+            PlayerHealth candidate = players[i];
+            if (!IsValidVisibleTarget(candidate, maxDistance))
+                continue;
+
+            float distance = Vector2.Distance(transform.position, candidate.transform.position);
+            if (distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            bestTarget = candidate.transform;
+        }
+
+        return bestTarget;
+    }
+
+    bool IsValidVisibleTarget(PlayerHealth candidate, float maxDistance)
+    {
+        if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsBotControlled)
+            return false;
+
+        HideInNebulaTarget candidateNebulaState = candidate.GetComponent<HideInNebulaTarget>();
+        HideInNebulaTarget botNebulaState = GetComponent<HideInNebulaTarget>();
+        if (candidateNebulaState != null && candidateNebulaState.IsHiddenFromObserver(botNebulaState))
+            return false;
+
+        return Vector2.Distance(transform.position, candidate.transform.position) <= maxDistance;
+    }
+
+    void RegenerateShield()
+    {
+        if (health == null || health.HasBrokenShield || health.CurrentShield >= health.MaxShield)
+            return;
+
+        shieldRegenAccumulator += ShieldRegenPerSecond * Time.fixedDeltaTime;
+        if (shieldRegenAccumulator < 1f)
+            return;
+
+        float amount = Mathf.Floor(shieldRegenAccumulator);
+        shieldRegenAccumulator -= amount;
+        health.TryRestoreShieldAuthority(amount, true);
+    }
+
+    void EnsureTurrets()
+    {
+        Sprite turretSprite = LoadTurretSprite();
+        Vector2 shipLocalSize = GetMothershipLocalSize();
+
+        for (int i = 0; i < turrets.Length; i++)
+        {
+            if (turrets[i] == null)
+                turrets[i] = new TurretRuntime { Ammo = weapon != null ? Mathf.Max(1, weapon.AmmoCount) : 10 };
+
+            if (turrets[i].Root == null)
+            {
+                GameObject turretObject = new GameObject("MothershipTurret_" + i);
+                turretObject.transform.SetParent(transform, false);
+                turrets[i].Root = turretObject.transform;
+            }
+
+            EnsureTurretVisual(turrets[i].Root, turretSprite);
+            turrets[i].Root.localScale = Vector3.one;
+            turrets[i].Root.localPosition = new Vector3(
+                turretOffsetFactors[i].x * shipLocalSize.x,
+                turretOffsetFactors[i].y * shipLocalSize.y,
+                0f);
+            FitTurretVisual(turrets[i].Root);
+        }
+    }
+
+    Vector2 GetMothershipLocalSize()
+    {
+        if (mothershipRenderer != null && mothershipRenderer.sprite != null)
+            return mothershipRenderer.sprite.bounds.size;
+
+        return new Vector2(7f, 3f);
+    }
+
+    void EnsureTurretVisual(Transform turretRoot, Sprite turretSprite)
+    {
+        if (turretRoot == null)
+            return;
+
+        SpriteRenderer rootRenderer = turretRoot.GetComponent<SpriteRenderer>();
+        if (rootRenderer != null)
+            rootRenderer.enabled = false;
+
+        Transform visual = turretRoot.Find("TurretVisual");
+        if (visual == null)
+        {
+            GameObject visualObject = new GameObject("TurretVisual");
+            visualObject.transform.SetParent(turretRoot, false);
+            visual = visualObject.transform;
+        }
+
+        SpriteRenderer visualRenderer = visual.GetComponent<SpriteRenderer>();
+        if (visualRenderer == null)
+            visualRenderer = visual.gameObject.AddComponent<SpriteRenderer>();
+
+        visualRenderer.sprite = turretSprite;
+        visualRenderer.color = Color.white;
+        if (mothershipRenderer != null)
+        {
+            visualRenderer.sortingLayerID = mothershipRenderer.sortingLayerID;
+            visualRenderer.sortingOrder = mothershipRenderer.sortingOrder + 1;
+        }
+    }
+
+    void FitTurretVisual(Transform turretRoot)
+    {
+        Transform visual = turretRoot != null ? turretRoot.Find("TurretVisual") : null;
+        SpriteRenderer renderer = visual != null ? visual.GetComponent<SpriteRenderer>() : null;
+        if (renderer == null || renderer.sprite == null)
+            return;
+
+        float largest = Mathf.Max(renderer.sprite.bounds.size.x, renderer.sprite.bounds.size.y);
+        if (largest <= 0.001f)
+            return;
+
+        float targetSize = Mathf.Max(TurretMinimumTargetSize, GetMothershipLocalSize().x * TurretTargetSizeFactor);
+        float scale = targetSize / largest;
+        visual.localScale = new Vector3(scale, scale, 1f);
+        float pivotOffset = renderer.sprite.bounds.size.x * scale * TurretPivotOffsetFromCenterFactor;
+        visual.localPosition = new Vector3(-pivotOffset, 0f, 0f);
+        visual.localRotation = Quaternion.identity;
+    }
+
+    void TickTurrets()
+    {
+        if (weapon == null || shooting == null)
+            return;
+
+        float turnSpeed = 360f / TurretFullTurnDuration;
+        for (int i = 0; i < turrets.Length; i++)
+        {
+            TurretRuntime turret = turrets[i];
+            if (turret == null || turret.Root == null)
+                continue;
+
+            UpdateTurretReload(turret);
+            Transform target = FindClosestVisibleHumanTargetFrom(turret.Root.position, weapon.Range);
+            if (target == null)
+                continue;
+
+            Vector2 toTarget = target.position - turret.Root.position;
+            if (toTarget.sqrMagnitude <= 0.001f)
+                continue;
+
+            float targetAngle = Mathf.Atan2(toTarget.y, toTarget.x) * Mathf.Rad2Deg - 180f;
+            Quaternion targetRotation = Quaternion.Euler(0f, 0f, targetAngle);
+            turret.Root.rotation = Quaternion.RotateTowards(turret.Root.rotation, targetRotation, turnSpeed * Time.fixedDeltaTime);
+
+            if (Time.time < turret.NextFireTime || turret.Reloading || turret.Ammo <= 0)
+                continue;
+
+            Vector2 muzzleDirection = -turret.Root.right;
+            Vector3 muzzlePosition = turret.Root.position + (Vector3)(muzzleDirection * GetTurretMuzzleDistance(turret.Root));
+            if (shooting.FireBotProjectileFromWorld(muzzleDirection, muzzlePosition))
+            {
+                turret.Ammo--;
+                turret.NextFireTime = Time.time + Mathf.Max(0.05f, weapon.FireRate);
+                if (turret.Ammo <= 0)
+                {
+                    turret.Reloading = true;
+                    turret.ReloadFinishTime = Time.time + Mathf.Max(0f, weapon.ReloadDuration);
+                }
+            }
+        }
+    }
+
+    float GetTurretMuzzleDistance(Transform turretRoot)
+    {
+        Transform visual = turretRoot != null ? turretRoot.Find("TurretVisual") : null;
+        SpriteRenderer renderer = visual != null ? visual.GetComponent<SpriteRenderer>() : null;
+        if (renderer == null || renderer.sprite == null)
+            return Mathf.Max(0.18f, weapon != null ? weapon.MuzzleOffsetDistance : 0.18f);
+
+        float visualWidth = renderer.sprite.bounds.size.x * Mathf.Abs(visual.lossyScale.x);
+        return (visualWidth * (0.5f + TurretPivotOffsetFromCenterFactor)) + Mathf.Max(0.08f, weapon != null ? weapon.MuzzleOffsetDistance : 0.18f);
+    }
+
+    void UpdateTurretReload(TurretRuntime turret)
+    {
+        if (!turret.Reloading || weapon == null || Time.time < turret.ReloadFinishTime)
+            return;
+
+        turret.Reloading = false;
+        turret.Ammo = Mathf.Max(1, weapon.AmmoCount);
+    }
+
+    Transform FindClosestVisibleHumanTargetFrom(Vector3 origin, float maxDistance)
+    {
+        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        Transform bestTarget = null;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < players.Length; i++)
+        {
+            PlayerHealth candidate = players[i];
+            if (!IsValidVisibleTarget(candidate, maxDistance))
+                continue;
+
+            float distance = Vector2.Distance(origin, candidate.transform.position);
+            if (distance > maxDistance || distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            bestTarget = candidate.transform;
+        }
+
+        return bestTarget;
+    }
+
+    static Sprite LoadTurretSprite()
+    {
+        if (cachedTurretSprite != null)
+            return cachedTurretSprite;
+
+        cachedTurretSprite = Resources.Load<Sprite>("wieza_mother_ship_resource");
+        if (cachedTurretSprite != null)
+            return cachedTurretSprite;
+
+#if UNITY_EDITOR
+        cachedTurretSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/wieza_mother_ship.png");
+        if (cachedTurretSprite != null)
+            return cachedTurretSprite;
+
+        Object[] assets = AssetDatabase.LoadAllAssetsAtPath("Assets/wieza_mother_ship.png");
+        for (int i = 0; i < assets.Length; i++)
+        {
+            if (assets[i] is Sprite sprite)
+            {
+                cachedTurretSprite = sprite;
+                return cachedTurretSprite;
+            }
+        }
+#endif
+
+        return null;
+    }
+
+    static Sprite LoadTurretWreckSprite()
+    {
+        if (cachedTurretWreckSprite != null)
+            return cachedTurretWreckSprite;
+
+        cachedTurretWreckSprite = Resources.Load<Sprite>("wieza_mother_ship_wrak_resource");
+        if (cachedTurretWreckSprite != null)
+            return cachedTurretWreckSprite;
+
+#if UNITY_EDITOR
+        cachedTurretWreckSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/wieza_mother_ship_wrak.png");
+        if (cachedTurretWreckSprite != null)
+            return cachedTurretWreckSprite;
+
+        Object[] assets = AssetDatabase.LoadAllAssetsAtPath("Assets/wieza_mother_ship_wrak.png");
+        for (int i = 0; i < assets.Length; i++)
+        {
+            if (assets[i] is Sprite sprite)
+            {
+                cachedTurretWreckSprite = sprite;
+                return cachedTurretWreckSprite;
+            }
+        }
+#endif
+
+        return null;
     }
 }
 

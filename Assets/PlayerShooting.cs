@@ -265,6 +265,50 @@ public class PlayerShooting : MonoBehaviourPun
         return true;
     }
 
+    public bool TryFireBotFromWorld(Vector2 direction, Vector3 spawnPosition, float cooldownOffset = 0f)
+    {
+        if (GetComponent<EnemyBot>() == null)
+            return false;
+
+        if (!photonView.IsMine || !IsGameStarted())
+            return false;
+
+        UpdateReload();
+
+        if (Time.time < nextFireTime || direction.sqrMagnitude < 0.04f)
+            return false;
+
+        if (!infiniteAmmo && (isReloading || currentAmmo <= 0))
+            return false;
+
+        int ownerId = photonView != null ? photonView.ViewID : 0;
+        bool spawned = SpawnBullet(direction.normalized, spawnPosition, ownerId);
+        if (!spawned)
+            return false;
+
+        photonView.RPC(nameof(PlayLaserSfx), RpcTarget.All);
+        if (!infiniteAmmo)
+            ConsumeAmmo();
+        nextFireTime = Time.time + fireRate + Mathf.Max(0f, cooldownOffset);
+        return true;
+    }
+
+    public bool FireBotProjectileFromWorld(Vector2 direction, Vector3 spawnPosition)
+    {
+        if (GetComponent<EnemyBot>() == null)
+            return false;
+
+        if (!photonView.IsMine || !IsGameStarted() || direction.sqrMagnitude < 0.04f)
+            return false;
+
+        int ownerId = photonView != null ? photonView.ViewID : 0;
+        bool spawned = SpawnBullet(direction.normalized, spawnPosition, ownerId);
+        if (spawned)
+            photonView.RPC(nameof(PlayLaserSfx), RpcTarget.All);
+
+        return spawned;
+    }
+
     void ConsumeAmmo()
     {
         currentAmmo = Mathf.Max(0, currentAmmo - 1);
@@ -709,7 +753,7 @@ public class PlayerShooting : MonoBehaviourPun
         fireRate = Mathf.Max(0.05f, configuredFireRate);
         maxAmmo = Mathf.Max(1, configuredMaxAmmo);
         reloadDuration = Mathf.Max(0f, configuredReloadDuration);
-        bulletDamage = Mathf.Max(1, configuredBulletDamage);
+        bulletDamage = Mathf.Max(0, configuredBulletDamage);
         bulletScaleMultiplier = Mathf.Max(0.25f, configuredBulletScaleMultiplier);
         bulletColor = configuredBulletColor;
         muzzleOffsetDistance = Mathf.Max(0f, configuredMuzzleOffsetDistance);

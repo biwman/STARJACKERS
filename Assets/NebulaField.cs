@@ -10,8 +10,8 @@ public class NebulaField : MonoBehaviour
 {
     const float TargetVisualSize = 3.36f;
     const float ColliderRadiusFactor = 0.4f;
-    const float PlayerDeepHideFactor = 0.8f;
-    const float PlayerDamageFactor = 0.8f;
+    const float PlayerDeepHideFactor = 1.25f;
+    const float PlayerDamageFactor = 1f;
     const float MinSizeMultiplier = 1f;
     const float MaxSizeMultiplier = 4f;
 
@@ -154,8 +154,8 @@ public class NebulaField : MonoBehaviour
 
     bool ShouldHideTarget(HideInNebulaTarget target)
     {
-        if (target.GetComponent<PlayerHealth>() == null)
-            return true;
+        if (target == null)
+            return false;
 
         Bounds targetBounds = GetTargetBounds(target);
         float nebulaRadius = GetWorldNebulaRadius();
@@ -178,7 +178,7 @@ public class NebulaField : MonoBehaviour
         float nebulaRadius = GetWorldNebulaRadius();
         float targetRadius = Mathf.Max(targetBounds.extents.x, targetBounds.extents.y);
         float distance = Vector2.Distance(transform.position, targetBounds.center);
-        return distance <= nebulaRadius + Mathf.Max(0.08f, targetRadius * 0.12f);
+        return distance <= nebulaRadius + Mathf.Max(0.02f, targetRadius * 0.04f);
     }
 
     public bool ShouldHide(HideInNebulaTarget target)
@@ -211,19 +211,52 @@ public class NebulaField : MonoBehaviour
 
     Bounds GetTargetBounds(HideInNebulaTarget target)
     {
-        SpriteRenderer[] targetRenderers = target.GetComponentsInChildren<SpriteRenderer>(true);
-        if (targetRenderers.Length == 0)
+        Collider2D[] colliders = target.GetComponentsInChildren<Collider2D>(false);
+        bool hasBounds = false;
+        Bounds combined = new Bounds(target.transform.position, Vector3.zero);
+        for (int i = 0; i < colliders.Length; i++)
         {
-            return new Bounds(target.transform.position, Vector3.one);
+            Collider2D collider = colliders[i];
+            if (collider == null || !collider.enabled || collider.isTrigger)
+                continue;
+
+            if (!hasBounds)
+            {
+                combined = collider.bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                combined.Encapsulate(collider.bounds);
+            }
         }
 
-        Bounds combined = targetRenderers[0].bounds;
-        for (int i = 1; i < targetRenderers.Length; i++)
+        if (hasBounds)
+            return combined;
+
+        SpriteRenderer rootRenderer = target.GetComponent<SpriteRenderer>();
+        if (rootRenderer != null && rootRenderer.enabled)
+            return rootRenderer.bounds;
+
+        SpriteRenderer[] targetRenderers = target.GetComponentsInChildren<SpriteRenderer>(false);
+        for (int i = 0; i < targetRenderers.Length; i++)
         {
-            combined.Encapsulate(targetRenderers[i].bounds);
+            SpriteRenderer renderer = targetRenderers[i];
+            if (renderer == null || !renderer.enabled)
+                continue;
+
+            if (!hasBounds)
+            {
+                combined = renderer.bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                combined.Encapsulate(renderer.bounds);
+            }
         }
 
-        return combined;
+        return hasBounds ? combined : new Bounds(target.transform.position, Vector3.one);
     }
 
     float GetWorldNebulaRadius()
