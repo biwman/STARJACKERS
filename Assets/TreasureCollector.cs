@@ -13,10 +13,13 @@ public class TreasureCollector : MonoBehaviourPun
     static readonly System.Collections.Generic.Dictionary<int, int> ReservedDroppedCargoLoot = new System.Collections.Generic.Dictionary<int, int>();
 
     const float TreasureScanInterval = 0.08f;
-    const float BeamWidth = 0.24f;
-    const float BeamJitterAmplitude = 0.08f;
-    const float BeamJitterFrequency = 18f;
+    const float BeamWidth = 0.18f;
+    const float BeamJitterAmplitude = 0.13f;
+    const float BeamJitterFrequency = 22f;
     const float BeamZOffset = -0.35f;
+    const int BeamPointCount = 13;
+    const float CollectFacingTurnSpeed = 720f;
+    const float HudButtonVerticalNudge = 12f;
     const float ExtractionUseSearchRadius = 2.1f;
     const float ExtractionUseKeepAliveDistance = 1.15f;
 
@@ -43,6 +46,7 @@ public class TreasureCollector : MonoBehaviourPun
     Coroutine pickupToastRoutine;
     Coroutine extractionUseRoutine;
     bool collectButtonHooked;
+    RectTransform nudgedCollectButtonRect;
 
     public static void ResetRoundReservations()
     {
@@ -125,6 +129,8 @@ public class TreasureCollector : MonoBehaviourPun
             if (buttonObject != null)
                 collectButton = buttonObject.GetComponent<Button>();
         }
+
+        EnsureCollectButtonNudged();
 
         if (collectButton == null || collectButtonHooked)
             return;
@@ -356,11 +362,13 @@ public class TreasureCollector : MonoBehaviourPun
             }
 
             currentTreasure = treasureToCollect;
+            FaceCollectibleTarget();
             timer += Time.deltaTime;
             yield return null;
         }
 
-        AddScore(treasureToCollect.value);
+        int collectXp = RoundXpTracker.RecordTreasureCollected(photonView.Owner, treasureToCollect.itemId);
+        AddScore(collectXp);
         StoreCollectedItem(treasureToCollect.itemId);
 
         PhotonView treasureView = treasureToCollect.GetComponent<PhotonView>();
@@ -403,6 +411,7 @@ public class TreasureCollector : MonoBehaviourPun
             }
 
             currentWreck = wreckToLoot;
+            FaceCollectibleTarget();
             timer += Time.deltaTime;
             yield return null;
         }
@@ -440,6 +449,7 @@ public class TreasureCollector : MonoBehaviourPun
             }
 
             currentDroppedCargo = crateToLoot;
+            FaceCollectibleTarget();
             timer += Time.deltaTime;
             yield return null;
         }
@@ -458,6 +468,21 @@ public class TreasureCollector : MonoBehaviourPun
     {
         if (movement != null) movement.enabled = false;
         if (shooting != null) shooting.enabled = false;
+    }
+
+    void FaceCollectibleTarget()
+    {
+        if (!photonView.IsMine)
+            return;
+
+        Vector2 target = GetCurrentCollectibleCenter(transform.position);
+        Vector2 toTarget = target - (Vector2)transform.position;
+        if (toTarget.sqrMagnitude < 0.0001f)
+            return;
+
+        float targetAngle = Mathf.Atan2(toTarget.y, toTarget.x) * Mathf.Rad2Deg - 90f;
+        Quaternion targetRotation = Quaternion.Euler(0f, 0f, targetAngle);
+        transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, CollectFacingTurnSpeed * Time.deltaTime);
     }
 
     public void ForceCancelCollectionForDeath()
@@ -787,6 +812,19 @@ public class TreasureCollector : MonoBehaviourPun
         return (Vector2)transform.position + (Vector2)transform.up * forwardOffset;
     }
 
+    void EnsureCollectButtonNudged()
+    {
+        if (collectButton == null)
+            return;
+
+        RectTransform rect = collectButton.GetComponent<RectTransform>();
+        if (rect == null || rect == nudgedCollectButtonRect)
+            return;
+
+        rect.anchoredPosition += new Vector2(0f, HudButtonVerticalNudge);
+        nudgedCollectButtonRect = rect;
+    }
+
     void SetupBeam()
     {
         Transform existing = transform.Find("TreasureBeam");
@@ -801,22 +839,22 @@ public class TreasureCollector : MonoBehaviourPun
 
         collectionBeam.useWorldSpace = true;
         collectionBeam.alignment = LineAlignment.View;
-        collectionBeam.positionCount = 2;
+        collectionBeam.positionCount = BeamPointCount;
         collectionBeam.widthMultiplier = BeamWidth;
         collectionBeam.startWidth = BeamWidth;
-        collectionBeam.endWidth = BeamWidth * 0.7f;
-        collectionBeam.numCapVertices = 6;
-        collectionBeam.numCornerVertices = 4;
+        collectionBeam.endWidth = BeamWidth * 0.55f;
+        collectionBeam.numCapVertices = 12;
+        collectionBeam.numCornerVertices = 10;
         collectionBeam.material = new Material(Shader.Find("Sprites/Default"));
-        collectionBeam.startColor = new Color(0.7f, 1f, 0.82f, 1f);
-        collectionBeam.endColor = new Color(0.28f, 1f, 0.52f, 0.78f);
+        collectionBeam.colorGradient = BuildCollectionBeamGradient(1f);
+        collectionBeam.widthCurve = BuildCollectionBeamWidthCurve();
         collectionBeam.textureMode = LineTextureMode.Stretch;
 
         SpriteRenderer referenceRenderer = GetComponent<SpriteRenderer>();
         if (referenceRenderer != null)
         {
             collectionBeam.sortingLayerID = referenceRenderer.sortingLayerID;
-            collectionBeam.sortingOrder = referenceRenderer.sortingOrder + 20;
+            collectionBeam.sortingOrder = referenceRenderer.sortingOrder + 36;
         }
         else
         {
@@ -849,15 +887,53 @@ public class TreasureCollector : MonoBehaviourPun
 
         Vector2 start = GetShipTipPosition();
         Vector2 end = GetCollectibleBeamTarget(start);
-        Vector2 direction = (end - start).normalized;
+        Vector2 delta = end - start;
+        Vector2 direction = delta.sqrMagnitude > 0.0001f ? delta.normalized : (Vector2)transform.up;
         Vector2 perpendicular = new Vector2(-direction.y, direction.x);
-        float jitter = Mathf.Sin(Time.time * BeamJitterFrequency) * BeamJitterAmplitude;
+        float pulse = Mathf.Sin(Time.time * 14f) * 0.5f + 0.5f;
+        float alpha = Mathf.Lerp(0.72f, 1f, pulse);
+        collectionBeam.colorGradient = BuildCollectionBeamGradient(alpha);
+        collectionBeam.widthMultiplier = Mathf.Lerp(BeamWidth * 0.72f, BeamWidth * 1.3f, pulse);
 
-        Vector3 startPos = new Vector3(start.x + perpendicular.x * jitter * 0.5f, start.y + perpendicular.y * jitter * 0.5f, BeamZOffset);
-        Vector3 endPos = new Vector3(end.x - perpendicular.x * jitter, end.y - perpendicular.y * jitter, BeamZOffset);
+        for (int i = 0; i < collectionBeam.positionCount; i++)
+        {
+            float t = i / (float)(collectionBeam.positionCount - 1);
+            Vector2 point = Vector2.Lerp(start, end, t);
+            float taper = Mathf.Sin(t * Mathf.PI);
+            float waveA = Mathf.Sin((t * Mathf.PI * 5f) + Time.time * BeamJitterFrequency);
+            float waveB = Mathf.Sin((t * Mathf.PI * 11f) - Time.time * 13f) * 0.45f;
+            float jitter = (waveA + waveB) * BeamJitterAmplitude * taper;
+            point += perpendicular * jitter;
+            collectionBeam.SetPosition(i, new Vector3(point.x, point.y, BeamZOffset));
+        }
+    }
 
-        collectionBeam.SetPosition(0, startPos);
-        collectionBeam.SetPosition(1, endPos);
+    Gradient BuildCollectionBeamGradient(float alpha)
+    {
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(0.96f, 1f, 0.86f), 0f),
+                new GradientColorKey(new Color(0.28f, 1f, 0.66f), 0.38f),
+                new GradientColorKey(new Color(0.1f, 0.74f, 1f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0.95f * alpha, 0f),
+                new GradientAlphaKey(0.72f * alpha, 0.55f),
+                new GradientAlphaKey(0.18f * alpha, 1f)
+            });
+        return gradient;
+    }
+
+    AnimationCurve BuildCollectionBeamWidthCurve()
+    {
+        return new AnimationCurve(
+            new Keyframe(0f, 0.62f),
+            new Keyframe(0.18f, 1.2f),
+            new Keyframe(0.58f, 0.82f),
+            new Keyframe(1f, 0.22f));
     }
 
     Vector2 GetCollectibleBeamTarget(Vector2 start)
@@ -876,6 +952,18 @@ public class TreasureCollector : MonoBehaviourPun
         }
 
         return fallbackPosition;
+    }
+
+    Vector2 GetCurrentCollectibleCenter(Vector2 fallback)
+    {
+        if (currentTreasure != null)
+            return currentTreasure.transform.position;
+        if (currentWreck != null)
+            return currentWreck.transform.position;
+        if (currentDroppedCargo != null)
+            return currentDroppedCargo.transform.position;
+
+        return fallback;
     }
 
     void SetBeamEnabled(bool enabled)
@@ -966,7 +1054,15 @@ public class TreasureCollector : MonoBehaviourPun
 
     public void AddScore(int amount)
     {
-        totalScore = Mathf.Max(0, totalScore + amount);
+        if (amount <= 0)
+            return;
+
+        SetScoreTotal(totalScore + amount);
+    }
+
+    public void SetScoreTotal(int score)
+    {
+        totalScore = Mathf.Max(0, score);
 
         if (scoreText != null)
         {
@@ -974,6 +1070,7 @@ public class TreasureCollector : MonoBehaviourPun
         }
 
         SyncScoreProperty();
+        RoundResultsTracker.RecordScore(photonView.Owner, totalScore);
     }
 
     [PunRPC]
@@ -1087,6 +1184,7 @@ public class TreasureCollector : MonoBehaviourPun
             }
             else
             {
+                AddScore(RoundXpTracker.RecordWreckLooted(photonView.Owner, false));
                 ShowPickupToast(itemId);
             }
         }
@@ -1099,12 +1197,23 @@ public class TreasureCollector : MonoBehaviourPun
     [PunRPC]
     async void ReceivePendingWreckLootRpc(int wreckViewId, int lootIndex, string itemId)
     {
+        bool playerWreck = false;
+        PhotonView wreckView = PhotonView.Find(wreckViewId);
+        if (wreckView != null)
+        {
+            ShipWreck wreck = wreckView.GetComponent<ShipWreck>();
+            playerWreck = wreck != null && wreck.SourceShipSkinIndex >= 0;
+        }
+
         bool stored = false;
         try
         {
             stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
             if (stored)
+            {
+                AddScore(RoundXpTracker.RecordWreckLooted(photonView.Owner, playerWreck));
                 ShowPickupToast(itemId);
+            }
             else
                 Debug.Log("No free ship slot for reserved wreck loot item.");
         }
@@ -1125,7 +1234,10 @@ public class TreasureCollector : MonoBehaviourPun
         {
             stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
             if (stored)
+            {
+                AddScore(RoundXpTracker.RecordDroppedCargoLooted(photonView.Owner));
                 ShowPickupToast(itemId);
+            }
             else
                 Debug.Log("No free ship slot for reserved dropped cargo item.");
         }

@@ -40,6 +40,7 @@ public static class RoundResultsTracker
     {
         EnsureRoomScope();
         TrackedResults.Clear();
+        RoundXpTracker.ResetForCurrentRoom();
     }
 
     public static void RecordScore(Player player, int score)
@@ -59,10 +60,12 @@ public static class RoundResultsTracker
             return;
 
         EnsureRoomScope();
+        outcome = string.IsNullOrWhiteSpace(outcome) ? "active" : outcome;
+        finalScore = RoundXpTracker.FinalizeRoundXp(player, finalScore, outcome);
         TrackedRoundResult result = GetOrCreate(player);
         result.Score = Mathf.Max(0, finalScore);
         result.HasScore = true;
-        result.Outcome = string.IsNullOrWhiteSpace(outcome) ? "active" : outcome;
+        result.Outcome = outcome;
     }
 
     public static int GetKnownScore(Player player, GameObject sceneObject = null)
@@ -102,6 +105,8 @@ public static class RoundResultsTracker
             string outcome = tracked != null && !string.IsNullOrWhiteSpace(tracked.Outcome)
                 ? tracked.Outcome
                 : "active";
+
+            score = RoundXpTracker.FinalizeRoundXp(player, score, outcome);
 
             entries.Add(new RoundResultEntry
             {

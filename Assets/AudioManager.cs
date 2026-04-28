@@ -30,6 +30,7 @@ public class AudioManager : MonoBehaviour
     AudioClip spaceTruckAlertClip;
     AudioClip mothershipEngineClip;
     AudioClip shieldFullPowerClip;
+    AudioClip magneticBeamClip;
 
     AudioSource oneShotSource;
     AudioSource drillingLoopSource;
@@ -124,6 +125,7 @@ public class AudioManager : MonoBehaviour
         spaceTruckAlertClip = Resources.Load<AudioClip>("Audio/alert_3times");
         mothershipEngineClip = Resources.Load<AudioClip>("Audio/mother_ship_sound");
         shieldFullPowerClip = Resources.Load<AudioClip>("Audio/Shield At Full Power");
+        magneticBeamClip = Resources.Load<AudioClip>("Audio/magnetic_beam_sound");
     }
 
     void EnsureSources()
@@ -241,6 +243,11 @@ public class AudioManager : MonoBehaviour
     public void PlayShieldFullPowerAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(shieldFullPowerClip != null ? shieldFullPowerClip : shieldChargeClip, worldPosition, 0.82f);
+    }
+
+    public void PlayMagneticBeamAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(magneticBeamClip != null ? magneticBeamClip : shieldChargeClip, worldPosition, 0.88f);
     }
 
     public void PlayEvacBuzzerBurst()

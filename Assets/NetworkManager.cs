@@ -724,6 +724,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.MapSizeKey:
             case RoomSettings.MapBackgroundKey:
             case RoomSettings.VisualEffectsEnabledKey:
+            case RoomSettings.StartingVfxEnabledKey:
             case RoomSettings.ObstacleDensityKey:
             case RoomSettings.ObstacleDestroyEnabledKey:
             case RoomSettings.ObstacleHpKey:

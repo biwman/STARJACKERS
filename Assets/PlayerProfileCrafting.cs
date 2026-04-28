@@ -142,6 +142,32 @@ public static class PlayerProfileCraftingCatalog
         },
         new PlayerProfileCraftingRecipe
         {
+            Id = "magnetic_beam_from_asteroids",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.AsteroidResourceId,
+                InventoryItemCatalog.AsteroidResourceId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidGoldId
+            },
+            OutputItemId = InventoryItemCatalog.MagneticBeamId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "tractor_beam_from_asteroids",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.TractorBeamId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
             Id = "shield_reactor_from_truck_wreck",
             Inputs = new[]
             {

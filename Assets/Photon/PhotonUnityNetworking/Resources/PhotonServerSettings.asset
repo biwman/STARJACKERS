@@ -102,6 +102,11 @@ MonoBehaviour:
   - PlaySpaceTruckAlert
   - PlayShieldFullPowerAudio
   - PlayHpHitVisual
+  - PlayMagneticBeamEffects
+  - RequestStartTractorBeam
+  - RequestStopTractorBeam
+  - StartTractorBeamEffects
+  - StopTractorBeamEffects
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

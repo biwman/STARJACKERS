@@ -92,6 +92,11 @@ public class PlayerMovement : MonoBehaviourPun
             gameObject.AddComponent<EngineThrusterVFX>();
         }
 
+        if (!isAstronaut && GetComponent<EnemyBot>() == null && GetComponent<StartingShipEntryVfx>() == null)
+        {
+            gameObject.AddComponent<StartingShipEntryVfx>();
+        }
+
         targetRotationAngle = transform.eulerAngles.z;
 
         CaptureBaseMovementProfile();
@@ -151,6 +156,15 @@ public class PlayerMovement : MonoBehaviourPun
                 return;
             }
 
+            if (IsStartingEntryActive())
+            {
+                moveInput = Vector2.zero;
+                shootInput = Vector2.zero;
+                effectiveMoveInput = Vector2.zero;
+                UpdateEngineAudio();
+                return;
+            }
+
             ResolveJoysticks();
 
             moveInput = joystick != null && joystick.IsPressed ? joystick.inputVector : Vector2.zero;
@@ -188,6 +202,9 @@ public class PlayerMovement : MonoBehaviourPun
             }
             return;
         }
+
+        if (IsStartingEntryActive())
+            return;
 
         float currentSpeed = IsBoosterDepleted ? speed * CurrentDepletedSpeedMultiplier : speed;
         if (rb != null)
@@ -401,6 +418,12 @@ public class PlayerMovement : MonoBehaviourPun
         }
 
         return false;
+    }
+
+    bool IsStartingEntryActive()
+    {
+        StartingShipEntryVfx entry = GetComponent<StartingShipEntryVfx>();
+        return entry != null && entry.IsControllingMotion;
     }
 
     void UpdateBooster(float deltaTime)

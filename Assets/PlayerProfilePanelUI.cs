@@ -45,6 +45,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
     };
 
     static readonly Vector2 ShipPreviewImagePosition = new Vector2(0f, 22f);
+    static readonly Vector2 PlayerInventoryGridPosition = new Vector2(-938f, -578f);
+    static readonly Vector2 PlayerInventoryViewportSize = new Vector2(830f, 362f);
+    const int PlayerInventoryGridColumns = 6;
     static readonly Vector2[] EquipmentSlotLayoutPositions =
     {
         new Vector2(-258f, -22f),
@@ -75,16 +78,23 @@ public class PlayerProfilePanelUI : MonoBehaviour
     Button[] skinButtons;
     Button[] shipInventoryButtons;
     Button[] playerInventoryButtons;
+    Button playerInventoryExtendButton;
     TMP_Text[] shipInventoryTexts;
     TMP_Text[] playerInventoryTexts;
     Image[] shipInventoryIcons;
     Image[] playerInventoryIcons;
     ScrollRect playerInventoryScrollRect;
     RectTransform playerInventoryContentRect;
+    GameObject playerInventoryScrollbarObject;
+    int builtPlayerInventorySlotCount = -1;
     TMP_Text shipTypeLabelText;
     TMP_Text shipSkinLabelText;
     TMP_Text shipInventoryLabelText;
     TMP_Text playerInventoryLabelText;
+    GameObject playerInventoryExtendConfirmObject;
+    TMP_Text playerInventoryExtendConfirmText;
+    Button playerInventoryExtendConfirmButton;
+    Button playerInventoryExtendCancelButton;
     TMP_Text shipPreviewTitleText;
     TMP_Text shipPreviewStatsText;
     RectTransform shipPreviewRootRect;
@@ -233,8 +243,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         CreateText(panelObject.transform, "ProfileTitle", "PLAYER PROFILE", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(210f, -28f), new Vector2(360f, 40f), 34f, TextAlignmentOptions.Left);
         accountText = CreateText(panelObject.transform, "AccountText", "Connecting...", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-250f, -28f), new Vector2(320f, 24f), 16f, TextAlignmentOptions.Right);
         gamesPlayedText = CreateText(panelObject.transform, "GamesPlayedText", "Games Played: 0", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(210f, -92f), new Vector2(210f, 24f), 18f, TextAlignmentOptions.Left);
-        totalXpText = CreateText(panelObject.transform, "TotalXpText", "Total XP: 0", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(420f, -92f), new Vector2(190f, 24f), 18f, TextAlignmentOptions.Left);
-        astronsText = CreateText(panelObject.transform, "AstronsText", "Astrons: 0", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(610f, -92f), new Vector2(180f, 24f), 18f, TextAlignmentOptions.Left);
+        totalXpText = CreateText(panelObject.transform, "TotalXpText", "Level: 1  Total XP: 0", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(420f, -92f), new Vector2(250f, 24f), 18f, TextAlignmentOptions.Left);
+        astronsText = CreateText(panelObject.transform, "AstronsText", "Astrons: 0", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(665f, -92f), new Vector2(125f, 24f), 18f, TextAlignmentOptions.Left);
 
         CreateText(panelObject.transform, "NicknameLabel", "NICKNAME", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(790f, -92f), new Vector2(130f, 24f), 18f, TextAlignmentOptions.Left);
 
@@ -315,13 +325,16 @@ public class PlayerProfilePanelUI : MonoBehaviour
         inventoryHintText = CreateText(panelObject.transform, "InventoryHintText", "Tap to preview. Drag between inventories, loadout slots and crafting.", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -146f), new Vector2(820f, 24f), 16f, TextAlignmentOptions.Center);
         inventoryHintText.fontStyle = FontStyles.Normal;
 
-        shipInventoryLabelText = CreateText(panelObject.transform, "ShipInventoryLabel", "SHIP INVENTORY", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-614f, -262f), new Vector2(420f, 24f), 18f, TextAlignmentOptions.Center);
-        CreateInventoryGrid(panelObject.transform, false, new Vector2(-878f, -294f), 10, 5, out shipInventoryButtons, out shipInventoryTexts, out shipInventoryIcons);
+        shipInventoryLabelText = CreateText(panelObject.transform, "ShipInventoryLabel", "SHIP INVENTORY", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-614f, -222f), new Vector2(420f, 24f), 18f, TextAlignmentOptions.Center);
+        CreateInventoryGrid(panelObject.transform, false, new Vector2(-878f, -254f), 10, 5, out shipInventoryButtons, out shipInventoryTexts, out shipInventoryIcons);
 
-        playerInventoryLabelText = CreateText(panelObject.transform, "PlayerInventoryLabel", "PLAYER INVENTORY (" + PlayerInventoryData.PlayerSlotCount + ")", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-560f, -546f), new Vector2(520f, 24f), 18f, TextAlignmentOptions.Center);
-        CreateScrollablePlayerInventoryGrid(panelObject.transform, new Vector2(-938f, -578f), new Vector2(830f, 362f), PlayerInventoryData.PlayerSlotCount, 6, out playerInventoryButtons, out playerInventoryTexts, out playerInventoryIcons);
+        playerInventoryLabelText = CreateText(panelObject.transform, "PlayerInventoryLabel", "PLAYER INVENTORY (" + GetPlayerInventorySlotCount() + ")", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-574f, -546f), new Vector2(430f, 24f), 18f, TextAlignmentOptions.Center);
+        playerInventoryExtendButton = CreateButton(panelObject.transform, "PlayerInventoryExtendButton", "EXTEND", new Vector2(-278f, -542f), new Vector2(128f, 36f), OnPlayerInventoryExtendClicked);
+        StyleButton(playerInventoryExtendButton, new Color(0.12f, 0.38f, 0.44f, 0.98f), new Color(0.16f, 0.52f, 0.62f, 1f));
+        RebuildPlayerInventoryGrid(GetPlayerInventorySlotCount());
 
         CreateItemPreview(panelObject.transform);
+        CreatePlayerInventoryExtendConfirm(panelObject.transform);
         CreateCraftingPanel(panelObject.transform);
         CreateCraftingRecipeBrowser(panelObject.transform);
 
@@ -524,6 +537,45 @@ public class PlayerProfilePanelUI : MonoBehaviour
         itemPreviewSellButton = CreateButton(itemPreviewPanelObject.transform, "ItemPreviewSellButton", "SELL", new Vector2(-72f, -254f), new Vector2(116f, 44f), OnItemPreviewSellClicked);
         itemPreviewSalvageButton = CreateButton(itemPreviewPanelObject.transform, "ItemPreviewSalvageButton", "SALVAGE", new Vector2(72f, -254f), new Vector2(116f, 44f), OnItemPreviewSalvageClicked);
         itemPreviewPanelObject.SetActive(false);
+    }
+
+    void CreatePlayerInventoryExtendConfirm(Transform parent)
+    {
+        playerInventoryExtendConfirmObject = new GameObject("PlayerInventoryExtendConfirm", typeof(RectTransform), typeof(Image));
+        playerInventoryExtendConfirmObject.transform.SetParent(parent, false);
+        RectTransform overlayRect = playerInventoryExtendConfirmObject.GetComponent<RectTransform>();
+        overlayRect.anchorMin = Vector2.zero;
+        overlayRect.anchorMax = Vector2.one;
+        overlayRect.offsetMin = Vector2.zero;
+        overlayRect.offsetMax = Vector2.zero;
+
+        Image overlayImage = playerInventoryExtendConfirmObject.GetComponent<Image>();
+        overlayImage.color = new Color(0.01f, 0.02f, 0.035f, 0.72f);
+        overlayImage.raycastTarget = true;
+
+        GameObject panel = new GameObject("PlayerInventoryExtendConfirmPanel", typeof(RectTransform), typeof(Image));
+        panel.transform.SetParent(playerInventoryExtendConfirmObject.transform, false);
+        RectTransform panelRect = panel.GetComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.anchoredPosition = Vector2.zero;
+        panelRect.sizeDelta = new Vector2(560f, 240f);
+
+        Image panelImage = panel.GetComponent<Image>();
+        panelImage.color = new Color(0.07f, 0.1f, 0.14f, 0.98f);
+
+        CreateText(panel.transform, "PlayerInventoryExtendTitle", "EXTEND INVENTORY", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(500f, 34f), 24f, TextAlignmentOptions.Center);
+        playerInventoryExtendConfirmText = CreateText(panel.transform, "PlayerInventoryExtendText", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -86f), new Vector2(500f, 70f), 19f, TextAlignmentOptions.Center);
+        playerInventoryExtendConfirmText.fontStyle = FontStyles.Normal;
+        playerInventoryExtendConfirmText.textWrappingMode = TextWrappingModes.Normal;
+
+        playerInventoryExtendConfirmButton = CreateButton(panel.transform, "PlayerInventoryExtendConfirmButton", "EXTEND", new Vector2(-116f, -166f), new Vector2(180f, 52f), OnPlayerInventoryExtendConfirmClicked);
+        StyleButton(playerInventoryExtendConfirmButton, new Color(0.1f, 0.46f, 0.34f, 1f), new Color(0.16f, 0.62f, 0.44f, 1f));
+        playerInventoryExtendCancelButton = CreateButton(panel.transform, "PlayerInventoryExtendCancelButton", "CANCEL", new Vector2(116f, -166f), new Vector2(180f, 52f), HidePlayerInventoryExtendConfirm);
+        StyleButton(playerInventoryExtendCancelButton, new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f));
+
+        playerInventoryExtendConfirmObject.SetActive(false);
     }
 
     void CreateCraftingPanel(Transform parent)
@@ -1302,6 +1354,52 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
     }
 
+    void RebuildPlayerInventoryGrid(int slotCount)
+    {
+        if (panelObject == null)
+            return;
+
+        int safeSlotCount = Mathf.Max(PlayerInventoryData.DefaultPlayerSlotCount, slotCount);
+        if (builtPlayerInventorySlotCount == safeSlotCount && playerInventoryButtons != null)
+            return;
+
+        if (playerInventoryScrollRect != null)
+        {
+            Destroy(playerInventoryScrollRect.gameObject);
+            playerInventoryScrollRect = null;
+            playerInventoryContentRect = null;
+        }
+
+        if (playerInventoryScrollbarObject != null)
+        {
+            Destroy(playerInventoryScrollbarObject);
+            playerInventoryScrollbarObject = null;
+        }
+
+        CreateScrollablePlayerInventoryGrid(
+            panelObject.transform,
+            PlayerInventoryGridPosition,
+            PlayerInventoryViewportSize,
+            safeSlotCount,
+            PlayerInventoryGridColumns,
+            out playerInventoryButtons,
+            out playerInventoryTexts,
+            out playerInventoryIcons);
+        PlacePlayerInventoryGridInHierarchy();
+        builtPlayerInventorySlotCount = safeSlotCount;
+    }
+
+    void PlacePlayerInventoryGridInHierarchy()
+    {
+        if (itemPreviewPanelObject == null || playerInventoryScrollRect == null)
+            return;
+
+        int targetIndex = itemPreviewPanelObject.transform.GetSiblingIndex();
+        playerInventoryScrollRect.transform.SetSiblingIndex(targetIndex);
+        if (playerInventoryScrollbarObject != null)
+            playerInventoryScrollbarObject.transform.SetSiblingIndex(targetIndex + 1);
+    }
+
     void CreateScrollablePlayerInventoryGrid(Transform parent, Vector2 anchoredPosition, Vector2 viewportSize, int slotCount, int columns, out Button[] buttons, out TMP_Text[] labels, out Image[] icons)
     {
         buttons = new Button[slotCount];
@@ -1338,6 +1436,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
         GameObject scrollbarObject = new GameObject("PlayerInventoryScrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
         scrollbarObject.transform.SetParent(parent, false);
+        playerInventoryScrollbarObject = scrollbarObject;
         RectTransform scrollbarRect = scrollbarObject.GetComponent<RectTransform>();
         scrollbarRect.anchorMin = new Vector2(0.5f, 1f);
         scrollbarRect.anchorMax = new Vector2(0.5f, 1f);
@@ -1620,7 +1719,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
         if (totalXpText != null)
         {
-            totalXpText.text = "Total XP: " + profile.TotalXp;
+            totalXpText.text = "Level: " + RoundXpBalance.GetLevelForTotalXp(profile.TotalXp) + "  Total XP: " + profile.TotalXp;
         }
 
         if (astronsText != null)
@@ -2175,6 +2274,70 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
     }
 
+    int GetPlayerInventorySlotCount()
+    {
+        if (!PlayerProfileService.HasInstance || PlayerProfileService.Instance.CurrentProfile == null)
+            return PlayerInventoryData.DefaultPlayerSlotCount;
+
+        PlayerInventoryData inventory = PlayerProfileService.Instance.CurrentProfile.Inventory;
+        if (inventory == null || inventory.PlayerSlots == null)
+            return PlayerInventoryData.DefaultPlayerSlotCount;
+
+        return Mathf.Max(PlayerInventoryData.DefaultPlayerSlotCount, inventory.PlayerSlots.Length);
+    }
+
+    void OnPlayerInventoryExtendClicked()
+    {
+        if (inventoryActionInProgress || PlayerProfileService.Instance.CurrentProfile == null)
+            return;
+
+        int price = PlayerProfileService.Instance.GetNextPlayerInventoryExtendPrice();
+        if (playerInventoryExtendConfirmText != null)
+            playerInventoryExtendConfirmText.text = "Do you want to extend player inventory for " + price + " Astrons?";
+
+        if (playerInventoryExtendConfirmObject != null)
+        {
+            playerInventoryExtendConfirmObject.SetActive(true);
+            playerInventoryExtendConfirmObject.transform.SetAsLastSibling();
+        }
+    }
+
+    void HidePlayerInventoryExtendConfirm()
+    {
+        if (playerInventoryExtendConfirmObject != null)
+            playerInventoryExtendConfirmObject.SetActive(false);
+    }
+
+    async void OnPlayerInventoryExtendConfirmClicked()
+    {
+        if (inventoryActionInProgress)
+            return;
+
+        int price = PlayerProfileService.Instance.GetNextPlayerInventoryExtendPrice();
+        try
+        {
+            inventoryActionInProgress = true;
+            SetInteractable(false);
+            bool extended = await PlayerProfileService.Instance.TryExtendPlayerInventoryAsync();
+            HidePlayerInventoryExtendConfirm();
+            if (extended)
+                SetStatus("Player inventory extended by " + PlayerInventoryData.PlayerSlotExtensionSize + " slots.");
+            else
+                SetStatus("Not enough Astrons. Need " + price + ".");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Player inventory extend failed: " + ex);
+            SetStatus("Inventory extension failed.");
+        }
+        finally
+        {
+            inventoryActionInProgress = false;
+            SetInteractable(!NetworkManager.SessionRequested);
+            RefreshView();
+        }
+    }
+
     void SetInteractable(bool interactable)
     {
         if (nicknameInput != null)
@@ -2225,6 +2388,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
             itemPreviewSalvageButton.interactable = interactable;
         if (craftButton != null)
             craftButton.interactable = interactable;
+        if (playerInventoryExtendButton != null)
+            playerInventoryExtendButton.interactable = interactable;
+        if (playerInventoryExtendConfirmButton != null)
+            playerInventoryExtendConfirmButton.interactable = interactable;
+        if (playerInventoryExtendCancelButton != null)
+            playerInventoryExtendCancelButton.interactable = interactable;
     }
 
     void SetInventoryButtonState(Button[] buttons, bool interactable)
@@ -3017,8 +3186,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (shipInventoryLabelText != null)
             shipInventoryLabelText.text = "SHIP INVENTORY (" + ShipCatalog.GetShipInventoryCapacity(selectedSkin) + ")";
 
+        RebuildPlayerInventoryGrid(normalized.PlayerSlots.Length);
+
         if (playerInventoryLabelText != null)
-            playerInventoryLabelText.text = "PLAYER INVENTORY (" + PlayerInventoryData.PlayerSlotCount + ")";
+            playerInventoryLabelText.text = "PLAYER INVENTORY (" + normalized.PlayerSlots.Length + ")";
 
         RefreshInventoryButtons(shipInventoryButtons, shipInventoryTexts, shipInventoryIcons, normalized.ShipSlots, true);
         RefreshInventoryButtons(playerInventoryButtons, playerInventoryTexts, playerInventoryIcons, normalized.PlayerSlots, false);

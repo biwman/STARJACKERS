@@ -91,6 +91,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text mapSizeSettingText;
     public TMP_Text mapBackgroundSettingText;
     public TMP_Text visualEffectsSettingText;
+    public TMP_Text startingVfxSettingText;
     public TMP_Text obstacleSettingText;
     public TMP_Text obstacleDestroySettingText;
     public TMP_Text obstacleHpValueSettingText;
@@ -118,6 +119,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button mapSizeSettingButton;
     public Button mapBackgroundSettingButton;
     public Button visualEffectsSettingButton;
+    public Button startingVfxSettingButton;
     public Button obstacleSettingButton;
     public Button obstacleDestroySettingButton;
     public Button obstacleHpValueSettingButton;
@@ -158,6 +160,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     GameObject mapSelectionOverlayObject;
     TMP_Text mapSelectionOverlayTitleText;
     Button mapSelectionOverlayCloseButton;
+    ScrollRect mapSelectionScrollRect;
+    RectTransform mapSelectionContentRect;
     readonly List<Button> mapSelectionTileButtons = new List<Button>();
     bool leftSettingsScrollInitialized;
 
@@ -536,6 +540,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         mapSizeSettingButton = EnsureSettingButton(ref mapSizeSettingText, mapSizeSettingButton, "MapSizeSettingButton", "MapSizeSettingText", Vector2.zero, CycleMapSize);
         mapBackgroundSettingButton = EnsureSettingButton(ref mapBackgroundSettingText, mapBackgroundSettingButton, "MapBackgroundSettingButton", "MapBackgroundSettingText", Vector2.zero, CycleMapBackground);
         visualEffectsSettingButton = EnsureSettingButton(ref visualEffectsSettingText, visualEffectsSettingButton, "VisualEffectsSettingButton", "VisualEffectsSettingText", Vector2.zero, CycleVisualEffectsEnabled);
+        startingVfxSettingButton = EnsureSettingButton(ref startingVfxSettingText, startingVfxSettingButton, "StartingVfxSettingButton", "StartingVfxSettingText", Vector2.zero, CycleStartingVfxEnabled);
         obstacleSettingButton = EnsureSettingButton(ref obstacleSettingText, obstacleSettingButton, "ObstacleSettingButton", "ObstacleSettingText", Vector2.zero, CycleObstacleDensity);
         obstacleDestroySettingButton = EnsureSettingButton(ref obstacleDestroySettingText, obstacleDestroySettingButton, "ObstacleDestroySettingButton", "ObstacleDestroySettingText", Vector2.zero, CycleObstacleDestroyEnabled);
         obstacleHpValueSettingButton = EnsureSettingButton(ref obstacleHpValueSettingText, obstacleHpValueSettingButton, "ObstacleHpValueSettingButton", "ObstacleHpValueSettingText", Vector2.zero, CycleObstacleHp);
@@ -575,6 +580,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         AttachLeftSectionButton(mapBackgroundSettingButton, "COSMETICS");
         AttachLeftSectionButton(visualEffectsSettingButton, "COSMETICS");
+        AttachLeftSectionButton(startingVfxSettingButton, "COSMETICS");
 
         AttachLeftSectionButton(boosterSettingButton, "FEELING");
         AttachLeftSectionButton(ammoSettingButton, "FEELING");
@@ -686,7 +692,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         panelRect.anchorMax = new Vector2(0.5f, 0.5f);
         panelRect.pivot = new Vector2(0.5f, 0.5f);
         panelRect.anchoredPosition = new Vector2(0f, -10f);
-        panelRect.sizeDelta = new Vector2(1440f, 780f);
+        panelRect.sizeDelta = new Vector2(1540f, 880f);
 
         Image panelImage = panelObject.GetComponent<Image>();
         panelImage.color = new Color(0.08f, 0.11f, 0.16f, 0.94f);
@@ -696,6 +702,68 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         TMP_Text subtitle = CreateStandaloneLabel(panelObject.transform, "LobbyMapSelectionSubtitle", "Choose a preset map for the round.", new Vector2(36f, -68f), new Vector2(540f, 24f), 16f, TextAlignmentOptions.Left);
         subtitle.fontStyle = FontStyles.Normal;
         subtitle.color = new Color(0.78f, 0.84f, 0.91f, 0.92f);
+
+        GameObject viewportObject = FindOrCreateChild(panelObject, "LobbyMapSelectionViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
+        RectTransform viewportRect = viewportObject.GetComponent<RectTransform>();
+        viewportRect.anchorMin = new Vector2(0.5f, 1f);
+        viewportRect.anchorMax = new Vector2(0.5f, 1f);
+        viewportRect.pivot = new Vector2(0.5f, 1f);
+        viewportRect.anchoredPosition = new Vector2(-18f, -116f);
+        viewportRect.sizeDelta = new Vector2(1340f, 700f);
+
+        Image viewportImage = viewportObject.GetComponent<Image>();
+        viewportImage.color = new Color(0.04f, 0.06f, 0.09f, 0.42f);
+        viewportImage.raycastTarget = true;
+
+        GameObject contentObject = FindOrCreateChild(viewportObject, "LobbyMapSelectionContent", typeof(RectTransform));
+        mapSelectionContentRect = contentObject.GetComponent<RectTransform>();
+        mapSelectionContentRect.anchorMin = new Vector2(0f, 1f);
+        mapSelectionContentRect.anchorMax = new Vector2(0f, 1f);
+        mapSelectionContentRect.pivot = new Vector2(0f, 1f);
+        mapSelectionContentRect.anchoredPosition = Vector2.zero;
+
+        GameObject scrollbarObject = FindOrCreateChild(panelObject, "LobbyMapSelectionScrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
+        RectTransform scrollbarRect = scrollbarObject.GetComponent<RectTransform>();
+        scrollbarRect.anchorMin = new Vector2(0.5f, 1f);
+        scrollbarRect.anchorMax = new Vector2(0.5f, 1f);
+        scrollbarRect.pivot = new Vector2(0f, 1f);
+        scrollbarRect.anchoredPosition = new Vector2(680f, -116f);
+        scrollbarRect.sizeDelta = new Vector2(42f, 700f);
+
+        Image scrollbarBg = scrollbarObject.GetComponent<Image>();
+        scrollbarBg.color = new Color(0.1f, 0.14f, 0.18f, 0.88f);
+
+        GameObject slidingAreaObject = FindOrCreateChild(scrollbarObject, "Sliding Area", typeof(RectTransform));
+        RectTransform slidingAreaRect = slidingAreaObject.GetComponent<RectTransform>();
+        slidingAreaRect.anchorMin = Vector2.zero;
+        slidingAreaRect.anchorMax = Vector2.one;
+        slidingAreaRect.offsetMin = new Vector2(4f, 4f);
+        slidingAreaRect.offsetMax = new Vector2(-4f, -4f);
+
+        GameObject handleObject = FindOrCreateChild(slidingAreaObject, "Handle", typeof(RectTransform), typeof(Image));
+        RectTransform handleRect = handleObject.GetComponent<RectTransform>();
+        handleRect.anchorMin = new Vector2(0f, 1f);
+        handleRect.anchorMax = new Vector2(1f, 1f);
+        handleRect.pivot = new Vector2(0.5f, 1f);
+        handleRect.sizeDelta = new Vector2(0f, 140f);
+
+        Image handleImage = handleObject.GetComponent<Image>();
+        handleImage.color = new Color(0.23f, 0.74f, 0.62f, 0.95f);
+
+        Scrollbar scrollbar = scrollbarObject.GetComponent<Scrollbar>();
+        scrollbar.direction = Scrollbar.Direction.BottomToTop;
+        scrollbar.handleRect = handleRect;
+        scrollbar.targetGraphic = handleImage;
+
+        mapSelectionScrollRect = viewportObject.GetComponent<ScrollRect>();
+        mapSelectionScrollRect.horizontal = false;
+        mapSelectionScrollRect.vertical = true;
+        mapSelectionScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        mapSelectionScrollRect.viewport = viewportRect;
+        mapSelectionScrollRect.content = mapSelectionContentRect;
+        mapSelectionScrollRect.verticalScrollbar = scrollbar;
+        mapSelectionScrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+        mapSelectionScrollRect.scrollSensitivity = 36f;
 
         GameObject closeButtonObject = FindOrCreateChild(panelObject, "LobbyMapSelectionCloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
         mapSelectionOverlayCloseButton = closeButtonObject.GetComponent<Button>();
@@ -747,19 +815,21 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         mapSelectionTileButtons.Clear();
         IReadOnlyList<LobbyMapDefinition> maps = LobbyMapCatalog.AllMaps;
+        int rows = Mathf.CeilToInt(maps.Count / 2f);
+        mapSelectionContentRect.sizeDelta = new Vector2(1280f, Mathf.Max(700f, rows * 280f + 20f));
         for (int i = 0; i < maps.Count; i++)
         {
             LobbyMapDefinition map = maps[i];
             GameObject tileObject = new GameObject("LobbyMapTile_" + map.Id, typeof(RectTransform), typeof(Image), typeof(Button));
-            tileObject.transform.SetParent(panelObject.transform, false);
+            tileObject.transform.SetParent(mapSelectionContentRect, false);
 
             RectTransform tileRect = tileObject.GetComponent<RectTransform>();
-            tileRect.anchorMin = new Vector2(0.5f, 0.5f);
-            tileRect.anchorMax = new Vector2(0.5f, 0.5f);
-            tileRect.pivot = new Vector2(0.5f, 0.5f);
+            tileRect.anchorMin = new Vector2(0f, 1f);
+            tileRect.anchorMax = new Vector2(0f, 1f);
+            tileRect.pivot = new Vector2(0.5f, 1f);
             int column = i % 2;
             int row = i / 2;
-            tileRect.anchoredPosition = new Vector2(-310f + (column * 620f), 110f - (row * 280f));
+            tileRect.anchoredPosition = new Vector2(290f + (column * 620f), -20f - (row * 280f));
             tileRect.sizeDelta = new Vector2(540f, 250f);
 
             Image tileImage = tileObject.GetComponent<Image>();
@@ -784,6 +854,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             tileSubtitle.fontStyle = FontStyles.Normal;
             tileSubtitle.color = new Color(0.82f, 0.88f, 0.94f, 0.9f);
         }
+
+        if (mapSelectionScrollRect != null)
+            mapSelectionScrollRect.verticalNormalizedPosition = 1f;
 
         mapSelectionOverlayObject.SetActive(false);
     }
@@ -1785,6 +1858,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RefreshHostSettingsUi();
     }
 
+    void CycleStartingVfxEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.StartingVfxEnabledKey] = !AreStartingVfxEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
     void CycleTreasureDensity()
     {
         CycleDensitySetting(RoomSettings.TreasureDensityKey, GetTreasureDensity());
@@ -2208,6 +2292,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (visualEffectsSettingText != null)
             visualEffectsSettingText.text = "VISUALS: " + (AreVisualEffectsEnabled() ? "ON" : "OFF");
 
+        if (startingVfxSettingText != null)
+            startingVfxSettingText.text = "STARTING VFX: " + (AreStartingVfxEnabled() ? "ON" : "OFF");
+
         if (obstacleSettingText != null)
             obstacleSettingText.text = "OBSTACLES DENSITY: " + FormatDensity(GetObstacleDensity());
 
@@ -2269,6 +2356,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(mapSizeSettingButton, isHost);
         SetSettingButtonState(mapBackgroundSettingButton, isHost);
         SetSettingButtonState(visualEffectsSettingButton, isHost);
+        SetSettingButtonState(startingVfxSettingButton, isHost);
         SetSettingButtonState(obstacleSettingButton, isHost);
         SetSettingButtonState(obstacleDestroySettingButton, isHost);
         SetSettingButtonState(obstacleHpValueSettingButton, isHost);
@@ -2451,6 +2539,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.MapBackgroundKey) ||
                changedProps.ContainsKey(RoomSettings.SelectedMapKey) ||
                changedProps.ContainsKey(RoomSettings.VisualEffectsEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.StartingVfxEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.ObstacleDensityKey) ||
                changedProps.ContainsKey(RoomSettings.ObstacleDestroyEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.ObstacleHpKey) ||
@@ -2523,6 +2612,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     bool AreVisualEffectsEnabled()
     {
         return RoomSettings.AreVisualEffectsEnabled();
+    }
+
+    bool AreStartingVfxEnabled()
+    {
+        return RoomSettings.AreStartingVfxEnabled();
     }
 
     string GetTreasureDensity()

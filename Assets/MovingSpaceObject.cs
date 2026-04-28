@@ -26,7 +26,7 @@ public class MovingSpaceObject : MonoBehaviour
     const float SnapshotInterval = 0.045f;
     const float RemoteSmoothing = 16f;
     const float ImpulseRequestCooldown = 0.05f;
-    const float RemotePredictionMaxOffset = 0.65f;
+    const float RemotePredictionMaxOffset = 1.1f;
 
     static readonly Dictionary<string, MovingSpaceObject> ObjectsById = new Dictionary<string, MovingSpaceObject>();
     static PhysicsMaterial2D sharedBouncyMaterial;
@@ -205,6 +205,33 @@ public class MovingSpaceObject : MonoBehaviour
         }
     }
 
+    public void ApplyMagneticPull(Vector2 sourcePosition, float strength, float deltaTime)
+    {
+        if (rb == null || strength <= 0f || deltaTime <= 0f)
+            return;
+
+        ApplySimulationMode();
+        if (!isAuthority || !movingEnabled || !translateEnabled)
+            return;
+
+        Vector2 toSource = sourcePosition - rb.position;
+        float distance = toSource.magnitude;
+        if (distance <= 0.05f)
+            return;
+
+        float effectiveMass = Mathf.Clamp(GetMassFactor(), 1f, 12f);
+        float falloff = Mathf.Clamp01(1f - (distance / 8f));
+        float pullAcceleration = strength * Mathf.Lerp(0.45f, 1f, falloff) / effectiveMass;
+        rb.linearVelocity += toSource.normalized * pullAcceleration * deltaTime;
+
+        float maxMagneticSpeed = objectType == SpaceObjectType.Treasure ? 5.8f : 4.4f;
+        if (rb.linearVelocity.sqrMagnitude > maxMagneticSpeed * maxMagneticSpeed)
+            rb.linearVelocity = rb.linearVelocity.normalized * maxMagneticSpeed;
+
+        if (rb.linearVelocity.sqrMagnitude > 0.001f)
+            cruiseDirection = rb.linearVelocity.normalized;
+    }
+
     public void ForceBroadcastSnapshot()
     {
         if (!isAuthority || rb == null || string.IsNullOrWhiteSpace(stableId))
@@ -239,12 +266,8 @@ public class MovingSpaceObject : MonoBehaviour
         if (isAuthority || rb == null || impulse.sqrMagnitude < 0.0001f)
             return;
 
-        int weightFactor = objectType == SpaceObjectType.Obstacle
-            ? RoomSettings.GetObstacleWeightFactor()
-            : RoomSettings.GetTreasureWeightFactor();
-        weightFactor = Mathf.Max(1, weightFactor);
-
-        Vector2 offset = impulse * (0.018f / weightFactor);
+        float predictionScale = objectType == SpaceObjectType.Treasure ? 0.105f : 0.075f;
+        Vector2 offset = impulse * predictionScale;
         predictedLocalOffset = Vector2.ClampMagnitude(predictedLocalOffset + offset, RemotePredictionMaxOffset);
         rb.position += offset;
     }

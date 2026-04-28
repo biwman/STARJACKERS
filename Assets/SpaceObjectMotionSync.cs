@@ -90,7 +90,7 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
 
         object[] payload = { stableId, impulse.x, impulse.y, PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : 0 };
         RaiseEventOptions options = new RaiseEventOptions { Receivers = ReceiverGroup.MasterClient };
-        PhotonNetwork.RaiseEvent(ImpulseRequestEventCode, payload, options, SendOptions.SendUnreliable);
+        PhotonNetwork.RaiseEvent(ImpulseRequestEventCode, payload, options, SendOptions.SendReliable);
     }
 
     public static void BroadcastSpaceMineDetonation(Vector3 worldPosition, float radius)

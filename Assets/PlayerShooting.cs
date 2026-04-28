@@ -1,10 +1,12 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using UnityEngine;
 using Photon.Pun;
 using TMPro;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public class PlayerShooting : MonoBehaviourPun
@@ -15,6 +17,14 @@ public class PlayerShooting : MonoBehaviourPun
     const float GadgetMinePlacementCooldown = 0.9f;
     const int GadgetMineDefaultCharges = 4;
     const int BatteryDefaultCharges = 3;
+    const int MagneticBeamDefaultCharges = 3;
+    const int TractorBeamDefaultCharges = 4;
+    const float MagneticBeamRadius = 8f;
+    const float MagneticBeamDuration = 3f;
+    const float MagneticBeamPullStrength = 24f;
+    const float TractorBeamRadius = 8f;
+    const float TractorBeamMaxDuration = 10f;
+    const float TractorBeamPullStrength = 36f;
     static readonly Color PlasmaBulletColor = new Color(0.15f, 1f, 0.28f, 1f);
 
     sealed class GadgetRuntimeState
@@ -64,6 +74,9 @@ public class PlayerShooting : MonoBehaviourPun
     readonly Dictionary<string, GadgetRuntimeState> gadgetStates = new Dictionary<string, GadgetRuntimeState>(StringComparer.Ordinal);
     readonly Dictionary<string, int> authoritativeGadgetCharges = new Dictionary<string, int>(StringComparer.Ordinal);
     string lastAuthoritativeGadgetChargeStateRaw = null;
+    Coroutine authoritativeTractorBeamRoutine;
+    int activeTractorBeamTargetViewId;
+    string activeTractorBeamItemId;
 
     public int CurrentAmmo => currentAmmo;
     public int MaxAmmo => maxAmmo;
@@ -741,10 +754,41 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.IsNullOrWhiteSpace(itemId))
             return;
 
+        if (IsHoldGadget(itemId))
+        {
+            BeginGadgetUse(itemId);
+            return;
+        }
+
         if (gadgetStates.TryGetValue(itemId, out GadgetRuntimeState state) && state != null && state.Cooldown > 0f)
             state.NextUseTime = Time.time + state.Cooldown;
 
         photonView.RPC(nameof(RequestAuthoritativeGadgetUse), RpcTarget.MasterClient, itemId);
+    }
+
+    public void BeginGadgetUse(string itemId)
+    {
+        if (!CanUseGadget(itemId) || string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        if (string.Equals(itemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal))
+        {
+            photonView.RPC(nameof(RequestStartTractorBeam), RpcTarget.MasterClient, itemId);
+            return;
+        }
+
+        TriggerGadgetUse(itemId);
+    }
+
+    public void EndGadgetUse(string itemId)
+    {
+        if (string.Equals(itemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal))
+            photonView.RPC(nameof(RequestStopTractorBeam), RpcTarget.MasterClient, itemId);
+    }
+
+    public bool IsHoldGadget(string itemId)
+    {
+        return string.Equals(itemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal);
     }
 
     public void ConfigureWeaponProfile(float configuredFireRate, int configuredMaxAmmo, float configuredReloadDuration, int configuredBulletDamage, float configuredBulletScaleMultiplier, Color configuredBulletColor, float configuredMuzzleOffsetDistance, bool configuredInfiniteAmmo, float configuredBulletSpeed = -1f, string configuredShotSoundId = "", float configuredRangeMultiplier = -1f)
@@ -941,6 +985,12 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
             return new Color(0.16f, 0.46f, 0.78f, 0.96f);
 
+        if (string.Equals(itemId, InventoryItemCatalog.MagneticBeamId, StringComparison.Ordinal))
+            return new Color(0.08f, 0.36f, 0.86f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal))
+            return new Color(0.72f, 0.5f, 0.08f, 0.96f);
+
         return new Color(0.22f, 0.3f, 0.4f, 0.94f);
     }
 
@@ -963,6 +1013,12 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
             return BatteryDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.MagneticBeamId, StringComparison.Ordinal))
+            return MagneticBeamDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal))
+            return TractorBeamDefaultCharges * equippedCount;
 
         return 0;
     }
@@ -996,6 +1052,74 @@ public class PlayerShooting : MonoBehaviourPun
         SetAuthoritativeRemainingChargesOnMaster(owner.ActorNumber, itemId, remainingCharges - 1, maxCharges);
     }
 
+    [PunRPC]
+    void RequestStartTractorBeam(string itemId, PhotonMessageInfo messageInfo)
+    {
+        if (!PhotonNetwork.IsMasterClient || !IsGameStarted() || !string.Equals(itemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal))
+            return;
+
+        if (photonView == null || photonView.Owner == null || messageInfo.Sender == null || messageInfo.Sender.ActorNumber != photonView.Owner.ActorNumber)
+            return;
+
+        Photon.Realtime.Player owner = photonView.Owner;
+        int maxCharges = ResolveEquippedGadgetMaxCharges(owner, itemId);
+        if (maxCharges <= 0)
+            return;
+
+        int remainingCharges = GetAuthoritativeRemainingChargesOnMaster(owner.ActorNumber, itemId, maxCharges);
+        if (remainingCharges <= 0)
+            return;
+
+        PhotonView targetView = FindClosestTractorBeamTarget();
+        if (targetView == null)
+            return;
+
+        StopAuthoritativeTractorBeam(true);
+        SetAuthoritativeRemainingChargesOnMaster(owner.ActorNumber, itemId, remainingCharges - 1, maxCharges);
+        RoundXpTracker.RecordGadgetSuccess(owner, itemId);
+        activeTractorBeamTargetViewId = targetView.ViewID;
+        activeTractorBeamItemId = itemId;
+        photonView.RPC(nameof(StartTractorBeamEffects), RpcTarget.All, photonView.ViewID, targetView.ViewID);
+        authoritativeTractorBeamRoutine = StartCoroutine(TractorBeamPullRoutine(targetView.ViewID));
+    }
+
+    [PunRPC]
+    void RequestStopTractorBeam(string itemId, PhotonMessageInfo messageInfo)
+    {
+        if (!PhotonNetwork.IsMasterClient || !string.Equals(itemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal))
+            return;
+
+        if (photonView == null || photonView.Owner == null || messageInfo.Sender == null || messageInfo.Sender.ActorNumber != photonView.Owner.ActorNumber)
+            return;
+
+        StopAuthoritativeTractorBeam(true);
+    }
+
+    int ResolveEquippedGadgetMaxCharges(Photon.Realtime.Player owner, string itemId)
+    {
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        List<string> orderedItems = new List<string>();
+        Dictionary<string, int> gadgetCounts = CollectEquippedGadgetCounts(equipmentSlots, shipSkinIndex, orderedItems);
+        int equippedCount = gadgetCounts.TryGetValue(itemId, out int count) ? count : 0;
+        return ResolveGadgetMaxCharges(itemId, equippedCount);
+    }
+
+    void StopAuthoritativeTractorBeam(bool notifyClients)
+    {
+        if (authoritativeTractorBeamRoutine != null)
+        {
+            StopCoroutine(authoritativeTractorBeamRoutine);
+            authoritativeTractorBeamRoutine = null;
+        }
+
+        if (notifyClients && photonView != null)
+            photonView.RPC(nameof(StopTractorBeamEffects), RpcTarget.All, photonView.ViewID);
+
+        activeTractorBeamTargetViewId = 0;
+        activeTractorBeamItemId = null;
+    }
+
     bool TryExecuteAuthoritativeGadgetUse(string itemId)
     {
         if (string.Equals(itemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal))
@@ -1004,7 +1128,186 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
             return TryActivateBatteryCharge();
 
+        if (string.Equals(itemId, InventoryItemCatalog.MagneticBeamId, StringComparison.Ordinal))
+            return TryActivateMagneticBeam();
+
         return false;
+    }
+
+    bool TryActivateMagneticBeam()
+    {
+        if (CountMagneticBeamTargets() > 0)
+            RoundXpTracker.RecordGadgetSuccess(photonView.Owner, InventoryItemCatalog.MagneticBeamId);
+
+        photonView.RPC(nameof(PlayMagneticBeamEffects), RpcTarget.All);
+        StartCoroutine(MagneticBeamPullRoutine());
+        return true;
+    }
+
+    int CountMagneticBeamTargets()
+    {
+        int count = 0;
+        Vector2 sourcePosition = transform.position;
+        MovingSpaceObject[] objects = FindObjectsByType<MovingSpaceObject>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < objects.Length; i++)
+        {
+            MovingSpaceObject movingObject = objects[i];
+            if (movingObject == null)
+                continue;
+
+            if (Vector2.Distance(sourcePosition, movingObject.transform.position) <= MagneticBeamRadius)
+                count++;
+        }
+
+        return count;
+    }
+
+    IEnumerator MagneticBeamPullRoutine()
+    {
+        float elapsed = 0f;
+        WaitForFixedUpdate wait = new WaitForFixedUpdate();
+        while (elapsed < MagneticBeamDuration)
+        {
+            ApplyMagneticBeamPull(Time.fixedDeltaTime);
+            elapsed += Time.fixedDeltaTime;
+            yield return wait;
+        }
+    }
+
+    void ApplyMagneticBeamPull(float deltaTime)
+    {
+        Vector2 sourcePosition = transform.position;
+        MovingSpaceObject[] objects = FindObjectsByType<MovingSpaceObject>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < objects.Length; i++)
+        {
+            MovingSpaceObject movingObject = objects[i];
+            if (movingObject == null)
+                continue;
+
+            float distance = Vector2.Distance(sourcePosition, movingObject.transform.position);
+            if (distance > MagneticBeamRadius)
+                continue;
+
+            movingObject.ApplyMagneticPull(sourcePosition, MagneticBeamPullStrength, deltaTime);
+        }
+    }
+
+    [PunRPC]
+    void PlayMagneticBeamEffects()
+    {
+        AudioManager.Instance.PlayMagneticBeamAt(transform.position);
+        MagneticBeamVfx.Spawn(transform);
+    }
+
+    PhotonView FindClosestTractorBeamTarget()
+    {
+        Vector2 sourcePosition = transform.position;
+        PhotonView bestView = null;
+        float bestDistance = float.MaxValue;
+        PhotonView[] views = FindObjectsByType<PhotonView>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < views.Length; i++)
+        {
+            PhotonView candidateView = views[i];
+            if (candidateView == null || candidateView == photonView)
+                continue;
+
+            if (!IsValidTractorBeamTarget(candidateView))
+                continue;
+
+            Collider2D collider = candidateView.GetComponent<Collider2D>();
+            Vector2 closest = collider != null ? collider.ClosestPoint(sourcePosition) : (Vector2)candidateView.transform.position;
+            float distance = Vector2.Distance(sourcePosition, closest);
+            if (distance > TractorBeamRadius || distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            bestView = candidateView;
+        }
+
+        return bestView;
+    }
+
+    bool IsValidTractorBeamTarget(PhotonView candidateView)
+    {
+        if (candidateView == null)
+            return false;
+
+        Treasure treasure = candidateView.GetComponent<Treasure>();
+        if (treasure != null)
+            return !treasure.isBeingCollected;
+
+        ShipWreck wreck = candidateView.GetComponent<ShipWreck>();
+        if (wreck != null)
+            return wreck.HasLoot && !wreck.isBeingCollected;
+
+        DroppedCargoCrate crate = candidateView.GetComponent<DroppedCargoCrate>();
+        if (crate != null)
+            return crate.HasLoot && !crate.isBeingCollected;
+
+        return false;
+    }
+
+    IEnumerator TractorBeamPullRoutine(int targetViewId)
+    {
+        float elapsed = 0f;
+        WaitForFixedUpdate wait = new WaitForFixedUpdate();
+        while (elapsed < TractorBeamMaxDuration)
+        {
+            PhotonView targetView = PhotonView.Find(targetViewId);
+            if (targetView == null || !IsValidTractorBeamTarget(targetView))
+                break;
+
+            ApplyTractorBeamPull(targetView, Time.fixedDeltaTime);
+            elapsed += Time.fixedDeltaTime;
+            yield return wait;
+        }
+
+        authoritativeTractorBeamRoutine = null;
+        StopAuthoritativeTractorBeam(true);
+    }
+
+    void ApplyTractorBeamPull(PhotonView targetView, float deltaTime)
+    {
+        if (targetView == null || deltaTime <= 0f)
+            return;
+
+        Vector2 sourcePosition = transform.position;
+        MovingSpaceObject movingObject = targetView.GetComponent<MovingSpaceObject>();
+        if (movingObject != null)
+        {
+            movingObject.ApplyMagneticPull(sourcePosition, TractorBeamPullStrength, deltaTime);
+            return;
+        }
+
+        Rigidbody2D targetBody = targetView.GetComponent<Rigidbody2D>();
+        if (targetBody == null)
+            return;
+
+        Vector2 toSource = sourcePosition - targetBody.position;
+        float distance = toSource.magnitude;
+        if (distance < 0.08f)
+        {
+            targetBody.linearVelocity *= 0.88f;
+            return;
+        }
+
+        float pullAcceleration = TractorBeamPullStrength * Mathf.Lerp(0.65f, 1.25f, Mathf.Clamp01(distance / TractorBeamRadius));
+        targetBody.linearVelocity += toSource.normalized * pullAcceleration * deltaTime;
+        float maxSpeed = 6.4f;
+        if (targetBody.linearVelocity.sqrMagnitude > maxSpeed * maxSpeed)
+            targetBody.linearVelocity = targetBody.linearVelocity.normalized * maxSpeed;
+    }
+
+    [PunRPC]
+    void StartTractorBeamEffects(int sourceViewId, int targetViewId)
+    {
+        TractorBeamVfx.StartBeam(sourceViewId, targetViewId);
+    }
+
+    [PunRPC]
+    void StopTractorBeamEffects(int sourceViewId)
+    {
+        TractorBeamVfx.StopBeam(sourceViewId);
     }
 
     int GetAuthoritativeRemainingChargesOnMaster(int actorNumber, string itemId, int maxCharges)
@@ -1441,7 +1744,10 @@ public class GadgetButtonUI : MonoBehaviourPun
         widget.Button.transition = Selectable.Transition.ColorTint;
         widget.Button.targetGraphic = widget.Background;
         string capturedItemId = itemId;
-        widget.Button.onClick.AddListener(() => HandleGadgetClicked(capturedItemId));
+        if (shooting != null && shooting.IsHoldGadget(capturedItemId))
+            ConfigureHoldGadgetInput(widget.Button, capturedItemId);
+        else
+            widget.Button.onClick.AddListener(() => HandleGadgetClicked(capturedItemId));
 
         TMP_Text referenceText = FindAnyObjectByType<TMP_Text>();
 
@@ -1495,6 +1801,32 @@ public class GadgetButtonUI : MonoBehaviourPun
         }
 
         return widget;
+    }
+
+    void ConfigureHoldGadgetInput(Button button, string itemId)
+    {
+        if (button == null)
+            return;
+
+        EventTrigger trigger = button.GetComponent<EventTrigger>();
+        if (trigger == null)
+            trigger = button.gameObject.AddComponent<EventTrigger>();
+
+        trigger.triggers = new List<EventTrigger.Entry>();
+        AddGadgetTrigger(trigger, EventTriggerType.PointerDown, () => shooting?.BeginGadgetUse(itemId));
+        AddGadgetTrigger(trigger, EventTriggerType.PointerUp, () => shooting?.EndGadgetUse(itemId));
+        AddGadgetTrigger(trigger, EventTriggerType.PointerExit, () => shooting?.EndGadgetUse(itemId));
+        AddGadgetTrigger(trigger, EventTriggerType.Cancel, () => shooting?.EndGadgetUse(itemId));
+    }
+
+    void AddGadgetTrigger(EventTrigger trigger, EventTriggerType eventType, System.Action callback)
+    {
+        EventTrigger.Entry entry = new EventTrigger.Entry
+        {
+            eventID = eventType
+        };
+        entry.callback.AddListener(_ => callback?.Invoke());
+        trigger.triggers.Add(entry);
     }
 
     void RefreshState()

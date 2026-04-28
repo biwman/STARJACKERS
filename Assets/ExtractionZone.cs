@@ -229,10 +229,10 @@ public class ExtractionZone : MonoBehaviourPun
         processedPlayers.Add(playerView.ViewID);
 
         Debug.Log("Evacuating: " + playerView.Owner.NickName);
-        int finalScore = RoundResultsTracker.GetKnownScore(playerView.Owner, playerView.gameObject) + 5;
+        int finalScore = RoundResultsTracker.GetKnownScore(playerView.Owner, playerView.gameObject);
         string outcome = playerHealth.IsAstronautControlled ? "evacuated" : "extracted";
         RoundResultsTracker.RecordOutcome(playerView.Owner, finalScore, outcome);
-        playerView.RPC(nameof(PlayerHealth.OnEvacuated), playerView.Owner, 5);
+        playerView.RPC(nameof(PlayerHealth.OnEvacuated), playerView.Owner, 0);
         playerView.RPC(nameof(PlayerHealth.BeginEvacuationSequence), RpcTarget.All);
         return true;
     }

@@ -141,6 +141,8 @@ public static class InventoryItemCatalog
     public const string FusionEngineId = "fusion_engine";
     public const string GadgetMineId = "gadget_mine";
     public const string BatteryId = "battery";
+    public const string MagneticBeamId = "magnetic_beam";
+    public const string TractorBeamId = "tractor_beam";
     public const string ShieldReactorId = "shield_reactor";
 
     static readonly Dictionary<string, InventoryItemDefinition> Definitions = BuildDefinitions();
@@ -428,6 +430,32 @@ public static class InventoryItemCatalog
                 IconResourcePath = "battery_charge_resource",
                 ProjectFileName = "battery_charge.png",
                 SalvageOutputs = new[] { AsteroidResourceId, AsteroidResourceId }
+            },
+            [MagneticBeamId] = new InventoryItemDefinition
+            {
+                Id = MagneticBeamId,
+                DisplayName = "Magnetic Beam",
+                ShortLabel = "MAG",
+                Description = "A ship-mounted magnetic projector that pulls nearby asteroids and resources toward the ship for a short burst.",
+                ItemType = InventoryItemType.Equipment,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 500,
+                IconResourcePath = "magnetic_beam_resource",
+                ProjectFileName = "magnetic_beam.png",
+                SalvageOutputs = new[] { AsteroidResourceId, AsteroidGoldId }
+            },
+            [TractorBeamId] = new InventoryItemDefinition
+            {
+                Id = TractorBeamId,
+                DisplayName = "Tractor Beam",
+                ShortLabel = "TRC",
+                Description = "A focused yellow tow beam that locks onto the nearest collectible object and pulls it behind the ship while held.",
+                ItemType = InventoryItemType.Equipment,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1000,
+                IconResourcePath = "tractor_beam_resource",
+                ProjectFileName = "tractor_beam.png",
+                SalvageOutputs = new[] { AsteroidGoldId, AsteroidRareId }
             },
             [ShieldReactorId] = new InventoryItemDefinition
             {

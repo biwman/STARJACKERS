@@ -47,6 +47,7 @@ public sealed class LobbyMapDefinition
     public int ObstacleSizePercent { get; }
     public bool ObstaclesNoBorders { get; }
     public string ResourceDensity { get; }
+    public string ResourceRichness { get; }
     public string NebulaDensity { get; }
     public int ExtractionZoneCount { get; }
     public bool MovingObjectsEnabled { get; }
@@ -68,6 +69,7 @@ public sealed class LobbyMapDefinition
         int obstacleSizePercent,
         bool obstaclesNoBorders,
         string resourceDensity,
+        string resourceRichness,
         string nebulaDensity,
         int extractionZoneCount,
         bool movingObjectsEnabled,
@@ -88,6 +90,7 @@ public sealed class LobbyMapDefinition
         ObstacleSizePercent = obstacleSizePercent;
         ObstaclesNoBorders = obstaclesNoBorders;
         ResourceDensity = resourceDensity;
+        ResourceRichness = resourceRichness;
         NebulaDensity = nebulaDensity;
         ExtractionZoneCount = extractionZoneCount;
         MovingObjectsEnabled = movingObjectsEnabled;
@@ -115,6 +118,7 @@ public static class LobbyMapCatalog
             100,
             false,
             "medium",
+            RoomSettings.DefaultResourceRichness,
             "low",
             2,
             true,
@@ -124,6 +128,31 @@ public static class LobbyMapCatalog
             true,
             new LobbyEnemyMapPreset(EnemyBotKind.Drone, true, 1, true, 50, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, true, 1, false, 200, 20, 1f, 0, 60),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, false, 30, false, 60, 20, 1f, 0, 60),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
+        new LobbyMapDefinition(
+            "noob_haven",
+            "NOOB HAVEN",
+            240f,
+            "large",
+            1f,
+            "medium",
+            false,
+            300,
+            100,
+            false,
+            "medium",
+            RoomSettings.ResourceRichnessLow,
+            "low",
+            2,
+            true,
+            RoomSettings.DefaultObstacleWeightFactor,
+            RoomSettings.DefaultTreasureWeightFactor,
+            12,
+            true,
+            new LobbyEnemyMapPreset(EnemyBotKind.Drone, false, 1, false, 50, 20, 1f, 0, 60),
+            new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, false, 30, false, 60, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
@@ -139,6 +168,7 @@ public static class LobbyMapCatalog
             100,
             false,
             "high",
+            RoomSettings.DefaultResourceRichness,
             "medium",
             3,
             true,
@@ -163,6 +193,7 @@ public static class LobbyMapCatalog
             100,
             false,
             "high",
+            RoomSettings.DefaultResourceRichness,
             "low",
             3,
             true,
@@ -187,6 +218,7 @@ public static class LobbyMapCatalog
             100,
             false,
             "high",
+            RoomSettings.DefaultResourceRichness,
             "low",
             2,
             true,
@@ -233,6 +265,7 @@ public static class LobbyMapCatalog
         props[RoomSettings.ObstacleSizePercentKey] = map.ObstacleSizePercent;
         props[RoomSettings.ObstacleNoBordersKey] = map.ObstaclesNoBorders;
         props[RoomSettings.TreasureDensityKey] = map.ResourceDensity;
+        props[RoomSettings.ResourceRichnessKey] = map.ResourceRichness;
         props[RoomSettings.NebulaDensityKey] = map.NebulaDensity;
         props[RoomSettings.ExtractionCountKey] = map.ExtractionZoneCount;
         props[RoomSettings.MovingObjectsEnabledKey] = map.MovingObjectsEnabled;

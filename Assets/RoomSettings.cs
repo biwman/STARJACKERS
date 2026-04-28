@@ -32,6 +32,7 @@ public static class RoomSettings
     public const string MapBackgroundKey = "mapBackground";
     public const string SelectedMapKey = "selectedMap";
     public const string VisualEffectsEnabledKey = "visualEffectsEnabled";
+    public const string StartingVfxEnabledKey = "startingVfxEnabled";
     public const string MovingObjectsEnabledKey = "movingObjectsEnabled";
     public const string EnemyBotsEnabledKey = "enemyBotsEnabled";
     public const string CorsairEnabledKey = "corsairEnabled";
@@ -68,6 +69,7 @@ public static class RoomSettings
     public const int DefaultMapBackground = 5;
     public const string DefaultLobbyMapId = "just_space";
     public const bool DefaultVisualEffectsEnabled = true;
+    public const bool DefaultStartingVfxEnabled = true;
     public const bool DefaultMovingObjectsEnabled = true;
     public const bool DefaultEnemyBotsEnabled = true;
     public const bool DefaultCorsairEnabled = true;
@@ -297,6 +299,18 @@ public static class RoomSettings
         }
 
         return DefaultVisualEffectsEnabled;
+    }
+
+    public static bool AreStartingVfxEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(StartingVfxEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultStartingVfxEnabled;
     }
 
     public static string GetResourceRichness()

@@ -52,6 +52,7 @@ public class PlayerHealth : MonoBehaviourPun
         if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || currentShield >= maxShield)
             return false;
 
+        RoundXpTracker.RecordBatterySuccess(photonView.Owner, maxShield - currentShield);
         photonView.RPC(nameof(PlayBatteryShieldChargeAudio), RpcTarget.All);
         StartCoroutine(ApplyBatteryShieldChargeRoutine());
         return true;
@@ -218,6 +219,11 @@ public class PlayerHealth : MonoBehaviourPun
                 damagedBot.NotifyDamageTaken(previousHp, currentHP, Mathf.Max(0, previousShield - currentShield), hpDamage, attackerViewID);
         }
 
+        RoundXpTracker.RecordDamage(attackerViewID, photonView, absorbed, hpDamage);
+
+        if (previousHp > 0 && currentHP <= 0)
+            RoundXpTracker.RecordKill(attackerViewID, this);
+
         if (currentHP <= 0)
         {
             HandleDeath(attackerViewID);
@@ -368,6 +374,7 @@ public class PlayerHealth : MonoBehaviourPun
         string wreckLoot = PlayerProfileService.SerializeShipInventorySlots(PlayerProfileService.GetPlayerShipInventorySlots(photonView.Owner));
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView.Owner, 0);
         Vector3 astronautSpawnPosition = FindSafeAstronautSpawnPosition();
+        RoundXpTracker.RecordPlayerShipDestroyed(photonView.Owner);
         photonView.RPC(nameof(ClearLocalShipInventoryForWreck), photonView.Owner);
         photonView.RPC(nameof(SpawnAstronautAfterDestruction), photonView.Owner, astronautSpawnPosition.x, astronautSpawnPosition.y, transform.eulerAngles.z);
         photonView.RPC(nameof(BecomeWreck), RpcTarget.All, wreckLoot, shipSkinIndex);
@@ -824,6 +831,10 @@ public class PlayerHealth : MonoBehaviourPun
     void PlayDeathExplosion()
     {
         AudioManager.Instance.PlayExplosionAt(transform.position);
+        if (RoomSettings.AreVisualEffectsEnabled() && !IsBotControlled && !IsAstronautControlled)
+        {
+            PlayerShipExplosionVfx.Spawn(transform.position, GetComponent<SpriteRenderer>());
+        }
     }
 
     [PunRPC]

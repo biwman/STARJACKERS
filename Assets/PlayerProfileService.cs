@@ -12,6 +12,8 @@ public class PlayerProfileService : MonoBehaviour
 {
     const int CloudRetryCount = 3;
     const int CloudRetryDelayMs = 1200;
+    const int PlayerInventoryExtendBasePrice = 1000;
+    const int PlayerInventoryExtendMaxPrice = 64000;
     const string CloudNicknameKey = "profile_nickname";
     const string CloudShipSkinKey = "profile_ship_skin";
     const string CloudGamesPlayedKey = "profile_games_played";
@@ -39,6 +41,14 @@ public class PlayerProfileService : MonoBehaviour
     public bool IsBusy { get; private set; }
     public string PlayerId => AuthenticationService.Instance?.PlayerId;
     public PlayerProfileData CurrentProfile { get; private set; } = PlayerProfileData.Default();
+    public int CurrentPlayerInventorySlotCount
+    {
+        get
+        {
+            EnsureInventory();
+            return CurrentProfile.Inventory.PlayerSlots.Length;
+        }
+    }
 
     public event Action<PlayerProfileData> ProfileChanged;
 
@@ -362,6 +372,32 @@ public class PlayerProfileService : MonoBehaviour
         }
 
         await SaveInventoryOnlyAsync();
+        return true;
+    }
+
+    public int GetNextPlayerInventoryExtendPrice()
+    {
+        EnsureInventory();
+        int extensions = Mathf.Max(0, (CurrentProfile.Inventory.PlayerSlots.Length - PlayerInventoryData.DefaultPlayerSlotCount) / PlayerInventoryData.PlayerSlotExtensionSize);
+        int price = PlayerInventoryExtendBasePrice;
+        for (int i = 0; i < extensions && price < PlayerInventoryExtendMaxPrice; i++)
+            price = Mathf.Min(PlayerInventoryExtendMaxPrice, price * 2);
+
+        return price;
+    }
+
+    public async Task<bool> TryExtendPlayerInventoryAsync()
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        int price = GetNextPlayerInventoryExtendPrice();
+        if (CurrentProfile.Astrons < price)
+            return false;
+
+        CurrentProfile.Astrons = Mathf.Max(0, CurrentProfile.Astrons - price);
+        CurrentProfile.Inventory.ExtendPlayerSlots(PlayerInventoryData.PlayerSlotExtensionSize);
+        await SaveInventoryAndAstronsAsync();
         return true;
     }
 
@@ -942,7 +978,9 @@ public class EquipmentSnapshot
 [Serializable]
 public class PlayerInventoryData
 {
-    public const int PlayerSlotCount = 30;
+    public const int DefaultPlayerSlotCount = 30;
+    public const int PlayerSlotCount = DefaultPlayerSlotCount;
+    public const int PlayerSlotExtensionSize = 10;
     public const int ShipSlotCount = 10;
     public const int EquipmentSlotCount = 8;
     public const int CraftingSlotCount = 4;
@@ -955,7 +993,7 @@ public class PlayerInventoryData
     {
         return new PlayerInventoryData
         {
-            PlayerSlots = new string[PlayerSlotCount],
+            PlayerSlots = new string[DefaultPlayerSlotCount],
             ShipSlots = new string[ShipSlotCount],
             EquipmentSlots = new string[EquipmentSlotCount],
             CraftingSlots = new string[CraftingSlotCount]
@@ -976,10 +1014,11 @@ public class PlayerInventoryData
 
     public void Normalize()
     {
-        if (PlayerSlots == null || PlayerSlots.Length != PlayerSlotCount)
+        int playerSlotCount = Mathf.Max(DefaultPlayerSlotCount, PlayerSlots != null ? PlayerSlots.Length : 0);
+        if (PlayerSlots == null || PlayerSlots.Length != playerSlotCount)
         {
             string[] old = PlayerSlots;
-            PlayerSlots = new string[PlayerSlotCount];
+            PlayerSlots = new string[playerSlotCount];
             CopyInto(old, PlayerSlots);
         }
 
@@ -1142,6 +1181,18 @@ public class PlayerInventoryData
         Normalize();
         ShipSlots = new string[ShipSlotCount];
         CopyInto(source, ShipSlots);
+    }
+
+    public void ExtendPlayerSlots(int extraSlots)
+    {
+        Normalize();
+        int safeExtraSlots = Mathf.Max(0, extraSlots);
+        if (safeExtraSlots == 0)
+            return;
+
+        string[] old = PlayerSlots;
+        PlayerSlots = new string[old.Length + safeExtraSlots];
+        CopyInto(old, PlayerSlots);
     }
 
     static int FindFirstEmpty(string[] slots)
