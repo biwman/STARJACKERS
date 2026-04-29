@@ -334,7 +334,7 @@ public class PlayerProfileService : MonoBehaviour
     public bool HasFreeShipInventorySlot()
     {
         EnsureInventory();
-        return CurrentProfile.Inventory.GetFirstEmptyShipSlot(ShipCatalog.GetShipInventoryCapacity(CurrentProfile.ShipSkinIndex)) >= 0;
+        return CurrentProfile.Inventory.GetFirstEmptyShipSlot(GetActiveShipInventoryCapacity()) >= 0;
     }
 
     public async Task ReplaceShipInventoryAsync(string[] newShipSlots)
@@ -419,6 +419,33 @@ public class PlayerProfileService : MonoBehaviour
         return true;
     }
 
+    public async Task<bool> TryBuyShopItemAsync(string itemId)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        InventoryItemDefinition definition = InventoryItemCatalog.GetDefinition(itemId);
+        if (definition == null || definition.ItemType != InventoryItemType.Equipment)
+            return false;
+
+        int price = InventoryItemCatalog.GetShopBuyValueAstrons(itemId);
+        if (price <= 0 || CurrentProfile.Astrons < price)
+            return false;
+
+        PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
+        bool stored = workingInventory.TryAddToPlayer(itemId);
+        if (!stored)
+            stored = workingInventory.TryAddToShip(itemId, ShipCatalog.GetShipInventoryCapacity(CurrentProfile.ShipSkinIndex));
+
+        if (!stored)
+            return false;
+
+        CurrentProfile.Astrons = Mathf.Max(0, CurrentProfile.Astrons - price);
+        CurrentProfile.Inventory = workingInventory;
+        await SaveInventoryAndAstronsAsync();
+        return true;
+    }
+
     public async Task<bool> SalvageInventoryItemAsync(bool fromShipInventory, int sourceIndex)
     {
         await EnsureInitializedAsync();
@@ -461,6 +488,13 @@ public class PlayerProfileService : MonoBehaviour
             return false;
 
         string movedItem = fromShipInventory
+            ? GetSlotItem(CurrentProfile.Inventory.ShipSlots, sourceIndex)
+            : GetSlotItem(CurrentProfile.Inventory.PlayerSlots, sourceIndex);
+
+        if (!InventoryItemCatalog.IsCompatibleWithEquipmentSlot(movedItem, equipmentSlotIndex))
+            return false;
+
+        movedItem = fromShipInventory
             ? CurrentProfile.Inventory.RemoveFromShip(sourceIndex)
             : CurrentProfile.Inventory.RemoveFromPlayer(sourceIndex);
 
@@ -486,6 +520,14 @@ public class PlayerProfileService : MonoBehaviour
 
         await SaveInventoryOnlyAsync();
         return true;
+    }
+
+    string GetSlotItem(string[] slots, int index)
+    {
+        if (slots == null || index < 0 || index >= slots.Length)
+            return null;
+
+        return slots[index];
     }
 
     public async Task<bool> MoveEquipmentItemToInventoryAsync(int equipmentSlotIndex, bool toPlayerInventory, int shipSkinIndex)
@@ -519,7 +561,7 @@ public class PlayerProfileService : MonoBehaviour
         await EnsureInitializedAsync();
         EnsureInventory();
 
-        if (!CurrentProfile.Inventory.TryAddToShip(itemId, ShipCatalog.GetShipInventoryCapacity(CurrentProfile.ShipSkinIndex)))
+        if (!CurrentProfile.Inventory.TryAddToShip(itemId, GetActiveShipInventoryCapacity()))
             return false;
 
         await SaveInventoryOnlyAsync();
@@ -618,7 +660,7 @@ public class PlayerProfileService : MonoBehaviour
             await RunCloudOperationWithRetryAsync(
                 () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
                 "save inventory");
-            ApplyProfileToPhoton();
+            ApplyInventoryToPhoton();
             NotifyProfileChanged();
         }
         catch (Exception ex)
@@ -825,6 +867,39 @@ public class PlayerProfileService : MonoBehaviour
             CurrentProfile.Inventory = PlayerInventoryData.Default();
 
         CurrentProfile.Inventory.Normalize();
+    }
+
+    int GetActiveShipSkinIndex()
+    {
+        int fallbackSkin = CurrentProfile != null ? CurrentProfile.ShipSkinIndex : 0;
+        if (PhotonNetwork.LocalPlayer != null &&
+            PhotonNetwork.LocalPlayer.CustomProperties != null &&
+            PhotonNetwork.LocalPlayer.CustomProperties.ContainsKey(RoomSettings.ShipSkinKey))
+        {
+            return RoomSettings.GetPlayerShipSkin(PhotonNetwork.LocalPlayer, fallbackSkin);
+        }
+
+        return fallbackSkin;
+    }
+
+    int GetActiveShipInventoryCapacity()
+    {
+        return ShipCatalog.GetShipInventoryCapacity(GetActiveShipSkinIndex());
+    }
+
+    void ApplyInventoryToPhoton()
+    {
+        if (CurrentProfile == null || PhotonNetwork.LocalPlayer == null)
+            return;
+
+        EnsureInventory();
+        var props = new ExitGames.Client.Photon.Hashtable
+        {
+            [RoomSettings.ShipInventoryStateKey] = SerializeShipInventorySlots(CurrentProfile.Inventory.ShipSlots),
+            [RoomSettings.EquipmentStateKey] = SerializeEquipmentSlots(CurrentProfile.Inventory.EquipmentSlots)
+        };
+
+        PhotonNetwork.LocalPlayer.SetCustomProperties(props);
     }
 
     void RestoreInventorySource(bool fromShipInventory, int sourceIndex, string itemId)

@@ -23,6 +23,9 @@ public class GameTimer : MonoBehaviourPun
 
     void Start()
     {
+        EndDisasterMeteorVfx.EnsureExists();
+        RepairBaySpawner.EnsureExists();
+
         GameObject obj = GameObject.Find("TimerText");
 
         if (obj != null)

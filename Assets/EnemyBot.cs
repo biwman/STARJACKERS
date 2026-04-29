@@ -10,7 +10,8 @@ public enum EnemyBotKind
     Corsair,
     SpaceMine,
     SpaceTruck,
-    Mothership
+    Mothership,
+    NeutralFighter
 }
 
 public enum EnemyMovementModel
@@ -19,7 +20,8 @@ public enum EnemyMovementModel
     OrbitMap,
     Drift,
     RouteExtractionZones,
-    Mothership
+    Mothership,
+    NeutralFighter
 }
 
 public enum EnemySpawnPattern
@@ -707,6 +709,81 @@ public static class EnemyBotCatalog
         },
         new EnemyBotDefinition
         {
+            Kind = EnemyBotKind.NeutralFighter,
+            Id = "neutral_fighter",
+            DisplayName = "Neutral Fighter",
+            InstantiationMarker = "enemy_bot_neutral_fighter",
+            VisualResourcePath = "neutral_fighter_resource",
+            EditorAssetPath = "Assets/neutral_fighter.png",
+            TargetSize = 0.94f,
+            PhysicsMass = 5.4f,
+            LinearDamping = 0.08f,
+            AngularDamping = 0.2f,
+            DefaultHp = 20,
+            DefaultShield = 20,
+            DefaultSpeedMultiplier = 1.5f,
+            DefaultEnabled = false,
+            DefaultCount = 2,
+            DefaultSpawnSecond = 0,
+            Movement = new EnemyMovementProfile
+            {
+                Model = EnemyMovementModel.NeutralFighter,
+                SpawnPattern = EnemySpawnPattern.SafePerimeter,
+                MoveSpeed = 1.1f,
+                TurnResponsiveness = 320f,
+                DetectionRadius = 6f,
+                DisengageRadius = 8.5f,
+                OrbitDistance = 3.1f,
+                PreferredDistance = 4.4f,
+                ShootDistance = 7.8f,
+                RepathInterval = 0.24f,
+                TargetRefreshInterval = 0.28f,
+                IdleDriftTurnSpeed = 28f,
+                OrbitAngularSpeed = 1.25f
+            },
+            Weapon = new EnemyWeaponProfile
+            {
+                AmmoCount = 6,
+                ReloadDuration = 4f,
+                FireRate = 0.5f,
+                Damage = 10,
+                BulletScaleMultiplier = 0.58f,
+                BulletColor = new Color(1f, 0.08f, 0.04f, 1f),
+                BulletSpeed = 11.5f,
+                MuzzleOffsetDistance = 0.62f,
+                InfiniteAmmo = false,
+                RotateTowardAim = true,
+                Range = 8f,
+                ShotSoundId = "shoot_small"
+            },
+            Wreck = new EnemyWreckProfile
+            {
+                Mass = 3.8f,
+                LinearDamping = 0.68f,
+                AngularDamping = 0.85f,
+                DriftSpeed = 0.1f,
+                AngularVelocityRange = 3.2f,
+                RewardItemId = InventoryItemCatalog.NeutralFighterSalvageId,
+                DestroyWhenEmpty = true,
+                BaseColor = new Color(0.42f, 0.44f, 0.46f, 0.98f),
+                VisualResourcePath = "neutral_fighter_wreck_resource",
+                EditorAssetPath = "Assets/neutral_fighter_wreck.png"
+            },
+            Trails = new EnemyTrailProfile
+            {
+                RootOffsetFactors = new Vector2(0f, -0.44f),
+                RootRotationZ = 180f,
+                TrailOffsetFactors = new[] { new Vector2(0f, 0.04f) },
+                MinTrailTime = 0.18f,
+                MaxTrailTime = 0.7f,
+                MinTrailWidth = 0.025f,
+                MaxTrailWidth = 0.14f,
+                EmissionThreshold = 0.03f,
+                VisualStyle = EnemyTrailVisualStyle.OrangeSmall
+            }
+        },
+        new EnemyBotDefinition
+        {
             Kind = EnemyBotKind.Mothership,
             Id = "mothership",
             DisplayName = "Mothership",
@@ -1061,6 +1138,9 @@ public class EnemyBot : MonoBehaviourPun
                     case EnemyMovementModel.Mothership:
                         behavior = gameObject.AddComponent<EnemyMothershipBehavior>();
                         break;
+                    case EnemyMovementModel.NeutralFighter:
+                        behavior = gameObject.AddComponent<EnemyNeutralFighterBehavior>();
+                        break;
                     default:
                         behavior = gameObject.AddComponent<EnemyDroneBehavior>();
                         break;
@@ -1086,6 +1166,7 @@ public class EnemyBot : MonoBehaviourPun
             EnemyMovementModel.Drift => existingBehavior is EnemyMineBehavior,
             EnemyMovementModel.RouteExtractionZones => existingBehavior is EnemySpaceTruckBehavior,
             EnemyMovementModel.Mothership => existingBehavior is EnemyMothershipBehavior,
+            EnemyMovementModel.NeutralFighter => existingBehavior is EnemyNeutralFighterBehavior,
             _ => existingBehavior is EnemyDroneBehavior
         };
     }
@@ -1349,6 +1430,9 @@ public class EnemyBot : MonoBehaviourPun
 
         if (kind == EnemyBotKind.Mothership && behavior is EnemyMothershipBehavior mothershipBehavior)
             mothershipBehavior.NotifyDamageSource(attackerViewID);
+
+        if (kind == EnemyBotKind.NeutralFighter && behavior is EnemyNeutralFighterBehavior neutralFighterBehavior)
+            neutralFighterBehavior.NotifyDamageSource(attackerViewID);
 
         if (kind != EnemyBotKind.SpaceTruck)
             return;
@@ -1760,6 +1844,419 @@ public class EnemyCorsairBehavior : EnemyBotBehaviorBase
             return;
 
         shooting.TryFireBot(shootDirection.normalized);
+    }
+}
+
+[RequireComponent(typeof(EnemyBot))]
+public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
+{
+    enum FighterMode
+    {
+        Patrol,
+        Combat,
+        Flee
+    }
+
+    const float FleeDuration = 5f;
+    const float AvoidanceScanRadius = 1.75f;
+    const float AvoidanceWeight = 0.62f;
+    const float MapEdgeMargin = 2.6f;
+    const float FireIntervalJitter = 0.1f;
+    const float StuckVelocityThreshold = 0.16f;
+    const float StuckDuration = 0.42f;
+    const float AvoidanceSuppressionDuration = 0.85f;
+
+    Rigidbody2D rb;
+    PhotonView view;
+    PlayerShooting shooting;
+    PlayerHealth health;
+    EnemyMovementProfile movement;
+    EnemyWeaponProfile weapon;
+    FighterMode mode = FighterMode.Patrol;
+    Transform currentTarget;
+    Vector2 patrolDirection = Vector2.up;
+    Vector2 fleeDirection = Vector2.right;
+    float nextTargetRefreshTime;
+    float nextRepathTime;
+    float nextPatrolTurnTime;
+    float fleeUntil;
+    float orbitDirection = 1f;
+    float lowSpeedSince;
+    float avoidanceSuppressedUntil;
+
+    public override void Initialize(EnemyBot owner)
+    {
+        base.Initialize(owner);
+        rb = owner.GetComponent<Rigidbody2D>();
+        view = owner.GetComponent<PhotonView>();
+        shooting = owner.GetComponent<PlayerShooting>();
+        health = owner.GetComponent<PlayerHealth>();
+        movement = owner.Definition != null ? owner.Definition.Movement : null;
+        weapon = owner.Definition != null ? owner.Definition.Weapon : null;
+
+        int seed = view != null ? view.ViewID : Random.Range(1, 9999);
+        float angle = Mathf.Abs(seed * 0.211f) % (Mathf.PI * 2f);
+        patrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+        orbitDirection = seed % 2 == 0 ? 1f : -1f;
+
+        if (shooting != null && weapon != null)
+        {
+            shooting.ConfigureWeaponProfile(
+                weapon.FireRate,
+                weapon.AmmoCount,
+                weapon.ReloadDuration,
+                RoomSettings.GetEnemyDamage(owner.Kind),
+                weapon.BulletScaleMultiplier,
+                weapon.BulletColor,
+                weapon.MuzzleOffsetDistance,
+                weapon.InfiniteAmmo,
+                weapon.BulletSpeed,
+                weapon.ShotSoundId,
+                weapon.Range);
+        }
+    }
+
+    public override void TickBehavior()
+    {
+        if (bot == null || view == null || !view.IsMine || rb == null || movement == null)
+            return;
+
+        if (health != null && health.IsWreck)
+            return;
+
+        RefreshTargetIfNeeded();
+        UpdateMode();
+
+        Vector2 desiredDirection = ResolveDesiredDirection();
+        desiredDirection = ApplyAvoidance(desiredDirection);
+        if (desiredDirection.sqrMagnitude <= 0.001f)
+            desiredDirection = rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity.normalized : patrolDirection.normalized;
+
+        float speed = ResolveCurrentSpeed();
+        Vector2 desiredVelocity = desiredDirection.normalized * speed;
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, mode == FighterMode.Combat ? 0.2f : 0.13f);
+
+        Vector2 aimDirection = ResolveAimDirection(desiredDirection);
+        RotateNoseToward(aimDirection);
+
+        if (mode == FighterMode.Combat)
+            TryShootAtTarget();
+    }
+
+    public void NotifyDamageSource(int attackerViewID)
+    {
+        PhotonView attackerView = attackerViewID > 0 ? PhotonView.Find(attackerViewID) : null;
+        if (attackerView != null)
+            currentTarget = attackerView.transform;
+
+        Vector2 threatPosition = attackerView != null ? (Vector2)attackerView.transform.position : rb != null ? rb.position - Vector2.right : (Vector2)transform.position - Vector2.right;
+        Vector2 away = rb != null ? rb.position - threatPosition : (Vector2)transform.position - threatPosition;
+        if (away.sqrMagnitude < 0.001f)
+            away = rb != null && rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity.normalized : patrolDirection;
+
+        fleeDirection = away.normalized;
+        fleeUntil = Time.time + FleeDuration;
+        mode = FighterMode.Flee;
+    }
+
+    void RefreshTargetIfNeeded()
+    {
+        if (Time.time < nextTargetRefreshTime)
+            return;
+
+        nextTargetRefreshTime = Time.time + Mathf.Max(0.12f, movement.TargetRefreshInterval);
+        currentTarget = ResolveTarget();
+    }
+
+    void UpdateMode()
+    {
+        if (mode == FighterMode.Flee)
+        {
+            if (Time.time < fleeUntil)
+                return;
+
+            if (currentTarget == null || !IsTargetWithin(currentTarget, movement.DetectionRadius))
+                mode = FighterMode.Patrol;
+            else
+                mode = FighterMode.Combat;
+            return;
+        }
+
+        if (currentTarget != null && IsTargetWithin(currentTarget, movement.DetectionRadius))
+        {
+            mode = FighterMode.Combat;
+            return;
+        }
+
+        if (mode == FighterMode.Combat && (currentTarget == null || !IsTargetWithin(currentTarget, movement.DisengageRadius)))
+            mode = FighterMode.Patrol;
+    }
+
+    Vector2 ResolveDesiredDirection()
+    {
+        switch (mode)
+        {
+            case FighterMode.Combat:
+                return ResolveCombatDirection();
+            case FighterMode.Flee:
+                return fleeDirection.sqrMagnitude > 0.001f ? fleeDirection.normalized : -transform.up;
+            default:
+                return ResolvePatrolDirection();
+        }
+    }
+
+    Vector2 ResolvePatrolDirection()
+    {
+        if (Time.time >= nextPatrolTurnTime)
+        {
+            nextPatrolTurnTime = Time.time + Random.Range(1.2f, 2.4f);
+            float angle = Mathf.Atan2(patrolDirection.y, patrolDirection.x) + Random.Range(-0.55f, 0.55f);
+            patrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+        }
+
+        Vector2 boundaryPush = ResolveMapBoundaryPush();
+        if (boundaryPush.sqrMagnitude > 0.001f)
+            patrolDirection = (patrolDirection * 0.55f + boundaryPush * 1.15f).normalized;
+
+        return patrolDirection.normalized;
+    }
+
+    Vector2 ResolveCombatDirection()
+    {
+        if (currentTarget == null)
+            return ResolvePatrolDirection();
+
+        Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
+        float distance = toTarget.magnitude;
+        if (distance <= 0.001f)
+            return ResolvePatrolDirection();
+
+        Vector2 toward = toTarget / distance;
+        Vector2 tangent = orbitDirection > 0f
+            ? new Vector2(-toward.y, toward.x)
+            : new Vector2(toward.y, -toward.x);
+
+        float slowOrbitWave = Mathf.Sin(Time.time * 1.8f + view.ViewID * 0.17f) * 0.18f;
+        if (distance > movement.PreferredDistance + 0.6f)
+            return (toward * 0.86f + tangent * (0.26f + slowOrbitWave)).normalized;
+
+        if (distance < movement.OrbitDistance)
+            return (-toward * 0.72f + tangent * 0.68f).normalized;
+
+        return (tangent * 0.88f + toward * 0.16f).normalized;
+    }
+
+    Vector2 ApplyAvoidance(Vector2 desiredDirection)
+    {
+        if (Time.time < avoidanceSuppressedUntil)
+            return desiredDirection;
+
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f
+            ? desiredDirection.normalized
+            : rb.linearVelocity.sqrMagnitude > 0.001f
+                ? rb.linearVelocity.normalized
+                : patrolDirection.normalized;
+        Vector2 avoidance = ResolveMapBoundaryPush();
+        int closeAvoidedObjects = 0;
+        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null || hit.attachedRigidbody == rb)
+                continue;
+
+            if (!IsAvoidedObject(hit))
+                continue;
+
+            Vector2 closest = hit.ClosestPoint(rb.position);
+            Vector2 toObstacle = closest - rb.position;
+            if (toObstacle.sqrMagnitude > 0.0001f && Vector2.Dot(toObstacle.normalized, desired) < -0.2f)
+                continue;
+
+            Vector2 away = rb.position - closest;
+            float distance = Mathf.Max(0.12f, away.magnitude);
+            if (away.sqrMagnitude <= 0.0001f)
+                away = rb.position - (Vector2)hit.transform.position;
+
+            if (away.sqrMagnitude > 0.0001f)
+            {
+                closeAvoidedObjects++;
+                avoidance += away.normalized * Mathf.Clamp01((AvoidanceScanRadius - distance) / AvoidanceScanRadius);
+            }
+        }
+
+        if (avoidance.sqrMagnitude <= 0.001f)
+            return desiredDirection;
+
+        UpdateStuckSuppression(closeAvoidedObjects);
+        if (Time.time < avoidanceSuppressedUntil)
+            return desired;
+
+        Vector2 blended = (desired + avoidance.normalized * AvoidanceWeight).normalized;
+        if (Vector2.Dot(blended, desired) < 0.2f)
+            blended = (desired * 0.82f + avoidance.normalized * 0.18f).normalized;
+
+        return blended;
+    }
+
+    void UpdateStuckSuppression(int closeAvoidedObjects)
+    {
+        if (closeAvoidedObjects < 2 || rb.linearVelocity.magnitude > StuckVelocityThreshold)
+        {
+            lowSpeedSince = 0f;
+            return;
+        }
+
+        if (lowSpeedSince <= 0f)
+        {
+            lowSpeedSince = Time.time;
+            return;
+        }
+
+        if (Time.time - lowSpeedSince >= StuckDuration)
+        {
+            avoidanceSuppressedUntil = Time.time + AvoidanceSuppressionDuration;
+            lowSpeedSince = 0f;
+        }
+    }
+
+    bool IsAvoidedObject(Collider2D hit)
+    {
+        if (hit.GetComponentInParent<ObstacleChunk>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<Treasure>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<ShipWreck>() != null)
+            return true;
+
+        return hit.GetComponentInParent<DroppedCargoCrate>() != null;
+    }
+
+    Vector2 ResolveMapBoundaryPush()
+    {
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = Mathf.Max(3f, mapSize.x * 0.5f);
+        float halfY = Mathf.Max(3f, mapSize.y * 0.5f);
+        Vector2 push = Vector2.zero;
+
+        if (rb.position.x > halfX - MapEdgeMargin)
+            push.x -= 1f;
+        else if (rb.position.x < -halfX + MapEdgeMargin)
+            push.x += 1f;
+
+        if (rb.position.y > halfY - MapEdgeMargin)
+            push.y -= 1f;
+        else if (rb.position.y < -halfY + MapEdgeMargin)
+            push.y += 1f;
+
+        return push;
+    }
+
+    float ResolveCurrentSpeed()
+    {
+        float baseSpeed = bot != null ? bot.EffectiveMoveSpeed : 1f;
+        return mode == FighterMode.Patrol ? baseSpeed * 0.5f : baseSpeed;
+    }
+
+    Vector2 ResolveAimDirection(Vector2 moveDirection)
+    {
+        if (mode == FighterMode.Combat && currentTarget != null)
+        {
+            Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
+            if (toTarget.sqrMagnitude > 0.001f)
+                return toTarget.normalized;
+        }
+
+        return moveDirection.sqrMagnitude > 0.001f ? moveDirection.normalized : transform.up;
+    }
+
+    void RotateNoseToward(Vector2 direction)
+    {
+        if (direction.sqrMagnitude <= 0.001f)
+            return;
+
+        float targetAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
+        float nextAngle = Mathf.MoveTowardsAngle(rb.rotation, targetAngle, movement.TurnResponsiveness * Time.fixedDeltaTime);
+        rb.MoveRotation(nextAngle);
+    }
+
+    void TryShootAtTarget()
+    {
+        if (shooting == null || weapon == null || currentTarget == null)
+            return;
+
+        Vector2 aim = (Vector2)currentTarget.position - rb.position;
+        float distance = aim.magnitude;
+        if (distance <= 0.001f || distance > weapon.Range)
+            return;
+
+        Vector2 normalizedAim = aim / distance;
+        if (Vector2.Dot(transform.up, normalizedAim) < 0.92f)
+            return;
+
+        Vector3 muzzle = transform.position + transform.up * Mathf.Max(0.1f, weapon.MuzzleOffsetDistance);
+        float cooldownJitter = Random.Range(-FireIntervalJitter, FireIntervalJitter);
+        shooting.TryFireBotFromWorld(normalizedAim, muzzle, cooldownJitter);
+    }
+
+    Transform ResolveTarget()
+    {
+        if (currentTarget != null)
+        {
+            PlayerHealth currentHealth = currentTarget.GetComponent<PlayerHealth>();
+            float allowedRange = mode == FighterMode.Combat ? movement.DisengageRadius : movement.DetectionRadius;
+            if (IsValidVisibleTarget(currentHealth, allowedRange))
+                return currentTarget;
+        }
+
+        return FindClosestVisibleHumanTarget(movement.DetectionRadius);
+    }
+
+    Transform FindClosestVisibleHumanTarget(float maxDistance)
+    {
+        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        Transform bestTarget = null;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < players.Length; i++)
+        {
+            PlayerHealth candidate = players[i];
+            if (!IsValidVisibleTarget(candidate, maxDistance))
+                continue;
+
+            float distance = Vector2.Distance(transform.position, candidate.transform.position);
+            if (distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            bestTarget = candidate.transform;
+        }
+
+        return bestTarget;
+    }
+
+    bool IsValidVisibleTarget(PlayerHealth candidate, float maxDistance)
+    {
+        if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsBotControlled)
+            return false;
+
+        HideInNebulaTarget candidateNebulaState = candidate.GetComponent<HideInNebulaTarget>();
+        HideInNebulaTarget botNebulaState = GetComponent<HideInNebulaTarget>();
+        if (candidateNebulaState != null && candidateNebulaState.IsHiddenFromObserver(botNebulaState))
+            return false;
+
+        return Vector2.Distance(transform.position, candidate.transform.position) <= maxDistance;
+    }
+
+    bool IsTargetWithin(Transform target, float maxDistance)
+    {
+        if (target == null)
+            return false;
+
+        PlayerHealth targetHealth = target.GetComponent<PlayerHealth>();
+        return IsValidVisibleTarget(targetHealth, maxDistance);
     }
 }
 

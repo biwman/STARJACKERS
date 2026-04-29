@@ -130,6 +130,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, true, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, false, 30, false, 60, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
         new LobbyMapDefinition(
             "noob_haven",
@@ -155,6 +156,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, false, 30, false, 60, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
         new LobbyMapDefinition(
             "minefield",
@@ -180,6 +182,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 30, true, 60, 20, 1f, 0, 90),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
         new LobbyMapDefinition(
             "pirate_bay",
@@ -205,6 +208,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, true, 1, true, 250, 20, 1f, 0, 90),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 10, false, 20, 20, 1f, 20, 120),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
         new LobbyMapDefinition(
             "mothership",
@@ -230,6 +234,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, true, 250, 20, 1f, 0, 90),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, false, 10, false, 20, 20, 1f, 20, 120),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, true, 1, false, 200, 200, 1f, 0, 90))
     };
 
@@ -268,11 +273,13 @@ public static class LobbyMapCatalog
         props[RoomSettings.ResourceRichnessKey] = map.ResourceRichness;
         props[RoomSettings.NebulaDensityKey] = map.NebulaDensity;
         props[RoomSettings.ExtractionCountKey] = map.ExtractionZoneCount;
+        props[RoomSettings.RepairBayCountKey] = RoomSettings.DefaultRepairBayCount;
         props[RoomSettings.MovingObjectsEnabledKey] = map.MovingObjectsEnabled;
         props[RoomSettings.ObstacleWeightFactorKey] = map.ObstacleMassFactor;
         props[RoomSettings.TreasureWeightFactorKey] = map.TreasureMassFactor;
         props[RoomSettings.MapBackgroundKey] = map.MapBackgroundIndex;
         props[RoomSettings.VisualEffectsEnabledKey] = map.VisualEffectsEnabled;
+        props[RoomSettings.EndDisasterModeKey] = RoomSettings.EndDisasterMeteor;
 
         for (int i = 0; i < map.EnemyPresets.Count; i++)
         {

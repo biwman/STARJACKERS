@@ -216,7 +216,37 @@ public class Bullet : MonoBehaviourPun
 
         SpriteRenderer spriteRenderer = GetComponent<SpriteRenderer>();
         if (spriteRenderer != null)
+        {
             spriteRenderer.color = visualColor;
+            if (IsSmallRedPlasma())
+                EnsurePlasmaGlow(spriteRenderer);
+        }
+    }
+
+    bool IsSmallRedPlasma()
+    {
+        return visualColor.r > 0.85f &&
+               visualColor.g < 0.22f &&
+               visualColor.b < 0.18f &&
+               visualScaleMultiplier <= 0.75f;
+    }
+
+    void EnsurePlasmaGlow(SpriteRenderer coreRenderer)
+    {
+        if (coreRenderer == null || coreRenderer.sprite == null || transform.Find("RedPlasmaGlow") != null)
+            return;
+
+        GameObject glowObject = new GameObject("RedPlasmaGlow");
+        glowObject.transform.SetParent(transform, false);
+        glowObject.transform.localPosition = Vector3.zero;
+        glowObject.transform.localRotation = Quaternion.identity;
+        glowObject.transform.localScale = Vector3.one * 1.9f;
+
+        SpriteRenderer glowRenderer = glowObject.AddComponent<SpriteRenderer>();
+        glowRenderer.sprite = coreRenderer.sprite;
+        glowRenderer.color = new Color(1f, 0.1f, 0.02f, 0.34f);
+        glowRenderer.sortingLayerID = coreRenderer.sortingLayerID;
+        glowRenderer.sortingOrder = coreRenderer.sortingOrder - 1;
     }
 
     float GetOwnerLength()

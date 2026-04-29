@@ -149,6 +149,10 @@ public class PlayerShooting : MonoBehaviourPun
         if (!photonView.IsMine)
             return;
 
+        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
+        if (repairDocking != null && repairDocking.IsBusy)
+            return;
+
         SyncEquippedWeaponProfile();
         SyncEquippedGadgetProfile();
         RefreshAuthoritativeGadgetRuntimeStates();
@@ -818,6 +822,12 @@ public class PlayerShooting : MonoBehaviourPun
     [PunRPC]
     void PlayLaserSfx()
     {
+        if (shotSoundId == "shoot_small")
+        {
+            AudioManager.Instance.PlayShootSmallAt(transform.position);
+            return;
+        }
+
         if (shotSoundId == "corsair")
         {
             AudioManager.Instance.PlayCorsairLaserAt(transform.position);
@@ -934,6 +944,10 @@ public class PlayerShooting : MonoBehaviourPun
     public bool CanUseGadget(string itemId)
     {
         if (!photonView.IsMine || !IsGameStarted() || string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
+        if (repairDocking != null && repairDocking.IsBusy)
             return false;
 
         if (!gadgetStates.TryGetValue(itemId, out GadgetRuntimeState state) || state == null)

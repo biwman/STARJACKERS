@@ -19,6 +19,7 @@ public static class RoomSettings
     public const string ResourceRichnessKey = "resourceRichness";
     public const string NebulaDensityKey = "nebulaDensity";
     public const string ExtractionCountKey = "extractionCount";
+    public const string RepairBayCountKey = "repairBayCount";
     public const string BoosterSlowdownKey = "boosterSlowdownPercent";
     public const string AmmoCountKey = "ammoCount";
     public const string BoosterRecoveryDelayKey = "boosterRecoveryDelay";
@@ -33,6 +34,7 @@ public static class RoomSettings
     public const string SelectedMapKey = "selectedMap";
     public const string VisualEffectsEnabledKey = "visualEffectsEnabled";
     public const string StartingVfxEnabledKey = "startingVfxEnabled";
+    public const string EndDisasterModeKey = "endDisasterMode";
     public const string MovingObjectsEnabledKey = "movingObjectsEnabled";
     public const string EnemyBotsEnabledKey = "enemyBotsEnabled";
     public const string CorsairEnabledKey = "corsairEnabled";
@@ -41,6 +43,7 @@ public static class RoomSettings
     public const string BulletPushMultiplierKey = "bulletPushMultiplier";
     public const string ObstacleWeightFactorKey = "obstacleWeightFactor";
     public const string TreasureWeightFactorKey = "treasureWeightFactor";
+    public const string BatteringDamageKey = "batteringDamage";
     public const string RoundResultsKey = "roundResultsSnapshot";
     public const string RoundEndReasonKey = "roundEndReason";
     public const string ShipSkinKey = "shipSkinIndex";
@@ -56,6 +59,7 @@ public static class RoomSettings
     public const int DefaultObstacleSizePercent = 100;
     public const bool DefaultObstacleNoBorders = false;
     public const int DefaultExtractionCount = 3;
+    public const int DefaultRepairBayCount = 1;
     public const int DefaultBoosterSlowdownPercent = 30;
     public const int DefaultAmmoCount = 15;
     public const int DefaultBoosterRecoveryDelay = 5;
@@ -70,6 +74,9 @@ public static class RoomSettings
     public const string DefaultLobbyMapId = "just_space";
     public const bool DefaultVisualEffectsEnabled = true;
     public const bool DefaultStartingVfxEnabled = true;
+    public const string EndDisasterOff = "off";
+    public const string EndDisasterMeteor = "meteor";
+    public const string DefaultEndDisasterMode = EndDisasterMeteor;
     public const bool DefaultMovingObjectsEnabled = true;
     public const bool DefaultEnemyBotsEnabled = true;
     public const bool DefaultCorsairEnabled = true;
@@ -78,6 +85,7 @@ public static class RoomSettings
     public const int DefaultBulletPushMultiplier = 1;
     public const int DefaultObstacleWeightFactor = 6;
     public const int DefaultTreasureWeightFactor = 6;
+    public const int DefaultBatteringDamage = 0;
     public const int MaxObstacleWeightFactor = 999;
     public const bool DefaultEnemyRespawnEnabled = false;
     public const int DefaultEnemyRespawnIntervalSeconds = 60;
@@ -182,6 +190,11 @@ public static class RoomSettings
     public static int GetExtractionCount()
     {
         return GetInt(ExtractionCountKey, DefaultExtractionCount, 1, 4);
+    }
+
+    public static int GetRepairBayCount()
+    {
+        return GetInt(RepairBayCountKey, DefaultRepairBayCount, 0, 2);
     }
 
     public static int GetBoosterSlowdownPercent()
@@ -311,6 +324,38 @@ public static class RoomSettings
         }
 
         return DefaultStartingVfxEnabled;
+    }
+
+    public static string GetEndDisasterMode()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(EndDisasterModeKey, out object value) &&
+            value is string mode)
+        {
+            return NormalizeEndDisasterMode(mode);
+        }
+
+        return DefaultEndDisasterMode;
+    }
+
+    public static bool IsEndDisasterMeteorEnabled()
+    {
+        return GetEndDisasterMode() == EndDisasterMeteor;
+    }
+
+    public static string NormalizeEndDisasterMode(string mode)
+    {
+        string normalized = string.IsNullOrWhiteSpace(mode)
+            ? DefaultEndDisasterMode
+            : mode.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case EndDisasterMeteor:
+                return EndDisasterMeteor;
+            default:
+                return EndDisasterOff;
+        }
     }
 
     public static string GetResourceRichness()
@@ -611,6 +656,11 @@ public static class RoomSettings
     public static int GetBulletPushMultiplier()
     {
         return GetInt(BulletPushMultiplierKey, DefaultBulletPushMultiplier, 1, 5);
+    }
+
+    public static int GetBatteringDamage()
+    {
+        return GetInt(BatteringDamageKey, DefaultBatteringDamage, 0, 50);
     }
 
     public static string GetMassLabel(int mass)

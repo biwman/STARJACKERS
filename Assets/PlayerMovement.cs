@@ -1,5 +1,6 @@
 using UnityEngine;
 using System;
+using System.Collections.Generic;
 using Photon.Pun;
 using UnityEngine.Rendering;
 
@@ -33,6 +34,7 @@ public class PlayerMovement : MonoBehaviourPun
     float turnRateMultiplier = 1f;
     bool baseSpeedCaptured;
     bool fusionEngineEquipped;
+    int equippedFusionEngineCount;
     string lastAppliedEngineSignature = string.Empty;
     const float BaseTurnDegreesPerSecond = 1080f;
     const float AccelerationResponsiveness = 18f;
@@ -41,11 +43,24 @@ public class PlayerMovement : MonoBehaviourPun
     const float BrakeDriftResponsivenessMultiplier = 0.8f;
     const float MaxDriftInertiaSlowdown = 4.2f;
     const float MovingObjectImpulseRequestCooldown = 0.08f;
+    const float BatteringRequiredBoosterSeconds = 2f;
+    const float BatteringFullSpeedRatio = 0.9f;
+    const float BatteringSpeedGraceSeconds = 0.25f;
+    const float BatteringPairCooldown = 0.5f;
+    const float BatteringProbeRadius = 0.72f;
+    const float BatteringFrontDotThreshold = 0.42f;
     const float RemotePushNoseProbeRadius = 0.9f;
     const float RemotePushBodyProbeRadius = 0.68f;
     static PhysicsMaterial2D playerCollisionMaterial;
     static readonly Collider2D[] RemotePushProbeHits = new Collider2D[32];
+    static readonly Collider2D[] BatteringProbeHits = new Collider2D[32];
     float nextMovingObjectImpulseRequestTime;
+    float continuousBoosterTime;
+    float lastBatteringEligibleSpeedTime = -999f;
+    readonly Dictionary<int, float> nextLocalBatteringRequestTimeByTargetView = new Dictionary<int, float>();
+    readonly Dictionary<int, float> nextAuthoritativeBatteringTimeByTargetView = new Dictionary<int, float>();
+    readonly Dictionary<string, float> nextLocalBatteringRequestTimeByObstacle = new Dictionary<string, float>();
+    readonly Dictionary<string, float> nextAuthoritativeBatteringTimeByObstacle = new Dictionary<string, float>();
 
     public float BoosterNormalized => boosterCharge;
     public bool IsBoosterDepleted => boosterExhausted;
@@ -211,6 +226,8 @@ public class PlayerMovement : MonoBehaviourPun
         {
             ApplyVelocity(currentSpeed);
             ClampExcessCollisionBoost(currentSpeed);
+            UpdateBatteringSpeedEligibility();
+            TryRequestBatteringProbe();
             TryRequestNearbyMovingObjectImpulse();
             rb.angularVelocity = 0f;
             float maxTurnDelta = BaseTurnDegreesPerSecond * Mathf.Max(0.1f, turnRateMultiplier) * Time.fixedDeltaTime;
@@ -239,6 +256,7 @@ public class PlayerMovement : MonoBehaviourPun
 
         float currentSpeed = IsBoosterDepleted ? speed * CurrentDepletedSpeedMultiplier : speed;
         ClampExcessCollisionBoost(currentSpeed);
+        TryRequestBatteringImpact(collision);
         TryRequestMovingObjectImpulse(collision);
     }
 
@@ -247,7 +265,329 @@ public class PlayerMovement : MonoBehaviourPun
         if (!photonView.IsMine || rb == null)
             return;
 
+        TryRequestBatteringImpact(collision);
         TryRequestMovingObjectImpulse(collision);
+    }
+
+    void TryRequestBatteringImpact(Collision2D collision)
+    {
+        int batteringDamage = RoomSettings.GetBatteringDamage();
+        if (batteringDamage <= 0 || collision == null || rb == null || GetComponent<AstronautSurvivor>() != null)
+            return;
+
+        if (continuousBoosterTime < BatteringRequiredBoosterSeconds ||
+            (!HasRecentBatteringSpeed() && !IsAtBatteringSpeed(rb.linearVelocity.magnitude)))
+            return;
+
+        PlayerHealth ownHealth = GetComponent<PlayerHealth>();
+        if (ownHealth == null || ownHealth.IsWreck || ownHealth.IsEvacuationAnimating || ownHealth.CurrentHP <= 0)
+            return;
+
+        if (!TryGetFrontBatteringImpactPoint(collision, out Vector2 impactPoint))
+            return;
+
+        PlayerHealth targetHealth = collision.collider != null
+            ? collision.collider.GetComponentInParent<PlayerHealth>()
+            : null;
+        if (!IsValidBatteringTarget(targetHealth))
+        {
+            TryRequestObstacleBatteringImpact(collision, impactPoint);
+            return;
+        }
+
+        PhotonView targetView = targetHealth.photonView;
+        if (targetView == null || targetView.ViewID == photonView.ViewID)
+            return;
+
+        if (nextLocalBatteringRequestTimeByTargetView.TryGetValue(targetView.ViewID, out float nextAllowedTime) && Time.time < nextAllowedTime)
+            return;
+
+        nextLocalBatteringRequestTimeByTargetView[targetView.ViewID] = Time.time + BatteringPairCooldown;
+        photonView.RPC(
+            nameof(RequestBatteringImpact),
+            RpcTarget.MasterClient,
+            targetView.ViewID,
+            impactPoint.x,
+            impactPoint.y,
+            continuousBoosterTime,
+            rb.linearVelocity.magnitude);
+    }
+
+    void TryRequestObstacleBatteringImpact(Collision2D collision, Vector2 impactPoint)
+    {
+        ObstacleChunk obstacle = collision != null && collision.collider != null
+            ? collision.collider.GetComponentInParent<ObstacleChunk>()
+            : null;
+        if (!IsValidBatteringObstacle(obstacle))
+            return;
+
+        if (nextLocalBatteringRequestTimeByObstacle.TryGetValue(obstacle.StableId, out float nextAllowedTime) && Time.time < nextAllowedTime)
+            return;
+
+        nextLocalBatteringRequestTimeByObstacle[obstacle.StableId] = Time.time + BatteringPairCooldown;
+        photonView.RPC(
+            nameof(RequestObstacleBatteringImpact),
+            RpcTarget.MasterClient,
+            obstacle.StableId,
+            impactPoint.x,
+            impactPoint.y,
+            continuousBoosterTime,
+            rb != null ? rb.linearVelocity.magnitude : 0f);
+    }
+
+    void TryRequestBatteringProbe()
+    {
+        int batteringDamage = RoomSettings.GetBatteringDamage();
+        if (batteringDamage <= 0 || rb == null || GetComponent<AstronautSurvivor>() != null)
+            return;
+
+        if (!HasRecentBatteringSpeed())
+            return;
+
+        PlayerHealth ownHealth = GetComponent<PlayerHealth>();
+        if (ownHealth == null || ownHealth.IsWreck || ownHealth.IsEvacuationAnimating || ownHealth.CurrentHP <= 0)
+            return;
+
+        Vector2 probeCenter = rb.position + (Vector2)transform.up * GetBatteringProbeDistance();
+        ContactFilter2D contactFilter = new ContactFilter2D { useTriggers = false };
+        int hitCount = Physics2D.OverlapCircle(probeCenter, BatteringProbeRadius, contactFilter, BatteringProbeHits);
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D hit = BatteringProbeHits[i];
+            BatteringProbeHits[i] = null;
+            if (hit == null || hit.transform == transform || hit.transform.IsChildOf(transform))
+                continue;
+
+            PlayerHealth targetHealth = hit.GetComponentInParent<PlayerHealth>();
+            if (IsValidBatteringTarget(targetHealth))
+            {
+                PhotonView targetView = targetHealth.photonView;
+                if (targetView != null && (!nextLocalBatteringRequestTimeByTargetView.TryGetValue(targetView.ViewID, out float nextAllowedTime) || Time.time >= nextAllowedTime))
+                {
+                    Vector2 impactPoint = hit.ClosestPoint(probeCenter);
+                    if (!IsBatteringImpactInFront(impactPoint))
+                        continue;
+
+                    nextLocalBatteringRequestTimeByTargetView[targetView.ViewID] = Time.time + BatteringPairCooldown;
+                    photonView.RPC(
+                        nameof(RequestBatteringImpact),
+                        RpcTarget.MasterClient,
+                        targetView.ViewID,
+                        impactPoint.x,
+                        impactPoint.y,
+                        continuousBoosterTime,
+                        rb.linearVelocity.magnitude);
+                    return;
+                }
+            }
+
+            ObstacleChunk obstacle = hit.GetComponentInParent<ObstacleChunk>();
+            if (IsValidBatteringObstacle(obstacle) &&
+                (!nextLocalBatteringRequestTimeByObstacle.TryGetValue(obstacle.StableId, out float nextObstacleTime) || Time.time >= nextObstacleTime))
+            {
+                Vector2 impactPoint = hit.ClosestPoint(probeCenter);
+                if (!IsBatteringImpactInFront(impactPoint))
+                    continue;
+
+                nextLocalBatteringRequestTimeByObstacle[obstacle.StableId] = Time.time + BatteringPairCooldown;
+                photonView.RPC(
+                    nameof(RequestObstacleBatteringImpact),
+                    RpcTarget.MasterClient,
+                    obstacle.StableId,
+                    impactPoint.x,
+                    impactPoint.y,
+                    continuousBoosterTime,
+                    rb.linearVelocity.magnitude);
+                return;
+            }
+        }
+    }
+
+    [PunRPC]
+    void RequestBatteringImpact(int targetViewId, float impactX, float impactY, float reportedBoosterSeconds, float reportedSpeed, PhotonMessageInfo messageInfo)
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView == null || photonView.Owner == null || messageInfo.Sender == null)
+            return;
+
+        if (messageInfo.Sender.ActorNumber != photonView.Owner.ActorNumber)
+            return;
+
+        int batteringDamage = RoomSettings.GetBatteringDamage();
+        if (batteringDamage <= 0 || reportedBoosterSeconds < BatteringRequiredBoosterSeconds)
+            return;
+
+        PlayerHealth ownHealth = GetComponent<PlayerHealth>();
+        if (ownHealth == null || ownHealth.IsWreck || ownHealth.IsEvacuationAnimating || ownHealth.IsAstronautControlled || ownHealth.CurrentHP <= 0)
+            return;
+
+        PhotonView targetView = PhotonView.Find(targetViewId);
+        if (targetView == null || targetView == photonView)
+            return;
+
+        PlayerHealth targetHealth = targetView.GetComponent<PlayerHealth>();
+        if (!IsValidBatteringTarget(targetHealth))
+            return;
+
+        float authoritySpeed = rb != null ? rb.linearVelocity.magnitude : 0f;
+        if (!IsAtBatteringSpeed(Mathf.Max(reportedSpeed, authoritySpeed)) && reportedBoosterSeconds < BatteringRequiredBoosterSeconds + BatteringSpeedGraceSeconds)
+            return;
+
+        if (nextAuthoritativeBatteringTimeByTargetView.TryGetValue(targetViewId, out float nextAllowedTime) && Time.time < nextAllowedTime)
+            return;
+
+        nextAuthoritativeBatteringTimeByTargetView[targetViewId] = Time.time + BatteringPairCooldown;
+        int targetDamage = batteringDamage * 2;
+        Vector2 impactNormal = ResolveBatteringImpactNormal(new Vector2(impactX, impactY));
+        photonView.RPC(nameof(PlayBatteringImpactVisual), RpcTarget.All, impactX, impactY, impactNormal.x, impactNormal.y);
+        targetHealth.photonView.RPC(nameof(PlayerHealth.TakeDamageAt), RpcTarget.MasterClient, targetDamage, photonView.ViewID, impactX, impactY);
+        photonView.RPC(nameof(PlayerHealth.TakeDamageAt), RpcTarget.MasterClient, batteringDamage, -1, impactX, impactY);
+    }
+
+    [PunRPC]
+    void RequestObstacleBatteringImpact(string obstacleStableId, float impactX, float impactY, float reportedBoosterSeconds, float reportedSpeed, PhotonMessageInfo messageInfo)
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView == null || photonView.Owner == null || messageInfo.Sender == null)
+            return;
+
+        if (messageInfo.Sender.ActorNumber != photonView.Owner.ActorNumber)
+            return;
+
+        int batteringDamage = RoomSettings.GetBatteringDamage();
+        if (batteringDamage <= 0 || reportedBoosterSeconds < BatteringRequiredBoosterSeconds || string.IsNullOrWhiteSpace(obstacleStableId))
+            return;
+
+        PlayerHealth ownHealth = GetComponent<PlayerHealth>();
+        if (ownHealth == null || ownHealth.IsWreck || ownHealth.IsEvacuationAnimating || ownHealth.IsAstronautControlled || ownHealth.CurrentHP <= 0)
+            return;
+
+        ObstacleChunk obstacle = ObstacleChunk.Find(obstacleStableId);
+        if (!IsValidBatteringObstacle(obstacle))
+            return;
+
+        float authoritySpeed = rb != null ? rb.linearVelocity.magnitude : 0f;
+        if (!IsAtBatteringSpeed(Mathf.Max(reportedSpeed, authoritySpeed)) && reportedBoosterSeconds < BatteringRequiredBoosterSeconds + BatteringSpeedGraceSeconds)
+            return;
+
+        if (nextAuthoritativeBatteringTimeByObstacle.TryGetValue(obstacleStableId, out float nextAllowedTime) && Time.time < nextAllowedTime)
+            return;
+
+        nextAuthoritativeBatteringTimeByObstacle[obstacleStableId] = Time.time + BatteringPairCooldown;
+        Vector2 impactNormal = ResolveBatteringImpactNormal(new Vector2(impactX, impactY));
+        photonView.RPC(nameof(PlayBatteringImpactVisual), RpcTarget.All, impactX, impactY, impactNormal.x, impactNormal.y);
+        SpaceObjectMotionSync.RequestObstacleDamage(obstacleStableId, batteringDamage * 2);
+        photonView.RPC(nameof(PlayerHealth.TakeDamageAt), RpcTarget.MasterClient, batteringDamage, -1, impactX, impactY);
+    }
+
+    [PunRPC]
+    void PlayBatteringImpactVisual(float impactX, float impactY, float normalX, float normalY)
+    {
+        if (!RoomSettings.AreVisualEffectsEnabled())
+            return;
+
+        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+        BatteringImpactVfx.Spawn(
+            new Vector3(impactX, impactY, 0f),
+            new Vector2(normalX, normalY),
+            renderer);
+    }
+
+    bool IsValidBatteringTarget(PlayerHealth targetHealth)
+    {
+        if (targetHealth == null || targetHealth.photonView == null || targetHealth.photonView == photonView)
+            return false;
+
+        if (targetHealth.IsWreck || targetHealth.IsEvacuationAnimating || targetHealth.CurrentHP <= 0)
+            return false;
+
+        return targetHealth.CurrentShield > 0 || targetHealth.CurrentHP > 0;
+    }
+
+    bool IsValidBatteringObstacle(ObstacleChunk obstacle)
+    {
+        return obstacle != null &&
+               !string.IsNullOrWhiteSpace(obstacle.StableId) &&
+               obstacle.CurrentHealth > 0 &&
+               RoomSettings.AreObstaclesDestructible();
+    }
+
+    void UpdateBatteringSpeedEligibility()
+    {
+        if (continuousBoosterTime >= BatteringRequiredBoosterSeconds && rb != null && IsAtBatteringSpeed(rb.linearVelocity.magnitude))
+            lastBatteringEligibleSpeedTime = Time.time;
+    }
+
+    bool HasRecentBatteringSpeed()
+    {
+        return continuousBoosterTime >= BatteringRequiredBoosterSeconds &&
+               Time.time - lastBatteringEligibleSpeedTime <= BatteringSpeedGraceSeconds;
+    }
+
+    bool TryGetFrontBatteringImpactPoint(Collision2D collision, out Vector2 impactPoint)
+    {
+        impactPoint = transform.position;
+        if (collision == null || collision.contactCount <= 0)
+            return false;
+
+        float bestDot = float.NegativeInfinity;
+        Vector2 bestPoint = impactPoint;
+        for (int i = 0; i < collision.contactCount; i++)
+        {
+            Vector2 contactPoint = collision.GetContact(i).point;
+            Vector2 toContact = contactPoint - (Vector2)transform.position;
+            if (toContact.sqrMagnitude < 0.0001f)
+                continue;
+
+            float dot = Vector2.Dot(((Vector2)transform.up).normalized, toContact.normalized);
+            if (dot > bestDot)
+            {
+                bestDot = dot;
+                bestPoint = contactPoint;
+            }
+        }
+
+        impactPoint = bestPoint;
+        return bestDot >= BatteringFrontDotThreshold;
+    }
+
+    bool IsBatteringImpactInFront(Vector2 impactPoint)
+    {
+        Vector2 toImpact = impactPoint - (Vector2)transform.position;
+        if (toImpact.sqrMagnitude < 0.0001f)
+            return false;
+
+        return Vector2.Dot(((Vector2)transform.up).normalized, toImpact.normalized) >= BatteringFrontDotThreshold;
+    }
+
+    bool IsAtBatteringSpeed(float currentMagnitude)
+    {
+        return currentMagnitude >= GetBatteringFullSpeedThreshold();
+    }
+
+    float GetBatteringFullSpeedThreshold()
+    {
+        float boostMultiplier = 1f + (RoomSettings.GetMaxInputBoostPercent() / 100f);
+        return Mathf.Max(0.1f, speed * boostMultiplier * BatteringFullSpeedRatio);
+    }
+
+    float GetBatteringProbeDistance()
+    {
+        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+        if (renderer == null)
+            return 0.9f;
+
+        return Mathf.Clamp(renderer.bounds.extents.y * 0.95f, 0.55f, 1.5f);
+    }
+
+    Vector2 ResolveBatteringImpactNormal(Vector2 impactPoint)
+    {
+        Vector2 normal = impactPoint - (Vector2)transform.position;
+        if (normal.sqrMagnitude > 0.0001f)
+            return normal.normalized;
+
+        if (rb != null && rb.linearVelocity.sqrMagnitude > 0.0001f)
+            return rb.linearVelocity.normalized;
+
+        return transform.up;
     }
 
     void ClampExcessCollisionBoost(float currentSpeed)
@@ -433,6 +773,8 @@ public class PlayerMovement : MonoBehaviourPun
             boosterCharge = 0f;
             boosterExhausted = false;
             boosterRecoveryDelayTimer = 0f;
+            continuousBoosterTime = 0f;
+            lastBatteringEligibleSpeedTime = -999f;
             return;
         }
 
@@ -443,18 +785,25 @@ public class PlayerMovement : MonoBehaviourPun
         {
             boosterCharge -= deltaTime / boosterDuration;
             boosterRecoveryDelayTimer = GetCurrentBoosterRecoveryDelay();
+            continuousBoosterTime += deltaTime;
         }
         else if (usingFullAcceleration)
         {
             boosterRecoveryDelayTimer = GetCurrentBoosterRecoveryDelay();
+            continuousBoosterTime = 0f;
+            lastBatteringEligibleSpeedTime = -999f;
         }
         else if (boosterRecoveryDelayTimer > 0f)
         {
             boosterRecoveryDelayTimer -= deltaTime;
+            continuousBoosterTime = 0f;
+            lastBatteringEligibleSpeedTime = -999f;
         }
         else
         {
             boosterCharge += deltaTime / (boosterDuration * 2f);
+            continuousBoosterTime = 0f;
+            lastBatteringEligibleSpeedTime = -999f;
         }
 
         boosterCharge = Mathf.Clamp01(boosterCharge);
@@ -706,11 +1055,12 @@ public class PlayerMovement : MonoBehaviourPun
         float baseShipBoosterDuration = ShipCatalog.GetBoosterDuration(shipSkinIndex);
         float baseShipTurnRate = ShipCatalog.GetTurnRateMultiplier(shipSkinIndex);
 
+        equippedFusionEngineCount = fusionCount;
         fusionEngineEquipped = hasFusion;
         baseSpeed = Mathf.Max(0.1f, baseShipSpeed);
         baseBoosterDuration = Mathf.Max(0.1f, baseShipBoosterDuration);
         turnRateMultiplier = Mathf.Max(0.1f, baseShipTurnRate);
-        speed = baseSpeed * (fusionEngineEquipped ? 1.2f : 1f);
+        speed = baseSpeed * (1f + (0.15f * equippedFusionEngineCount));
         boosterDuration = baseBoosterDuration;
         lastAppliedEngineSignature = signature;
         SyncEngineAudioClip();
@@ -751,7 +1101,7 @@ public class PlayerMovement : MonoBehaviourPun
     float GetCurrentBoosterRecoveryDelay()
     {
         float baseDelay = RoomSettings.GetBoosterRecoveryDelay();
-        return Mathf.Max(0f, baseDelay - (fusionEngineEquipped ? 2f : 0f));
+        return Mathf.Max(0f, baseDelay - equippedFusionEngineCount);
     }
 
     AudioClip ResolveEngineAudioClip()

@@ -14,6 +14,18 @@ public enum InventoryItemType
     Misc
 }
 
+public enum InventoryItemCategory
+{
+    Treasure,
+    Wreck,
+    Weapon,
+    Shield,
+    Engine,
+    Gadget,
+    Resource,
+    Misc
+}
+
 public enum InventoryItemRarity
 {
     Common,
@@ -32,8 +44,10 @@ public class InventoryItemDefinition
     public string ShortLabel;
     public string Description;
     public InventoryItemType ItemType;
+    public InventoryItemCategory Category;
     public InventoryItemRarity Rarity;
     public int SellValueAstrons;
+    public int ShopBuyValueAstronsOverride = -1;
     public string IconResourcePath;
     public string ProjectFileName;
     public string[] SalvageOutputs;
@@ -137,6 +151,7 @@ public static class InventoryItemCatalog
     public const string SpaceMineWreckId = "space_mine_wreck";
     public const string SpaceTruckWreckId = "space_truck_wreck";
     public const string MothershipCoreId = "mothership_core";
+    public const string NeutralFighterSalvageId = "neutral_fighter_salvage";
     public const string PlasmaGunId = "plasma_gun";
     public const string FusionEngineId = "fusion_engine";
     public const string GadgetMineId = "gadget_mine";
@@ -157,6 +172,13 @@ public static class InventoryItemCatalog
     }
 
     public static Sprite GetIcon(string itemId) => GetDefinition(itemId)?.GetIcon();
+
+    public static IReadOnlyList<InventoryItemDefinition> GetAllDefinitions()
+    {
+        List<InventoryItemDefinition> definitions = new List<InventoryItemDefinition>(Definitions.Values);
+        definitions.Sort((a, b) => string.CompareOrdinal(a?.DisplayName ?? string.Empty, b?.DisplayName ?? string.Empty));
+        return definitions;
+    }
 
     public static string GetShortLabel(string itemId)
     {
@@ -191,6 +213,54 @@ public static class InventoryItemCatalog
         return definition != null ? definition.ItemType : InventoryItemType.Misc;
     }
 
+    public static InventoryItemCategory GetCategory(string itemId)
+    {
+        InventoryItemDefinition definition = GetDefinition(itemId);
+        return definition != null ? definition.Category : InventoryItemCategory.Misc;
+    }
+
+    public static string GetCategoryLabel(string itemId)
+    {
+        return GetCategory(itemId) switch
+        {
+            InventoryItemCategory.Treasure => "Treasure",
+            InventoryItemCategory.Wreck => "Wreck",
+            InventoryItemCategory.Weapon => "Weapon",
+            InventoryItemCategory.Shield => "Shield",
+            InventoryItemCategory.Engine => "Engine",
+            InventoryItemCategory.Gadget => "Gadget",
+            InventoryItemCategory.Resource => "Resource",
+            _ => "Misc"
+        };
+    }
+
+    public static bool IsCompatibleWithEquipmentSlot(string itemId, int equipmentSlotIndex)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        InventoryItemDefinition definition = GetDefinition(itemId);
+        if (definition == null || definition.ItemType != InventoryItemType.Equipment)
+            return false;
+
+        InventoryItemCategory expectedCategory = GetEquipmentSlotCategory(equipmentSlotIndex);
+        return expectedCategory != InventoryItemCategory.Misc && definition.Category == expectedCategory;
+    }
+
+    public static InventoryItemCategory GetEquipmentSlotCategory(int equipmentSlotIndex)
+    {
+        if (equipmentSlotIndex == 0 || equipmentSlotIndex == 1)
+            return InventoryItemCategory.Weapon;
+        if (equipmentSlotIndex == 2 || equipmentSlotIndex == 3)
+            return InventoryItemCategory.Shield;
+        if (equipmentSlotIndex == 4 || equipmentSlotIndex == 5)
+            return InventoryItemCategory.Engine;
+        if (equipmentSlotIndex == 6 || equipmentSlotIndex == 7)
+            return InventoryItemCategory.Gadget;
+
+        return InventoryItemCategory.Misc;
+    }
+
     public static InventoryItemRarity GetRarity(string itemId)
     {
         InventoryItemDefinition definition = GetDefinition(itemId);
@@ -201,6 +271,22 @@ public static class InventoryItemCatalog
     {
         InventoryItemDefinition definition = GetDefinition(itemId);
         return definition != null ? Mathf.Max(0, definition.SellValueAstrons) : 0;
+    }
+
+    public static int GetShopBuyValueAstrons(string itemId)
+    {
+        InventoryItemDefinition definition = GetDefinition(itemId);
+        if (definition == null || definition.ItemType != InventoryItemType.Equipment)
+            return 0;
+
+        if (definition.ShopBuyValueAstronsOverride > 0)
+            return definition.ShopBuyValueAstronsOverride;
+
+        int craftingCost = PlayerProfileCraftingCatalog.GetCraftingInputSellValueForOutput(itemId);
+        if (craftingCost > 0)
+            return craftingCost * 4;
+
+        return Mathf.Max(0, definition.SellValueAstrons * 4);
     }
 
     public static string[] GetSalvageOutputs(string itemId)
@@ -243,6 +329,7 @@ public static class InventoryItemCatalog
                 ShortLabel = "COM",
                 Description = "A common collectible asteroid resource.",
                 ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Treasure,
                 Rarity = InventoryItemRarity.Common,
                 SellValueAstrons = 100,
                 IconResourcePath = "treasure_asteroid_white_common_resource",
@@ -256,6 +343,7 @@ public static class InventoryItemCatalog
                 ShortLabel = "UNC",
                 Description = "An uncommon collectible asteroid resource.",
                 ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Treasure,
                 Rarity = InventoryItemRarity.Uncommon,
                 SellValueAstrons = 200,
                 IconResourcePath = "treasure_asteroid_green_uncommon_resource",
@@ -269,6 +357,7 @@ public static class InventoryItemCatalog
                 ShortLabel = "RAR",
                 Description = "A rare collectible asteroid resource.",
                 ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Treasure,
                 Rarity = InventoryItemRarity.Rare,
                 SellValueAstrons = 400,
                 IconResourcePath = "treasure_asteroid_blue_rare_resource",
@@ -282,6 +371,7 @@ public static class InventoryItemCatalog
                 ShortLabel = "VRA",
                 Description = "A very rare collectible asteroid resource.",
                 ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Treasure,
                 Rarity = InventoryItemRarity.VeryRare,
                 SellValueAstrons = 800,
                 IconResourcePath = "treasure_asteroid_violet_rare_resource",
@@ -295,6 +385,7 @@ public static class InventoryItemCatalog
                 ShortLabel = "EPI",
                 Description = "An epic collectible asteroid resource.",
                 ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Treasure,
                 Rarity = InventoryItemRarity.Epic,
                 SellValueAstrons = 1600,
                 IconResourcePath = "treasure_asteroid_burgundy_epic_resource",
@@ -308,6 +399,7 @@ public static class InventoryItemCatalog
                 ShortLabel = "LEG",
                 Description = "A legendary collectible asteroid resource.",
                 ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Treasure,
                 Rarity = InventoryItemRarity.Legendary,
                 SellValueAstrons = 3200,
                 IconResourcePath = "treasure_asteroid_gold_legendary_resource",
@@ -321,8 +413,9 @@ public static class InventoryItemCatalog
                 ShortLabel = "BOT",
                 Description = "A recoverable drone wreck fragment.",
                 ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
                 Rarity = InventoryItemRarity.Uncommon,
-                SellValueAstrons = 40,
+                SellValueAstrons = 300,
                 IconResourcePath = "droid1_resource",
                 ProjectFileName = "droid1.png",
                 SalvageOutputs = new[] { AsteroidGoldId }
@@ -334,8 +427,9 @@ public static class InventoryItemCatalog
                 ShortLabel = "CRS",
                 Description = "Rare salvage recovered from a destroyed Corsair.",
                 ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
                 Rarity = InventoryItemRarity.Rare,
-                SellValueAstrons = 150,
+                SellValueAstrons = 1200,
                 IconResourcePath = "statek_duzy_resource",
                 ProjectFileName = "statek_duzy.png",
                 SalvageOutputs = new[] { AsteroidRareId, AsteroidRareId }
@@ -347,8 +441,9 @@ public static class InventoryItemCatalog
                 ShortLabel = "MIN",
                 Description = "A disabled space mine hull recovered before detonation.",
                 ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
                 Rarity = InventoryItemRarity.Uncommon,
-                SellValueAstrons = 55,
+                SellValueAstrons = 300,
                 IconResourcePath = "wrak_miny_resource",
                 ProjectFileName = "wrak_miny.png",
                 SalvageOutputs = new[] { AsteroidGoldId }
@@ -360,8 +455,9 @@ public static class InventoryItemCatalog
                 ShortLabel = "TRK",
                 Description = "Heavy salvage recovered from a destroyed Space Truck.",
                 ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
                 Rarity = InventoryItemRarity.Rare,
-                SellValueAstrons = 200,
+                SellValueAstrons = 800,
                 IconResourcePath = "space_truck_wrak_resource",
                 ProjectFileName = "space_truck_wrak.png",
                 SalvageOutputs = new[] { AsteroidGoldId, AsteroidGoldId }
@@ -373,11 +469,26 @@ public static class InventoryItemCatalog
                 ShortLabel = "MTH",
                 Description = "A legendary command core recovered from a destroyed Mothership.",
                 ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
                 Rarity = InventoryItemRarity.Legendary,
-                SellValueAstrons = 500,
+                SellValueAstrons = 4000,
                 IconResourcePath = "mother_ship_wrak_resource",
                 ProjectFileName = "mother_ship_wrak.png",
                 SalvageOutputs = new[] { AsteroidRareId, AsteroidRareId }
+            },
+            [NeutralFighterSalvageId] = new InventoryItemDefinition
+            {
+                Id = NeutralFighterSalvageId,
+                DisplayName = "Neutral Fighter Salvage",
+                ShortLabel = "NFS",
+                Description = "Uncommon salvage recovered from a destroyed Neutral Fighter.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
+                Rarity = InventoryItemRarity.Uncommon,
+                SellValueAstrons = 500,
+                IconResourcePath = "neutral_fighter_wreck_resource",
+                ProjectFileName = "neutral_fighter_wreck.png",
+                SalvageOutputs = new[] { AsteroidResourceId, AsteroidResourceId }
             },
             [PlasmaGunId] = new InventoryItemDefinition
             {
@@ -386,8 +497,10 @@ public static class InventoryItemCatalog
                 ShortLabel = "PLS",
                 Description = "A salvaged Corsair plasma cannon adapted for player ships.",
                 ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Weapon,
                 Rarity = InventoryItemRarity.Epic,
-                SellValueAstrons = 260,
+                SellValueAstrons = 1800,
+                ShopBuyValueAstronsOverride = 6500,
                 IconResourcePath = "plasma_gun_resource",
                 ProjectFileName = "plasma_gun.png",
                 SalvageOutputs = new[] { AsteroidGoldId, AsteroidGoldId }
@@ -399,8 +512,9 @@ public static class InventoryItemCatalog
                 ShortLabel = "FUS",
                 Description = "A high-output engine core that boosts speed, trail output, and engine recovery.",
                 ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Engine,
                 Rarity = InventoryItemRarity.Epic,
-                SellValueAstrons = 200,
+                SellValueAstrons = 900,
                 IconResourcePath = "fusion_engine_icon_resource",
                 ProjectFileName = "fusion_ engine.png",
                 SalvageOutputs = new[] { AsteroidRareId }
@@ -412,8 +526,9 @@ public static class InventoryItemCatalog
                 ShortLabel = "GMI",
                 Description = "A deployable proximity mine adapted for player gadget slots.",
                 ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
                 Rarity = InventoryItemRarity.Rare,
-                SellValueAstrons = 200,
+                SellValueAstrons = 1200,
                 IconResourcePath = "space_mine_resource",
                 ProjectFileName = "space mine.png",
                 SalvageOutputs = new[] { SpaceMineWreckId, SpaceMineWreckId }
@@ -425,8 +540,9 @@ public static class InventoryItemCatalog
                 ShortLabel = "BAT",
                 Description = "A reusable shield charge pack that restores shields over time when triggered from a gadget slot.",
                 ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
                 Rarity = InventoryItemRarity.Rare,
-                SellValueAstrons = 100,
+                SellValueAstrons = 500,
                 IconResourcePath = "battery_charge_resource",
                 ProjectFileName = "battery_charge.png",
                 SalvageOutputs = new[] { AsteroidResourceId, AsteroidResourceId }
@@ -438,8 +554,9 @@ public static class InventoryItemCatalog
                 ShortLabel = "MAG",
                 Description = "A ship-mounted magnetic projector that pulls nearby asteroids and resources toward the ship for a short burst.",
                 ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
                 Rarity = InventoryItemRarity.Rare,
-                SellValueAstrons = 500,
+                SellValueAstrons = 600,
                 IconResourcePath = "magnetic_beam_resource",
                 ProjectFileName = "magnetic_beam.png",
                 SalvageOutputs = new[] { AsteroidResourceId, AsteroidGoldId }
@@ -451,8 +568,9 @@ public static class InventoryItemCatalog
                 ShortLabel = "TRC",
                 Description = "A focused yellow tow beam that locks onto the nearest collectible object and pulls it behind the ship while held.",
                 ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
                 Rarity = InventoryItemRarity.Rare,
-                SellValueAstrons = 1000,
+                SellValueAstrons = 1200,
                 IconResourcePath = "tractor_beam_resource",
                 ProjectFileName = "tractor_beam.png",
                 SalvageOutputs = new[] { AsteroidGoldId, AsteroidRareId }
@@ -464,8 +582,9 @@ public static class InventoryItemCatalog
                 ShortLabel = "SHR",
                 Description = "A defensive reactor that increases maximum shield capacity when installed in a shield slot.",
                 ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Shield,
                 Rarity = InventoryItemRarity.Rare,
-                SellValueAstrons = 150,
+                SellValueAstrons = 1400,
                 IconResourcePath = "shield_reactor_resource",
                 ProjectFileName = "shield_reactor.png",
                 SalvageOutputs = new[] { AsteroidResourceId, AsteroidGoldId }

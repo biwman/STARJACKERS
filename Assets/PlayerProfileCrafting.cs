@@ -183,6 +183,34 @@ public static class PlayerProfileCraftingCatalog
 
     public static IReadOnlyList<PlayerProfileCraftingRecipe> GetAllRecipes() => Recipes;
 
+    public static int GetCraftingInputSellValueForOutput(string outputItemId)
+    {
+        PlayerProfileCraftingRecipe recipe = GetRecipeForOutput(outputItemId);
+        if (recipe == null || recipe.Inputs == null)
+            return 0;
+
+        int total = 0;
+        for (int i = 0; i < recipe.Inputs.Length; i++)
+            total += InventoryItemCatalog.GetSellValueAstrons(recipe.Inputs[i]);
+
+        return total;
+    }
+
+    public static PlayerProfileCraftingRecipe GetRecipeForOutput(string outputItemId)
+    {
+        if (string.IsNullOrWhiteSpace(outputItemId))
+            return null;
+
+        for (int i = 0; i < Recipes.Length; i++)
+        {
+            PlayerProfileCraftingRecipe recipe = Recipes[i];
+            if (recipe != null && string.Equals(recipe.OutputItemId, outputItemId, StringComparison.Ordinal))
+                return recipe;
+        }
+
+        return null;
+    }
+
     public static bool TryCraft(string[] craftingSlots, out PlayerProfileCraftingResult result)
     {
         result = default;

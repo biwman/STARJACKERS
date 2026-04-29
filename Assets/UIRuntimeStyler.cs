@@ -309,6 +309,9 @@ public class UIRuntimeStyler : MonoBehaviour
                name.StartsWith("ShipPreviewButton", System.StringComparison.Ordinal) ||
                name.StartsWith("CraftingCatalogButton", System.StringComparison.Ordinal) ||
                name.StartsWith("CraftingRecipeCloseButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("ShopButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("ShopBuyButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("ShopCloseButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ItemPreviewSellButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ItemPreviewSalvageButton", System.StringComparison.Ordinal) ||
                name.StartsWith("CraftButton", System.StringComparison.Ordinal);

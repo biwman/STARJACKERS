@@ -31,6 +31,9 @@ public class AudioManager : MonoBehaviour
     AudioClip mothershipEngineClip;
     AudioClip shieldFullPowerClip;
     AudioClip magneticBeamClip;
+    AudioClip shootSmallClip;
+    AudioClip repairBayLandingClip;
+    AudioClip repairBayStartingClip;
 
     AudioSource oneShotSource;
     AudioSource drillingLoopSource;
@@ -126,6 +129,9 @@ public class AudioManager : MonoBehaviour
         mothershipEngineClip = Resources.Load<AudioClip>("Audio/mother_ship_sound");
         shieldFullPowerClip = Resources.Load<AudioClip>("Audio/Shield At Full Power");
         magneticBeamClip = Resources.Load<AudioClip>("Audio/magnetic_beam_sound");
+        shootSmallClip = Resources.Load<AudioClip>("Audio/shoot_small");
+        repairBayLandingClip = Resources.Load<AudioClip>("Audio/stacja_naprawcza_landing_sound");
+        repairBayStartingClip = Resources.Load<AudioClip>("Audio/stacja_naprawcza_starting_sound");
     }
 
     void EnsureSources()
@@ -195,6 +201,11 @@ public class AudioManager : MonoBehaviour
         PlaySpatialOneShot(corsairLaserClip != null ? corsairLaserClip : laserClip, worldPosition, 0.66f);
     }
 
+    public void PlayShootSmallAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(shootSmallClip != null ? shootSmallClip : laserClip, worldPosition, 0.58f);
+    }
+
     public void PlayExplosion()
     {
         PlayOneShot(explosionClip, 0.75f);
@@ -248,6 +259,16 @@ public class AudioManager : MonoBehaviour
     public void PlayMagneticBeamAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(magneticBeamClip != null ? magneticBeamClip : shieldChargeClip, worldPosition, 0.88f);
+    }
+
+    public void PlayRepairBayLandingAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(repairBayLandingClip != null ? repairBayLandingClip : shieldChargeClip, worldPosition, 0.86f);
+    }
+
+    public void PlayRepairBayStartingAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(repairBayStartingClip != null ? repairBayStartingClip : engineClip, worldPosition, 0.86f);
     }
 
     public void PlayEvacBuzzerBurst()

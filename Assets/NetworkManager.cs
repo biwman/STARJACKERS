@@ -725,6 +725,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.MapBackgroundKey:
             case RoomSettings.VisualEffectsEnabledKey:
             case RoomSettings.StartingVfxEnabledKey:
+            case RoomSettings.EndDisasterModeKey:
             case RoomSettings.ObstacleDensityKey:
             case RoomSettings.ObstacleDestroyEnabledKey:
             case RoomSettings.ObstacleHpKey:
@@ -734,6 +735,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.ResourceRichnessKey:
             case RoomSettings.NebulaDensityKey:
             case RoomSettings.ExtractionCountKey:
+            case RoomSettings.RepairBayCountKey:
             case RoomSettings.BoosterSlowdownKey:
             case RoomSettings.AmmoCountKey:
             case RoomSettings.BoosterRecoveryDelayKey:

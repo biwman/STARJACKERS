@@ -28,6 +28,7 @@ public class PlayerHealth : MonoBehaviourPun
     public int CurrentHP => currentHP;
     public int CurrentShield => currentShield;
     public int MaxShield => maxShield;
+    public bool HasFullVitals => currentHP >= maxHP && currentShield >= maxShield;
     public bool HasBrokenShield => maxShield > 0 && currentShield <= 0;
     public bool IsWreck { get; private set; }
     public bool IsBotControlled => GetComponent<EnemyBot>() != null;
@@ -71,6 +72,11 @@ public class PlayerHealth : MonoBehaviourPun
 
         currentHP = maxHP;
         currentShield = maxShield;
+
+        if (!IsAstronautControlled && !IsBotControlled && GetComponent<PlayerRepairDocking>() == null)
+        {
+            gameObject.AddComponent<PlayerRepairDocking>();
+        }
 
         if (photonView.IsMine && !IsBotControlled)
         {
@@ -169,6 +175,10 @@ public class PlayerHealth : MonoBehaviourPun
         if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating)
             return;
 
+        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
+        if (repairDocking != null && repairDocking.IsDamageImmune)
+            return;
+
         int previousHp = currentHP;
         int previousShield = currentShield;
         int remainingDamage = Mathf.Max(0, dmg);
@@ -228,6 +238,20 @@ public class PlayerHealth : MonoBehaviourPun
         {
             HandleDeath(attackerViewID);
         }
+    }
+
+    public void RepairVitalsAuthority(int amount)
+    {
+        if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || amount <= 0)
+            return;
+
+        int previousHp = currentHP;
+        int previousShield = currentShield;
+        currentHP = Mathf.Min(maxHP, currentHP + amount);
+        currentShield = Mathf.Min(maxShield, currentShield + amount);
+
+        if (currentHP != previousHp || currentShield != previousShield)
+            photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
     }
 
     Vector2 ResolveDamageImpactPosition(int attackerViewID)

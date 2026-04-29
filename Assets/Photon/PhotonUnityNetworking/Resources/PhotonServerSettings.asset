@@ -107,6 +107,14 @@ MonoBehaviour:
   - RequestStopTractorBeam
   - StartTractorBeamEffects
   - StopTractorBeamEffects
+  - RequestBatteringImpact
+  - RequestObstacleBatteringImpact
+  - PlayBatteringImpactVisual
+  - BeginRepairLanding
+  - BeginRepairLaunch
+  - ForceEndRepairDocking
+  - RequestRepairDock
+  - RequestRepairLaunch
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

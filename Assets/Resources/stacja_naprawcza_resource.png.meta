@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 9f0dba4459c722844bffe74ce9698330
+guid: 9643038eb03dff341954097b0c0fa940
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 4840881966642311215
-    second: koszmiczna_anomalia_0
+      213: -9092641861267413854
+    second: stacja_naprawcza_resource_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -126,23 +126,23 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: koszmiczna_anomalia_0
+      name: stacja_naprawcza_resource_0
       rect:
         serializedVersion: 2
-        x: 55
-        y: 162
-        width: 868
-        height: 753
+        x: 3
+        y: 0
+        width: 1533
+        height: 1024
       alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 35, y: 0, z: 0, w: 0}
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: f203f4520844e2340800000000000000
-      internalID: 4840881966642311215
+      spriteID: 2a42f4de66270d180800000000000000
+      internalID: -9092641861267413854
       vertices: []
       indices: 
       edges: []
@@ -151,7 +151,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 16a5d57a8c003a0438d8abbf10e7390b
+    spriteID: 
     internalID: 0
     vertices: []
     indices: 
@@ -161,7 +161,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      koszmiczna_anomalia_0: 4840881966642311215
+      stacja_naprawcza_resource_0: -9092641861267413854
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

@@ -45,6 +45,7 @@ public class TreasureCollector : MonoBehaviourPun
     TMP_Text pickupToastLabel;
     Coroutine pickupToastRoutine;
     Coroutine extractionUseRoutine;
+    Coroutine collectibleUseRoutine;
     bool collectButtonHooked;
     RectTransform nudgedCollectButtonRect;
 
@@ -183,6 +184,14 @@ public class TreasureCollector : MonoBehaviourPun
         if (!photonView.IsMine)
             return;
 
+        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
+        RepairBay repairBay = RepairBay.FindClosestUsable(transform.position);
+        if (repairDocking != null && (repairDocking.IsBusy || repairBay != null))
+        {
+            if (repairDocking.TryStartUse(repairBay))
+                return;
+        }
+
         if (currentExtraction == null)
             currentExtraction = ResolveNearbyExtractionZone();
 
@@ -217,7 +226,7 @@ public class TreasureCollector : MonoBehaviourPun
         {
             isCollecting = true;
             StartCollectibleFeedback(currentTreasure.GetComponent<PhotonView>());
-            StartCoroutine(CollectTreasureRoutine(currentTreasure));
+            collectibleUseRoutine = StartCoroutine(CollectTreasureRoutine(currentTreasure));
             return;
         }
 
@@ -225,7 +234,7 @@ public class TreasureCollector : MonoBehaviourPun
         {
             isCollecting = true;
             StartCollectibleFeedback(currentWreck.GetComponent<PhotonView>());
-            StartCoroutine(LootWreckRoutine(currentWreck));
+            collectibleUseRoutine = StartCoroutine(LootWreckRoutine(currentWreck));
             return;
         }
 
@@ -233,7 +242,7 @@ public class TreasureCollector : MonoBehaviourPun
         {
             isCollecting = true;
             StartCollectibleFeedback(currentDroppedCargo.GetComponent<PhotonView>());
-            StartCoroutine(LootDroppedCargoRoutine(currentDroppedCargo));
+            collectibleUseRoutine = StartCoroutine(LootDroppedCargoRoutine(currentDroppedCargo));
         }
     }
 
@@ -278,12 +287,26 @@ public class TreasureCollector : MonoBehaviourPun
         if (!photonView.IsMine)
             return;
 
+        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
+        if (repairDocking != null)
+            repairDocking.StopUseHold();
+
+        if (repairDocking != null && repairDocking.IsBusy)
+            return;
+
+        ReleaseCurrentCollectibleReservation();
         isCollecting = false;
         StopCollectibleFeedback();
         if (extractionUseRoutine != null)
         {
             StopCoroutine(extractionUseRoutine);
             extractionUseRoutine = null;
+        }
+
+        if (collectibleUseRoutine != null)
+        {
+            StopCoroutine(collectibleUseRoutine);
+            collectibleUseRoutine = null;
         }
 
         if (movement != null) movement.enabled = true;
@@ -367,25 +390,30 @@ public class TreasureCollector : MonoBehaviourPun
             yield return null;
         }
 
-        int collectXp = RoundXpTracker.RecordTreasureCollected(photonView.Owner, treasureToCollect.itemId);
-        AddScore(collectXp);
-        StoreCollectedItem(treasureToCollect.itemId);
-
+        string collectedItemId = treasureToCollect.itemId;
         PhotonView treasureView = treasureToCollect.GetComponent<PhotonView>();
-        if (treasureView != null)
-        {
-            if (PhotonNetwork.IsMasterClient)
-            {
-                PhotonNetwork.Destroy(treasureView.gameObject);
-            }
-            else
-            {
-                photonView.RPC(nameof(RequestDestroyTreasure), RpcTarget.MasterClient, treasureView.ViewID);
-            }
-        }
+        int treasureViewId = treasureView != null ? treasureView.ViewID : 0;
+
+        int collectXp = RoundXpTracker.RecordTreasureCollected(photonView.Owner, collectedItemId);
+        AddScore(collectXp);
+        StoreCollectedItem(collectedItemId);
 
         treasureToCollect.isBeingCollected = false;
         FinishCollection();
+
+        if (treasureViewId > 0)
+        {
+            if (PhotonNetwork.IsMasterClient)
+            {
+                PhotonView viewToDestroy = PhotonView.Find(treasureViewId);
+                if (viewToDestroy != null)
+                    PhotonNetwork.Destroy(viewToDestroy.gameObject);
+            }
+            else
+            {
+                photonView.RPC(nameof(RequestDestroyTreasure), RpcTarget.MasterClient, treasureViewId);
+            }
+        }
     }
 
     IEnumerator LootWreckRoutine(ShipWreck wreckToLoot)
@@ -470,6 +498,16 @@ public class TreasureCollector : MonoBehaviourPun
         if (shooting != null) shooting.enabled = false;
     }
 
+    void ReleaseCurrentCollectibleReservation()
+    {
+        if (currentTreasure != null)
+            currentTreasure.isBeingCollected = false;
+        if (currentWreck != null)
+            currentWreck.isBeingCollected = false;
+        if (currentDroppedCargo != null)
+            currentDroppedCargo.isBeingCollected = false;
+    }
+
     void FaceCollectibleTarget()
     {
         if (!photonView.IsMine)
@@ -502,6 +540,12 @@ public class TreasureCollector : MonoBehaviourPun
             extractionUseRoutine = null;
         }
 
+        if (collectibleUseRoutine != null)
+        {
+            StopCoroutine(collectibleUseRoutine);
+            collectibleUseRoutine = null;
+        }
+
         StopAllCoroutines();
         StopLocalDrillingLoop();
         SetBeamEnabled(false);
@@ -526,6 +570,7 @@ public class TreasureCollector : MonoBehaviourPun
     void FinishCollection()
     {
         isCollecting = false;
+        collectibleUseRoutine = null;
         StopCollectibleFeedback();
         currentTreasure = null;
         currentWreck = null;
