@@ -43,6 +43,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         "ShipInventoryButton",
         "ShipInventoryPanel",
         "ReloadButton",
+        "ComplexAmmoBar",
+        "SuperAttackJoystickBG",
+        "WeaponSwitchButton",
         "TimerText",
         "HP_Bar",
         "Shield_Bar",
@@ -50,7 +53,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         "ScoreText"
     };
 
-    static readonly float[] RoundDurationOptions = { 60f, 90f, 120f, 150f, 180f, 210f, 240f };
+    static readonly float[] RoundDurationOptions = { 60f, 90f, 120f, 150f, 180f, 210f, 240f, 270f, 300f, 330f, 360f };
     static readonly string[] DensityOptions = { "none", "low", "medium", "high" };
     static readonly string[] ResourceRichnessOptions =
     {
@@ -61,16 +64,22 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RoomSettings.ResourceRichnessVeryHigh,
         RoomSettings.ResourceRichnessExtreme
     };
+    static readonly string[] SpaceJunkDensityOptions =
+    {
+        RoomSettings.SpaceJunkDensityNone,
+        RoomSettings.SpaceJunkDensityLow,
+        RoomSettings.SpaceJunkDensityMedium,
+        RoomSettings.SpaceJunkDensityHigh
+    };
     static readonly string[] MapSizeOptions = { "small", "medium", "large", "very_large", "super_large" };
-    static readonly int[] MapBackgroundOptions = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
-    static readonly int[] ObstacleHpOptions = { 50, 100, 150, 200, 250, 300 };
+    static readonly int[] MapBackgroundOptions = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
+    static readonly int[] ObstacleHpOptions = { 50, 100, 150, 200, 250, 300, 350, 400, 450, 500 };
     static readonly int[] ObstacleSizePercentOptions = { 50, 100, 150, 200, 250, 300, 350, 400, 450, 500 };
     static readonly int[] ExtractionCountOptions = { 1, 2, 3, 4 };
     static readonly int[] RepairBayCountOptions = { 0, 1, 2 };
     static readonly int[] BoosterSlowdownOptions = { 30, 40, 50, 60, 70, 80, 90, 100 };
     static readonly int[] AmmoCountOptions = { 5, 10, 15, 20, 25, 30 };
     static readonly int[] BoosterRecoveryDelayOptions = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
-    static readonly int[] MaxInputBoostPercentOptions = { 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50 };
     static readonly float[] LastShipTimerMultiplierOptions = { 1f, 1.5f, 2f, 3f, 4f, 5f };
     static readonly string[] MovingObjectsModeOptions = { RoomSettings.MovingObjectsModeOn, RoomSettings.MovingObjectsModeOff, RoomSettings.MovingObjectsModeOnlyRotate };
     static readonly int[] EnemyCountOptions = { 1, 2, 3, 4, 5 };
@@ -86,6 +95,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     static readonly int[] TreasureWeightFactorOptions = { 2, 6, 12 };
     static readonly int[] BatteringDamageOptions = { 0, 10, 20, 30, 40, 50 };
     static readonly string[] EndDisasterModeOptions = { RoomSettings.EndDisasterOff, RoomSettings.EndDisasterMeteor };
+    static readonly int[] EndDisasterWarningSecondOptions = { 10, 15, 20, 25, 30, 35, 40 };
+    static readonly string[] ShootingModelOptions = { RoomSettings.ShootingModelSimple, RoomSettings.ShootingModelComplex };
 
     public Button readyButton;
     public TMP_Text readyText;
@@ -96,6 +107,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text visualEffectsSettingText;
     public TMP_Text startingVfxSettingText;
     public TMP_Text endDisasterSettingText;
+    public TMP_Text endDisasterTimeSettingText;
     public TMP_Text obstacleSettingText;
     public TMP_Text obstacleDestroySettingText;
     public TMP_Text obstacleHpValueSettingText;
@@ -103,13 +115,13 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text obstacleNoBordersSettingText;
     public TMP_Text treasureSettingText;
     public TMP_Text resourceRichnessSettingText;
+    public TMP_Text spaceJunkSettingText;
     public TMP_Text nebulaSettingText;
     public TMP_Text extractionSettingText;
     public TMP_Text repairBaySettingText;
     public TMP_Text boosterSettingText;
     public TMP_Text ammoSettingText;
     public TMP_Text boosterDelaySettingText;
-    public TMP_Text maxInputBoostSettingText;
     public TMP_Text shipDriftSettingText;
     public TMP_Text deathTimerSettingText;
     public TMP_Text movingObjectsSettingText;
@@ -121,12 +133,18 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text obstacleWeightSettingText;
     public TMP_Text treasureWeightSettingText;
     public TMP_Text batteringSettingText;
+    public TMP_Text shootingModelSettingText;
+    public TMP_Text superAttackSettingText;
+    public TMP_Text advancedShootingJoystickSettingText;
+    public TMP_Text hapticsSettingText;
+    public TMP_Text gunSetupSettingText;
     public Button roundSettingButton;
     public Button mapSizeSettingButton;
     public Button mapBackgroundSettingButton;
     public Button visualEffectsSettingButton;
     public Button startingVfxSettingButton;
     public Button endDisasterSettingButton;
+    public Button endDisasterTimeSettingButton;
     public Button obstacleSettingButton;
     public Button obstacleDestroySettingButton;
     public Button obstacleHpValueSettingButton;
@@ -134,13 +152,13 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button obstacleNoBordersSettingButton;
     public Button treasureSettingButton;
     public Button resourceRichnessSettingButton;
+    public Button spaceJunkSettingButton;
     public Button nebulaSettingButton;
     public Button extractionSettingButton;
     public Button repairBaySettingButton;
     public Button boosterSettingButton;
     public Button ammoSettingButton;
     public Button boosterDelaySettingButton;
-    public Button maxInputBoostSettingButton;
     public Button shipDriftSettingButton;
     public Button deathTimerSettingButton;
     public Button movingObjectsSettingButton;
@@ -148,6 +166,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button obstacleWeightSettingButton;
     public Button treasureWeightSettingButton;
     public Button batteringSettingButton;
+    public Button shootingModelSettingButton;
+    public Button superAttackSettingButton;
+    public Button advancedShootingJoystickSettingButton;
+    public Button hapticsSettingButton;
+    public Button gunSetupSettingButton;
     public Button backToRoundsButton;
     public TMP_Text backToRoundsText;
     public Button mapSelectionButton;
@@ -485,6 +508,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return null;
     }
 
+    void HideDeprecatedSettingButton(string buttonName, string textName)
+    {
+        GameObject buttonObject = FindSceneObjectByName(buttonName);
+        if (buttonObject != null)
+            buttonObject.SetActive(false);
+
+        GameObject textObject = FindSceneObjectByName(textName);
+        if (textObject != null)
+            textObject.SetActive(false);
+    }
+
     void ApplyHudVisibility(GameObject hudObject, bool visible)
     {
         if (hudObject == null)
@@ -551,6 +585,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         visualEffectsSettingButton = EnsureSettingButton(ref visualEffectsSettingText, visualEffectsSettingButton, "VisualEffectsSettingButton", "VisualEffectsSettingText", Vector2.zero, CycleVisualEffectsEnabled);
         startingVfxSettingButton = EnsureSettingButton(ref startingVfxSettingText, startingVfxSettingButton, "StartingVfxSettingButton", "StartingVfxSettingText", Vector2.zero, CycleStartingVfxEnabled);
         endDisasterSettingButton = EnsureSettingButton(ref endDisasterSettingText, endDisasterSettingButton, "EndDisasterSettingButton", "EndDisasterSettingText", Vector2.zero, CycleEndDisasterMode);
+        endDisasterTimeSettingButton = EnsureSettingButton(ref endDisasterTimeSettingText, endDisasterTimeSettingButton, "EndDisasterTimeSettingButton", "EndDisasterTimeSettingText", Vector2.zero, CycleEndDisasterWarningSeconds);
         obstacleSettingButton = EnsureSettingButton(ref obstacleSettingText, obstacleSettingButton, "ObstacleSettingButton", "ObstacleSettingText", Vector2.zero, CycleObstacleDensity);
         obstacleDestroySettingButton = EnsureSettingButton(ref obstacleDestroySettingText, obstacleDestroySettingButton, "ObstacleDestroySettingButton", "ObstacleDestroySettingText", Vector2.zero, CycleObstacleDestroyEnabled);
         obstacleHpValueSettingButton = EnsureSettingButton(ref obstacleHpValueSettingText, obstacleHpValueSettingButton, "ObstacleHpValueSettingButton", "ObstacleHpValueSettingText", Vector2.zero, CycleObstacleHp);
@@ -558,15 +593,21 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         obstacleNoBordersSettingButton = EnsureSettingButton(ref obstacleNoBordersSettingText, obstacleNoBordersSettingButton, "ObstacleNoBordersSettingButton", "ObstacleNoBordersSettingText", Vector2.zero, CycleObstacleNoBorders);
         treasureSettingButton = EnsureSettingButton(ref treasureSettingText, treasureSettingButton, "TreasureSettingButton", "TreasureSettingText", Vector2.zero, CycleTreasureDensity);
         resourceRichnessSettingButton = EnsureSettingButton(ref resourceRichnessSettingText, resourceRichnessSettingButton, "ResourceRichnessSettingButton", "ResourceRichnessSettingText", Vector2.zero, CycleResourceRichness);
+        spaceJunkSettingButton = EnsureSettingButton(ref spaceJunkSettingText, spaceJunkSettingButton, "SpaceJunkSettingButton", "SpaceJunkSettingText", Vector2.zero, CycleSpaceJunkDensity);
         nebulaSettingButton = EnsureSettingButton(ref nebulaSettingText, nebulaSettingButton, "NebulaSettingButton", "NebulaSettingText", Vector2.zero, CycleNebulaDensity);
         extractionSettingButton = EnsureSettingButton(ref extractionSettingText, extractionSettingButton, "ExtractionSettingButton", "ExtractionSettingText", Vector2.zero, CycleExtractionCount);
         repairBaySettingButton = EnsureSettingButton(ref repairBaySettingText, repairBaySettingButton, "RepairBaySettingButton", "RepairBaySettingText", Vector2.zero, CycleRepairBayCount);
         boosterSettingButton = EnsureSettingButton(ref boosterSettingText, boosterSettingButton, "BoosterSettingButton", "BoosterSettingText", Vector2.zero, CycleBoosterSlowdown);
         ammoSettingButton = EnsureSettingButton(ref ammoSettingText, ammoSettingButton, "AmmoSettingButton", "AmmoSettingText", Vector2.zero, CycleAmmoCount);
         boosterDelaySettingButton = EnsureSettingButton(ref boosterDelaySettingText, boosterDelaySettingButton, "BoosterDelaySettingButton", "BoosterDelaySettingText", Vector2.zero, CycleBoosterRecoveryDelay);
-        maxInputBoostSettingButton = EnsureSettingButton(ref maxInputBoostSettingText, maxInputBoostSettingButton, "MaxInputBoostSettingButton", "MaxInputBoostSettingText", Vector2.zero, CycleMaxInputBoostPercent);
+        HideDeprecatedSettingButton("MaxInputBoostSettingButton", "MaxInputBoostSettingText");
         shipDriftSettingButton = EnsureSettingButton(ref shipDriftSettingText, shipDriftSettingButton, "ShipDriftSettingButton", "ShipDriftSettingText", Vector2.zero, CycleShipDriftEnabled);
         deathTimerSettingButton = EnsureSettingButton(ref deathTimerSettingText, deathTimerSettingButton, "DeathTimerSettingButton", "DeathTimerSettingText", Vector2.zero, CycleLastShipTimerMultiplier);
+        shootingModelSettingButton = EnsureSettingButton(ref shootingModelSettingText, shootingModelSettingButton, "ShootingModelSettingButton", "ShootingModelSettingText", Vector2.zero, CycleShootingModel);
+        superAttackSettingButton = EnsureSettingButton(ref superAttackSettingText, superAttackSettingButton, "SuperAttackSettingButton", "SuperAttackSettingText", Vector2.zero, CycleSuperAttackEnabled);
+        advancedShootingJoystickSettingButton = EnsureSettingButton(ref advancedShootingJoystickSettingText, advancedShootingJoystickSettingButton, "AdvancedShootingJoystickSettingButton", "AdvancedShootingJoystickSettingText", Vector2.zero, CycleAdvancedShootingJoystickEnabled);
+        hapticsSettingButton = EnsureSettingButton(ref hapticsSettingText, hapticsSettingButton, "HapticsSettingButton", "HapticsSettingText", Vector2.zero, CycleHapticsEnabled);
+        gunSetupSettingButton = EnsureSettingButton(ref gunSetupSettingText, gunSetupSettingButton, "GunSetupSettingButton", "GunSetupSettingText", Vector2.zero, OpenGunSetup);
         movingObjectsSettingButton = EnsureSettingButton(ref movingObjectsSettingText, movingObjectsSettingButton, "MovingObjectsSettingButton", "MovingObjectsSettingText", Vector2.zero, CycleMovingObjectsEnabled);
         bulletPushSettingButton = EnsureSettingButton(ref bulletPushSettingText, bulletPushSettingButton, "BulletPushSettingButton", "BulletPushSettingText", Vector2.zero, CycleBulletPushMultiplier);
         obstacleWeightSettingButton = EnsureSettingButton(ref obstacleWeightSettingText, obstacleWeightSettingButton, "ObstacleWeightSettingButton", "ObstacleWeightSettingText", Vector2.zero, CycleObstacleWeightFactor);
@@ -584,6 +625,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(obstacleNoBordersSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(treasureSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(resourceRichnessSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(spaceJunkSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(nebulaSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(extractionSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(repairBaySettingButton, "ENVIRONMENT");
@@ -594,15 +636,20 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(mapBackgroundSettingButton, "COSMETICS");
         AttachLeftSectionButton(visualEffectsSettingButton, "COSMETICS");
         AttachLeftSectionButton(startingVfxSettingButton, "COSMETICS");
-        AttachLeftSectionButton(endDisasterSettingButton, "COSMETICS");
 
         AttachLeftSectionButton(boosterSettingButton, "FEELING");
         AttachLeftSectionButton(ammoSettingButton, "FEELING");
         AttachLeftSectionButton(boosterDelaySettingButton, "FEELING");
-        AttachLeftSectionButton(maxInputBoostSettingButton, "FEELING");
         AttachLeftSectionButton(shipDriftSettingButton, "FEELING");
         AttachLeftSectionButton(bulletPushSettingButton, "FEELING");
         AttachLeftSectionButton(batteringSettingButton, "FEELING");
+        AttachLeftSectionButton(endDisasterSettingButton, "FEELING");
+        AttachLeftSectionButton(endDisasterTimeSettingButton, "FEELING");
+        AttachLeftSectionButton(shootingModelSettingButton, "FEELING");
+        AttachLeftSectionButton(superAttackSettingButton, "FEELING");
+        AttachLeftSectionButton(advancedShootingJoystickSettingButton, "FEELING");
+        AttachLeftSectionButton(hapticsSettingButton, "FEELING");
+        AttachLeftSectionButton(gunSetupSettingButton, "FEELING");
 
         LayoutLeftSectionButtons();
         EnsureEnemySettingsUiExists();
@@ -996,7 +1043,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     Sprite LoadLobbyBackgroundSprite(int backgroundIndex)
     {
-        int clampedIndex = Mathf.Clamp(backgroundIndex, 1, 12);
+        int clampedIndex = Mathf.Clamp(backgroundIndex, 1, 15);
         if (mapBackgroundPreviewCache.TryGetValue(clampedIndex, out Sprite cachedSprite) && cachedSprite != null)
             return cachedSprite;
 
@@ -1541,6 +1588,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.EndDisasterWarningSecondsKey))
+        {
+            props[RoomSettings.EndDisasterWarningSecondsKey] = RoomSettings.DefaultEndDisasterWarningSeconds;
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.TreasureDensityKey))
         {
             props[RoomSettings.TreasureDensityKey] = "medium";
@@ -1550,6 +1603,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ResourceRichnessKey))
         {
             props[RoomSettings.ResourceRichnessKey] = RoomSettings.DefaultResourceRichness;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.SpaceJunkDensityKey))
+        {
+            props[RoomSettings.SpaceJunkDensityKey] = RoomSettings.DefaultSpaceJunkDensity;
             changed = true;
         }
 
@@ -1586,12 +1645,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.BoosterRecoveryDelayKey))
         {
             props[RoomSettings.BoosterRecoveryDelayKey] = RoomSettings.DefaultBoosterRecoveryDelay;
-            changed = true;
-        }
-
-        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.MaxInputBoostPercentKey))
-        {
-            props[RoomSettings.MaxInputBoostPercentKey] = RoomSettings.DefaultMaxInputBoostPercent;
             changed = true;
         }
 
@@ -1716,6 +1769,30 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.BatteringDamageKey))
         {
             props[RoomSettings.BatteringDamageKey] = RoomSettings.DefaultBatteringDamage;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ShootingModelKey))
+        {
+            props[RoomSettings.ShootingModelKey] = RoomSettings.DefaultShootingModel;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.SuperAttackEnabledKey))
+        {
+            props[RoomSettings.SuperAttackEnabledKey] = RoomSettings.DefaultSuperAttackEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AdvancedShootingJoystickEnabledKey))
+        {
+            props[RoomSettings.AdvancedShootingJoystickEnabledKey] = RoomSettings.DefaultAdvancedShootingJoystickEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.HapticsEnabledKey))
+        {
+            props[RoomSettings.HapticsEnabledKey] = RoomSettings.DefaultHapticsEnabled;
             changed = true;
         }
 
@@ -1917,6 +1994,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             RoomSettings.DefaultEndDisasterMode);
     }
 
+    void CycleEndDisasterWarningSeconds()
+    {
+        CycleIntSetting(
+            RoomSettings.EndDisasterWarningSecondsKey,
+            EndDisasterWarningSecondOptions,
+            GetEndDisasterWarningSeconds(),
+            RoomSettings.DefaultEndDisasterWarningSeconds);
+    }
+
     void CycleTreasureDensity()
     {
         CycleDensitySetting(RoomSettings.TreasureDensityKey, GetTreasureDensity());
@@ -1925,6 +2011,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     void CycleResourceRichness()
     {
         CycleStringSetting(RoomSettings.ResourceRichnessKey, ResourceRichnessOptions, GetResourceRichness(), RoomSettings.DefaultResourceRichness);
+    }
+
+    void CycleSpaceJunkDensity()
+    {
+        CycleStringSetting(RoomSettings.SpaceJunkDensityKey, SpaceJunkDensityOptions, GetSpaceJunkDensity(), RoomSettings.DefaultSpaceJunkDensity);
     }
 
     void CycleNebulaDensity()
@@ -1998,11 +2089,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     void CycleBoosterRecoveryDelay()
     {
         CycleIntSetting(RoomSettings.BoosterRecoveryDelayKey, BoosterRecoveryDelayOptions, GetBoosterRecoveryDelay(), 0);
-    }
-
-    void CycleMaxInputBoostPercent()
-    {
-        CycleIntSetting(RoomSettings.MaxInputBoostPercentKey, MaxInputBoostPercentOptions, GetMaxInputBoostPercent(), RoomSettings.DefaultMaxInputBoostPercent);
     }
 
     void CycleShipDriftEnabled()
@@ -2211,6 +2297,56 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             RoomSettings.DefaultBatteringDamage);
     }
 
+    void CycleShootingModel()
+    {
+        CycleStringSetting(
+            RoomSettings.ShootingModelKey,
+            ShootingModelOptions,
+            GetShootingModel(),
+            RoomSettings.DefaultShootingModel);
+    }
+
+    void OpenGunSetup()
+    {
+        if (!PhotonNetwork.InRoom || RoomSettings.GetSessionState() != RoomSettings.SessionStateInLobby)
+            return;
+
+        GunSetupOverlayUI.Show();
+    }
+
+    void CycleSuperAttackEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.SuperAttackEnabledKey] = !RoomSettings.IsSuperAttackToggleEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
+    void CycleAdvancedShootingJoystickEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.AdvancedShootingJoystickEnabledKey] = !RoomSettings.IsAdvancedShootingJoystickEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
+    void CycleHapticsEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.HapticsEnabledKey] = !RoomSettings.AreHapticsEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
     void CycleIntSetting(string key, int[] options, int current, int fallbackIndexValue)
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
@@ -2364,6 +2500,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (endDisasterSettingText != null)
             endDisasterSettingText.text = "END DISASTER: " + FormatEndDisasterMode(GetEndDisasterMode());
 
+        if (endDisasterTimeSettingText != null)
+            endDisasterTimeSettingText.text = "END DISASTER TIME: " + GetEndDisasterWarningSeconds() + "s";
+
         if (obstacleSettingText != null)
             obstacleSettingText.text = "OBSTACLES DENSITY: " + FormatDensity(GetObstacleDensity());
 
@@ -2385,6 +2524,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (resourceRichnessSettingText != null)
             resourceRichnessSettingText.text = "RESOURCES RICHNESS: " + FormatResourceRichness(GetResourceRichness());
 
+        if (spaceJunkSettingText != null)
+            spaceJunkSettingText.text = "SPACE JUNK: " + FormatSpaceJunkDensity(GetSpaceJunkDensity());
+
         if (nebulaSettingText != null)
             nebulaSettingText.text = "NEBULA DENSITY: " + FormatDensity(GetNebulaDensity());
 
@@ -2403,9 +2545,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (boosterDelaySettingText != null)
             boosterDelaySettingText.text = "BOOST COOLDOWN: " + GetBoosterRecoveryDelay() + "s";
 
-        if (maxInputBoostSettingText != null)
-            maxInputBoostSettingText.text = "MAX BOOST BONUS: +" + GetMaxInputBoostPercent() + "%";
-
         if (shipDriftSettingText != null)
             shipDriftSettingText.text = "BRAKING DRIFT: " + GetShipDriftLevel();
 
@@ -2421,6 +2560,21 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (batteringSettingText != null)
             batteringSettingText.text = "BATTERING: " + FormatBatteringDamage(GetBatteringDamage());
 
+        if (shootingModelSettingText != null)
+            shootingModelSettingText.text = "SHOOTING MODEL: " + FormatShootingModel(GetShootingModel());
+
+        if (superAttackSettingText != null)
+            superAttackSettingText.text = "SUPERATTACK: " + (RoomSettings.IsSuperAttackToggleEnabled() ? "ON" : "OFF");
+
+        if (advancedShootingJoystickSettingText != null)
+            advancedShootingJoystickSettingText.text = "ADVANCED SHOOTING JOYSTICK: " + (RoomSettings.IsAdvancedShootingJoystickEnabled() ? "ON" : "OFF");
+
+        if (hapticsSettingText != null)
+            hapticsSettingText.text = "HAPTICS: " + (RoomSettings.AreHapticsEnabled() ? "ON" : "OFF");
+
+        if (gunSetupSettingText != null)
+            gunSetupSettingText.text = "GUN SETUP";
+
         if (obstacleWeightSettingText != null)
             obstacleWeightSettingText.text = "OBSTACLE MASS: " + RoomSettings.GetMassLabel(GetObstacleWeightFactor());
 
@@ -2433,6 +2587,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(visualEffectsSettingButton, isHost);
         SetSettingButtonState(startingVfxSettingButton, isHost);
         SetSettingButtonState(endDisasterSettingButton, isHost);
+        SetSettingButtonState(endDisasterTimeSettingButton, isHost);
         SetSettingButtonState(obstacleSettingButton, isHost);
         SetSettingButtonState(obstacleDestroySettingButton, isHost);
         SetSettingButtonState(obstacleHpValueSettingButton, isHost);
@@ -2440,18 +2595,23 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(obstacleNoBordersSettingButton, isHost);
         SetSettingButtonState(treasureSettingButton, isHost);
         SetSettingButtonState(resourceRichnessSettingButton, isHost);
+        SetSettingButtonState(spaceJunkSettingButton, isHost);
         SetSettingButtonState(nebulaSettingButton, isHost);
         SetSettingButtonState(extractionSettingButton, isHost);
         SetSettingButtonState(repairBaySettingButton, isHost);
         SetSettingButtonState(boosterSettingButton, isHost);
         SetSettingButtonState(ammoSettingButton, isHost);
         SetSettingButtonState(boosterDelaySettingButton, isHost);
-        SetSettingButtonState(maxInputBoostSettingButton, isHost);
         SetSettingButtonState(shipDriftSettingButton, isHost);
         SetSettingButtonState(deathTimerSettingButton, isHost);
         SetSettingButtonState(movingObjectsSettingButton, isHost);
         SetSettingButtonState(bulletPushSettingButton, isHost);
         SetSettingButtonState(batteringSettingButton, isHost);
+        SetSettingButtonState(shootingModelSettingButton, isHost);
+        SetSettingButtonState(superAttackSettingButton, isHost);
+        SetSettingButtonState(advancedShootingJoystickSettingButton, isHost);
+        SetSettingButtonState(hapticsSettingButton, isHost);
+        SetSettingButtonState(gunSetupSettingButton, isHost);
         SetSettingButtonState(obstacleWeightSettingButton, isHost);
         SetSettingButtonState(treasureWeightSettingButton, isHost);
         RefreshLobbyMapSelectionUi(isHost);
@@ -2631,6 +2791,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.VisualEffectsEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.StartingVfxEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.EndDisasterModeKey) ||
+               changedProps.ContainsKey(RoomSettings.EndDisasterWarningSecondsKey) ||
                changedProps.ContainsKey(RoomSettings.ObstacleDensityKey) ||
                changedProps.ContainsKey(RoomSettings.ObstacleDestroyEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.ObstacleHpKey) ||
@@ -2638,21 +2799,40 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.ObstacleNoBordersKey) ||
                changedProps.ContainsKey(RoomSettings.TreasureDensityKey) ||
                changedProps.ContainsKey(RoomSettings.ResourceRichnessKey) ||
+               changedProps.ContainsKey(RoomSettings.SpaceJunkDensityKey) ||
                changedProps.ContainsKey(RoomSettings.NebulaDensityKey) ||
                changedProps.ContainsKey(RoomSettings.ExtractionCountKey) ||
                changedProps.ContainsKey(RoomSettings.RepairBayCountKey) ||
                changedProps.ContainsKey(RoomSettings.BoosterSlowdownKey) ||
                changedProps.ContainsKey(RoomSettings.AmmoCountKey) ||
                changedProps.ContainsKey(RoomSettings.BoosterRecoveryDelayKey) ||
-               changedProps.ContainsKey(RoomSettings.MaxInputBoostPercentKey) ||
                changedProps.ContainsKey(RoomSettings.ShipDriftEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.LastShipTimerMultiplierKey) ||
                changedProps.ContainsKey(RoomSettings.MovingObjectsEnabledKey) ||
                ContainsEnemyRoomSettingChange(changedProps) ||
                changedProps.ContainsKey(RoomSettings.BulletPushMultiplierKey) ||
                changedProps.ContainsKey(RoomSettings.BatteringDamageKey) ||
+               changedProps.ContainsKey(RoomSettings.ShootingModelKey) ||
+               changedProps.ContainsKey(RoomSettings.SuperAttackEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.AdvancedShootingJoystickEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.HapticsEnabledKey) ||
+               ContainsGunSetupRoomSettingChange(changedProps) ||
                changedProps.ContainsKey(RoomSettings.ObstacleWeightFactorKey) ||
                changedProps.ContainsKey(RoomSettings.TreasureWeightFactorKey);
+    }
+
+    bool ContainsGunSetupRoomSettingChange(Hashtable changedProps)
+    {
+        if (changedProps == null)
+            return false;
+
+        foreach (System.Collections.DictionaryEntry entry in changedProps)
+        {
+            if (entry.Key is string key && RoomSettings.IsGunSetupKey(key))
+                return true;
+        }
+
+        return false;
     }
 
     float GetRoundDuration()
@@ -2717,6 +2897,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return RoomSettings.GetEndDisasterMode();
     }
 
+    int GetEndDisasterWarningSeconds()
+    {
+        return RoomSettings.GetEndDisasterWarningSeconds();
+    }
+
     string GetTreasureDensity()
     {
         return GetDensitySetting(RoomSettings.TreasureDensityKey);
@@ -2725,6 +2910,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     string GetResourceRichness()
     {
         return RoomSettings.GetResourceRichness();
+    }
+
+    string GetSpaceJunkDensity()
+    {
+        return RoomSettings.GetSpaceJunkDensity();
     }
 
     string GetNebulaDensity()
@@ -2755,11 +2945,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     int GetBoosterRecoveryDelay()
     {
         return RoomSettings.GetBoosterRecoveryDelay();
-    }
-
-    int GetMaxInputBoostPercent()
-    {
-        return RoomSettings.GetMaxInputBoostPercent();
     }
 
     int GetShipDriftLevel()
@@ -2812,6 +2997,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return RoomSettings.GetBatteringDamage();
     }
 
+    string GetShootingModel()
+    {
+        return RoomSettings.GetShootingModel();
+    }
+
     int GetObstacleWeightFactor()
     {
         return RoomSettings.GetObstacleWeightFactor();
@@ -2851,6 +3041,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return RoomSettings.NormalizeResourceRichness(richness).Replace("_", " ").ToUpperInvariant();
     }
 
+    string FormatSpaceJunkDensity(string density)
+    {
+        return RoomSettings.NormalizeSpaceJunkDensity(density).ToUpperInvariant();
+    }
+
     string FormatMapSize(string mapSize)
     {
         switch (mapSize)
@@ -2866,7 +3061,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     string FormatMapBackground(int backgroundIndex)
     {
-        return "TLO " + Mathf.Clamp(backgroundIndex, 1, 12);
+        return "TLO " + Mathf.Clamp(backgroundIndex, 1, 15);
+    }
+
+    string FormatShootingModel(string model)
+    {
+        return RoomSettings.NormalizeShootingModel(model).ToUpperInvariant();
     }
 
     string GetDisplayName(Player player)

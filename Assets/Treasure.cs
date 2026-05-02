@@ -23,6 +23,8 @@ public class Treasure : MonoBehaviourPun
         if (sr != null)
         {
             sr.color = Color.white;
+            sr.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+            sr.sortingOrder = GameVisualTheme.TreasureSortingOrder;
             originalColor = Color.white;
         }
 

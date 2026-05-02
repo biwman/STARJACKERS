@@ -298,6 +298,9 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
             out ObstacleChunk.RuntimeState childAState,
             out ObstacleChunk.RuntimeState childBState);
 
+        if (createdChildren)
+            SpawnAsteroidSplitVfx(source);
+
         if (source != null && source.gameObject != null)
             DestroyObstacleImmediately(source.gameObject);
 
@@ -543,17 +546,37 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
     void ApplyObstacleSplitDeltaInternal(string sourceStableId, string childAState, string childBState)
     {
+        bool hasSplitChildren = !string.IsNullOrWhiteSpace(childAState) && !string.IsNullOrWhiteSpace(childBState);
         if (!string.IsNullOrWhiteSpace(sourceStableId))
         {
             ObstacleChunk source = ObstacleChunk.Find(sourceStableId);
             if (source != null && source.gameObject != null)
+            {
+                if (hasSplitChildren)
+                    SpawnAsteroidSplitVfx(source);
+
                 DestroyObstacleImmediately(source.gameObject);
+            }
         }
 
         ApplySingleRuntimeState(childAState, PhotonNetwork.IsMasterClient);
         ApplySingleRuntimeState(childBState, PhotonNetwork.IsMasterClient);
         RebuildDynamicObstacleSequenceFromScene();
         layoutApplied = true;
+    }
+
+    void SpawnAsteroidSplitVfx(ObstacleChunk source)
+    {
+        if (source == null || !RoomSettings.AreVisualEffectsEnabled())
+            return;
+
+        SpriteRenderer renderer = source.GetComponentInChildren<SpriteRenderer>();
+        float radius = Mathf.Max(0.2f, source.GetApproximateRadius());
+        if (renderer != null)
+            radius = Mathf.Max(radius, Mathf.Max(renderer.bounds.extents.x, renderer.bounds.extents.y));
+
+        radius = Mathf.Max(radius, source.GetTargetWorldSize() * 0.5f);
+        AsteroidSplitVfx.Spawn(source.transform.position, radius, renderer);
     }
 
     void ApplySingleRuntimeState(string serializedState, bool authorityState)

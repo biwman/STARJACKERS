@@ -39,6 +39,10 @@ public sealed class RepairBay : MonoBehaviour
             if (bay == null)
                 continue;
 
+            int localActorNumber = Photon.Pun.PhotonNetwork.LocalPlayer != null ? Photon.Pun.PhotonNetwork.LocalPlayer.ActorNumber : -1;
+            if (bay.IsOccupiedByOther(localActorNumber))
+                continue;
+
             float distance = Vector2.Distance(position, bay.LandingPoint);
             if (distance <= InteractionRadius && distance < bestDistance)
             {
@@ -48,6 +52,49 @@ public sealed class RepairBay : MonoBehaviour
         }
 
         return best;
+    }
+
+    public bool IsOccupiedByOther(int actorNumber)
+    {
+        if (string.IsNullOrWhiteSpace(stableId))
+            return false;
+
+        string raw = GetOccupancyStateRaw();
+        if (string.IsNullOrWhiteSpace(raw))
+            return false;
+
+        string[] entries = raw.Split(';');
+        for (int i = 0; i < entries.Length; i++)
+        {
+            string entry = entries[i];
+            if (string.IsNullOrWhiteSpace(entry))
+                continue;
+
+            int separatorIndex = entry.IndexOf('=');
+            if (separatorIndex <= 0 || separatorIndex >= entry.Length - 1)
+                continue;
+
+            string id = entry.Substring(0, separatorIndex);
+            if (!string.Equals(id, stableId, System.StringComparison.Ordinal))
+                continue;
+
+            if (int.TryParse(entry.Substring(separatorIndex + 1), out int occupiedByActor))
+                return occupiedByActor > 0 && occupiedByActor != actorNumber;
+        }
+
+        return false;
+    }
+
+    static string GetOccupancyStateRaw()
+    {
+        if (Photon.Pun.PhotonNetwork.CurrentRoom != null &&
+            Photon.Pun.PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.RepairBayOccupancyStateKey, out object value) &&
+            value is string raw)
+        {
+            return raw;
+        }
+
+        return string.Empty;
     }
 
     public void Configure(string id, Vector2 position, float phase)
@@ -91,8 +138,8 @@ public sealed class RepairBay : MonoBehaviour
             renderer.sprite = Resources.Load<Sprite>("stacja_naprawcza_resource");
 
         renderer.color = Color.white;
-        renderer.sortingLayerName = "Ground";
-        renderer.sortingOrder = 2;
+        renderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        renderer.sortingOrder = GameVisualTheme.RepairBaySortingOrder;
 
         if (renderer.sprite != null)
         {

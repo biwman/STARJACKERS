@@ -333,12 +333,14 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         normalized.Normalize();
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
         int shipCapacity = ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
+        int safePocketStart = PlayerProfileService.GetSafePocketStartIndex(shipSkinIndex);
 
         int filledSlots = 0;
 
         for (int i = 0; i < normalized.ShipSlots.Length && i < slotButtons.Length; i++)
         {
             bool slotEnabled = i < shipCapacity;
+            bool isSafePocket = slotEnabled && i >= safePocketStart;
             string itemId = normalized.ShipSlots[i];
             bool occupied = slotEnabled && !string.IsNullOrWhiteSpace(itemId);
             Sprite icon = occupied ? InventoryItemCatalog.GetIcon(itemId) : null;
@@ -352,9 +354,19 @@ public class ShipInventoryHudUI : MonoBehaviourPun
 
             if (slotImage != null)
             {
-                slotImage.color = occupied
-                    ? InventoryItemCatalog.GetRarityColor(itemId)
-                    : new Color(0.11f, 0.16f, 0.22f, 0.98f);
+                if (occupied)
+                {
+                    Color baseColor = InventoryItemCatalog.GetRarityColor(itemId);
+                    slotImage.color = isSafePocket
+                        ? Color.Lerp(baseColor, new Color(0.24f, 0.74f, 0.66f, baseColor.a), 0.32f)
+                        : baseColor;
+                }
+                else
+                {
+                    slotImage.color = isSafePocket
+                        ? new Color(0.09f, 0.23f, 0.22f, 0.98f)
+                        : new Color(0.11f, 0.16f, 0.22f, 0.98f);
+                }
             }
 
             if (slotIcons[i] != null)
@@ -366,8 +378,38 @@ public class ShipInventoryHudUI : MonoBehaviourPun
             if (slotLabels[i] != null)
             {
                 bool showText = occupied && icon == null;
-                slotLabels[i].text = showText ? InventoryItemCatalog.GetShortLabel(itemId) : string.Empty;
-                slotLabels[i].color = showText ? Color.white : new Color(0f, 0f, 0f, 0f);
+                if (showText)
+                {
+                    slotLabels[i].text = InventoryItemCatalog.GetShortLabel(itemId);
+                    slotLabels[i].color = Color.white;
+                }
+                else if (isSafePocket)
+                {
+                    slotLabels[i].text = "SAFE";
+                    slotLabels[i].color = occupied ? new Color(0f, 0f, 0f, 0f) : new Color(0.56f, 1f, 0.95f, 0.86f);
+                }
+                else
+                {
+                    slotLabels[i].text = string.Empty;
+                    slotLabels[i].color = new Color(0f, 0f, 0f, 0f);
+                }
+            }
+
+            if (slotButtons[i] != null)
+            {
+                Outline outline = slotButtons[i].GetComponent<Outline>();
+                if (isSafePocket)
+                {
+                    if (outline == null)
+                        outline = slotButtons[i].gameObject.AddComponent<Outline>();
+                    outline.effectColor = new Color(0.38f, 0.98f, 0.88f, 0.95f);
+                    outline.effectDistance = new Vector2(2f, 2f);
+                    outline.enabled = true;
+                }
+                else if (outline != null)
+                {
+                    outline.enabled = false;
+                }
             }
         }
 
@@ -410,6 +452,7 @@ public class ShipInventoryHudUI : MonoBehaviourPun
             return;
 
         bool shouldDrop = ShouldDropToSpace(eventData);
+        int targetSlotIndex = shouldDrop ? -1 : GetSlotIndexAtScreenPosition(eventData);
         HideDragVisual();
         dragInProgress = false;
         draggedSlotIndex = -1;
@@ -417,6 +460,12 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         if (shouldDrop)
         {
             DropShipItem(index);
+            return;
+        }
+
+        if (targetSlotIndex >= 0 && targetSlotIndex != index)
+        {
+            MoveShipItemBetweenSlots(index, targetSlotIndex);
         }
     }
 
@@ -478,6 +527,28 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         return !overPanel && !overButton;
     }
 
+    int GetSlotIndexAtScreenPosition(PointerEventData eventData)
+    {
+        if (eventData == null || slotButtons == null)
+            return -1;
+
+        Camera eventCamera = eventData.pressEventCamera;
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
+        int shipCapacity = ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
+
+        for (int i = 0; i < slotButtons.Length && i < shipCapacity; i++)
+        {
+            if (slotButtons[i] == null)
+                continue;
+
+            RectTransform rect = slotButtons[i].GetComponent<RectTransform>();
+            if (rect != null && RectTransformUtility.RectangleContainsScreenPoint(rect, eventData.position, eventCamera))
+                return i;
+        }
+
+        return -1;
+    }
+
     async void DropShipItem(int index)
     {
         string removedItem = null;
@@ -505,6 +576,18 @@ public class ShipInventoryHudUI : MonoBehaviourPun
                     Debug.LogError("Failed to restore dropped ship inventory item: " + restoreEx);
                 }
             }
+        }
+    }
+
+    async void MoveShipItemBetweenSlots(int sourceIndex, int targetIndex)
+    {
+        try
+        {
+            await PlayerProfileService.Instance.MoveShipItemWithinShipAsync(sourceIndex, targetIndex);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to move ship inventory item within ship slots: " + ex);
         }
     }
 

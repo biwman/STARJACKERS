@@ -32,6 +32,7 @@ public class PlayerMovement : MonoBehaviourPun
     float baseSpeed = 5f;
     float baseBoosterDuration = 5f;
     float turnRateMultiplier = 1f;
+    int maxBoostPercent = 30;
     bool baseSpeedCaptured;
     bool fusionEngineEquipped;
     int equippedFusionEngineCount;
@@ -42,18 +43,20 @@ public class PlayerMovement : MonoBehaviourPun
     const float HighSpeedBrakeResponsiveness = 1.15f;
     const float BrakeDriftResponsivenessMultiplier = 0.8f;
     const float MaxDriftInertiaSlowdown = 4.2f;
-    const float MovingObjectImpulseRequestCooldown = 0.08f;
+    const float MovingObjectImpulseRequestCooldown = 0.045f;
     const float BatteringRequiredBoosterSeconds = 2f;
     const float BatteringFullSpeedRatio = 0.9f;
     const float BatteringSpeedGraceSeconds = 0.25f;
     const float BatteringPairCooldown = 0.5f;
     const float BatteringProbeRadius = 0.72f;
     const float BatteringFrontDotThreshold = 0.42f;
-    const float RemotePushNoseProbeRadius = 0.9f;
-    const float RemotePushBodyProbeRadius = 0.68f;
+    const float RemotePushNoseProbeRadius = 0.52f;
+    const float RemotePushBodyProbeRadius = 0.38f;
+    const float RemotePushContactTolerance = 0.12f;
     static PhysicsMaterial2D playerCollisionMaterial;
     static readonly Collider2D[] RemotePushProbeHits = new Collider2D[32];
     static readonly Collider2D[] BatteringProbeHits = new Collider2D[32];
+    Collider2D[] remotePushPlayerColliders;
     float nextMovingObjectImpulseRequestTime;
     float continuousBoosterTime;
     float lastBatteringEligibleSpeedTime = -999f;
@@ -70,6 +73,13 @@ public class PlayerMovement : MonoBehaviourPun
 
     void Start()
     {
+        if (LureBeaconDecoy.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+        {
+            LureBeaconDecoy.EnsureAttached(gameObject);
+            enabled = false;
+            return;
+        }
+
         EnsureBotBootstrap();
 
         bool isAstronaut = GetComponent<AstronautSurvivor>() != null || AstronautSurvivor.IsAstronautInstantiationData(photonView.InstantiationData);
@@ -183,6 +193,8 @@ public class PlayerMovement : MonoBehaviourPun
             ResolveJoysticks();
 
             moveInput = joystick != null && joystick.IsPressed ? joystick.inputVector : Vector2.zero;
+            if (moveInput == Vector2.zero)
+                moveInput = GetKeyboardMoveInput();
             shootInput = shootJoystick != null && shootJoystick.IsPressed ? shootJoystick.inputVector : Vector2.zero;
 
             if (moveInput.magnitude < 0.2f)
@@ -481,6 +493,9 @@ public class PlayerMovement : MonoBehaviourPun
     [PunRPC]
     void PlayBatteringImpactVisual(float impactX, float impactY, float normalX, float normalY)
     {
+        if (photonView != null && photonView.IsMine)
+            HapticsManager.PlayBatteringImpact();
+
         if (!RoomSettings.AreVisualEffectsEnabled())
             return;
 
@@ -565,8 +580,7 @@ public class PlayerMovement : MonoBehaviourPun
 
     float GetBatteringFullSpeedThreshold()
     {
-        float boostMultiplier = 1f + (RoomSettings.GetMaxInputBoostPercent() / 100f);
-        return Mathf.Max(0.1f, speed * boostMultiplier * BatteringFullSpeedRatio);
+        return Mathf.Max(0.1f, speed * GetShipMaxSpeedBoostMultiplier() * BatteringFullSpeedRatio);
     }
 
     float GetBatteringProbeDistance()
@@ -595,7 +609,7 @@ public class PlayerMovement : MonoBehaviourPun
         if (rb == null)
             return;
 
-        float expectedTopSpeed = currentSpeed * Mathf.Max(1f, GetMaxInputSpeedBoostMultiplier());
+        float expectedTopSpeed = currentSpeed * Mathf.Max(1f, GetCurrentBoostSpeedMultiplier());
         float hardCap = expectedTopSpeed * 1.22f;
         float currentMagnitude = rb.linearVelocity.magnitude;
 
@@ -615,13 +629,13 @@ public class PlayerMovement : MonoBehaviourPun
             : null;
 
         Vector2 playerVelocity = rb != null ? rb.linearVelocity : Vector2.zero;
-        if (RequestMovingObjectImpulse(movingObject, playerVelocity, 1.25f))
+        if (RequestMovingObjectImpulse(movingObject, playerVelocity, 2.15f))
             return;
 
         DroppedCargoCrate crate = collision.collider != null
             ? collision.collider.GetComponentInParent<DroppedCargoCrate>()
             : null;
-        RequestDroppedCargoImpulse(crate, playerVelocity, 0.65f);
+        RequestDroppedCargoImpulse(crate, playerVelocity, 1.75f);
     }
 
     void TryRequestNearbyMovingObjectImpulse()
@@ -636,7 +650,7 @@ public class PlayerMovement : MonoBehaviourPun
         }
 
         Vector2 playerVelocity = rb.linearVelocity;
-        if (playerVelocity.sqrMagnitude < 0.01f)
+        if (playerVelocity.sqrMagnitude < 0.01f && effectiveMoveInput.sqrMagnitude < 0.01f)
             return;
 
         Vector2 noseProbeCenter = rb.position + (Vector2)transform.up * GetRemotePushProbeDistance();
@@ -647,10 +661,10 @@ public class PlayerMovement : MonoBehaviourPun
         FindRemotePushTarget(noseProbeCenter, RemotePushNoseProbeRadius, ref bestObject, ref bestCrate, ref bestDistance);
         FindRemotePushTarget(rb.position, RemotePushBodyProbeRadius, ref bestObject, ref bestCrate, ref bestDistance);
 
-        if (RequestMovingObjectImpulse(bestObject, playerVelocity, bestObject != null && bestObject.ObjectType == MovingSpaceObject.SpaceObjectType.Treasure ? 1.45f : 0.95f))
+        if (RequestMovingObjectImpulse(bestObject, playerVelocity, bestObject != null && bestObject.ObjectType == MovingSpaceObject.SpaceObjectType.Treasure ? 2.95f : 1.75f))
             return;
 
-        RequestDroppedCargoImpulse(bestCrate, playerVelocity, 0.75f);
+        RequestDroppedCargoImpulse(bestCrate, playerVelocity, 2.05f);
     }
 
     void FindRemotePushTarget(
@@ -673,7 +687,11 @@ public class PlayerMovement : MonoBehaviourPun
             if (hit.transform == transform || hit.transform.IsChildOf(transform))
                 continue;
 
-            float distance = Vector2.Distance(probeCenter, hit.ClosestPoint(probeCenter));
+            if (!IsRemotePushContactClose(hit, out float contactDistance))
+                continue;
+
+            float probeDistance = Vector2.Distance(probeCenter, hit.ClosestPoint(probeCenter));
+            float distance = contactDistance + probeDistance * 0.025f;
 
             MovingSpaceObject movingObject = hit.GetComponentInParent<MovingSpaceObject>();
             if (movingObject != null &&
@@ -697,6 +715,39 @@ public class PlayerMovement : MonoBehaviourPun
         }
     }
 
+    bool IsRemotePushContactClose(Collider2D targetCollider, out float bestDistance)
+    {
+        bestDistance = float.MaxValue;
+        if (targetCollider == null || targetCollider.isTrigger || !targetCollider.enabled)
+            return false;
+
+        Collider2D[] playerColliders = GetRemotePushPlayerColliders();
+        if (playerColliders == null || playerColliders.Length == 0)
+            return false;
+
+        for (int i = 0; i < playerColliders.Length; i++)
+        {
+            Collider2D playerCollider = playerColliders[i];
+            if (playerCollider == null || !playerCollider.enabled || playerCollider.isTrigger)
+                continue;
+
+            ColliderDistance2D distance = playerCollider.Distance(targetCollider);
+            float resolvedDistance = distance.isOverlapped ? 0f : Mathf.Max(0f, distance.distance);
+            if (resolvedDistance < bestDistance)
+                bestDistance = resolvedDistance;
+        }
+
+        return bestDistance <= RemotePushContactTolerance;
+    }
+
+    Collider2D[] GetRemotePushPlayerColliders()
+    {
+        if (remotePushPlayerColliders == null || remotePushPlayerColliders.Length == 0)
+            remotePushPlayerColliders = GetComponents<Collider2D>();
+
+        return remotePushPlayerColliders;
+    }
+
     float GetRemotePushProbeDistance()
     {
         SpriteRenderer renderer = GetComponent<SpriteRenderer>();
@@ -717,7 +768,8 @@ public class PlayerMovement : MonoBehaviourPun
         if (movingObject.ObjectType == MovingSpaceObject.SpaceObjectType.Obstacle && RoomSettings.IsObstacleMassMax())
             return false;
 
-        if (playerVelocity.sqrMagnitude < 0.01f)
+        Vector2 pushVector = ResolveRemotePushVector(movingObject.transform.position, playerVelocity);
+        if (pushVector.sqrMagnitude < 0.01f)
             return false;
 
         int weightFactor = movingObject.ObjectType == MovingSpaceObject.SpaceObjectType.Obstacle
@@ -725,10 +777,13 @@ public class PlayerMovement : MonoBehaviourPun
             : RoomSettings.GetTreasureWeightFactor();
         weightFactor = Mathf.Max(1, weightFactor);
 
-        Vector2 impulse = (playerVelocity * Mathf.Max(0.1f, strength)) / weightFactor;
+        float effectiveWeight = movingObject.ObjectType == MovingSpaceObject.SpaceObjectType.Treasure
+            ? Mathf.Max(1f, weightFactor * 0.45f)
+            : Mathf.Max(1f, weightFactor * 0.72f);
+        Vector2 impulse = (pushVector * Mathf.Max(0.1f, strength)) / effectiveWeight;
         nextMovingObjectImpulseRequestTime = Time.time + MovingObjectImpulseRequestCooldown;
         movingObject.ApplyRemotePushPrediction(impulse);
-        SpaceObjectMotionSync.RequestImpulse(movingObject.StableId, impulse);
+        SpaceObjectMotionSync.RequestPlayerPush(movingObject.StableId, impulse, transform.position);
         return true;
     }
 
@@ -737,14 +792,40 @@ public class PlayerMovement : MonoBehaviourPun
         if (crate == null || Time.time < nextMovingObjectImpulseRequestTime)
             return false;
 
-        if (playerVelocity.sqrMagnitude < 0.01f)
+        Vector2 pushVector = ResolveRemotePushVector(crate.transform.position, playerVelocity);
+        if (pushVector.sqrMagnitude < 0.01f)
             return false;
 
-        if (!crate.TryRequestRemoteImpulse(playerVelocity * Mathf.Max(0.1f, strength)))
+        if (!crate.TryRequestRemoteImpulse(pushVector * Mathf.Max(0.1f, strength)))
             return false;
 
         nextMovingObjectImpulseRequestTime = Time.time + MovingObjectImpulseRequestCooldown;
         return true;
+    }
+
+    Vector2 ResolveRemotePushVector(Vector2 targetPosition, Vector2 playerVelocity)
+    {
+        Vector2 desired = playerVelocity;
+        Vector2 intendedInput = effectiveMoveInput.sqrMagnitude > 0.01f ? effectiveMoveInput.normalized * speed : Vector2.zero;
+        if (intendedInput.sqrMagnitude > desired.sqrMagnitude)
+            desired = intendedInput;
+
+        if (desired.sqrMagnitude < 0.01f)
+            desired = transform.up * Mathf.Max(1f, speed * 0.65f);
+
+        Vector2 awayToTarget = targetPosition - (Vector2)transform.position;
+        if (awayToTarget.sqrMagnitude > 0.0001f)
+        {
+            Vector2 awayDirection = awayToTarget.normalized;
+            float desiredMagnitude = Mathf.Max(desired.magnitude, speed * 0.72f);
+            float alignment = Vector2.Dot(desired.normalized, awayDirection);
+            if (alignment < 0.15f)
+                desired = Vector2.Lerp(desired.normalized, awayDirection, 0.78f).normalized * desiredMagnitude;
+            else
+                desired = (desired.normalized + awayDirection * 0.35f).normalized * desiredMagnitude;
+        }
+
+        return desired;
     }
 
     bool IsGameStarted()
@@ -825,17 +906,57 @@ public class PlayerMovement : MonoBehaviourPun
             return Vector2.zero;
 
         if (rawInput.magnitude >= fullSpeedSnapThreshold)
-            return rawInput.normalized * GetMaxInputSpeedBoostMultiplier();
+            return rawInput.normalized * GetCurrentBoostSpeedMultiplier();
 
         return rawInput;
     }
 
-    float GetMaxInputSpeedBoostMultiplier()
+    Vector2 GetKeyboardMoveInput()
+    {
+#if UNITY_EDITOR || UNITY_STANDALONE
+        Vector2 keyboardInput = Vector2.zero;
+
+#if ENABLE_INPUT_SYSTEM
+        UnityEngine.InputSystem.Keyboard keyboard = UnityEngine.InputSystem.Keyboard.current;
+        if (keyboard == null)
+            return Vector2.zero;
+
+        if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed)
+            keyboardInput.x -= 1f;
+        if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed)
+            keyboardInput.x += 1f;
+        if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed)
+            keyboardInput.y -= 1f;
+        if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed)
+            keyboardInput.y += 1f;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
+            keyboardInput.x -= 1f;
+        if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow))
+            keyboardInput.x += 1f;
+        if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow))
+            keyboardInput.y -= 1f;
+        if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow))
+            keyboardInput.y += 1f;
+#endif
+
+        return keyboardInput.sqrMagnitude > 1f ? keyboardInput.normalized : keyboardInput;
+#else
+        return Vector2.zero;
+#endif
+    }
+
+    float GetCurrentBoostSpeedMultiplier()
     {
         if (boosterCharge < 0.01f)
             return 1f;
 
-        return 1f + (RoomSettings.GetMaxInputBoostPercent() / 100f);
+        return GetShipMaxSpeedBoostMultiplier();
+    }
+
+    float GetShipMaxSpeedBoostMultiplier()
+    {
+        return 1f + (Mathf.Max(0, maxBoostPercent) / 100f);
     }
 
     void ApplyVelocity(float currentSpeed)
@@ -1054,12 +1175,14 @@ public class PlayerMovement : MonoBehaviourPun
         float baseShipSpeed = ShipCatalog.GetBaseSpeed(shipSkinIndex);
         float baseShipBoosterDuration = ShipCatalog.GetBoosterDuration(shipSkinIndex);
         float baseShipTurnRate = ShipCatalog.GetTurnRateMultiplier(shipSkinIndex);
+        int baseShipMaxBoostPercent = ShipCatalog.GetMaxBoostPercent(shipSkinIndex);
 
         equippedFusionEngineCount = fusionCount;
         fusionEngineEquipped = hasFusion;
         baseSpeed = Mathf.Max(0.1f, baseShipSpeed);
         baseBoosterDuration = Mathf.Max(0.1f, baseShipBoosterDuration);
         turnRateMultiplier = Mathf.Max(0.1f, baseShipTurnRate);
+        maxBoostPercent = Mathf.Max(0, baseShipMaxBoostPercent);
         speed = baseSpeed * (1f + (0.15f * equippedFusionEngineCount));
         boosterDuration = baseBoosterDuration;
         lastAppliedEngineSignature = signature;
@@ -1107,6 +1230,9 @@ public class PlayerMovement : MonoBehaviourPun
     AudioClip ResolveEngineAudioClip()
     {
         EnemyBot enemyBot = GetComponent<EnemyBot>();
+        if (enemyBot != null && enemyBot.Kind == EnemyBotKind.RadarShip)
+            return AudioManager.Instance.RadarShipEngineClip;
+
         if (enemyBot != null && enemyBot.Kind == EnemyBotKind.Mothership)
             return AudioManager.Instance.MothershipEngineClip;
 
@@ -1463,6 +1589,8 @@ public class EngineThrusterVFX : MonoBehaviour
         if (trailRenderers == null)
             return;
 
+        EnsureTrailSorting();
+
         for (int i = 0; i < trailRenderers.Length; i++)
         {
             TrailRenderer trailRenderer = trailRenderers[i];
@@ -1488,6 +1616,27 @@ public class EngineThrusterVFX : MonoBehaviour
                 trailRenderer.widthMultiplier = Mathf.Lerp(0.03f, 0.16f, intensity);
                 trailRenderer.emitting = clamped > 0.04f;
             }
+        }
+    }
+
+    void EnsureTrailSorting()
+    {
+        if (trailRenderers == null || shipRenderer == null)
+            return;
+
+        int targetLayer = shipRenderer.sortingLayerID;
+        int targetOrder = shipRenderer.sortingOrder - 2;
+        for (int i = 0; i < trailRenderers.Length; i++)
+        {
+            TrailRenderer trail = trailRenderers[i];
+            if (trail == null)
+                continue;
+
+            if (trail.sortingLayerID != targetLayer)
+                trail.sortingLayerID = targetLayer;
+
+            if (trail.sortingOrder != targetOrder)
+                trail.sortingOrder = targetOrder;
         }
     }
 

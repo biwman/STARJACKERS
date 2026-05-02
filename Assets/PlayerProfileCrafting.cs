@@ -72,7 +72,7 @@ public static class PlayerProfileCraftingCatalog
                 InventoryItemCatalog.RichAsteroidId,
                 InventoryItemCatalog.RichAsteroidId
             },
-            OutputItemId = InventoryItemCatalog.SpaceJunkId,
+            OutputItemId = InventoryItemCatalog.AsteroidEpicId,
             OutputCount = 1
         },
         new PlayerProfileCraftingRecipe
@@ -80,10 +80,10 @@ public static class PlayerProfileCraftingCatalog
             Id = "epic_to_legendary_asteroid",
             Inputs = new[]
             {
-                InventoryItemCatalog.SpaceJunkId,
-                InventoryItemCatalog.SpaceJunkId,
-                InventoryItemCatalog.SpaceJunkId,
-                InventoryItemCatalog.SpaceJunkId
+                InventoryItemCatalog.AsteroidEpicId,
+                InventoryItemCatalog.AsteroidEpicId,
+                InventoryItemCatalog.AsteroidEpicId,
+                InventoryItemCatalog.AsteroidEpicId
             },
             OutputItemId = InventoryItemCatalog.AsteroidLegendaryId,
             OutputCount = 1
@@ -99,6 +99,55 @@ public static class PlayerProfileCraftingCatalog
                 InventoryItemCatalog.AsteroidGoldId
             },
             OutputItemId = InventoryItemCatalog.PlasmaGunId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "triple_gun_from_common_asteroids",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.AsteroidResourceId,
+                InventoryItemCatalog.AsteroidResourceId
+            },
+            OutputItemId = InventoryItemCatalog.TripleGunId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "artillery_gun_from_mid_asteroids",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.ArtilleryGunId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "rail_gun_from_high_grade_salvage",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.CorsairSalvageId,
+                InventoryItemCatalog.NeutralFighterSalvageId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.RichAsteroidId
+            },
+            OutputItemId = InventoryItemCatalog.RailGunId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "double_ionizer_from_fighter_salvage",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.NeutralFighterSalvageId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.DoubleIonizerId,
             OutputCount = 1
         },
         new PlayerProfileCraftingRecipe
@@ -164,6 +213,19 @@ public static class PlayerProfileCraftingCatalog
                 InventoryItemCatalog.AsteroidRareId
             },
             OutputItemId = InventoryItemCatalog.TractorBeamId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "lure_beacon_from_asteroids",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.AsteroidResourceId,
+                InventoryItemCatalog.AsteroidResourceId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidGoldId
+            },
+            OutputItemId = InventoryItemCatalog.LureBeaconId,
             OutputCount = 1
         },
         new PlayerProfileCraftingRecipe

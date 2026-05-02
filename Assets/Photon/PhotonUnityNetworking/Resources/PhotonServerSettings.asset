@@ -115,6 +115,20 @@ MonoBehaviour:
   - ForceEndRepairDocking
   - RequestRepairDock
   - RequestRepairLaunch
+  - NotifyFinalDeath
+  - PlayShotSfx
+  - TakeDamageProfileAt
+  - PlayImpactVfx
+  - NotifyFinalEvacuation
+  - PlayRadarShipIncomingRpc
+  - PlayRadarShipShootRpc
+  - SpawnRadarStrikeImpactRpc
+  - SpawnRadarStrikeMarkerRpc
+  - PlayDestroyedFeedback
+  - PlayHpHitFeedback
+  - PlayShieldHitFeedback
+  - TakeBeaconDamageAt
+  - TakeBeaconDamageProfileAt
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

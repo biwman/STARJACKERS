@@ -29,6 +29,11 @@ public class ShipWreck : MonoBehaviourPun
     void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+            spriteRenderer.sortingOrder = GameVisualTheme.WreckSortingOrder;
+        }
     }
 
     public void InitializeFromLootJson(string rawLoot, int shipSkinIndex = 0)

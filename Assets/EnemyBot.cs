@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Collections.Generic;
 using Photon.Pun;
 using UnityEngine;
 #if UNITY_EDITOR
@@ -11,7 +13,120 @@ public enum EnemyBotKind
     SpaceMine,
     SpaceTruck,
     Mothership,
-    NeutralFighter
+    NeutralFighter,
+    RadarShip
+}
+
+public static class EnemyTargetingUtility
+{
+    const float BeaconPriorityRangeMultiplier = 1.9f;
+
+    public static Transform FindClosestTarget(Vector2 origin, PlayerHealth observerHealth, float maxDistance, bool requireNebulaVisibility)
+    {
+        Transform bestBeaconTarget = null;
+        float bestBeaconDistance = float.MaxValue;
+
+        float beaconRange = maxDistance * BeaconPriorityRangeMultiplier;
+        foreach (LureBeaconDecoy beacon in LureBeaconDecoy.GetActiveBeacons())
+        {
+            if (!IsValidBeaconTarget(beacon, origin, beaconRange))
+                continue;
+
+            float distance = Vector2.Distance(origin, beacon.transform.position);
+            if (distance >= bestBeaconDistance)
+                continue;
+
+            bestBeaconDistance = distance;
+            bestBeaconTarget = beacon.transform;
+        }
+
+        if (bestBeaconTarget != null)
+            return bestBeaconTarget;
+
+        Transform bestTarget = null;
+        float bestDistance = float.MaxValue;
+
+        PlayerHealth[] players = Object.FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < players.Length; i++)
+        {
+            PlayerHealth candidate = players[i];
+            if (!IsValidPlayerTarget(candidate, observerHealth, origin, maxDistance, requireNebulaVisibility))
+                continue;
+
+            float distance = Vector2.Distance(origin, candidate.transform.position);
+            if (distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            bestTarget = candidate.transform;
+        }
+
+        return bestTarget;
+    }
+
+    public static bool IsTargetValid(Transform target, PlayerHealth observerHealth, Vector2 origin, float maxDistance, bool requireNebulaVisibility)
+    {
+        if (target == null)
+            return false;
+
+        PlayerHealth player = target.GetComponent<PlayerHealth>();
+        if (player != null)
+        {
+            if (IsAnyBeaconAvailable(origin, maxDistance * BeaconPriorityRangeMultiplier))
+                return false;
+
+            return IsValidPlayerTarget(player, observerHealth, origin, maxDistance, requireNebulaVisibility);
+        }
+
+        LureBeaconDecoy beacon = target.GetComponent<LureBeaconDecoy>();
+        return IsValidBeaconTarget(beacon, origin, maxDistance * BeaconPriorityRangeMultiplier);
+    }
+
+    public static bool IsAnyTargetInRange(Vector2 origin, PlayerHealth observerHealth, float radius)
+    {
+        return FindClosestTarget(origin, observerHealth, radius, false) != null;
+    }
+
+    static bool IsValidPlayerTarget(PlayerHealth candidate, PlayerHealth observerHealth, Vector2 origin, float maxDistance, bool requireNebulaVisibility)
+    {
+        if (candidate == null || candidate == observerHealth || candidate.IsWreck || candidate.IsBotControlled || candidate.IsEvacuationAnimating)
+            return false;
+
+        if (candidate.GetComponent<LureBeaconDecoy>() != null)
+            return false;
+
+        if (Vector2.Distance(origin, candidate.transform.position) > maxDistance)
+            return false;
+
+        if (requireNebulaVisibility)
+        {
+            HideInNebulaTarget candidateNebulaState = candidate.GetComponent<HideInNebulaTarget>();
+            HideInNebulaTarget observerNebulaState = observerHealth != null ? observerHealth.GetComponent<HideInNebulaTarget>() : null;
+            if (candidateNebulaState != null && candidateNebulaState.IsHiddenFromObserver(observerNebulaState))
+                return false;
+        }
+
+        return true;
+    }
+
+    static bool IsValidBeaconTarget(LureBeaconDecoy beacon, Vector2 origin, float maxDistance)
+    {
+        if (beacon == null || !beacon.CanBeTargeted)
+            return false;
+
+        return Vector2.Distance(origin, beacon.transform.position) <= maxDistance;
+    }
+
+    static bool IsAnyBeaconAvailable(Vector2 origin, float maxDistance)
+    {
+        foreach (LureBeaconDecoy beacon in LureBeaconDecoy.GetActiveBeacons())
+        {
+            if (IsValidBeaconTarget(beacon, origin, maxDistance))
+                return true;
+        }
+
+        return false;
+    }
 }
 
 public enum EnemyMovementModel
@@ -21,7 +136,8 @@ public enum EnemyMovementModel
     Drift,
     RouteExtractionZones,
     Mothership,
-    NeutralFighter
+    NeutralFighter,
+    RadarShip
 }
 
 public enum EnemySpawnPattern
@@ -784,6 +900,81 @@ public static class EnemyBotCatalog
         },
         new EnemyBotDefinition
         {
+            Kind = EnemyBotKind.RadarShip,
+            Id = "radar_ship",
+            DisplayName = "Radar Ship",
+            InstantiationMarker = "enemy_bot_radar_ship",
+            VisualResourcePath = "radar_ship_resource",
+            EditorAssetPath = "Assets/radar_ship.png",
+            TargetSize = 3.2f,
+            PhysicsMass = 16f,
+            LinearDamping = 0.11f,
+            AngularDamping = 0.28f,
+            DefaultHp = 90,
+            DefaultShield = 110,
+            DefaultSpeedMultiplier = 1.1f,
+            DefaultEnabled = false,
+            DefaultCount = 1,
+            DefaultSpawnSecond = 0,
+            Movement = new EnemyMovementProfile
+            {
+                Model = EnemyMovementModel.RadarShip,
+                SpawnPattern = EnemySpawnPattern.WideCorners,
+                MoveSpeed = 0.88f,
+                TurnResponsiveness = 150f,
+                DetectionRadius = 8.5f,
+                DisengageRadius = 12f,
+                OrbitDistance = 5.6f,
+                PreferredDistance = 7.8f,
+                ShootDistance = 8.5f,
+                RepathInterval = 0.26f,
+                TargetRefreshInterval = 0.24f,
+                IdleDriftTurnSpeed = 15f,
+                OrbitAngularSpeed = 0.42f
+            },
+            Weapon = new EnemyWeaponProfile
+            {
+                AmmoCount = 9999,
+                ReloadDuration = 0f,
+                FireRate = 3f,
+                Damage = 38,
+                BulletScaleMultiplier = 1.8f,
+                BulletColor = new Color(1f, 0.55f, 0.18f, 1f),
+                BulletSpeed = 18f,
+                MuzzleOffsetDistance = 0f,
+                InfiniteAmmo = true,
+                RotateTowardAim = false,
+                Range = 8.5f,
+                ShotSoundId = "radar_ship"
+            },
+            Wreck = new EnemyWreckProfile
+            {
+                Mass = 18f,
+                LinearDamping = 0.82f,
+                AngularDamping = 1.02f,
+                DriftSpeed = 0.08f,
+                AngularVelocityRange = 1.3f,
+                RewardItemId = InventoryItemCatalog.RadarShipSalvageId,
+                DestroyWhenEmpty = false,
+                BaseColor = new Color(0.46f, 0.48f, 0.54f, 0.98f),
+                VisualResourcePath = "radar_ship_wreck_resource",
+                EditorAssetPath = "Assets/radar_ship_wreck.png"
+            },
+            Trails = new EnemyTrailProfile
+            {
+                RootOffsetFactors = new Vector2(0f, -0.46f),
+                RootRotationZ = 180f,
+                TrailOffsetFactors = new[] { new Vector2(0f, 0.02f) },
+                MinTrailTime = 0.34f,
+                MaxTrailTime = 1.12f,
+                MinTrailWidth = 0.05f,
+                MaxTrailWidth = 0.2f,
+                EmissionThreshold = 0.02f,
+                VisualStyle = EnemyTrailVisualStyle.OrangeSmall
+            }
+        },
+        new EnemyBotDefinition
+        {
             Kind = EnemyBotKind.Mothership,
             Id = "mothership",
             DisplayName = "Mothership",
@@ -932,6 +1123,7 @@ public class EnemyBot : MonoBehaviourPun
     public bool IsCorsair => kind == EnemyBotKind.Corsair;
     public bool IsSpaceMine => kind == EnemyBotKind.SpaceMine;
     public bool IsSpaceTruck => kind == EnemyBotKind.SpaceTruck;
+    public bool IsRadarShip => kind == EnemyBotKind.RadarShip;
     public bool IsMothership => kind == EnemyBotKind.Mothership;
     public bool IsPlayerPlacedMine => isPlayerPlacedMine;
     public bool IsSummonedDrone => isSummonedDrone;
@@ -1135,6 +1327,9 @@ public class EnemyBot : MonoBehaviourPun
                     case EnemyMovementModel.RouteExtractionZones:
                         behavior = gameObject.AddComponent<EnemySpaceTruckBehavior>();
                         break;
+                    case EnemyMovementModel.RadarShip:
+                        behavior = gameObject.AddComponent<EnemyRadarShipBehavior>();
+                        break;
                     case EnemyMovementModel.Mothership:
                         behavior = gameObject.AddComponent<EnemyMothershipBehavior>();
                         break;
@@ -1165,6 +1360,7 @@ public class EnemyBot : MonoBehaviourPun
             EnemyMovementModel.OrbitMap => existingBehavior is EnemyCorsairBehavior,
             EnemyMovementModel.Drift => existingBehavior is EnemyMineBehavior,
             EnemyMovementModel.RouteExtractionZones => existingBehavior is EnemySpaceTruckBehavior,
+            EnemyMovementModel.RadarShip => existingBehavior is EnemyRadarShipBehavior,
             EnemyMovementModel.Mothership => existingBehavior is EnemyMothershipBehavior,
             EnemyMovementModel.NeutralFighter => existingBehavior is EnemyNeutralFighterBehavior,
             _ => existingBehavior is EnemyDroneBehavior
@@ -1207,6 +1403,8 @@ public class EnemyBot : MonoBehaviourPun
 
         renderer.sprite = sprite;
         renderer.color = Color.white;
+        renderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        renderer.sortingOrder = GameVisualTheme.EnemySortingOrder;
         FitRendererToTargetSize(renderer, VisualTargetSize);
     }
 
@@ -1226,6 +1424,8 @@ public class EnemyBot : MonoBehaviourPun
             cachedRenderer.sprite = desiredSprite;
 
         cachedRenderer.color = Color.white;
+        cachedRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        cachedRenderer.sortingOrder = GameVisualTheme.EnemySortingOrder;
         FitRendererToTargetSize(cachedRenderer, VisualTargetSize);
     }
 
@@ -1275,7 +1475,7 @@ public class EnemyBot : MonoBehaviourPun
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth candidate = players[i];
-            if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating)
+            if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating || candidate.GetComponent<LureBeaconDecoy>() != null)
                 continue;
 
             EnemyBot candidateBot = candidate.GetComponent<EnemyBot>();
@@ -1289,6 +1489,18 @@ public class EnemyBot : MonoBehaviourPun
             PhotonView targetView = candidate.GetComponent<PhotonView>();
             if (targetView != null)
                 targetView.RPC(nameof(PlayerHealth.TakeDamage), RpcTarget.MasterClient, RoomSettings.GetEnemyDamage(kind), photonView.ViewID);
+        }
+
+        foreach (LureBeaconDecoy beacon in LureBeaconDecoy.GetActiveBeacons())
+        {
+            if (beacon == null || !beacon.CanBeTargeted || beacon.photonView == null)
+                continue;
+
+            float distance = Vector2.Distance(transform.position, beacon.transform.position);
+            if (distance > explosion.TriggerRadius)
+                continue;
+
+            beacon.photonView.RPC(nameof(LureBeaconDecoy.TakeBeaconDamageAt), RpcTarget.MasterClient, RoomSettings.GetEnemyDamage(kind), photonView.ViewID, beacon.transform.position.x, beacon.transform.position.y);
         }
     }
 
@@ -1434,6 +1646,9 @@ public class EnemyBot : MonoBehaviourPun
         if (kind == EnemyBotKind.NeutralFighter && behavior is EnemyNeutralFighterBehavior neutralFighterBehavior)
             neutralFighterBehavior.NotifyDamageSource(attackerViewID);
 
+        if (kind == EnemyBotKind.RadarShip && behavior is EnemyRadarShipBehavior radarShipBehavior)
+            radarShipBehavior.NotifyDamageSource(attackerViewID);
+
         if (kind != EnemyBotKind.SpaceTruck)
             return;
 
@@ -1484,6 +1699,30 @@ public class EnemyBot : MonoBehaviourPun
     void PlaySpaceTruckAlert(float x, float y, float z)
     {
         AudioManager.Instance.PlaySpaceTruckAlertAt(new Vector3(x, y, z));
+    }
+
+    [PunRPC]
+    public void SpawnRadarStrikeMarkerRpc(float x, float y, float warningDuration, float radius)
+    {
+        RadarStrikeVfx.SpawnMarker(new Vector2(x, y), warningDuration, radius);
+    }
+
+    [PunRPC]
+    public void PlayRadarShipShootRpc(float x, float y, float z)
+    {
+        AudioManager.Instance.PlayRadarShipShootAt(new Vector3(x, y, z));
+    }
+
+    [PunRPC]
+    public void PlayRadarShipIncomingRpc(float x, float y, float z)
+    {
+        AudioManager.Instance.PlayRadarShipIncomingAt(new Vector3(x, y, z));
+    }
+
+    [PunRPC]
+    public void SpawnRadarStrikeImpactRpc(float x, float y, float radius)
+    {
+        RadarStrikeVfx.SpawnImpact(new Vector2(x, y), radius);
     }
 
     public static Vector3 ResolveSpaceMineDetonationPosition(int sourceViewId, Vector3 fallbackWorldPosition)
@@ -1635,54 +1874,20 @@ public class EnemyDroneBehavior : EnemyBotBehaviorBase
 
     Transform ResolveTarget()
     {
-        if (currentTarget != null)
-        {
-            PlayerHealth currentHealth = currentTarget.GetComponent<PlayerHealth>();
-            if (IsValidVisibleTarget(currentHealth, movement.DisengageRadius))
-                return currentTarget;
-        }
+        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, transform.position, movement.DisengageRadius, true))
+            return currentTarget;
 
         return FindClosestVisibleHumanTarget(movement.DetectionRadius);
     }
 
     Transform FindClosestVisibleHumanTarget(float maxDistance)
     {
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
-        Transform bestTarget = null;
-        float bestDistance = float.MaxValue;
-
-        for (int i = 0; i < players.Length; i++)
-        {
-            PlayerHealth candidate = players[i];
-            if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsBotControlled)
-                continue;
-
-            float distance = Vector2.Distance(transform.position, candidate.transform.position);
-            if (distance > maxDistance || distance >= bestDistance)
-                continue;
-
-            if (!IsValidVisibleTarget(candidate, maxDistance))
-                continue;
-
-            bestDistance = distance;
-            bestTarget = candidate.transform;
-        }
-
-        return bestTarget;
+        return EnemyTargetingUtility.FindClosestTarget(transform.position, health, maxDistance, true);
     }
 
     bool IsValidVisibleTarget(PlayerHealth candidate, float maxDistance)
     {
-        if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsBotControlled)
-            return false;
-
-        HideInNebulaTarget candidateNebulaState = candidate.GetComponent<HideInNebulaTarget>();
-        HideInNebulaTarget botNebulaState = GetComponent<HideInNebulaTarget>();
-        if (candidateNebulaState != null && candidateNebulaState.IsHiddenFromObserver(botNebulaState))
-            return false;
-
-        float distance = Vector2.Distance(transform.position, candidate.transform.position);
-        return distance <= maxDistance;
+        return EnemyTargetingUtility.IsTargetValid(candidate != null ? candidate.transform : null, health, transform.position, maxDistance, true);
     }
 
     Vector2 CalculateMoveDirection(Vector2 targetPosition)
@@ -1813,28 +2018,7 @@ public class EnemyCorsairBehavior : EnemyBotBehaviorBase
         if (shooting == null || weapon == null)
             return;
 
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
-        Transform bestTarget = null;
-        float bestDistance = float.MaxValue;
-
-        for (int i = 0; i < players.Length; i++)
-        {
-            PlayerHealth candidate = players[i];
-            if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsBotControlled)
-                continue;
-
-            HideInNebulaTarget candidateNebulaState = candidate.GetComponent<HideInNebulaTarget>();
-            HideInNebulaTarget botNebulaState = GetComponent<HideInNebulaTarget>();
-            if (candidateNebulaState != null && candidateNebulaState.IsHiddenFromObserver(botNebulaState))
-                continue;
-
-            float distance = Vector2.Distance(transform.position, candidate.transform.position);
-            if (distance > weapon.Range || distance >= bestDistance)
-                continue;
-
-            bestDistance = distance;
-            bestTarget = candidate.transform;
-        }
+        Transform bestTarget = EnemyTargetingUtility.FindClosestTarget(transform.position, health, weapon.Range, true);
 
         if (bestTarget == null)
             return;
@@ -1860,7 +2044,12 @@ public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
     const float FleeDuration = 5f;
     const float AvoidanceScanRadius = 1.75f;
     const float AvoidanceWeight = 0.62f;
-    const float MapEdgeMargin = 2.6f;
+    const float MapEdgeSoftTurnMargin = 5.4f;
+    const float MapEdgeHardTurnMargin = 1.15f;
+    const float MapEdgeLookAheadSeconds = 1.2f;
+    const float MapEdgeMinimumLookAhead = 1.1f;
+    const float MapEdgeMaximumLookAhead = 3.4f;
+    const float MapEdgeTurnTangentWeight = 0.62f;
     const float FireIntervalJitter = 0.1f;
     const float StuckVelocityThreshold = 0.16f;
     const float StuckDuration = 0.42f;
@@ -1883,6 +2072,8 @@ public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
     float orbitDirection = 1f;
     float lowSpeedSince;
     float avoidanceSuppressedUntil;
+    float edgeAvoidanceStrength;
+    Vector2 edgeInwardNormal;
 
     public override void Initialize(EnemyBot owner)
     {
@@ -1927,16 +2118,33 @@ public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
         RefreshTargetIfNeeded();
         UpdateMode();
 
+        edgeAvoidanceStrength = 0f;
+        edgeInwardNormal = Vector2.zero;
+
         Vector2 desiredDirection = ResolveDesiredDirection();
+        desiredDirection = ApplyMapEdgeSteering(desiredDirection);
         desiredDirection = ApplyAvoidance(desiredDirection);
+        desiredDirection = ApplyMapEdgeSteering(desiredDirection);
         if (desiredDirection.sqrMagnitude <= 0.001f)
             desiredDirection = rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity.normalized : patrolDirection.normalized;
 
         float speed = ResolveCurrentSpeed();
         Vector2 desiredVelocity = desiredDirection.normalized * speed;
-        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, mode == FighterMode.Combat ? 0.2f : 0.13f);
+        float velocityBlend = mode == FighterMode.Combat ? 0.2f : 0.13f;
+        if (edgeAvoidanceStrength > 0.001f)
+            velocityBlend = Mathf.Max(velocityBlend, Mathf.Lerp(0.22f, 0.54f, edgeAvoidanceStrength));
+
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, velocityBlend);
 
         Vector2 aimDirection = ResolveAimDirection(desiredDirection);
+        if (edgeAvoidanceStrength > 0.58f &&
+            edgeInwardNormal.sqrMagnitude > 0.001f &&
+            aimDirection.sqrMagnitude > 0.001f &&
+            Vector2.Dot(aimDirection.normalized, edgeInwardNormal.normalized) < -0.12f)
+        {
+            aimDirection = desiredDirection;
+        }
+
         RotateNoseToward(aimDirection);
 
         if (mode == FighterMode.Combat)
@@ -2014,9 +2222,12 @@ public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
             patrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
         }
 
-        Vector2 boundaryPush = ResolveMapBoundaryPush();
-        if (boundaryPush.sqrMagnitude > 0.001f)
-            patrolDirection = (patrolDirection * 0.55f + boundaryPush * 1.15f).normalized;
+        Vector2 boundarySteer = ResolveMapBoundarySteering(patrolDirection, out float boundaryStrength, out _);
+        if (boundaryStrength > 0.001f)
+        {
+            float steerBlend = Mathf.Clamp01(0.28f + boundaryStrength * 0.62f);
+            patrolDirection = (patrolDirection.normalized * (1f - steerBlend) + boundarySteer * steerBlend).normalized;
+        }
 
         return patrolDirection.normalized;
     }
@@ -2056,7 +2267,7 @@ public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
             : rb.linearVelocity.sqrMagnitude > 0.001f
                 ? rb.linearVelocity.normalized
                 : patrolDirection.normalized;
-        Vector2 avoidance = ResolveMapBoundaryPush();
+        Vector2 avoidance = Vector2.zero;
         int closeAvoidedObjects = 0;
         Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
         for (int i = 0; i < hits.Length; i++)
@@ -2134,24 +2345,124 @@ public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
         return hit.GetComponentInParent<DroppedCargoCrate>() != null;
     }
 
-    Vector2 ResolveMapBoundaryPush()
+    Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
+    {
+        Vector2 desired = NormalizeMoveDirection(desiredDirection);
+        Vector2 edgeSteer = ResolveMapBoundarySteering(desired, out float strength, out Vector2 inwardNormal);
+        if (strength <= 0.001f)
+            return desiredDirection;
+
+        if (strength > edgeAvoidanceStrength)
+        {
+            edgeAvoidanceStrength = strength;
+            edgeInwardNormal = inwardNormal;
+        }
+
+        float inwardDot = inwardNormal.sqrMagnitude > 0.001f ? Vector2.Dot(desired, inwardNormal.normalized) : 0f;
+        float blend = Mathf.Clamp01(0.28f + strength * 0.72f);
+        if (inwardDot < -0.05f)
+            blend = Mathf.Clamp01(blend + 0.22f);
+
+        Vector2 result = (desired * (1f - blend) + edgeSteer * blend).normalized;
+        if (strength > 0.72f && inwardNormal.sqrMagnitude > 0.001f && Vector2.Dot(result, inwardNormal.normalized) < 0.18f)
+            result = (result * 0.42f + inwardNormal.normalized * 0.92f).normalized;
+
+        return result;
+    }
+
+    Vector2 NormalizeMoveDirection(Vector2 direction)
+    {
+        if (direction.sqrMagnitude > 0.001f)
+            return direction.normalized;
+
+        if (rb != null && rb.linearVelocity.sqrMagnitude > 0.001f)
+            return rb.linearVelocity.normalized;
+
+        return patrolDirection.sqrMagnitude > 0.001f ? patrolDirection.normalized : Vector2.up;
+    }
+
+    Vector2 ResolveMapBoundarySteering(Vector2 desiredDirection, out float strength, out Vector2 inwardNormal)
     {
         Vector2 mapSize = RoomSettings.GetMapDimensions();
-        float halfX = Mathf.Max(3f, mapSize.x * 0.5f);
-        float halfY = Mathf.Max(3f, mapSize.y * 0.5f);
+        float bodyRadius = Mathf.Clamp(bot != null ? bot.VisualTargetSize * 0.58f : 0.55f, 0.35f, 1.2f);
+        float halfX = Mathf.Max(3f, mapSize.x * 0.5f - bodyRadius);
+        float halfY = Mathf.Max(3f, mapSize.y * 0.5f - bodyRadius);
+        Vector2 desired = NormalizeMoveDirection(desiredDirection);
+        float lookAheadDistance = Mathf.Clamp(
+            ResolveCurrentSpeed() * MapEdgeLookAheadSeconds,
+            MapEdgeMinimumLookAhead,
+            MapEdgeMaximumLookAhead);
+        Vector2 predictedPosition = rb.position + desired * lookAheadDistance;
         Vector2 push = Vector2.zero;
+        float maxStrength = 0f;
 
-        if (rb.position.x > halfX - MapEdgeMargin)
-            push.x -= 1f;
-        else if (rb.position.x < -halfX + MapEdgeMargin)
-            push.x += 1f;
+        float rightDistance = halfX - predictedPosition.x;
+        if (rightDistance < MapEdgeSoftTurnMargin)
+        {
+            float axisStrength = CalculateMapEdgeStrength(rightDistance);
+            push.x -= axisStrength;
+            maxStrength = Mathf.Max(maxStrength, axisStrength);
+        }
 
-        if (rb.position.y > halfY - MapEdgeMargin)
-            push.y -= 1f;
-        else if (rb.position.y < -halfY + MapEdgeMargin)
-            push.y += 1f;
+        float leftDistance = predictedPosition.x + halfX;
+        if (leftDistance < MapEdgeSoftTurnMargin)
+        {
+            float axisStrength = CalculateMapEdgeStrength(leftDistance);
+            push.x += axisStrength;
+            maxStrength = Mathf.Max(maxStrength, axisStrength);
+        }
 
-        return push;
+        float topDistance = halfY - predictedPosition.y;
+        if (topDistance < MapEdgeSoftTurnMargin)
+        {
+            float axisStrength = CalculateMapEdgeStrength(topDistance);
+            push.y -= axisStrength;
+            maxStrength = Mathf.Max(maxStrength, axisStrength);
+        }
+
+        float bottomDistance = predictedPosition.y + halfY;
+        if (bottomDistance < MapEdgeSoftTurnMargin)
+        {
+            float axisStrength = CalculateMapEdgeStrength(bottomDistance);
+            push.y += axisStrength;
+            maxStrength = Mathf.Max(maxStrength, axisStrength);
+        }
+
+        if (push.sqrMagnitude <= 0.001f)
+        {
+            strength = 0f;
+            inwardNormal = Vector2.zero;
+            return Vector2.zero;
+        }
+
+        inwardNormal = push.normalized;
+        strength = Mathf.Clamp01(maxStrength);
+
+        bool affectsX = Mathf.Abs(push.x) > 0.001f;
+        bool affectsY = Mathf.Abs(push.y) > 0.001f;
+        Vector2 tangent = new Vector2(-inwardNormal.y, inwardNormal.x);
+        if (Vector2.Dot(tangent, desired) < 0f)
+            tangent = -tangent;
+
+        float outwardAmount = Mathf.Clamp01(-Vector2.Dot(desired, inwardNormal));
+        float tangentWeight = affectsX != affectsY
+            ? Mathf.Lerp(MapEdgeTurnTangentWeight, 0.2f, outwardAmount)
+            : Mathf.Lerp(0.28f, 0.12f, outwardAmount);
+
+        Vector2 steering = inwardNormal + tangent * tangentWeight;
+        return steering.sqrMagnitude > 0.001f ? steering.normalized : inwardNormal;
+    }
+
+    float CalculateMapEdgeStrength(float distanceToEdge)
+    {
+        float softStrength = Mathf.Clamp01((MapEdgeSoftTurnMargin - distanceToEdge) / MapEdgeSoftTurnMargin);
+        if (distanceToEdge < MapEdgeHardTurnMargin)
+        {
+            float hardStrength = Mathf.InverseLerp(MapEdgeHardTurnMargin, -MapEdgeHardTurnMargin, distanceToEdge);
+            softStrength = Mathf.Max(softStrength, 0.72f + hardStrength * 0.28f);
+        }
+
+        return Mathf.Clamp01(softStrength);
     }
 
     float ResolveCurrentSpeed()
@@ -2203,60 +2514,26 @@ public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
 
     Transform ResolveTarget()
     {
-        if (currentTarget != null)
-        {
-            PlayerHealth currentHealth = currentTarget.GetComponent<PlayerHealth>();
-            float allowedRange = mode == FighterMode.Combat ? movement.DisengageRadius : movement.DetectionRadius;
-            if (IsValidVisibleTarget(currentHealth, allowedRange))
-                return currentTarget;
-        }
+        float allowedRange = mode == FighterMode.Combat ? movement.DisengageRadius : movement.DetectionRadius;
+        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, transform.position, allowedRange, true))
+            return currentTarget;
 
         return FindClosestVisibleHumanTarget(movement.DetectionRadius);
     }
 
     Transform FindClosestVisibleHumanTarget(float maxDistance)
     {
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
-        Transform bestTarget = null;
-        float bestDistance = float.MaxValue;
-
-        for (int i = 0; i < players.Length; i++)
-        {
-            PlayerHealth candidate = players[i];
-            if (!IsValidVisibleTarget(candidate, maxDistance))
-                continue;
-
-            float distance = Vector2.Distance(transform.position, candidate.transform.position);
-            if (distance >= bestDistance)
-                continue;
-
-            bestDistance = distance;
-            bestTarget = candidate.transform;
-        }
-
-        return bestTarget;
+        return EnemyTargetingUtility.FindClosestTarget(transform.position, health, maxDistance, true);
     }
 
     bool IsValidVisibleTarget(PlayerHealth candidate, float maxDistance)
     {
-        if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsBotControlled)
-            return false;
-
-        HideInNebulaTarget candidateNebulaState = candidate.GetComponent<HideInNebulaTarget>();
-        HideInNebulaTarget botNebulaState = GetComponent<HideInNebulaTarget>();
-        if (candidateNebulaState != null && candidateNebulaState.IsHiddenFromObserver(botNebulaState))
-            return false;
-
-        return Vector2.Distance(transform.position, candidate.transform.position) <= maxDistance;
+        return EnemyTargetingUtility.IsTargetValid(candidate != null ? candidate.transform : null, health, transform.position, maxDistance, true);
     }
 
     bool IsTargetWithin(Transform target, float maxDistance)
     {
-        if (target == null)
-            return false;
-
-        PlayerHealth targetHealth = target.GetComponent<PlayerHealth>();
-        return IsValidVisibleTarget(targetHealth, maxDistance);
+        return EnemyTargetingUtility.IsTargetValid(target, health, transform.position, maxDistance, true);
     }
 }
 
@@ -2446,50 +2723,20 @@ public class EnemyMothershipBehavior : EnemyBotBehaviorBase
 
     Transform ResolveTarget()
     {
-        if (currentTarget != null)
-        {
-            PlayerHealth currentHealth = currentTarget.GetComponent<PlayerHealth>();
-            if (IsValidVisibleTarget(currentHealth, movement.DisengageRadius))
-                return currentTarget;
-        }
+        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, transform.position, movement.DisengageRadius, true))
+            return currentTarget;
 
         return FindClosestVisibleHumanTarget(movement.DetectionRadius);
     }
 
     Transform FindClosestVisibleHumanTarget(float maxDistance)
     {
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
-        Transform bestTarget = null;
-        float bestDistance = float.MaxValue;
-
-        for (int i = 0; i < players.Length; i++)
-        {
-            PlayerHealth candidate = players[i];
-            if (!IsValidVisibleTarget(candidate, maxDistance))
-                continue;
-
-            float distance = Vector2.Distance(transform.position, candidate.transform.position);
-            if (distance >= bestDistance)
-                continue;
-
-            bestDistance = distance;
-            bestTarget = candidate.transform;
-        }
-
-        return bestTarget;
+        return EnemyTargetingUtility.FindClosestTarget(transform.position, health, maxDistance, true);
     }
 
     bool IsValidVisibleTarget(PlayerHealth candidate, float maxDistance)
     {
-        if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsBotControlled)
-            return false;
-
-        HideInNebulaTarget candidateNebulaState = candidate.GetComponent<HideInNebulaTarget>();
-        HideInNebulaTarget botNebulaState = GetComponent<HideInNebulaTarget>();
-        if (candidateNebulaState != null && candidateNebulaState.IsHiddenFromObserver(botNebulaState))
-            return false;
-
-        return Vector2.Distance(transform.position, candidate.transform.position) <= maxDistance;
+        return EnemyTargetingUtility.IsTargetValid(candidate != null ? candidate.transform : null, health, transform.position, maxDistance, true);
     }
 
     void RegenerateShield()
@@ -2655,25 +2902,7 @@ public class EnemyMothershipBehavior : EnemyBotBehaviorBase
 
     Transform FindClosestVisibleHumanTargetFrom(Vector3 origin, float maxDistance)
     {
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
-        Transform bestTarget = null;
-        float bestDistance = float.MaxValue;
-
-        for (int i = 0; i < players.Length; i++)
-        {
-            PlayerHealth candidate = players[i];
-            if (!IsValidVisibleTarget(candidate, maxDistance))
-                continue;
-
-            float distance = Vector2.Distance(origin, candidate.transform.position);
-            if (distance > maxDistance || distance >= bestDistance)
-                continue;
-
-            bestDistance = distance;
-            bestTarget = candidate.transform;
-        }
-
-        return bestTarget;
+        return EnemyTargetingUtility.FindClosestTarget(origin, health, maxDistance, true);
     }
 
     static Sprite LoadTurretSprite()
@@ -2789,7 +3018,7 @@ public class EnemyMineBehavior : EnemyBotBehaviorBase
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth candidate = players[i];
-            if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating)
+            if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating || candidate.GetComponent<LureBeaconDecoy>() != null)
                 continue;
 
             if (bot != null && bot.ShouldIgnoreMineTriggerFor(candidate))
@@ -2800,6 +3029,15 @@ public class EnemyMineBehavior : EnemyBotBehaviorBase
                 continue;
 
             if (Vector2.Distance(transform.position, candidate.transform.position) <= radius)
+                return true;
+        }
+
+        foreach (LureBeaconDecoy beacon in LureBeaconDecoy.GetActiveBeacons())
+        {
+            if (beacon == null || !beacon.CanBeTargeted)
+                continue;
+
+            if (Vector2.Distance(transform.position, beacon.transform.position) <= radius)
                 return true;
         }
 
@@ -2920,5 +3158,665 @@ public class EnemySpaceTruckBehavior : EnemyBotBehaviorBase
             return;
 
         targetZoneIndex = (targetZoneIndex + 1) % extractionZones.Length;
+    }
+}
+
+[RequireComponent(typeof(EnemyBot))]
+public class EnemyRadarShipBehavior : EnemyBotBehaviorBase
+{
+    const float StrikeWarningDuration = 2f;
+    const float StrikeRadius = 1.35f;
+    const float AvoidanceScanRadius = 2.2f;
+    const float AvoidanceWeight = 0.34f;
+    const float PatrolRefreshInterval = 1.15f;
+    const float PatrolArrivalDistance = 1.9f;
+    const float PatrolFallbackTurnIntervalMin = 1.4f;
+    const float PatrolFallbackTurnIntervalMax = 2.5f;
+    const float MapEdgeMargin = 2f;
+    const float MapEdgeSteerWeight = 0.78f;
+
+    Rigidbody2D rb;
+    PhotonView view;
+    PlayerHealth health;
+    EnemyMovementProfile movement;
+    EnemyWeaponProfile weapon;
+    Transform currentTarget;
+    Transform patrolCollectibleTarget;
+    Vector2 fallbackPatrolDirection = Vector2.up;
+    float nextTargetRefreshTime;
+    float nextPatrolRefreshTime;
+    float nextFallbackTurnTime;
+    float nextStrikeTime;
+    float orbitDirection = 1f;
+    bool strikePending;
+
+    public override void Initialize(EnemyBot owner)
+    {
+        base.Initialize(owner);
+        rb = owner.GetComponent<Rigidbody2D>();
+        view = owner.GetComponent<PhotonView>();
+        health = owner.GetComponent<PlayerHealth>();
+        movement = owner.Definition != null ? owner.Definition.Movement : null;
+        weapon = owner.Definition != null ? owner.Definition.Weapon : null;
+
+        int seed = view != null ? view.ViewID : Random.Range(1, 9999);
+        float angle = Mathf.Abs(seed * 0.171f) % (Mathf.PI * 2f);
+        fallbackPatrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+        orbitDirection = seed % 2 == 0 ? 1f : -1f;
+        nextStrikeTime = Time.time + Random.Range(0.5f, 1.2f);
+    }
+
+    public override void TickBehavior()
+    {
+        if (bot == null || view == null || !view.IsMine || rb == null || movement == null)
+            return;
+
+        if (health != null && health.IsWreck)
+            return;
+
+        RefreshTargetIfNeeded();
+        RefreshPatrolTargetIfNeeded();
+
+        Vector2 desiredDirection = currentTarget != null
+            ? ResolveCombatDirection()
+            : ResolvePatrolDirection();
+
+        desiredDirection = ApplyCollectibleAvoidance(desiredDirection);
+        desiredDirection = ApplyMapEdgeSteering(desiredDirection);
+        if (desiredDirection.sqrMagnitude <= 0.001f)
+            desiredDirection = fallbackPatrolDirection.sqrMagnitude > 0.001f ? fallbackPatrolDirection : Vector2.up;
+
+        float speedMultiplier = currentTarget != null ? 1f : 0.82f;
+        Vector2 desiredVelocity = desiredDirection.normalized * (bot.EffectiveMoveSpeed * speedMultiplier);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, currentTarget != null ? 0.16f : 0.11f);
+
+        Vector2 aimDirection = currentTarget != null
+            ? (Vector2)currentTarget.position - rb.position
+            : rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity.normalized : desiredDirection;
+        RotateHullToward(aimDirection);
+
+        if (currentTarget != null)
+            TryCallRadarStrike();
+    }
+
+    public void NotifyDamageSource(int attackerViewID)
+    {
+        PhotonView attackerView = attackerViewID > 0 ? PhotonView.Find(attackerViewID) : null;
+        if (attackerView != null)
+        {
+            currentTarget = attackerView.transform;
+            nextTargetRefreshTime = Time.time + 0.4f;
+            nextStrikeTime = Mathf.Min(nextStrikeTime, Time.time + 0.25f);
+        }
+    }
+
+    void RefreshTargetIfNeeded()
+    {
+        if (Time.time < nextTargetRefreshTime)
+            return;
+
+        nextTargetRefreshTime = Time.time + Mathf.Max(0.18f, movement.TargetRefreshInterval);
+        currentTarget = ResolvePlayerTarget();
+    }
+
+    void RefreshPatrolTargetIfNeeded()
+    {
+        if (currentTarget != null)
+            return;
+
+        if (patrolCollectibleTarget != null && patrolCollectibleTarget.gameObject.activeInHierarchy)
+            return;
+
+        if (Time.time < nextPatrolRefreshTime)
+            return;
+
+        nextPatrolRefreshTime = Time.time + PatrolRefreshInterval;
+        patrolCollectibleTarget = ResolveBestCollectibleTarget();
+    }
+
+    Transform ResolvePlayerTarget()
+    {
+        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, movement.DisengageRadius, false))
+            return currentTarget;
+
+        return EnemyTargetingUtility.FindClosestTarget(rb.position, health, movement.DetectionRadius, false);
+    }
+
+    bool IsValidPlayerTarget(PlayerHealth candidate, float maxDistance)
+    {
+        return EnemyTargetingUtility.IsTargetValid(candidate != null ? candidate.transform : null, health, rb.position, maxDistance, false);
+    }
+
+    Transform ResolveBestCollectibleTarget()
+    {
+        Transform bestTarget = null;
+        float bestScore = float.MinValue;
+
+        Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < treasures.Length; i++)
+        {
+            Treasure treasure = treasures[i];
+            if (treasure == null || treasure.isBeingCollected)
+                continue;
+
+            float score = ScoreCollectible(treasure.transform.position, treasure.itemId, 1f);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestTarget = treasure.transform;
+            }
+        }
+
+        ShipWreck[] wrecks = FindObjectsByType<ShipWreck>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < wrecks.Length; i++)
+        {
+            ShipWreck wreck = wrecks[i];
+            if (wreck == null || !wreck.HasLoot || wreck.isBeingCollected)
+                continue;
+
+            string itemId = wreck.GetLootItemAt(wreck.GetFirstLootIndex());
+            float score = ScoreCollectible(wreck.transform.position, itemId, 1.18f);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestTarget = wreck.transform;
+            }
+        }
+
+        DroppedCargoCrate[] crates = FindObjectsByType<DroppedCargoCrate>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < crates.Length; i++)
+        {
+            DroppedCargoCrate crate = crates[i];
+            if (crate == null || !crate.HasLoot || crate.isBeingCollected)
+                continue;
+
+            float score = ScoreCollectible(crate.transform.position, crate.StoredItemId, 1.08f);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestTarget = crate.transform;
+            }
+        }
+
+        return bestTarget;
+    }
+
+    float ScoreCollectible(Vector2 position, string itemId, float categoryMultiplier)
+    {
+        int sellValue = Mathf.Max(1, InventoryItemCatalog.GetSellValueAstrons(itemId));
+        float distance = Vector2.Distance(rb.position, position);
+        float rarityWeight = (int)InventoryItemCatalog.GetRarity(itemId) * 110f;
+        return sellValue * categoryMultiplier + rarityWeight - distance * 38f;
+    }
+
+    Vector2 ResolvePatrolDirection()
+    {
+        if (patrolCollectibleTarget != null && patrolCollectibleTarget.gameObject.activeInHierarchy)
+        {
+            Vector2 toTarget = (Vector2)patrolCollectibleTarget.position - rb.position;
+            if (toTarget.magnitude <= PatrolArrivalDistance)
+            {
+                patrolCollectibleTarget = null;
+                nextPatrolRefreshTime = 0f;
+            }
+            else
+            {
+                return toTarget.normalized;
+            }
+        }
+
+        if (Time.time >= nextFallbackTurnTime)
+        {
+            nextFallbackTurnTime = Time.time + Random.Range(PatrolFallbackTurnIntervalMin, PatrolFallbackTurnIntervalMax);
+            float angle = Mathf.Atan2(fallbackPatrolDirection.y, fallbackPatrolDirection.x) + Random.Range(-0.52f, 0.52f);
+            fallbackPatrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+        }
+
+        return fallbackPatrolDirection;
+    }
+
+    Vector2 ResolveCombatDirection()
+    {
+        if (currentTarget == null)
+            return ResolvePatrolDirection();
+
+        Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
+        float distance = toTarget.magnitude;
+        if (distance <= 0.001f)
+            return ResolvePatrolDirection();
+
+        Vector2 toward = toTarget / distance;
+        Vector2 tangent = orbitDirection > 0f
+            ? new Vector2(-toward.y, toward.x)
+            : new Vector2(toward.y, -toward.x);
+
+        float wobble = Mathf.Sin(Time.time * 1.35f + (view != null ? view.ViewID : 1) * 0.13f) * 0.14f;
+        if (distance > movement.PreferredDistance + 0.5f)
+            return (toward * 0.78f + tangent * (0.32f + wobble)).normalized;
+
+        if (distance < movement.OrbitDistance)
+            return (-toward * 0.62f + tangent * 0.78f).normalized;
+
+        return (tangent * 0.92f + toward * 0.12f).normalized;
+    }
+
+    Vector2 ApplyCollectibleAvoidance(Vector2 desiredDirection)
+    {
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
+        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        Vector2 avoidance = Vector2.zero;
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null || hit.attachedRigidbody == rb)
+                continue;
+
+            if (!IsAvoidedObject(hit))
+                continue;
+
+            Vector2 closest = hit.ClosestPoint(rb.position);
+            Vector2 away = rb.position - closest;
+            if (away.sqrMagnitude <= 0.0001f)
+                away = rb.position - (Vector2)hit.transform.position;
+
+            float distance = Mathf.Max(0.12f, away.magnitude);
+            if (distance > AvoidanceScanRadius)
+                continue;
+
+            avoidance += away.normalized * Mathf.Clamp01((AvoidanceScanRadius - distance) / AvoidanceScanRadius);
+        }
+
+        if (avoidance.sqrMagnitude <= 0.001f)
+            return desiredDirection;
+
+        Vector2 result = (desired + avoidance.normalized * AvoidanceWeight).normalized;
+        return Vector2.Dot(result, desired) < 0.1f
+            ? (desired * 0.78f + avoidance.normalized * 0.22f).normalized
+            : result;
+    }
+
+    bool IsAvoidedObject(Collider2D hit)
+    {
+        if (hit.GetComponentInParent<ObstacleChunk>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<Treasure>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<ShipWreck>() != null)
+            return true;
+
+        return hit.GetComponentInParent<DroppedCargoCrate>() != null;
+    }
+
+    Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
+    {
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
+        float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
+        Vector2 predicted = rb.position + desired * Mathf.Max(1.4f, bot.EffectiveMoveSpeed * 1.8f);
+        Vector2 inward = Vector2.zero;
+
+        if (predicted.x > halfX)
+            inward.x -= Mathf.InverseLerp(halfX + 1.4f, halfX, predicted.x);
+        else if (predicted.x < -halfX)
+            inward.x += Mathf.InverseLerp(-halfX - 1.4f, -halfX, predicted.x);
+
+        if (predicted.y > halfY)
+            inward.y -= Mathf.InverseLerp(halfY + 1.4f, halfY, predicted.y);
+        else if (predicted.y < -halfY)
+            inward.y += Mathf.InverseLerp(-halfY - 1.4f, -halfY, predicted.y);
+
+        if (inward.sqrMagnitude <= 0.001f)
+            return desiredDirection;
+
+        return (desired * (1f - MapEdgeSteerWeight) + inward.normalized * MapEdgeSteerWeight).normalized;
+    }
+
+    void RotateHullToward(Vector2 direction)
+    {
+        if (direction.sqrMagnitude <= 0.001f)
+            return;
+
+        float targetAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg + 90f;
+        float nextAngle = Mathf.MoveTowardsAngle(rb.rotation, targetAngle, movement.TurnResponsiveness * Time.fixedDeltaTime);
+        rb.MoveRotation(nextAngle);
+    }
+
+    void TryCallRadarStrike()
+    {
+        if (weapon == null || currentTarget == null || strikePending || Time.time < nextStrikeTime)
+            return;
+
+        Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
+        if (toTarget.magnitude > weapon.Range)
+            return;
+
+        Vector2 strikePoint = currentTarget.position;
+        strikePending = true;
+        nextStrikeTime = Time.time + Mathf.Max(0.2f, weapon.FireRate);
+
+        if (bot.photonView != null)
+        {
+            bot.photonView.RPC(nameof(EnemyBot.PlayRadarShipIncomingRpc), RpcTarget.All, strikePoint.x, strikePoint.y, 0f);
+            bot.photonView.RPC(nameof(EnemyBot.SpawnRadarStrikeMarkerRpc), RpcTarget.All, strikePoint.x, strikePoint.y, StrikeWarningDuration, StrikeRadius);
+        }
+
+        StartCoroutine(ExecuteStrikeAfterDelay(strikePoint));
+    }
+
+    IEnumerator ExecuteStrikeAfterDelay(Vector2 strikePoint)
+    {
+        yield return new WaitForSeconds(StrikeWarningDuration);
+
+        if (bot == null || bot.photonView == null)
+        {
+            strikePending = false;
+            yield break;
+        }
+
+        bot.photonView.RPC(nameof(EnemyBot.PlayRadarShipShootRpc), RpcTarget.All, strikePoint.x, strikePoint.y, 0f);
+        ApplyStrikeDamage(strikePoint);
+        bot.photonView.RPC(nameof(EnemyBot.SpawnRadarStrikeImpactRpc), RpcTarget.All, strikePoint.x, strikePoint.y, StrikeRadius);
+        strikePending = false;
+    }
+
+    void ApplyStrikeDamage(Vector2 strikePoint)
+    {
+        Collider2D[] hits = Physics2D.OverlapCircleAll(strikePoint, StrikeRadius);
+        HashSet<int> processedViewIds = new HashSet<int>();
+        int attackerViewId = bot.photonView != null ? bot.photonView.ViewID : 0;
+        int baseDamage = RoomSettings.GetEnemyDamage(bot.Kind);
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            PlayerHealth candidate = hits[i] != null ? hits[i].GetComponentInParent<PlayerHealth>() : null;
+            PhotonView targetView = candidate != null ? candidate.GetComponent<PhotonView>() : null;
+            if (candidate == null || targetView == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating)
+                continue;
+
+            if (candidate.GetComponent<LureBeaconDecoy>() != null)
+                continue;
+
+            if (!processedViewIds.Add(targetView.ViewID))
+                continue;
+
+            float distance = Vector2.Distance(strikePoint, candidate.transform.position);
+            float falloff = Mathf.Lerp(1f, 0.65f, Mathf.Clamp01(distance / StrikeRadius));
+            int damage = Mathf.Max(1, Mathf.RoundToInt(baseDamage * falloff));
+            targetView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, damage, damage, attackerViewId, strikePoint.x, strikePoint.y);
+        }
+
+        foreach (LureBeaconDecoy beacon in LureBeaconDecoy.GetActiveBeacons())
+        {
+            if (beacon == null || !beacon.CanBeTargeted || beacon.photonView == null)
+                continue;
+
+            if (!processedViewIds.Add(beacon.photonView.ViewID))
+                continue;
+
+            float distance = Vector2.Distance(strikePoint, beacon.transform.position);
+            if (distance > StrikeRadius)
+                continue;
+
+            float falloff = Mathf.Lerp(1f, 0.65f, Mathf.Clamp01(distance / StrikeRadius));
+            int damage = Mathf.Max(1, Mathf.RoundToInt(baseDamage * falloff));
+            beacon.photonView.RPC(nameof(LureBeaconDecoy.TakeBeaconDamageProfileAt), RpcTarget.MasterClient, damage, damage, attackerViewId, strikePoint.x, strikePoint.y);
+        }
+    }
+}
+
+public sealed class RadarStrikeVfx : MonoBehaviour
+{
+    enum VfxMode
+    {
+        Marker,
+        Impact
+    }
+
+    const float MarkerZ = -0.34f;
+    const float ImpactZ = -0.35f;
+    const int MarkerSortingOrder = 7100;
+    const int ImpactSortingOrder = 7150;
+
+    static Material lineMaterial;
+
+    VfxMode mode;
+    Vector2 worldPosition;
+    float duration;
+    float radius;
+    float startedAt;
+    LineRenderer outerGlow;
+    LineRenderer outerCore;
+    LineRenderer innerCore;
+    LineRenderer crossA;
+    LineRenderer crossB;
+    LineRenderer impactFlash;
+    LineRenderer impactRing;
+    LineRenderer impactRingOuter;
+    LineRenderer impactBeam;
+    LineRenderer impactCoreGlow;
+    LineRenderer[] impactSparks;
+
+    public static void SpawnMarker(Vector2 position, float warningDuration, float radius)
+    {
+        GameObject effect = new GameObject("RadarStrikeMarkerVfx");
+        RadarStrikeVfx vfx = effect.AddComponent<RadarStrikeVfx>();
+        vfx.InitializeMarker(position, warningDuration, radius);
+    }
+
+    public static void SpawnImpact(Vector2 position, float radius)
+    {
+        GameObject effect = new GameObject("RadarStrikeImpactVfx");
+        RadarStrikeVfx vfx = effect.AddComponent<RadarStrikeVfx>();
+        vfx.InitializeImpact(position, radius);
+    }
+
+    void InitializeMarker(Vector2 position, float warningDuration, float configuredRadius)
+    {
+        mode = VfxMode.Marker;
+        worldPosition = position;
+        duration = Mathf.Max(0.2f, warningDuration);
+        radius = Mathf.Max(0.45f, configuredRadius);
+        startedAt = Time.time;
+        EnsureMarkerLines();
+        transform.position = new Vector3(position.x, position.y, MarkerZ);
+    }
+
+    void InitializeImpact(Vector2 position, float configuredRadius)
+    {
+        mode = VfxMode.Impact;
+        worldPosition = position;
+        duration = 0.92f;
+        radius = Mathf.Max(0.45f, configuredRadius);
+        startedAt = Time.time;
+        EnsureImpactLines();
+        transform.position = new Vector3(position.x, position.y, ImpactZ);
+    }
+
+    void Update()
+    {
+        float elapsed = Time.time - startedAt;
+        float progress = duration > 0.001f ? Mathf.Clamp01(elapsed / duration) : 1f;
+
+        if (mode == VfxMode.Marker)
+        {
+            UpdateMarker(progress);
+            if (progress >= 1f)
+                Destroy(gameObject);
+            return;
+        }
+
+        UpdateImpact(progress);
+        if (progress >= 1f)
+            Destroy(gameObject);
+    }
+
+    void EnsureMarkerLines()
+    {
+        outerGlow = CreateLine("OuterGlow", MarkerSortingOrder, 0.22f);
+        outerCore = CreateLine("OuterCore", MarkerSortingOrder + 1, 0.08f);
+        innerCore = CreateLine("InnerCore", MarkerSortingOrder + 2, 0.05f);
+        crossA = CreateLine("CrossA", MarkerSortingOrder + 3, 0.07f);
+        crossB = CreateLine("CrossB", MarkerSortingOrder + 3, 0.07f);
+
+        outerGlow.loop = true;
+        outerCore.loop = true;
+        innerCore.loop = true;
+    }
+
+    void EnsureImpactLines()
+    {
+        impactBeam = CreateLine("ImpactBeam", ImpactSortingOrder, 0.24f);
+        impactCoreGlow = CreateLine("ImpactCoreGlow", ImpactSortingOrder + 1, 0.34f);
+        impactFlash = CreateLine("ImpactFlash", ImpactSortingOrder + 2, 0.16f);
+        impactRing = CreateLine("ImpactRing", ImpactSortingOrder + 3, 0.12f);
+        impactRingOuter = CreateLine("ImpactRingOuter", ImpactSortingOrder + 2, 0.22f);
+        impactSparks = new LineRenderer[7];
+        for (int i = 0; i < impactSparks.Length; i++)
+            impactSparks[i] = CreateLine("ImpactSpark" + i, ImpactSortingOrder + 4 + i, 0.06f + i * 0.004f);
+
+        impactCoreGlow.loop = true;
+        impactRing.loop = true;
+        impactRingOuter.loop = true;
+    }
+
+    void UpdateMarker(float progress)
+    {
+        float pulse = Mathf.Sin(Time.time * 9.4f) * 0.5f + 0.5f;
+        float urgency = Mathf.SmoothStep(0f, 1f, progress);
+        Color warning = Color.Lerp(new Color(1f, 0.68f, 0.2f, 0.95f), new Color(1f, 0.12f, 0.08f, 1f), urgency);
+        Color glow = new Color(warning.r, warning.g * 0.9f, warning.b * 0.9f, Mathf.Lerp(0.24f, 0.52f, pulse));
+        float outerRadius = radius * Mathf.Lerp(0.86f, 1.08f, pulse);
+        float innerRadius = radius * 0.58f;
+        float crossExtent = radius * 0.7f;
+
+        UpdateRing(outerGlow, outerRadius, glow, MarkerSortingOrder, 36, 0.06f);
+        UpdateRing(outerCore, radius, new Color(1f, 0.98f, 0.9f, 0.96f), MarkerSortingOrder + 1, 32, 0.03f);
+        UpdateRing(innerCore, innerRadius, new Color(warning.r, warning.g, warning.b, 0.92f), MarkerSortingOrder + 2, 28, 0.04f);
+
+        Vector3 center = new Vector3(worldPosition.x, worldPosition.y, MarkerZ);
+        UpdateSimpleLine(crossA, center + new Vector3(-crossExtent, 0f, 0f), center + new Vector3(crossExtent, 0f, 0f), warning, MarkerSortingOrder + 3);
+        UpdateSimpleLine(crossB, center + new Vector3(0f, -crossExtent, 0f), center + new Vector3(0f, crossExtent, 0f), warning, MarkerSortingOrder + 3);
+    }
+
+    void UpdateImpact(float progress)
+    {
+        float inverse = 1f - progress;
+        float blast = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(progress * 1.25f));
+        Color hot = Color.Lerp(new Color(1f, 0.98f, 0.9f, 1f), new Color(1f, 0.36f, 0.08f, 0f), blast);
+        Color glow = Color.Lerp(new Color(1f, 0.86f, 0.52f, 0.92f), new Color(0.46f, 0.16f, 0.06f, 0f), progress);
+        Color ring = Color.Lerp(new Color(1f, 0.62f, 0.18f, 0.96f), new Color(0.82f, 0.1f, 0.04f, 0f), progress);
+        Vector3 center = new Vector3(worldPosition.x, worldPosition.y, ImpactZ);
+
+        float beamLength = Mathf.Lerp(radius * 3.1f, radius * 0.45f, blast);
+        UpdateSimpleLine(
+            impactBeam,
+            center + new Vector3(radius * 0.08f, beamLength, 0f),
+            center,
+            new Color(1f, 0.88f, 0.58f, inverse * 0.86f),
+            ImpactSortingOrder);
+
+        float coreRadius = Mathf.Lerp(radius * 0.32f, radius * 0.92f, blast);
+        float flashRadius = Mathf.Lerp(radius * 0.22f, radius * 1.14f, Mathf.SmoothStep(0f, 1f, progress));
+        UpdateRing(impactCoreGlow, coreRadius, glow, ImpactSortingOrder + 1, 24, 0.16f);
+        UpdateRing(impactFlash, flashRadius, hot, ImpactSortingOrder + 2, 22, 0.12f);
+        UpdateRing(impactRing, Mathf.Lerp(radius * 0.18f, radius * 1.0f, progress), ring, ImpactSortingOrder + 3, 28, 0.18f);
+        UpdateRing(impactRingOuter, Mathf.Lerp(radius * 0.4f, radius * 1.45f, progress), new Color(ring.r, ring.g, ring.b, inverse * 0.26f), ImpactSortingOrder + 2, 30, 0.24f);
+        UpdateImpactSparks(progress, center);
+    }
+
+    void UpdateImpactSparks(float progress, Vector3 center)
+    {
+        if (impactSparks == null)
+            return;
+
+        float inverse = 1f - progress;
+        for (int i = 0; i < impactSparks.Length; i++)
+        {
+            LineRenderer spark = impactSparks[i];
+            if (spark == null)
+                continue;
+
+            float angle = ((360f / impactSparks.Length) * i + 18f * Mathf.Sin(i * 3.17f)) * Mathf.Deg2Rad;
+            Vector2 dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle) * 0.72f + 0.28f).normalized;
+            float startDistance = Mathf.Lerp(radius * 0.08f, radius * 0.42f, progress);
+            float length = Mathf.Lerp(radius * (0.9f + i * 0.08f), radius * 0.18f, progress);
+            Vector3 start = center + (Vector3)(dir * startDistance);
+            Vector3 end = start + (Vector3)(dir * length);
+            Color sparkColor = Color.Lerp(new Color(1f, 0.92f, 0.68f, inverse * 0.95f), new Color(0.82f, 0.2f, 0.05f, 0f), progress);
+            UpdateSimpleLine(spark, start, end, sparkColor, ImpactSortingOrder + 4 + i);
+        }
+    }
+
+    LineRenderer CreateLine(string lineName, int sortingOrder, float width)
+    {
+        if (lineMaterial == null)
+        {
+            Shader shader = Shader.Find("Sprites/Default");
+            lineMaterial = new Material(shader)
+            {
+                name = "RadarStrikeVfxMaterial",
+                color = Color.white
+            };
+            lineMaterial.renderQueue = 5000;
+        }
+
+        GameObject lineObject = new GameObject(lineName);
+        lineObject.transform.SetParent(transform, false);
+        LineRenderer line = lineObject.AddComponent<LineRenderer>();
+        line.material = lineMaterial;
+        line.useWorldSpace = true;
+        line.textureMode = LineTextureMode.Stretch;
+        line.numCapVertices = 10;
+        line.numCornerVertices = 8;
+        line.alignment = LineAlignment.View;
+        line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        line.receiveShadows = false;
+        line.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        line.sortingOrder = sortingOrder;
+        line.startWidth = width;
+        line.endWidth = width;
+        line.positionCount = 0;
+        return line;
+    }
+
+    void UpdateRing(LineRenderer line, float ringRadius, Color color, int sortingOrder, int segments, float wobble = 0f)
+    {
+        if (line == null)
+            return;
+
+        line.enabled = color.a > 0.001f;
+        line.sortingOrder = sortingOrder;
+        line.startColor = color;
+        line.endColor = color;
+        line.positionCount = segments;
+
+        Vector3 center = new Vector3(worldPosition.x, worldPosition.y, mode == VfxMode.Marker ? MarkerZ : ImpactZ);
+        for (int i = 0; i < segments; i++)
+        {
+            float t = (float)i / segments * Mathf.PI * 2f;
+            float localRadius = ringRadius;
+            if (wobble > 0.0001f)
+                localRadius *= 1f + Mathf.Sin(t * 3f + startedAt * 1.7f + Time.time * 9.5f + i * 0.19f) * wobble;
+
+            line.SetPosition(i, center + new Vector3(Mathf.Cos(t) * localRadius, Mathf.Sin(t) * localRadius, 0f));
+        }
+    }
+
+    void UpdateSimpleLine(LineRenderer line, Vector3 start, Vector3 end, Color color, int sortingOrder)
+    {
+        if (line == null)
+            return;
+
+        line.enabled = color.a > 0.001f;
+        line.sortingOrder = sortingOrder;
+        line.startColor = color;
+        line.endColor = color;
+        line.positionCount = 2;
+        line.SetPosition(0, start);
+        line.SetPosition(1, end);
     }
 }

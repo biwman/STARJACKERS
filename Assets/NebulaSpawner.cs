@@ -258,13 +258,13 @@ public class NebulaSpawner : MonoBehaviour
             switch (density)
             {
                 case "none": return 0f;
-                case "low": return 0.8f;
-                case "high": return 2.4f;
-                default: return 1.35f;
+                case "low": return 0.4f;
+                case "high": return 1.2f;
+                default: return 0.675f;
             }
         }
 
-        return 1f;
+        return 0.5f;
     }
 
     bool IsRoundStarted()

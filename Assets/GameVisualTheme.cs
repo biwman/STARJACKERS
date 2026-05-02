@@ -8,6 +8,17 @@ using UnityEditor;
 [ExecuteAlways]
 public class GameVisualTheme : MonoBehaviour
 {
+    public const string WorldSortingLayerName = "Ground";
+    public const int BackgroundSortingOrder = 0;
+    public const int EndDisasterSortingOrder = 6;
+    public const int ExtractionZoneSortingOrder = 8;
+    public const int RepairBaySortingOrder = 9;
+    public const int ObstacleSortingOrder = 20;
+    public const int TreasureSortingOrder = 22;
+    public const int WreckSortingOrder = 24;
+    public const int EnemySortingOrder = 30;
+    public const int PlayerSortingOrder = 32;
+
     const float PlayerTargetSize = 1.04f;
     const float AstronautTargetSize = 0.56f;
     const float TreasureTargetSize = 1.5f;
@@ -32,8 +43,11 @@ public class GameVisualTheme : MonoBehaviour
     Sprite goldTreasureSprite;
     Sprite rareTreasureSprite;
     Sprite richTreasureSprite;
-    Sprite spaceJunkWorldSprite;
+    Sprite epicTreasureSprite;
     Sprite legendaryTreasureSprite;
+    Sprite spaceJunkTrashSprite;
+    Sprite spaceJunkStandardSprite;
+    Sprite spaceJunkAsteroidSprite;
     Sprite[] obstacleSprites;
     Sprite extractionSprite;
     Sprite backgroundSprite;
@@ -221,8 +235,11 @@ public class GameVisualTheme : MonoBehaviour
         goldTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_green_uncommon_resource", "Assets/Resources/treasure_asteroid_green_uncommon_resource.png", "Assets/treasure_asteroid_green_uncommon.png");
         rareTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_blue_rare_resource", "Assets/Resources/treasure_asteroid_blue_rare_resource.png", "Assets/treasure_asteroid_blue_rare.png");
         richTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_violet_rare_resource", "Assets/Resources/treasure_asteroid_violet_rare_resource.png", "Assets/treasure_asteroid_violet_rare.png");
-        spaceJunkWorldSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_burgundy_epic_resource", "Assets/Resources/treasure_asteroid_burgundy_epic_resource.png", "Assets/treasure_asteroid_burgundy_epic.png");
+        epicTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_burgundy_epic_resource", "Assets/Resources/treasure_asteroid_burgundy_epic_resource.png", "Assets/treasure_asteroid_burgundy_epic.png");
         legendaryTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_gold_legendary_resource", "Assets/Resources/treasure_asteroid_gold_legendary_resource.png", "Assets/treasure_asteroid_gold_legendary.png");
+        spaceJunkTrashSprite = LoadSpriteFromResourcesOrEditor("space_junk_trash", "Assets/Resources/space_junk_trash.png", "Assets/space_junk_trash.png");
+        spaceJunkStandardSprite = LoadSpriteFromResourcesOrEditor("space_junk_standard", "Assets/Resources/space_junk_standard.png", "Assets/space_junk_standard.png");
+        spaceJunkAsteroidSprite = LoadSpriteFromResourcesOrEditor("space_junk_asteroid", "Assets/Resources/space_junk_asteroid.png", "Assets/space_junk_asteroid.png");
         obstacleSprites = new[]
         {
             LoadObstacleSprite("asteroida_1_clean_resource", "Assets/Resources/asteroida_1_clean_resource.png", "Assets/asteroida_1_clean.png"),
@@ -273,6 +290,8 @@ public class GameVisualTheme : MonoBehaviour
         renderer.drawMode = SpriteDrawMode.Tiled;
         renderer.tileMode = SpriteTileMode.Continuous;
         renderer.size = mapSize;
+        renderer.sortingLayerName = WorldSortingLayerName;
+        renderer.sortingOrder = BackgroundSortingOrder;
     }
 
     void ApplyMapBounds()
@@ -321,6 +340,9 @@ public class GameVisualTheme : MonoBehaviour
         foreach (PlayerHealth player in players)
         {
             if (player == null)
+                continue;
+
+            if (player.GetComponent<LureBeaconDecoy>() != null)
                 continue;
 
             PhotonView view = player.GetComponent<PhotonView>();
@@ -398,6 +420,10 @@ public class GameVisualTheme : MonoBehaviour
             }
             if (!player.IsWreck)
                 renderer.color = Color.white;
+            renderer.sortingLayerName = WorldSortingLayerName;
+            renderer.sortingOrder = player.IsWreck
+                ? WreckSortingOrder
+                : isEnemyBot ? EnemySortingOrder : PlayerSortingOrder;
             FitSpriteToTargetSize(renderer, targetSize);
 
             Vector2 spriteWorldSize = GetSpriteWorldSize(renderer);
@@ -433,6 +459,8 @@ public class GameVisualTheme : MonoBehaviour
             {
                 renderer.sprite = desiredSprite;
             }
+            renderer.sortingLayerName = WorldSortingLayerName;
+            renderer.sortingOrder = TreasureSortingOrder;
             FitSpriteToTargetSize(renderer, TreasureTargetSize);
 
             if (triggerCollider != null)
@@ -458,10 +486,17 @@ public class GameVisualTheme : MonoBehaviour
                 return rareTreasureSprite != null ? rareTreasureSprite : treasureSprite;
             case InventoryItemCatalog.RichAsteroidId:
                 return richTreasureSprite != null ? richTreasureSprite : treasureSprite;
-            case InventoryItemCatalog.SpaceJunkId:
-                return spaceJunkWorldSprite != null ? spaceJunkWorldSprite : treasureSprite;
+            case InventoryItemCatalog.AsteroidEpicId:
+                return epicTreasureSprite != null ? epicTreasureSprite : treasureSprite;
             case InventoryItemCatalog.AsteroidLegendaryId:
                 return legendaryTreasureSprite != null ? legendaryTreasureSprite : treasureSprite;
+            case InventoryItemCatalog.LegacySpaceJunkId:
+            case InventoryItemCatalog.SpaceJunkStandardId:
+                return spaceJunkStandardSprite != null ? spaceJunkStandardSprite : treasureSprite;
+            case InventoryItemCatalog.SpaceJunkTrashId:
+                return spaceJunkTrashSprite != null ? spaceJunkTrashSprite : treasureSprite;
+            case InventoryItemCatalog.SpaceJunkAsteroidId:
+                return spaceJunkAsteroidSprite != null ? spaceJunkAsteroidSprite : treasureSprite;
             default:
                 return treasureSprite;
         }
@@ -518,6 +553,8 @@ public class GameVisualTheme : MonoBehaviour
             renderer.sprite = obstacleSprite;
             renderer.color = Color.white;
         }
+        renderer.sortingLayerName = WorldSortingLayerName;
+        renderer.sortingOrder = ObstacleSortingOrder;
 
         float obstacleSize = ObstacleTargetSize * RoomSettings.GetObstacleSizeMultiplier() * GetStableObstacleSizeMultiplier(target);
         FitSpriteToTargetSize(renderer, obstacleSize);
@@ -558,6 +595,8 @@ public class GameVisualTheme : MonoBehaviour
             {
                 renderer.sprite = extractionSprite;
             }
+            renderer.sortingLayerName = WorldSortingLayerName;
+            renderer.sortingOrder = ExtractionZoneSortingOrder;
             FitSpriteToTargetSize(renderer, ExtractionTargetSize);
             SetWorldCircleRadius(triggerCollider, triggerWorldRadius);
         }
@@ -782,7 +821,7 @@ public class GameVisualTheme : MonoBehaviour
 
     Sprite LoadBackgroundSprite(int backgroundIndex)
     {
-        int clampedIndex = Mathf.Clamp(backgroundIndex, 1, 12);
+        int clampedIndex = Mathf.Clamp(backgroundIndex, 1, 15);
         string resourcesPath = "Visuals/Backgrounds/background" + clampedIndex + "_resource";
         Texture2D texture = Resources.Load<Texture2D>(resourcesPath);
         Sprite sprite = texture != null ? CreateSpriteFromTexture(texture) : null;

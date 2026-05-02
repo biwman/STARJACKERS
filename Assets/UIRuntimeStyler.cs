@@ -458,13 +458,12 @@ public class UIRuntimeStyler : MonoBehaviour
         StyleLobbySettingButton("BoosterSettingButton", new Vector2(-690f, -550f));
         StyleLobbySettingButton("AmmoSettingButton", new Vector2(-290f, -550f));
         StyleLobbySettingButton("BoosterDelaySettingButton", new Vector2(-690f, -636f));
-        StyleLobbySettingButton("MaxInputBoostSettingButton", new Vector2(-290f, -636f));
-        StyleLobbySettingButton("ShipDriftSettingButton", new Vector2(-690f, -722f));
-        StyleLobbySettingButton("DeathTimerSettingButton", new Vector2(-290f, -722f));
-        StyleLobbySettingButton("MovingObjectsSettingButton", new Vector2(-690f, -808f));
-        StyleLobbySettingButton("BulletPushSettingButton", new Vector2(-290f, -808f));
-        StyleLobbySettingButton("ObstacleWeightSettingButton", new Vector2(-690f, -894f));
-        StyleLobbySettingButton("TreasureWeightSettingButton", new Vector2(-290f, -894f));
+        StyleLobbySettingButton("ShipDriftSettingButton", new Vector2(-290f, -636f));
+        StyleLobbySettingButton("DeathTimerSettingButton", new Vector2(-690f, -722f));
+        StyleLobbySettingButton("MovingObjectsSettingButton", new Vector2(-290f, -722f));
+        StyleLobbySettingButton("BulletPushSettingButton", new Vector2(-690f, -808f));
+        StyleLobbySettingButton("ObstacleWeightSettingButton", new Vector2(-290f, -808f));
+        StyleLobbySettingButton("TreasureWeightSettingButton", new Vector2(-690f, -894f));
 
         foreach (GameObject sceneObject in Resources.FindObjectsOfTypeAll<GameObject>())
         {

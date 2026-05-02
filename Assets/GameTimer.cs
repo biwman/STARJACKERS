@@ -8,6 +8,7 @@ public class GameTimer : MonoBehaviourPun
     const string ObstacleLayoutKey = "obstacleLayout";
     const string ExtractionLayoutKey = "extractionLayout";
     const string NebulaLayoutKey = "nebulaLayout";
+    const string RepairBayLayoutKey = "repairBayLayout";
     const string MapSeedKey = "mapSeed";
     const string LoneShipModeStartTimeKey = "loneShipModeStartTime";
     public const string EvacuationPauseUntilKey = "evacPauseUntil";
@@ -25,6 +26,7 @@ public class GameTimer : MonoBehaviourPun
     {
         EndDisasterMeteorVfx.EnsureExists();
         RepairBaySpawner.EnsureExists();
+        SpaceJunkSpawner.EnsureExists();
 
         GameObject obj = GameObject.Find("TimerText");
 
@@ -163,6 +165,8 @@ public class GameTimer : MonoBehaviourPun
         if (!PhotonNetwork.IsMasterClient)
             return;
 
+        EarlyRoundExitUI.HideAll();
+
         Hashtable props = new Hashtable();
         props["gameStarted"] = true;
         props[RoomSettings.StartTimeKey] = PhotonNetwork.Time;
@@ -171,8 +175,11 @@ public class GameTimer : MonoBehaviourPun
         props[EvacuationPauseUntilKey] = -1d;
         props[EvacuationPauseRemainingKey] = -1f;
         props[RoomSettings.GadgetChargesStateKey] = string.Empty;
+        props[RoomSettings.RepairBayOccupancyStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = string.Empty;
+        props[RoomSettings.FinishedRoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
+        props[RepairBayLayoutKey] = string.Empty;
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RoundResultsTracker.ResetForCurrentRoom();
     }

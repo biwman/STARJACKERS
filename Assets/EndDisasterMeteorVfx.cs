@@ -1,14 +1,16 @@
 using Photon.Pun;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public sealed class EndDisasterMeteorVfx : MonoBehaviour
 {
-    const float WarningSeconds = 20f;
     const float InitialMaxWorldSize = 0.28f;
     const float FinalMapFillMultiplier = 1.16f;
     const float EffectZ = 0.62f;
     const int SortingOrderAboveBackgroundFx = 6;
     const string MapSeedKey = "mapSeed";
+    const string MeteorAlarmResourcePath = "Audio/meteor_alarm";
 
     static readonly string[] ObstacleSpriteResourcePaths =
     {
@@ -31,6 +33,11 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
     float baseSpriteMaxWorldSize = 1f;
     float rotationSpeed;
     bool meteorVisible;
+    AudioClip meteorAlarmClip;
+    AudioSource meteorAlarmSource;
+    GameObject warningMessageObject;
+    CanvasGroup warningCanvasGroup;
+    TextMeshProUGUI warningMessageText;
 
     public static void EnsureExists()
     {
@@ -60,6 +67,9 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
 
     void OnDestroy()
     {
+        StopMeteorAlarm();
+        HideWarningMessage();
+
         if (instance == this)
             instance = null;
     }
@@ -81,15 +91,16 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
             return;
         }
 
+        float warningSeconds = Mathf.Max(1f, RoomSettings.GetEndDisasterWarningSeconds());
         float remaining = timer.GetCurrentRemainingTime();
-        if (remaining > WarningSeconds)
+        if (remaining > warningSeconds)
         {
             HideMeteor();
             return;
         }
 
         EnsureMeteorInitialized();
-        float progress = Mathf.Clamp01((WarningSeconds - remaining) / WarningSeconds);
+        float progress = Mathf.Clamp01((warningSeconds - remaining) / warningSeconds);
         float eased = EaseInCubic(progress);
         float maxWorldSize = Mathf.Lerp(InitialMaxWorldSize, targetFinalMaxWorldSize, eased);
         float scale = baseSpriteMaxWorldSize > 0.001f ? maxWorldSize / baseSpriteMaxWorldSize : 1f;
@@ -102,6 +113,8 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
         color.a = Mathf.Lerp(0.78f, 0.96f, progress);
         spriteRenderer.color = color;
         spriteRenderer.enabled = true;
+        UpdateMeteorAlarm(progress);
+        UpdateWarningMessage(progress);
         meteorVisible = true;
     }
 
@@ -131,7 +144,151 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
         if (spriteRenderer != null)
             spriteRenderer.enabled = false;
 
+        StopMeteorAlarm();
+        HideWarningMessage();
         meteorVisible = false;
+    }
+
+    void UpdateMeteorAlarm(float progress)
+    {
+        EnsureMeteorAlarmSource();
+        if (meteorAlarmSource == null || meteorAlarmSource.clip == null)
+            return;
+
+        meteorAlarmSource.volume = GetMeteorAlarmVolume(progress);
+        if (!meteorAlarmSource.isPlaying)
+            meteorAlarmSource.Play();
+    }
+
+    void EnsureMeteorAlarmSource()
+    {
+        if (meteorAlarmClip == null)
+            meteorAlarmClip = Resources.Load<AudioClip>(MeteorAlarmResourcePath);
+
+        if (meteorAlarmClip == null)
+            return;
+
+        if (meteorAlarmSource == null)
+            meteorAlarmSource = gameObject.AddComponent<AudioSource>();
+
+        meteorAlarmSource.clip = meteorAlarmClip;
+        meteorAlarmSource.loop = true;
+        meteorAlarmSource.playOnAwake = false;
+        meteorAlarmSource.spatialBlend = 0f;
+        meteorAlarmSource.volume = 0f;
+        meteorAlarmSource.dopplerLevel = 0f;
+    }
+
+    void StopMeteorAlarm()
+    {
+        if (meteorAlarmSource == null)
+            return;
+
+        if (meteorAlarmSource.isPlaying)
+            meteorAlarmSource.Stop();
+
+        meteorAlarmSource.volume = 0f;
+    }
+
+    float GetMeteorAlarmVolume(float progress)
+    {
+        progress = Mathf.Clamp01(progress);
+        if (progress < 0.34f)
+            return Mathf.Lerp(0.2f, 0.38f, progress / 0.34f);
+
+        if (progress < 0.78f)
+            return Mathf.Lerp(0.38f, 0.72f, (progress - 0.34f) / 0.44f);
+
+        return Mathf.Lerp(0.72f, 1f, (progress - 0.78f) / 0.22f);
+    }
+
+    void UpdateWarningMessage(float progress)
+    {
+        EnsureWarningMessage();
+        if (warningMessageObject == null)
+            return;
+
+        warningMessageObject.SetActive(true);
+        warningMessageObject.transform.SetAsLastSibling();
+
+        if (warningCanvasGroup != null)
+        {
+            float pulse = Mathf.PingPong(Time.unscaledTime * 2.7f, 1f);
+            warningCanvasGroup.alpha = Mathf.Lerp(0.78f, 1f, Mathf.Max(progress, pulse));
+        }
+
+        if (warningMessageText != null)
+        {
+            warningMessageText.color = Color.Lerp(
+                new Color(1f, 0.72f, 0.34f, 1f),
+                new Color(1f, 0.25f, 0.14f, 1f),
+                Mathf.Clamp01(progress * 1.18f));
+        }
+    }
+
+    void EnsureWarningMessage()
+    {
+        if (warningMessageObject != null && warningMessageObject.scene.IsValid())
+            return;
+
+        GameObject canvasObject = GameObject.Find("Canvas");
+        if (canvasObject == null)
+            return;
+
+        warningMessageObject = new GameObject("EndDisasterWarningMessage", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
+        warningMessageObject.transform.SetParent(canvasObject.transform, false);
+
+        RectTransform rect = warningMessageObject.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = new Vector2(24f, -86f);
+        rect.sizeDelta = new Vector2(360f, 54f);
+
+        Image background = warningMessageObject.GetComponent<Image>();
+        background.color = new Color(0.12f, 0.03f, 0.02f, 0.74f);
+        background.raycastTarget = false;
+
+        warningCanvasGroup = warningMessageObject.GetComponent<CanvasGroup>();
+        warningCanvasGroup.interactable = false;
+        warningCanvasGroup.blocksRaycasts = false;
+
+        GameObject textObject = new GameObject("EndDisasterWarningText", typeof(RectTransform), typeof(TextMeshProUGUI), typeof(Shadow));
+        textObject.transform.SetParent(warningMessageObject.transform, false);
+
+        RectTransform textRect = textObject.GetComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = new Vector2(16f, 4f);
+        textRect.offsetMax = new Vector2(-16f, -4f);
+
+        warningMessageText = textObject.GetComponent<TextMeshProUGUI>();
+        warningMessageText.text = "Disaster incoming!";
+        warningMessageText.fontSize = 24f;
+        warningMessageText.fontStyle = FontStyles.Bold;
+        warningMessageText.characterSpacing = 1.2f;
+        warningMessageText.alignment = TextAlignmentOptions.Left;
+        warningMessageText.textWrappingMode = TextWrappingModes.NoWrap;
+        warningMessageText.raycastTarget = false;
+
+        Shadow shadow = textObject.GetComponent<Shadow>();
+        shadow.effectColor = new Color(0f, 0f, 0f, 0.72f);
+        shadow.effectDistance = new Vector2(2.5f, -2.5f);
+
+        TMP_Text reference = FindAnyObjectByType<TMP_Text>();
+        if (reference != null)
+        {
+            warningMessageText.font = reference.font;
+            warningMessageText.fontSharedMaterial = reference.fontSharedMaterial;
+        }
+
+        warningMessageObject.SetActive(false);
+    }
+
+    void HideWarningMessage()
+    {
+        if (warningMessageObject != null)
+            warningMessageObject.SetActive(false);
     }
 
     void ConfigureSorting()
@@ -208,6 +365,7 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
 
             seed = CombineSeed(seed, RoomSettings.GetMapBackgroundIndex());
             seed = CombineSeed(seed, Mathf.RoundToInt(RoomSettings.GetRoundDuration()));
+            seed = CombineSeed(seed, RoomSettings.GetEndDisasterWarningSeconds());
         }
 
         return seed;

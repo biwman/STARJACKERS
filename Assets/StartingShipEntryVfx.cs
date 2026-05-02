@@ -29,6 +29,7 @@ public sealed class StartingShipEntryVfx : MonoBehaviourPun
     bool originalBodySimulated = true;
 
     public bool IsControllingMotion => initialized && photonView != null && photonView.IsMine && age < Duration;
+    public bool IsEntryActive => initialized && age < Duration;
 
     void Start()
     {
@@ -50,7 +51,7 @@ public sealed class StartingShipEntryVfx : MonoBehaviourPun
         finalRotation = transform.rotation;
         approachDirection = ResolveApproachDirection(finalPosition);
         startPosition = finalPosition + (Vector3)(approachDirection * ApproachDistance);
-        entryRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(-approachDirection.y, -approachDirection.x) * Mathf.Rad2Deg - 90f);
+        entryRotation = GetRotationForDirection(-approachDirection);
 
         CreateStreaks();
         CreateShockRing();
@@ -67,6 +68,8 @@ public sealed class StartingShipEntryVfx : MonoBehaviourPun
 
             transform.position = startPosition;
             transform.rotation = entryRotation;
+            if (body != null)
+                body.rotation = entryRotation.eulerAngles.z;
         }
 
         initialized = true;
@@ -84,7 +87,8 @@ public sealed class StartingShipEntryVfx : MonoBehaviourPun
         if (photonView != null && photonView.IsMine && t < 1f)
         {
             transform.position = Vector3.Lerp(startPosition, finalPosition, eased);
-            transform.rotation = Quaternion.Slerp(entryRotation, finalRotation, Mathf.SmoothStep(0.25f, 1f, t));
+            float rotationBlend = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.78f, 1f, t));
+            transform.rotation = Quaternion.Slerp(entryRotation, finalRotation, rotationBlend);
         }
 
         UpdateStreaks(t);
@@ -140,6 +144,16 @@ public sealed class StartingShipEntryVfx : MonoBehaviourPun
         int actorNumber = photonView != null && photonView.Owner != null ? photonView.Owner.ActorNumber : 1;
         float angle = (actorNumber * 93f) * Mathf.Deg2Rad;
         return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+    }
+
+    Quaternion GetRotationForDirection(Vector2 direction)
+    {
+        if (direction.sqrMagnitude < 0.0001f)
+            direction = Vector2.up;
+
+        direction.Normalize();
+        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
+        return Quaternion.Euler(0f, 0f, angle);
     }
 
     void CreateStreaks()

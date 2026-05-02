@@ -62,6 +62,7 @@ public class EndGameWatcher : MonoBehaviour
 
         PlayerMovement.gameStarted = false;
         PlayerShooting.gameStarted = false;
+        EarlyRoundExitUI.HideAll();
         HideLobbyUnderSummary();
         AwardRoundXpIfNeeded();
 

@@ -79,6 +79,10 @@ public class BoosterBarUI : MonoBehaviourPun
         fillImage = FindFillImage(clone.transform);
         handleImage = FindImage(clone.transform, "Handle");
         Image backgroundImage = clone.GetComponentInChildren<Image>();
+        DestroyIfExists(clone.transform, "HealthLabel");
+        DestroyIfExists(clone.transform, "HealthValue");
+        DestroyIfExists(clone.transform, "BoosterLabel");
+        DestroyIfExists(clone.transform, PercentName);
 
         if (backgroundImage != null)
         {
@@ -188,6 +192,13 @@ public class BoosterBarUI : MonoBehaviourPun
         }
 
         return null;
+    }
+
+    void DestroyIfExists(Transform parent, string objectName)
+    {
+        Transform existing = parent != null ? parent.Find(objectName) : null;
+        if (existing != null)
+            Destroy(existing.gameObject);
     }
 
     void CreateLabel(Transform parent)

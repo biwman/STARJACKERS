@@ -26,6 +26,11 @@ public class ExtractionZone : MonoBehaviourPun
     void Start()
     {
         sr = GetComponent<SpriteRenderer>();
+        if (sr != null)
+        {
+            sr.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+            sr.sortingOrder = GameVisualTheme.ExtractionZoneSortingOrder;
+        }
         SetColor(Color.red);
         cachedMessageObject = FindExtractionMessage();
         if (cachedMessageObject != null)
@@ -231,8 +236,9 @@ public class ExtractionZone : MonoBehaviourPun
         Debug.Log("Evacuating: " + playerView.Owner.NickName);
         int finalScore = RoundResultsTracker.GetKnownScore(playerView.Owner, playerView.gameObject);
         string outcome = playerHealth.IsAstronautControlled ? "evacuated" : "extracted";
-        RoundResultsTracker.RecordOutcome(playerView.Owner, finalScore, outcome);
+        finalScore = RoundResultsTracker.RecordOutcome(playerView.Owner, finalScore, outcome);
         playerView.RPC(nameof(PlayerHealth.OnEvacuated), playerView.Owner, 0);
+        playerView.RPC(nameof(PlayerHealth.NotifyFinalEvacuation), playerView.Owner, finalScore, outcome);
         playerView.RPC(nameof(PlayerHealth.BeginEvacuationSequence), RpcTarget.All);
         return true;
     }

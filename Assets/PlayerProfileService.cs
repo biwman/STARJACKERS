@@ -39,7 +39,7 @@ public class PlayerProfileService : MonoBehaviour
 
     public bool IsInitialized => initialized;
     public bool IsBusy { get; private set; }
-    public string PlayerId => AuthenticationService.Instance?.PlayerId;
+    public string PlayerId => TryGetAuthenticationPlayerId();
     public PlayerProfileData CurrentProfile { get; private set; } = PlayerProfileData.Default();
     public int CurrentPlayerInventorySlotCount
     {
@@ -345,6 +345,34 @@ public class PlayerProfileService : MonoBehaviour
         await SaveInventoryOnlyAsync();
     }
 
+    public async Task<bool> MoveShipItemWithinShipAsync(int sourceIndex, int targetIndex)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        if (sourceIndex == targetIndex)
+            return false;
+
+        PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
+        workingInventory.Normalize();
+
+        int capacity = GetActiveShipInventoryCapacity();
+        if (sourceIndex < 0 || sourceIndex >= capacity || targetIndex < 0 || targetIndex >= capacity)
+            return false;
+
+        string sourceItem = workingInventory.ShipSlots[sourceIndex];
+        if (string.IsNullOrWhiteSpace(sourceItem))
+            return false;
+
+        string targetItem = workingInventory.ShipSlots[targetIndex];
+        workingInventory.ShipSlots[targetIndex] = sourceItem;
+        workingInventory.ShipSlots[sourceIndex] = targetItem;
+
+        CurrentProfile.Inventory = workingInventory;
+        await SaveInventoryOnlyAsync();
+        return true;
+    }
+
     public async Task<bool> MoveInventoryItemAsync(bool fromShipInventory, int sourceIndex)
     {
         await EnsureInitializedAsync();
@@ -373,6 +401,36 @@ public class PlayerProfileService : MonoBehaviour
 
         await SaveInventoryOnlyAsync();
         return true;
+    }
+
+    public async Task<int> UnloadShipInventoryToPlayerAsync()
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
+        workingInventory.Normalize();
+
+        int movedCount = 0;
+        for (int i = 0; i < workingInventory.ShipSlots.Length; i++)
+        {
+            string itemId = workingInventory.ShipSlots[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            if (!workingInventory.TryAddToPlayer(itemId))
+                break;
+
+            workingInventory.ShipSlots[i] = null;
+            movedCount++;
+        }
+
+        if (movedCount <= 0)
+            return 0;
+
+        CurrentProfile.Inventory = workingInventory;
+        await SaveInventoryOnlyAsync();
+        return movedCount;
     }
 
     public int GetNextPlayerInventoryExtendPrice()
@@ -417,6 +475,20 @@ public class PlayerProfileService : MonoBehaviour
         CurrentProfile.Astrons = Mathf.Max(0, CurrentProfile.Astrons + value);
         await SaveInventoryAndAstronsAsync();
         return true;
+    }
+
+    public async Task AddAstronsAsync(int amount)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        int normalizedAmount = Mathf.Max(0, amount);
+        if (normalizedAmount <= 0)
+            return;
+
+        long updatedAstrons = (long)Mathf.Max(0, CurrentProfile.Astrons) + normalizedAmount;
+        CurrentProfile.Astrons = updatedAstrons > int.MaxValue ? int.MaxValue : (int)updatedAstrons;
+        await SaveInventoryAndAstronsAsync();
     }
 
     public async Task<bool> TryBuyShopItemAsync(string itemId)
@@ -756,6 +828,56 @@ public class PlayerProfileService : MonoBehaviour
         return new string[PlayerInventoryData.ShipSlotCount];
     }
 
+    public static int GetSafePocketSlotCount(int shipSkinIndex)
+    {
+        return ShipCatalog.GetSafePocketSlots(shipSkinIndex);
+    }
+
+    public static int GetSafePocketStartIndex(int shipSkinIndex)
+    {
+        int capacity = ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
+        int safePocketCount = GetSafePocketSlotCount(shipSkinIndex);
+        return Mathf.Clamp(capacity - safePocketCount, 0, PlayerInventoryData.ShipSlotCount);
+    }
+
+    public static bool IsSafePocketIndex(int shipSkinIndex, int slotIndex)
+    {
+        if (slotIndex < 0 || slotIndex >= PlayerInventoryData.ShipSlotCount)
+            return false;
+
+        int safePocketCount = GetSafePocketSlotCount(shipSkinIndex);
+        if (safePocketCount <= 0)
+            return false;
+
+        int capacity = ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
+        int startIndex = GetSafePocketStartIndex(shipSkinIndex);
+        return slotIndex >= startIndex && slotIndex < capacity;
+    }
+
+    public static string[] BuildLossWreckLoot(string[] sourceSlots, int shipSkinIndex)
+    {
+        string[] normalized = NormalizeShipSlots(sourceSlots);
+        for (int i = 0; i < normalized.Length; i++)
+        {
+            if (IsSafePocketIndex(shipSkinIndex, i))
+                normalized[i] = null;
+        }
+
+        return normalized;
+    }
+
+    public static string[] BuildPostLossShipInventory(string[] sourceSlots, int shipSkinIndex)
+    {
+        string[] normalized = NormalizeShipSlots(sourceSlots);
+        for (int i = 0; i < normalized.Length; i++)
+        {
+            if (!IsSafePocketIndex(shipSkinIndex, i))
+                normalized[i] = null;
+        }
+
+        return normalized;
+    }
+
     public static string[] GetPlayerEquipmentSlots(Photon.Realtime.Player player)
     {
         if (player != null &&
@@ -823,7 +945,7 @@ public class PlayerProfileService : MonoBehaviour
     PlayerProfileData BuildFallbackProfile()
     {
         string suffix = "0000";
-        string playerId = AuthenticationService.Instance != null ? AuthenticationService.Instance.PlayerId : string.Empty;
+        string playerId = TryGetAuthenticationPlayerId();
 
         if (!string.IsNullOrWhiteSpace(playerId))
         {
@@ -839,6 +961,25 @@ public class PlayerProfileService : MonoBehaviour
             Astrons = 0,
             Inventory = PlayerInventoryData.Default()
         };
+    }
+
+    string TryGetAuthenticationPlayerId()
+    {
+        if (UnityServices.State != ServicesInitializationState.Initialized)
+            return string.Empty;
+
+        try
+        {
+            return AuthenticationService.Instance != null ? AuthenticationService.Instance.PlayerId : string.Empty;
+        }
+        catch (ServicesInitializationException)
+        {
+            return string.Empty;
+        }
+        catch (InvalidOperationException)
+        {
+            return string.Empty;
+        }
     }
 
     string SanitizeNickname(string nickname)

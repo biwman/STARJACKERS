@@ -17,13 +17,13 @@ public static class RoomSettings
     public const string ObstacleNoBordersKey = "obstacleNoBorders";
     public const string TreasureDensityKey = "treasureDensity";
     public const string ResourceRichnessKey = "resourceRichness";
+    public const string SpaceJunkDensityKey = "spaceJunkDensity";
     public const string NebulaDensityKey = "nebulaDensity";
     public const string ExtractionCountKey = "extractionCount";
     public const string RepairBayCountKey = "repairBayCount";
     public const string BoosterSlowdownKey = "boosterSlowdownPercent";
     public const string AmmoCountKey = "ammoCount";
     public const string BoosterRecoveryDelayKey = "boosterRecoveryDelay";
-    public const string MaxInputBoostPercentKey = "maxInputBoostPercent";
     public const string ShipDriftEnabledKey = "shipDriftEnabled";
     public const string LastShipTimerMultiplierKey = "lastShipTimerMultiplier";
     public const string KillRewardPercentKey = "killRewardPercent";
@@ -35,6 +35,8 @@ public static class RoomSettings
     public const string VisualEffectsEnabledKey = "visualEffectsEnabled";
     public const string StartingVfxEnabledKey = "startingVfxEnabled";
     public const string EndDisasterModeKey = "endDisasterMode";
+    public const string EndDisasterWarningSecondsKey = "endDisasterWarningSeconds";
+    public const string HapticsEnabledKey = "hapticsEnabled";
     public const string MovingObjectsEnabledKey = "movingObjectsEnabled";
     public const string EnemyBotsEnabledKey = "enemyBotsEnabled";
     public const string CorsairEnabledKey = "corsairEnabled";
@@ -44,28 +46,33 @@ public static class RoomSettings
     public const string ObstacleWeightFactorKey = "obstacleWeightFactor";
     public const string TreasureWeightFactorKey = "treasureWeightFactor";
     public const string BatteringDamageKey = "batteringDamage";
+    public const string ShootingModelKey = "shootingModel";
+    public const string AdvancedShootingJoystickEnabledKey = "advancedShootingJoystickEnabled";
+    public const string SuperAttackEnabledKey = "superAttackEnabled";
+    public const string GunSetupKeyPrefix = "gunSetup.";
     public const string RoundResultsKey = "roundResultsSnapshot";
+    public const string FinishedRoundResultsKey = "finishedRoundResults";
     public const string RoundEndReasonKey = "roundEndReason";
     public const string ShipSkinKey = "shipSkinIndex";
     public const string ShipInventoryStateKey = "shipInventoryState";
     public const string EquipmentStateKey = "equipmentState";
     public const string GadgetChargesStateKey = "gadgetChargesState";
+    public const string RepairBayOccupancyStateKey = "repairBayOccupancyState";
     public const string ScoreKey = "score";
 
-    public const float DefaultRoundDuration = 180f;
+    public const float DefaultRoundDuration = 240f;
     public const string DefaultObstacleDensity = "high";
-    public const bool DefaultObstacleDestroyEnabled = false;
-    public const int DefaultObstacleHp = 60;
+    public const bool DefaultObstacleDestroyEnabled = true;
+    public const int DefaultObstacleHp = 400;
     public const int DefaultObstacleSizePercent = 100;
     public const bool DefaultObstacleNoBorders = false;
     public const int DefaultExtractionCount = 3;
     public const int DefaultRepairBayCount = 1;
-    public const int DefaultBoosterSlowdownPercent = 30;
+    public const int DefaultBoosterSlowdownPercent = 40;
     public const int DefaultAmmoCount = 15;
     public const int DefaultBoosterRecoveryDelay = 5;
-    public const int DefaultMaxInputBoostPercent = 20;
     public const int DefaultShipDriftLevel = 1;
-    public const float DefaultLastShipTimerMultiplier = 3f;
+    public const float DefaultLastShipTimerMultiplier = 1f;
     public const int DefaultKillRewardPercent = 50;
     public const int DefaultDeathRetainPercent = 25;
     public const int DefaultTimeUpRetainPercent = 25;
@@ -74,18 +81,27 @@ public static class RoomSettings
     public const string DefaultLobbyMapId = "just_space";
     public const bool DefaultVisualEffectsEnabled = true;
     public const bool DefaultStartingVfxEnabled = true;
+    public const bool DefaultHapticsEnabled = true;
     public const string EndDisasterOff = "off";
     public const string EndDisasterMeteor = "meteor";
     public const string DefaultEndDisasterMode = EndDisasterMeteor;
+    public const int DefaultEndDisasterWarningSeconds = 30;
+    public const int MinEndDisasterWarningSeconds = 10;
+    public const int MaxEndDisasterWarningSeconds = 40;
     public const bool DefaultMovingObjectsEnabled = true;
     public const bool DefaultEnemyBotsEnabled = true;
     public const bool DefaultCorsairEnabled = true;
     public const int DefaultCorsairSpawnSecond = 0;
     public const int DefaultCorsairHp = 200;
     public const int DefaultBulletPushMultiplier = 1;
-    public const int DefaultObstacleWeightFactor = 6;
+    public const int DefaultObstacleWeightFactor = 12;
     public const int DefaultTreasureWeightFactor = 6;
-    public const int DefaultBatteringDamage = 0;
+    public const int DefaultBatteringDamage = 20;
+    public const string ShootingModelSimple = "simple";
+    public const string ShootingModelComplex = "complex";
+    public const string DefaultShootingModel = ShootingModelComplex;
+    public const bool DefaultAdvancedShootingJoystickEnabled = true;
+    public const bool DefaultSuperAttackEnabled = true;
     public const int MaxObstacleWeightFactor = 999;
     public const bool DefaultEnemyRespawnEnabled = false;
     public const int DefaultEnemyRespawnIntervalSeconds = 60;
@@ -106,6 +122,11 @@ public static class RoomSettings
     public const string ResourceRichnessVeryHigh = "very_high";
     public const string ResourceRichnessExtreme = "extreme";
     public const string DefaultResourceRichness = ResourceRichnessMedium;
+    public const string SpaceJunkDensityNone = "none";
+    public const string SpaceJunkDensityLow = "low";
+    public const string SpaceJunkDensityMedium = "medium";
+    public const string SpaceJunkDensityHigh = "high";
+    public const string DefaultSpaceJunkDensity = SpaceJunkDensityLow;
 
     public static float GetRoundDuration()
     {
@@ -150,7 +171,7 @@ public static class RoomSettings
 
     public static int GetObstacleHp()
     {
-        return GetInt(ObstacleHpKey, DefaultObstacleHp, 50, 300);
+        return GetInt(ObstacleHpKey, DefaultObstacleHp, 50, 500);
     }
 
     public static int GetObstacleSizePercent()
@@ -210,11 +231,6 @@ public static class RoomSettings
     public static int GetBoosterRecoveryDelay()
     {
         return GetInt(BoosterRecoveryDelayKey, DefaultBoosterRecoveryDelay, 0, 10);
-    }
-
-    public static int GetMaxInputBoostPercent()
-    {
-        return GetInt(MaxInputBoostPercentKey, DefaultMaxInputBoostPercent, 0, 50);
     }
 
     public static int GetShipDriftLevel()
@@ -286,7 +302,7 @@ public static class RoomSettings
 
     public static int GetMapBackgroundIndex()
     {
-        return GetInt(MapBackgroundKey, DefaultMapBackground, 1, 12);
+        return GetInt(MapBackgroundKey, DefaultMapBackground, 1, 15);
     }
 
     public static string GetSelectedLobbyMapId()
@@ -326,6 +342,18 @@ public static class RoomSettings
         return DefaultStartingVfxEnabled;
     }
 
+    public static bool AreHapticsEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(HapticsEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultHapticsEnabled;
+    }
+
     public static string GetEndDisasterMode()
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -341,6 +369,15 @@ public static class RoomSettings
     public static bool IsEndDisasterMeteorEnabled()
     {
         return GetEndDisasterMode() == EndDisasterMeteor;
+    }
+
+    public static int GetEndDisasterWarningSeconds()
+    {
+        return GetInt(
+            EndDisasterWarningSecondsKey,
+            DefaultEndDisasterWarningSeconds,
+            MinEndDisasterWarningSeconds,
+            MaxEndDisasterWarningSeconds);
     }
 
     public static string NormalizeEndDisasterMode(string mode)
@@ -387,6 +424,36 @@ public static class RoomSettings
                 return normalized;
             default:
                 return DefaultResourceRichness;
+        }
+    }
+
+    public static string GetSpaceJunkDensity()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(SpaceJunkDensityKey, out object value) &&
+            value is string density)
+        {
+            return NormalizeSpaceJunkDensity(density);
+        }
+
+        return DefaultSpaceJunkDensity;
+    }
+
+    public static string NormalizeSpaceJunkDensity(string density)
+    {
+        string normalized = string.IsNullOrWhiteSpace(density)
+            ? DefaultSpaceJunkDensity
+            : density.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case SpaceJunkDensityNone:
+            case SpaceJunkDensityLow:
+            case SpaceJunkDensityMedium:
+            case SpaceJunkDensityHigh:
+                return normalized;
+            default:
+                return DefaultSpaceJunkDensity;
         }
     }
 
@@ -663,6 +730,93 @@ public static class RoomSettings
         return GetInt(BatteringDamageKey, DefaultBatteringDamage, 0, 50);
     }
 
+    public static string GetShootingModel()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ShootingModelKey, out object value) &&
+            value is string model)
+        {
+            return NormalizeShootingModel(model);
+        }
+
+        return DefaultShootingModel;
+    }
+
+    public static bool IsComplexShootingModel()
+    {
+        return GetShootingModel() == ShootingModelComplex;
+    }
+
+    public static string NormalizeShootingModel(string model)
+    {
+        string normalized = string.IsNullOrWhiteSpace(model)
+            ? DefaultShootingModel
+            : model.Trim().ToLowerInvariant();
+
+        switch (normalized)
+        {
+            case ShootingModelComplex:
+                return ShootingModelComplex;
+            default:
+                return ShootingModelSimple;
+        }
+    }
+
+    public static bool IsSuperAttackToggleEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(SuperAttackEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultSuperAttackEnabled;
+    }
+
+    public static bool IsSuperAttackEnabled()
+    {
+        return IsComplexShootingModel() && IsSuperAttackToggleEnabled();
+    }
+
+    public static bool IsAdvancedShootingJoystickEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(AdvancedShootingJoystickEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultAdvancedShootingJoystickEnabled;
+    }
+
+    public static string GetGunSetupRoomKey(string weaponId)
+    {
+        if (string.IsNullOrWhiteSpace(weaponId))
+            weaponId = "unknown";
+
+        return GunSetupKeyPrefix + weaponId.Trim().ToLowerInvariant();
+    }
+
+    public static bool IsGunSetupKey(string key)
+    {
+        return !string.IsNullOrWhiteSpace(key) &&
+               key.StartsWith(GunSetupKeyPrefix, System.StringComparison.Ordinal);
+    }
+
+    public static string GetGunSetupOverride(string weaponId)
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(GetGunSetupRoomKey(weaponId), out object value) &&
+            value is string raw)
+        {
+            return raw;
+        }
+
+        return string.Empty;
+    }
+
     public static string GetMassLabel(int mass)
     {
         if (mass >= MaxObstacleWeightFactor)
@@ -803,6 +957,7 @@ public sealed class PlayerShipDefinition
     public string DisplayName { get; }
     public int[] SkinIndices { get; }
     public int CargoCapacity { get; }
+    public int SafePocketSlots { get; }
     public int MainGunSlots { get; }
     public int ShieldSlots { get; }
     public int EngineSlots { get; }
@@ -812,6 +967,7 @@ public sealed class PlayerShipDefinition
     public float BaseSpeed { get; }
     public float TurnRateMultiplier { get; }
     public float BoosterDuration { get; }
+    public int MaxBoostPercent { get; }
     public Vector2[] ThrusterOffsetFactors { get; }
 
     public PlayerShipDefinition(
@@ -819,6 +975,7 @@ public sealed class PlayerShipDefinition
         string displayName,
         int[] skinIndices,
         int cargoCapacity,
+        int safePocketSlots,
         int mainGunSlots,
         int shieldSlots,
         int engineSlots,
@@ -828,12 +985,14 @@ public sealed class PlayerShipDefinition
         float baseSpeed,
         float turnRateMultiplier,
         float boosterDuration,
+        int maxBoostPercent,
         Vector2[] thrusterOffsetFactors)
     {
         Type = type;
         DisplayName = displayName;
         SkinIndices = skinIndices;
         CargoCapacity = cargoCapacity;
+        SafePocketSlots = Mathf.Max(0, safePocketSlots);
         MainGunSlots = mainGunSlots;
         ShieldSlots = shieldSlots;
         EngineSlots = engineSlots;
@@ -843,6 +1002,7 @@ public sealed class PlayerShipDefinition
         BaseSpeed = baseSpeed;
         TurnRateMultiplier = turnRateMultiplier;
         BoosterDuration = boosterDuration;
+        MaxBoostPercent = Mathf.Max(0, maxBoostPercent);
         ThrusterOffsetFactors = thrusterOffsetFactors;
     }
 }
@@ -868,15 +1028,17 @@ public static class ShipCatalog
         "Explorer",
         new[] { ExplorerBasicSkinIndex, ExplorerSilverSkinIndex, ExplorerGildedSkinIndex },
         8,
+        0,
         1,
         1,
         1,
         1,
-        50,
-        50,
+        75,
+        75,
         5f,
         1f,
         5f,
+        30,
         new[] { new Vector2(0f, 0.02f) });
 
     static readonly PlayerShipDefinition ViperDefinition = new PlayerShipDefinition(
@@ -884,15 +1046,17 @@ public static class ShipCatalog
         "Viper",
         new[] { ViperStandardSkinIndex, ViperSnowSkinIndex, ViperNavySkinIndex },
         10,
+        1,
         2,
         1,
         2,
         0,
-        40,
-        35,
+        60,
+        53,
         6f,
         1.2f,
         4f,
+        40,
         new[]
         {
             new Vector2(-2.24f, 0.34f),
@@ -904,15 +1068,17 @@ public static class ShipCatalog
         "Avenger",
         new[] { AvengerDarkGreenSkinIndex, AvengerMilitarySkinIndex, AvengerNasaSkinIndex },
         9,
+        1,
         2,
         2,
         0,
         2,
-        65,
-        70,
+        98,
+        105,
         4.2f,
         0.82f,
         6f,
+        30,
         new[] { new Vector2(0f, 0.02f) });
 
     static readonly PlayerShipDefinition ArrowDefinition = new PlayerShipDefinition(
@@ -922,13 +1088,15 @@ public static class ShipCatalog
         6,
         1,
         1,
+        1,
         2,
         1,
+        63,
         42,
-        28,
         6.8f,
         1.45f,
         3.6f,
+        20,
         new[]
         {
             new Vector2(-1.82f, 0.28f),
@@ -1000,6 +1168,11 @@ public static class ShipCatalog
         return GetShipDefinition(skinIndex).CargoCapacity;
     }
 
+    public static int GetSafePocketSlots(int skinIndex)
+    {
+        return Mathf.Clamp(GetShipDefinition(skinIndex).SafePocketSlots, 0, GetShipInventoryCapacity(skinIndex));
+    }
+
     public static int GetMainGunSlots(int skinIndex)
     {
         return GetShipDefinition(skinIndex).MainGunSlots;
@@ -1043,6 +1216,11 @@ public static class ShipCatalog
     public static float GetBoosterDuration(int skinIndex)
     {
         return GetShipDefinition(skinIndex).BoosterDuration;
+    }
+
+    public static int GetMaxBoostPercent(int skinIndex)
+    {
+        return GetShipDefinition(skinIndex).MaxBoostPercent;
     }
 
     public static Vector2[] GetThrusterOffsetFactors(int skinIndex)

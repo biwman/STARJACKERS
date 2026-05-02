@@ -20,6 +20,7 @@ public static class RoundXpBalance
     public const int KillSpaceMineXp = 20;
     public const int KillCorsairXp = 120;
     public const int KillSpaceTruckXp = 180;
+    public const int KillRadarShipXp = 220;
     public const int KillMothershipXp = 400;
     public const int KillPlayerShipXp = 150;
     public const int FirstBloodXp = 75;
@@ -65,6 +66,7 @@ public static class RoundXpBalance
             case EnemyBotKind.SpaceMine: return KillSpaceMineXp;
             case EnemyBotKind.Corsair: return KillCorsairXp;
             case EnemyBotKind.SpaceTruck: return KillSpaceTruckXp;
+            case EnemyBotKind.RadarShip: return KillRadarShipXp;
             case EnemyBotKind.Mothership: return KillMothershipXp;
             default: return KillDroneXp;
         }

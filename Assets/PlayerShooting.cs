@@ -14,17 +14,25 @@ public class PlayerShooting : MonoBehaviourPun
     const float AutoAimRange = 13f;
     const float ManualAimThreshold = 0.35f;
     const float DefaultBulletRangeMultiplier = 15f;
+    const float ComplexTapMaxDuration = 0.22f;
+    const float ComplexTapMaxDragMagnitude = 0.24f;
+    const float AdvancedShootMarkerRawThreshold = 0.05f;
+    const float SuperChargeTimeSeconds = 24f;
+    const float SuperChargeOnComplexHit = 0.08f;
     const float GadgetMinePlacementCooldown = 0.9f;
     const int GadgetMineDefaultCharges = 4;
     const int BatteryDefaultCharges = 3;
     const int MagneticBeamDefaultCharges = 3;
     const int TractorBeamDefaultCharges = 4;
+    const int LureBeaconDefaultCharges = 2;
     const float MagneticBeamRadius = 8f;
     const float MagneticBeamDuration = 3f;
     const float MagneticBeamPullStrength = 24f;
     const float TractorBeamRadius = 8f;
     const float TractorBeamMaxDuration = 10f;
     const float TractorBeamPullStrength = 36f;
+    const float LureBeaconDeployDistance = 1.15f;
+    const float LureBeaconSpawnClearanceRadius = 0.42f;
     static readonly Color PlasmaBulletColor = new Color(0.15f, 1f, 0.28f, 1f);
 
     sealed class GadgetRuntimeState
@@ -34,6 +42,17 @@ public class PlayerShooting : MonoBehaviourPun
         public int RemainingCharges;
         public float Cooldown;
         public float NextUseTime;
+    }
+
+    sealed class ComplexWeaponRuntimeState
+    {
+        public int SlotIndex;
+        public string WeaponId;
+        public WeaponAttackProfile Profile;
+        public int CurrentAmmo;
+        public int MaxAmmo;
+        public float AmmoReloadStartedAt;
+        public float NextAmmoAt;
     }
 
     public Joystick shootJoystick;
@@ -69,6 +88,7 @@ public class PlayerShooting : MonoBehaviourPun
     string baseShotSoundId = string.Empty;
     int multiShotCount = 1;
     string lastAppliedWeaponSignature = string.Empty;
+    string lastAppliedComplexWeaponSignature = string.Empty;
     string lastAppliedGadgetSignature = string.Empty;
     readonly List<string> activeGadgetItemIds = new List<string>();
     readonly Dictionary<string, GadgetRuntimeState> gadgetStates = new Dictionary<string, GadgetRuntimeState>(StringComparer.Ordinal);
@@ -77,11 +97,70 @@ public class PlayerShooting : MonoBehaviourPun
     Coroutine authoritativeTractorBeamRoutine;
     int activeTractorBeamTargetViewId;
     string activeTractorBeamItemId;
+    WeaponAttackProfile activeSimpleWeaponProfile;
+    WeaponAttackProfile activeComplexWeaponProfile;
+    readonly List<ComplexWeaponRuntimeState> complexWeaponStates = new List<ComplexWeaponRuntimeState>();
+    int activeComplexWeaponIndex;
+    AimMarkerVfx aimMarker;
+    Coroutine complexBurstRoutine;
+    float nextComplexAttackTime;
+    bool complexShootWasPressed;
+    bool complexSuperWasPressed;
+    float complexShootPressStartedAt;
+    float complexSuperPressStartedAt;
+    float complexShootMaxDragMagnitude;
+    float complexSuperMaxDragMagnitude;
+    Vector2 complexLastAimDirection = Vector2.up;
+    Vector2 complexLastSuperAimDirection = Vector2.up;
+    Vector2 complexLastAimTargetPoint;
+    Vector2 complexLastSuperAimTargetPoint;
+    float complexAmmoReloadStartedAt;
+    float complexNextAmmoAt;
+    float superCharge;
+    Joystick superJoystick;
+    AdvancedShootInputZone advancedShootInputZone;
+    bool simpleUsesDamageProfile;
+    int simpleShieldDamage;
+    int simpleHpDamage;
+    bool simplePierces;
+    float simpleAreaDamageRadius;
+    string simpleHitEffectId = string.Empty;
+    float simpleFlightTime = 10f;
 
-    public int CurrentAmmo => currentAmmo;
-    public int MaxAmmo => maxAmmo;
+    public int CurrentAmmo => IsComplexShootingActive && GetActiveComplexWeaponState() != null ? GetActiveComplexWeaponState().CurrentAmmo : currentAmmo;
+    public int MaxAmmo => IsComplexShootingActive && GetActiveComplexWeaponState() != null ? GetActiveComplexWeaponState().MaxAmmo : maxAmmo;
     public bool IsReloading => isReloading;
-    public bool CanManualReload => photonView.IsMine && IsGameStarted() && !isReloading && currentAmmo > 0 && currentAmmo < maxAmmo;
+    public bool IsComplexShootingActive => RoomSettings.IsComplexShootingModel() && GetComponent<EnemyBot>() == null && !AstronautSurvivor.IsAstronautInstantiationData(photonView != null ? photonView.InstantiationData : null);
+    public float ComplexAmmoReloadProgress => GetComplexAmmoReloadProgress();
+    public float SuperChargeNormalized => Mathf.Clamp01(superCharge);
+    public bool IsSuperAttackReady => IsComplexShootingActive && RoomSettings.IsSuperAttackEnabled() && superCharge >= 0.999f;
+    public bool CanManualReload => photonView.IsMine && IsGameStarted() && !IsComplexShootingActive && !isReloading && currentAmmo > 0 && currentAmmo < maxAmmo;
+    public int ComplexWeaponCount => complexWeaponStates.Count;
+    public int ActiveComplexWeaponNumber => complexWeaponStates.Count > 0 ? activeComplexWeaponIndex + 1 : 1;
+    public Sprite NextComplexWeaponIcon
+    {
+        get
+        {
+            ComplexWeaponRuntimeState state = GetNextComplexWeaponState();
+            return state != null ? WeaponAttackCatalog.GetWeaponIcon(state.WeaponId) : null;
+        }
+    }
+    public string NextComplexWeaponLabel
+    {
+        get
+        {
+            ComplexWeaponRuntimeState state = GetNextComplexWeaponState();
+            return state?.Profile?.DisplayName ?? "SIMPLE GUN";
+        }
+    }
+    public string ActiveComplexWeaponLabel
+    {
+        get
+        {
+            ComplexWeaponRuntimeState state = GetActiveComplexWeaponState();
+            return state?.Profile?.DisplayName ?? "SIMPLE GUN";
+        }
+    }
     public IReadOnlyList<string> ActiveGadgetItemIds => activeGadgetItemIds;
     public string CurrentGadgetItemId => activeGadgetItemIds.Count > 0 ? activeGadgetItemIds[0] : null;
     public Sprite CurrentGadgetIcon => !string.IsNullOrWhiteSpace(CurrentGadgetItemId) ? InventoryItemCatalog.GetIcon(CurrentGadgetItemId) : null;
@@ -101,6 +180,13 @@ public class PlayerShooting : MonoBehaviourPun
 
     void Start()
     {
+        if (LureBeaconDecoy.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+        {
+            LureBeaconDecoy.EnsureAttached(gameObject);
+            enabled = false;
+            return;
+        }
+
         EnsureBotBootstrap();
         CaptureBaseWeaponProfile();
         maxAmmo = GetConfiguredMaxAmmo();
@@ -125,9 +211,29 @@ public class PlayerShooting : MonoBehaviourPun
             gameObject.AddComponent<ReloadButtonUI>();
         }
 
+        if (GetComponent<ComplexAmmoBarUI>() == null)
+        {
+            gameObject.AddComponent<ComplexAmmoBarUI>();
+        }
+
+        if (GetComponent<SuperAttackUI>() == null)
+        {
+            gameObject.AddComponent<SuperAttackUI>();
+        }
+
+        if (GetComponent<WeaponSwitchButtonUI>() == null)
+        {
+            gameObject.AddComponent<WeaponSwitchButtonUI>();
+        }
+
         if (GetComponent<GadgetButtonUI>() == null)
         {
             gameObject.AddComponent<GadgetButtonUI>();
+        }
+
+        if (GetComponent<AdvancedShootInputZone>() == null)
+        {
+            advancedShootInputZone = gameObject.AddComponent<AdvancedShootInputZone>();
         }
 
         Debug.Log("PlayerShooting START");
@@ -149,15 +255,28 @@ public class PlayerShooting : MonoBehaviourPun
         if (!photonView.IsMine)
             return;
 
-        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
-        if (repairDocking != null && repairDocking.IsBusy)
+        if (AreShipControlsBlocked())
+        {
+            ResetComplexPressState();
+            HideAimMarker();
             return;
+        }
 
-        SyncEquippedWeaponProfile();
         SyncEquippedGadgetProfile();
         RefreshAuthoritativeGadgetRuntimeStates();
-        SyncAmmoSetting();
 
+        if (IsComplexShootingActive)
+        {
+            SyncComplexWeaponProfile();
+            UpdateComplexAmmoReload();
+            UpdateSuperCharge();
+            HandleComplexShootingInput();
+            return;
+        }
+
+        HideAimMarker();
+        SyncEquippedWeaponProfile();
+        SyncAmmoSetting();
         UpdateReload();
 
         if (shootJoystick == null)
@@ -189,6 +308,756 @@ public class PlayerShooting : MonoBehaviourPun
         }
     }
 
+    void HandleComplexShootingInput()
+    {
+        EnsureShootJoystick();
+        EnsureSuperJoystick();
+
+        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
+        bool controlsLocked = repairDocking != null && repairDocking.IsBusy;
+        if (controlsLocked)
+        {
+            ResetComplexPressState();
+            HideAimMarker();
+            return;
+        }
+
+        bool handledSuper = HandleComplexSuperInput();
+        if (!handledSuper)
+            HandleComplexNormalInput();
+    }
+
+    void EnsureShootJoystick()
+    {
+        if (shootJoystick != null)
+            return;
+
+        GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
+        if (shootJoystickObject != null)
+            shootJoystick = shootJoystickObject.GetComponent<Joystick>();
+    }
+
+    void EnsureSuperJoystick()
+    {
+        if (superJoystick != null)
+            return;
+
+        GameObject superJoystickObject = GameObject.Find(SuperAttackUI.RootName);
+        if (superJoystickObject != null)
+            superJoystick = superJoystickObject.GetComponent<Joystick>();
+    }
+
+    void HandleComplexNormalInput()
+    {
+        if (shootJoystick == null)
+            return;
+
+        WeaponAttackProfile profile = activeComplexWeaponProfile ?? SyncComplexWeaponProfile();
+        if (profile == null)
+            return;
+
+        if (shootJoystick.IsPressed)
+        {
+            if (!complexShootWasPressed)
+            {
+                complexShootWasPressed = true;
+                complexShootPressStartedAt = Time.time;
+                complexShootMaxDragMagnitude = 0f;
+                complexLastAimDirection = transform.up;
+                complexLastAimTargetPoint = (Vector2)transform.position + ((Vector2)transform.up * GetComplexRangeWorld(profile));
+            }
+
+            Vector2 raw = GetCurrentShootRawInput();
+            complexShootMaxDragMagnitude = Mathf.Max(complexShootMaxDragMagnitude, raw.magnitude);
+            if (raw.magnitude >= GetManualShootMarkerThreshold())
+            {
+                complexLastAimDirection = raw.normalized;
+                if (IsArcWeaponProfile(profile))
+                    complexLastAimTargetPoint = ResolveArcTargetPointFromInput(profile, raw);
+
+                ShowAimMarker(profile, complexLastAimDirection, IsArcWeaponProfile(profile) ? complexLastAimTargetPoint : (Vector2?)null);
+            }
+            else
+            {
+                HideAimMarker();
+            }
+            return;
+        }
+
+        if (!complexShootWasPressed)
+            return;
+
+        ReleaseComplexNormalInput(profile);
+    }
+
+    void ReleaseComplexNormalInput(WeaponAttackProfile profile)
+    {
+        bool wasTap = IsAdvancedShootJoystickEnabled()
+            ? complexShootMaxDragMagnitude <= ComplexTapMaxDragMagnitude
+            : Time.time - complexShootPressStartedAt <= ComplexTapMaxDuration &&
+              complexShootMaxDragMagnitude <= ComplexTapMaxDragMagnitude;
+
+        Vector2 direction = wasTap
+            ? ResolveComplexAutoAimDirection(profile)
+            : ResolveSafeAimDirection(complexLastAimDirection);
+        Vector2 targetPoint = wasTap && IsArcWeaponProfile(profile)
+            ? ResolveComplexAutoAimTargetPoint(profile)
+            : complexLastAimTargetPoint;
+
+        complexShootWasPressed = false;
+        HideAimMarker();
+        TryFireComplexAttack(profile, direction, targetPoint, true, false);
+    }
+
+    Vector2 GetCurrentShootRawInput()
+    {
+        if (shootJoystick == null)
+            return Vector2.zero;
+
+        return shootJoystick.rawInputVector.sqrMagnitude > 0.0001f
+            ? shootJoystick.rawInputVector
+            : shootJoystick.inputVector;
+    }
+
+    float GetManualShootMarkerThreshold()
+    {
+        if (IsAdvancedShootJoystickEnabled())
+            return AdvancedShootMarkerRawThreshold;
+
+        return ManualAimThreshold;
+    }
+
+    bool HandleComplexSuperInput()
+    {
+        if (superJoystick == null || !RoomSettings.IsSuperAttackEnabled())
+            return false;
+
+        WeaponAttackProfile normalProfile = activeComplexWeaponProfile ?? SyncComplexWeaponProfile();
+        WeaponAttackProfile superProfile = WeaponAttackCatalog.GetSuperAttack(normalProfile != null ? normalProfile.Id : WeaponAttackCatalog.SimpleGunId);
+        if (superProfile == null)
+            return false;
+
+        if (!IsSuperAttackReady)
+        {
+            if (complexSuperWasPressed)
+            {
+                complexSuperWasPressed = false;
+                HideAimMarker();
+            }
+            return false;
+        }
+
+        if (superJoystick.IsPressed)
+        {
+            if (!complexSuperWasPressed)
+            {
+                complexSuperWasPressed = true;
+                complexSuperPressStartedAt = Time.time;
+                complexSuperMaxDragMagnitude = 0f;
+                complexLastSuperAimDirection = transform.up;
+                complexLastSuperAimTargetPoint = (Vector2)transform.position + ((Vector2)transform.up * GetComplexRangeWorld(superProfile));
+            }
+
+            Vector2 raw = superJoystick.inputVector;
+            complexSuperMaxDragMagnitude = Mathf.Max(complexSuperMaxDragMagnitude, raw.magnitude);
+            if (raw.magnitude >= ManualAimThreshold)
+            {
+                complexLastSuperAimDirection = raw.normalized;
+                if (IsArcWeaponProfile(superProfile))
+                    complexLastSuperAimTargetPoint = ResolveArcTargetPointFromInput(superProfile, raw);
+
+                ShowAimMarker(superProfile, complexLastSuperAimDirection, IsArcWeaponProfile(superProfile) ? complexLastSuperAimTargetPoint : (Vector2?)null);
+            }
+            else
+            {
+                HideAimMarker();
+            }
+            return true;
+        }
+
+        if (!complexSuperWasPressed)
+            return false;
+
+        bool wasTap = Time.time - complexSuperPressStartedAt <= ComplexTapMaxDuration &&
+                      complexSuperMaxDragMagnitude <= ComplexTapMaxDragMagnitude;
+        Vector2 direction = wasTap
+            ? ResolveComplexAutoAimDirection(superProfile)
+            : ResolveSafeAimDirection(complexLastSuperAimDirection);
+        Vector2 targetPoint = wasTap && IsArcWeaponProfile(superProfile)
+            ? ResolveComplexAutoAimTargetPoint(superProfile)
+            : complexLastSuperAimTargetPoint;
+
+        complexSuperWasPressed = false;
+        HideAimMarker();
+        if (TryFireComplexAttack(superProfile, direction, targetPoint, false, true))
+            superCharge = 0f;
+
+        return true;
+    }
+
+    void ResetComplexPressState()
+    {
+        complexShootWasPressed = false;
+        complexSuperWasPressed = false;
+    }
+
+    WeaponAttackProfile SyncComplexWeaponProfile()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        string signature = BuildComplexWeaponSignature(equipmentSlots, shipSkinIndex);
+        if (signature == lastAppliedComplexWeaponSignature && activeComplexWeaponProfile != null)
+        {
+            SyncActiveComplexAmmoMirror();
+            return activeComplexWeaponProfile;
+        }
+
+        List<ComplexWeaponRuntimeState> previousStates = new List<ComplexWeaponRuntimeState>(complexWeaponStates);
+        complexWeaponStates.Clear();
+        BuildComplexWeaponStates(equipmentSlots, shipSkinIndex, previousStates);
+        activeComplexWeaponIndex = Mathf.Clamp(activeComplexWeaponIndex, 0, Mathf.Max(0, complexWeaponStates.Count - 1));
+        activeComplexWeaponProfile = GetActiveComplexWeaponState()?.Profile ?? WeaponAttackCatalog.GetNormalAttackByWeaponId(WeaponAttackCatalog.SimpleGunId);
+        lastAppliedComplexWeaponSignature = signature;
+        isReloading = false;
+        reloadFinishTime = 0f;
+        SyncActiveComplexAmmoMirror();
+        return activeComplexWeaponProfile;
+    }
+
+    string BuildComplexWeaponSignature(string[] equipmentSlots, int shipSkinIndex)
+    {
+        StringBuilder builder = new StringBuilder();
+        builder.Append(shipSkinIndex);
+        builder.Append(':');
+        for (int slot = 0; slot < 2; slot++)
+        {
+            if (!ShipCatalog.IsEquipmentSlotEnabled(slot, shipSkinIndex))
+                continue;
+
+            if (builder[builder.Length - 1] != ':')
+                builder.Append(',');
+
+            builder.Append(slot);
+            builder.Append('=');
+            builder.Append(GetWeaponIdForEquipmentSlot(equipmentSlots, slot));
+        }
+
+        builder.Append('|');
+        builder.Append(WeaponAttackCatalog.GetRoomSetupSignature());
+        return builder.ToString();
+    }
+
+    void BuildComplexWeaponStates(string[] equipmentSlots, int shipSkinIndex, List<ComplexWeaponRuntimeState> previousStates)
+    {
+        for (int slot = 0; slot < 2; slot++)
+        {
+            if (!ShipCatalog.IsEquipmentSlotEnabled(slot, shipSkinIndex))
+                continue;
+
+            string weaponId = GetWeaponIdForEquipmentSlot(equipmentSlots, slot);
+            WeaponAttackProfile profile = WeaponAttackCatalog.GetNormalAttackByWeaponId(weaponId);
+            ComplexWeaponRuntimeState previous = FindPreviousComplexWeaponState(previousStates, slot, weaponId);
+            int max = Mathf.Max(1, profile.MaxAmmo);
+            ComplexWeaponRuntimeState state = new ComplexWeaponRuntimeState
+            {
+                SlotIndex = slot,
+                WeaponId = weaponId,
+                Profile = profile,
+                MaxAmmo = max,
+                CurrentAmmo = previous != null ? Mathf.Clamp(previous.CurrentAmmo, 0, max) : max,
+                AmmoReloadStartedAt = previous != null ? previous.AmmoReloadStartedAt : 0f,
+                NextAmmoAt = previous != null ? previous.NextAmmoAt : 0f
+            };
+            complexWeaponStates.Add(state);
+        }
+
+        if (complexWeaponStates.Count == 0)
+        {
+            WeaponAttackProfile profile = WeaponAttackCatalog.GetNormalAttackByWeaponId(WeaponAttackCatalog.SimpleGunId);
+            complexWeaponStates.Add(new ComplexWeaponRuntimeState
+            {
+                SlotIndex = 0,
+                WeaponId = WeaponAttackCatalog.SimpleGunId,
+                Profile = profile,
+                MaxAmmo = Mathf.Max(1, profile.MaxAmmo),
+                CurrentAmmo = Mathf.Max(1, profile.MaxAmmo)
+            });
+        }
+    }
+
+    ComplexWeaponRuntimeState FindPreviousComplexWeaponState(List<ComplexWeaponRuntimeState> previousStates, int slot, string weaponId)
+    {
+        if (previousStates == null)
+            return null;
+
+        for (int i = 0; i < previousStates.Count; i++)
+        {
+            ComplexWeaponRuntimeState state = previousStates[i];
+            if (state != null &&
+                state.SlotIndex == slot &&
+                string.Equals(state.WeaponId, weaponId, StringComparison.Ordinal))
+            {
+                return state;
+            }
+        }
+
+        return null;
+    }
+
+    string GetWeaponIdForEquipmentSlot(string[] equipmentSlots, int slotIndex)
+    {
+        return WeaponAttackCatalog.GetWeaponIdForItem(GetEquipmentItem(equipmentSlots, slotIndex));
+    }
+
+    ComplexWeaponRuntimeState GetActiveComplexWeaponState()
+    {
+        if (complexWeaponStates.Count == 0)
+            return null;
+
+        activeComplexWeaponIndex = Mathf.Clamp(activeComplexWeaponIndex, 0, complexWeaponStates.Count - 1);
+        return complexWeaponStates[activeComplexWeaponIndex];
+    }
+
+    ComplexWeaponRuntimeState GetNextComplexWeaponState()
+    {
+        if (complexWeaponStates.Count == 0)
+            return null;
+
+        int activeIndex = Mathf.Clamp(activeComplexWeaponIndex, 0, complexWeaponStates.Count - 1);
+        int nextIndex = (activeIndex + 1) % complexWeaponStates.Count;
+        return complexWeaponStates[nextIndex];
+    }
+
+    void SyncActiveComplexAmmoMirror()
+    {
+        ComplexWeaponRuntimeState state = GetActiveComplexWeaponState();
+        if (state == null)
+            return;
+
+        activeComplexWeaponProfile = state.Profile;
+        maxAmmo = Mathf.Max(1, state.MaxAmmo);
+        currentAmmo = Mathf.Clamp(state.CurrentAmmo, 0, maxAmmo);
+        complexAmmoReloadStartedAt = state.AmmoReloadStartedAt;
+        complexNextAmmoAt = state.NextAmmoAt;
+    }
+
+    void UpdateComplexAmmoReload()
+    {
+        if (complexWeaponStates.Count == 0)
+            SyncComplexWeaponProfile();
+
+        for (int i = 0; i < complexWeaponStates.Count; i++)
+        {
+            ComplexWeaponRuntimeState state = complexWeaponStates[i];
+            if (state == null || state.Profile == null)
+                continue;
+
+            if (state.CurrentAmmo >= state.MaxAmmo)
+            {
+                state.NextAmmoAt = 0f;
+                state.AmmoReloadStartedAt = 0f;
+                continue;
+            }
+
+            float reloadTime = Mathf.Max(0f, state.Profile.AmmoReloadTime);
+            if (reloadTime <= 0f)
+                continue;
+
+            if (state.NextAmmoAt <= 0f)
+            {
+                state.AmmoReloadStartedAt = Time.time;
+                state.NextAmmoAt = Time.time + reloadTime;
+            }
+
+            while (state.CurrentAmmo < state.MaxAmmo && state.NextAmmoAt > 0f && Time.time >= state.NextAmmoAt)
+            {
+                state.CurrentAmmo++;
+                if (state.CurrentAmmo >= state.MaxAmmo)
+                {
+                    state.NextAmmoAt = 0f;
+                    state.AmmoReloadStartedAt = 0f;
+                    break;
+                }
+
+                state.AmmoReloadStartedAt = state.NextAmmoAt;
+                state.NextAmmoAt += reloadTime;
+            }
+        }
+
+        SyncActiveComplexAmmoMirror();
+    }
+
+    float GetComplexAmmoReloadProgress()
+    {
+        ComplexWeaponRuntimeState state = GetActiveComplexWeaponState();
+        if (!IsComplexShootingActive || state == null || state.CurrentAmmo >= state.MaxAmmo || state.NextAmmoAt <= 0f)
+            return 0f;
+
+        float duration = Mathf.Max(0.001f, state.NextAmmoAt - state.AmmoReloadStartedAt);
+        return Mathf.Clamp01((Time.time - state.AmmoReloadStartedAt) / duration);
+    }
+
+    void UpdateSuperCharge()
+    {
+        if (!RoomSettings.IsSuperAttackEnabled())
+        {
+            superCharge = 0f;
+            return;
+        }
+
+        superCharge = Mathf.Clamp01(superCharge + Time.deltaTime / SuperChargeTimeSeconds);
+    }
+
+    bool TryFireComplexAttack(WeaponAttackProfile profile, Vector2 direction, Vector2 targetPoint, bool consumeAmmo, bool isSuper)
+    {
+        if (profile == null || Time.time < nextComplexAttackTime)
+            return false;
+
+        ComplexWeaponRuntimeState activeWeaponState = consumeAmmo ? GetActiveComplexWeaponState() : null;
+        if (consumeAmmo)
+        {
+            if (activeWeaponState == null || activeWeaponState.CurrentAmmo <= 0)
+                return false;
+        }
+
+        direction = ResolveSafeAimDirection(direction);
+        if (consumeAmmo)
+        {
+            activeWeaponState.CurrentAmmo = Mathf.Max(0, activeWeaponState.CurrentAmmo - 1);
+            if (activeWeaponState.CurrentAmmo < activeWeaponState.MaxAmmo && activeWeaponState.NextAmmoAt <= 0f)
+            {
+                activeWeaponState.AmmoReloadStartedAt = Time.time;
+                activeWeaponState.NextAmmoAt = Time.time + Mathf.Max(0.001f, profile.AmmoReloadTime);
+            }
+
+            SyncActiveComplexAmmoMirror();
+        }
+
+        if (complexBurstRoutine != null)
+            StopCoroutine(complexBurstRoutine);
+
+        complexBurstRoutine = StartCoroutine(FireComplexBurst(profile, direction, targetPoint));
+        nextComplexAttackTime = Time.time + Mathf.Max(0.05f, profile.AttackCooldown);
+        return true;
+    }
+
+    public void SwitchComplexWeapon()
+    {
+        if (!photonView.IsMine || !IsComplexShootingActive || complexWeaponStates.Count <= 1)
+            return;
+
+        activeComplexWeaponIndex = (activeComplexWeaponIndex + 1) % complexWeaponStates.Count;
+        ResetComplexPressState();
+        HideAimMarker();
+        SyncActiveComplexAmmoMirror();
+    }
+
+    IEnumerator FireComplexBurst(WeaponAttackProfile profile, Vector2 direction, Vector2 targetPoint)
+    {
+        if (profile == null)
+            yield break;
+
+        if (profile.StartDelay > 0f)
+            yield return new WaitForSeconds(profile.StartDelay);
+
+        int ownerId = photonView != null ? photonView.ViewID : 0;
+        int count = Mathf.Max(1, profile.ProjectileCount);
+        for (int i = 0; i < count; i++)
+        {
+            Vector2 shotDirection = ResolveComplexProjectileDirection(direction, profile.SpreadAngle, i, count);
+            Vector2 projectileTargetPoint = ResolveComplexProjectileTargetPoint(profile, targetPoint, direction, i, count);
+            Vector3 spawnPos = transform.position + (Vector3)(shotDirection.normalized * Mathf.Max(0.05f, muzzleOffsetDistance));
+            bool spawned = SpawnComplexBullet(profile, shotDirection.normalized, spawnPos, ownerId, projectileTargetPoint);
+            if (spawned)
+                photonView.RPC(nameof(PlayShotSfx), RpcTarget.All, profile.ShotSoundId ?? string.Empty);
+
+            if (i < count - 1 && profile.ProjectileInterval > 0f)
+                yield return new WaitForSeconds(profile.ProjectileInterval);
+        }
+    }
+
+    Vector2 ResolveComplexProjectileDirection(Vector2 baseDirection, float spreadAngle, int index, int count)
+    {
+        baseDirection = ResolveSafeAimDirection(baseDirection);
+        if (count <= 1 || Mathf.Abs(spreadAngle) <= 0.01f)
+            return baseDirection;
+
+        float t = count == 1 ? 0f : index / (float)(count - 1);
+        float angle = Mathf.Lerp(-spreadAngle * 0.5f, spreadAngle * 0.5f, t);
+        return Quaternion.Euler(0f, 0f, angle) * baseDirection;
+    }
+
+    Vector2 ResolveComplexProjectileTargetPoint(WeaponAttackProfile profile, Vector2 baseTargetPoint, Vector2 baseDirection, int index, int count)
+    {
+        if (!IsArcWeaponProfile(profile) || count <= 1)
+            return baseTargetPoint;
+
+        if (IsArtillerySuperProfile(profile))
+        {
+            if (index <= 0)
+                return baseTargetPoint;
+
+            float clusterRadius = Mathf.Max(0.08f, profile.AreaDamageRadius * 0.5f);
+            Vector2 randomOffset = UnityEngine.Random.insideUnitCircle * clusterRadius;
+            return baseTargetPoint + randomOffset;
+        }
+
+        Vector2 source = transform.position;
+        Vector2 sourceToTarget = baseTargetPoint - source;
+        float targetDistance = sourceToTarget.magnitude;
+        if (targetDistance <= 0.001f)
+            return baseTargetPoint;
+
+        Vector2 safeDirection = ResolveSafeAimDirection(baseDirection);
+        float t = count == 1 ? 0f : index / (float)(count - 1);
+        float centered = Mathf.Lerp(-1f, 1f, t);
+        float angle = centered * profile.SpreadAngle * 0.75f;
+        Vector2 rotatedDirection = (Quaternion.Euler(0f, 0f, angle) * safeDirection).normalized;
+
+        float lateralSpacing = Mathf.Max(
+            Mathf.Max(0.42f, profile.AreaDamageRadius * 1.5f),
+            targetDistance * Mathf.Sin(Mathf.Abs(angle) * Mathf.Deg2Rad));
+
+        Vector2 perpendicular = new Vector2(-safeDirection.y, safeDirection.x);
+        float stagger = ((index % 2 == 0) ? -0.18f : 0.18f) * Mathf.Max(0.6f, profile.AreaDamageRadius);
+        Vector2 landingPoint = source + rotatedDirection * targetDistance;
+        landingPoint += perpendicular * centered * lateralSpacing * 0.28f;
+        landingPoint += safeDirection * stagger;
+        return landingPoint;
+    }
+
+    Vector2 ResolveComplexAutoAimDirection(WeaponAttackProfile profile)
+    {
+        float range = GetComplexRangeWorld(profile);
+        PlayerHealth[] targets = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        Transform bestTarget = null;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < targets.Length; i++)
+        {
+            PlayerHealth target = targets[i];
+            if (target == null || target.IsWreck || target.photonView == null || target.photonView.ViewID == photonView.ViewID)
+                continue;
+
+            if (target.GetComponent<LureBeaconDecoy>() != null)
+                continue;
+
+            HideInNebulaTarget nebulaState = target.GetComponent<HideInNebulaTarget>();
+            if (nebulaState != null && nebulaState.IsHiddenFromLocalPlayer())
+                continue;
+
+            Vector2 targetPosition = target.transform.position;
+            float distance = Vector2.Distance(transform.position, targetPosition);
+            if (distance > range || distance >= bestDistance)
+                continue;
+
+            if (!IsArcWeaponProfile(profile) &&
+                IsLineBlockedByObstacle(transform.position, targetPosition, target.transform))
+                continue;
+
+            bestDistance = distance;
+            bestTarget = target.transform;
+        }
+
+        if (bestTarget != null)
+            return ResolveSafeAimDirection(bestTarget.position - transform.position);
+
+        return transform.up;
+    }
+
+    Vector2 ResolveComplexAutoAimTargetPoint(WeaponAttackProfile profile)
+    {
+        float range = GetComplexRangeWorld(profile);
+        Vector2 direction = ResolveComplexAutoAimDirection(profile);
+        PlayerHealth[] targets = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        Transform bestTarget = null;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < targets.Length; i++)
+        {
+            PlayerHealth target = targets[i];
+            if (target == null || target.IsWreck || target.photonView == null || target.photonView.ViewID == photonView.ViewID)
+                continue;
+
+            if (target.GetComponent<LureBeaconDecoy>() != null)
+                continue;
+
+            HideInNebulaTarget nebulaState = target.GetComponent<HideInNebulaTarget>();
+            if (nebulaState != null && nebulaState.IsHiddenFromLocalPlayer())
+                continue;
+
+            Vector2 targetPosition = target.transform.position;
+            float distance = Vector2.Distance(transform.position, targetPosition);
+            if (distance > range || distance >= bestDistance)
+                continue;
+
+            if (!IsArcWeaponProfile(profile) &&
+                IsLineBlockedByObstacle(transform.position, targetPosition, target.transform))
+                continue;
+
+            bestDistance = distance;
+            bestTarget = target.transform;
+        }
+
+        if (bestTarget != null)
+            return bestTarget.position;
+
+        return (Vector2)transform.position + (direction * range);
+    }
+
+    bool IsLineBlockedByObstacle(Vector2 start, Vector2 end, Transform target)
+    {
+        RaycastHit2D[] hits = Physics2D.LinecastAll(start, end);
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i].collider;
+            if (hit == null || hit.isTrigger)
+                continue;
+
+            if (hit.transform == transform || hit.transform.IsChildOf(transform))
+                continue;
+
+            if (target != null && (hit.transform == target || hit.transform.IsChildOf(target)))
+                continue;
+
+            if (hit.GetComponentInParent<Bullet>() != null)
+                continue;
+
+            if (hit.GetComponentInParent<ObstacleChunk>() != null)
+                return true;
+        }
+
+        return false;
+    }
+
+    Vector2 ResolveSafeAimDirection(Vector2 direction)
+    {
+        if (direction.sqrMagnitude > 0.001f)
+            return direction.normalized;
+
+        Vector2 forward = transform.up;
+        return forward.sqrMagnitude > 0.001f ? forward.normalized : Vector2.up;
+    }
+
+    void ShowAimMarker(WeaponAttackProfile profile, Vector2 direction, Vector2? explicitTargetPoint = null)
+    {
+        if (profile == null)
+            return;
+
+        if (aimMarker == null)
+            aimMarker = AimMarkerVfx.EnsureFor(gameObject);
+
+        if (aimMarker == null)
+            return;
+
+        Vector2 resolvedDirection = ResolveSafeAimDirection(direction);
+        float range = GetComplexRangeWorld(profile);
+        if (IsArcWeaponProfile(profile))
+        {
+            Vector3 landingPoint = explicitTargetPoint.HasValue
+                ? (Vector3)explicitTargetPoint.Value
+                : transform.position + (Vector3)(resolvedDirection * range);
+            aimMarker.ShowArc(transform.position, landingPoint, profile.MarkerColor, ResolveArcHeight(range));
+            return;
+        }
+
+        aimMarker.ShowLine(transform.position, resolvedDirection, range, profile.MarkerColor);
+    }
+
+    void HideAimMarker()
+    {
+        if (aimMarker != null)
+            aimMarker.Hide();
+    }
+
+    float GetComplexRangeWorld(WeaponAttackProfile profile)
+    {
+        float multiplier = profile != null ? Mathf.Max(0.1f, profile.RangeMultiplier) : DefaultBulletRangeMultiplier;
+        return GetOwnerLengthForRange() * multiplier;
+    }
+
+    float GetOwnerLengthForRange()
+    {
+        SpriteRenderer spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+        if (spriteRenderer != null)
+            return Mathf.Max(spriteRenderer.bounds.size.x, spriteRenderer.bounds.size.y);
+
+        Collider2D collider2D = GetComponentInChildren<Collider2D>();
+        if (collider2D != null)
+            return Mathf.Max(collider2D.bounds.size.x, collider2D.bounds.size.y);
+
+        return 1f;
+    }
+
+    bool SpawnComplexBullet(WeaponAttackProfile profile, Vector2 direction, Vector3 spawnPos, int ownerId, Vector2 explicitTargetPoint)
+    {
+        if (bulletPrefab == null || profile == null)
+            return false;
+
+        float clampedFlightTime = Mathf.Clamp(profile.FlightTime, 0.2f, 30f);
+        float range = GetComplexRangeWorld(profile);
+        bool isArcProjectile = IsArcWeaponProfile(profile);
+        Vector2 targetPoint = isArcProjectile
+            ? explicitTargetPoint
+            : (Vector2)spawnPos + (direction.normalized * range);
+        float arcHeight = ResolveArcHeight(range);
+
+        GameObject bullet = PhotonNetwork.Instantiate(
+            bulletPrefab.name,
+            spawnPos,
+            Quaternion.identity,
+            0,
+            new object[]
+            {
+                ownerId,
+                Mathf.Max(profile.HpDamage, profile.ShieldDamage),
+                profile.ProjectileSize,
+                profile.ProjectileColor.r,
+                profile.ProjectileColor.g,
+                profile.ProjectileColor.b,
+                profile.ProjectileColor.a,
+                profile.RangeMultiplier,
+                profile.ShieldDamage,
+                profile.HpDamage,
+                profile.Pierces,
+                profile.AreaDamageRadius,
+                profile.HitEffectId ?? string.Empty,
+                clampedFlightTime,
+                isArcProjectile,
+                targetPoint.x,
+                targetPoint.y,
+                arcHeight
+            }
+        );
+
+        if (bullet == null)
+            return false;
+
+        Bullet bulletComponent = bullet.GetComponent<Bullet>();
+        if (bulletComponent != null)
+            bulletComponent.ownerViewID = ownerId;
+
+        Rigidbody2D rb = bullet.GetComponent<Rigidbody2D>();
+        if (rb != null && !isArcProjectile)
+            rb.linearVelocity = direction.normalized * profile.ProjectileSpeed;
+
+        Collider2D playerCollider = GetComponent<Collider2D>();
+        Collider2D bulletCollider = bullet.GetComponent<Collider2D>();
+        if (bulletCollider != null && playerCollider != null)
+            Physics2D.IgnoreCollision(bulletCollider, playerCollider);
+
+        return true;
+    }
+
+    public void AddSuperChargeForDamage()
+    {
+        if (!IsComplexShootingActive || !RoomSettings.IsSuperAttackEnabled())
+            return;
+
+        superCharge = Mathf.Clamp01(superCharge + SuperChargeOnComplexHit);
+    }
+
     Vector2 ResolveManualAimDirection()
     {
         Vector2 rawDirection = shootJoystick != null ? shootJoystick.inputVector : Vector2.zero;
@@ -208,6 +1077,9 @@ public class PlayerShooting : MonoBehaviourPun
         {
             PlayerHealth target = targets[i];
             if (target == null || target.IsWreck || target.photonView == null || target.photonView.ViewID == photonView.ViewID)
+                continue;
+
+            if (target.GetComponent<LureBeaconDecoy>() != null)
                 continue;
 
             HideInNebulaTarget nebulaState = target.GetComponent<HideInNebulaTarget>();
@@ -243,8 +1115,25 @@ public class PlayerShooting : MonoBehaviourPun
         PhotonView playerView = GetComponent<PhotonView>();
         int ownerId = playerView != null ? playerView.ViewID : 0;
         bool spawned = false;
+        WeaponAttackProfile profile = activeSimpleWeaponProfile;
 
-        if (ShouldFireFromDualWingMuzzles())
+        if (ShouldUseArcSimpleShot(profile))
+        {
+            Vector3 spawnPos = transform.position + (transform.up * muzzleOffsetDistance);
+            Vector2 targetPoint = (Vector2)transform.position + (direction.normalized * GetComplexRangeWorld(profile));
+            spawned |= SpawnComplexBullet(profile, direction.normalized, spawnPos, ownerId, targetPoint);
+        }
+        else if (ShouldUseSimpleSpreadShot(profile))
+        {
+            Vector3 spawnPos = transform.position + (transform.up * muzzleOffsetDistance);
+            int count = Mathf.Max(1, profile.ProjectileCount);
+            for (int i = 0; i < count; i++)
+            {
+                Vector2 shotDirection = ResolveComplexProjectileDirection(direction.normalized, profile.SpreadAngle, i, count);
+                spawned |= SpawnBullet(shotDirection, spawnPos, ownerId);
+            }
+        }
+        else if (ShouldFireFromDualWingMuzzles())
         {
             spawned |= SpawnBullet(direction, GetWingMuzzlePosition(-1f), ownerId);
             spawned |= SpawnBullet(direction, GetWingMuzzlePosition(1f), ownerId);
@@ -257,6 +1146,45 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (spawned)
             photonView.RPC(nameof(PlayLaserSfx), RpcTarget.All);
+    }
+
+    bool ShouldUseSimpleSpreadShot(WeaponAttackProfile profile)
+    {
+        return profile != null &&
+               string.Equals(profile.Id, WeaponAttackCatalog.TripleGunId, StringComparison.Ordinal);
+    }
+
+    bool ShouldUseArcSimpleShot(WeaponAttackProfile profile)
+    {
+        return IsArcWeaponProfile(profile);
+    }
+
+    bool IsArcWeaponProfile(WeaponAttackProfile profile)
+    {
+        return profile != null &&
+               (profile.MarkerType == ComplexAttackMarkerType.Arc ||
+                string.Equals(profile.Id, WeaponAttackCatalog.ArtilleryGunId, StringComparison.Ordinal));
+    }
+
+    bool IsArtillerySuperProfile(WeaponAttackProfile profile)
+    {
+        return profile != null &&
+               string.Equals(profile.Id, WeaponAttackCatalog.ArtilleryGunId + "_super", StringComparison.Ordinal);
+    }
+
+    Vector2 ResolveArcTargetPointFromInput(WeaponAttackProfile profile, Vector2 rawInput)
+    {
+        float maxRange = GetComplexRangeWorld(profile);
+        if (rawInput.sqrMagnitude <= 0.001f)
+            return (Vector2)transform.position + ((Vector2)transform.up * maxRange);
+
+        float distance = Mathf.Clamp01(rawInput.magnitude) * maxRange;
+        return (Vector2)transform.position + (rawInput.normalized * distance);
+    }
+
+    float ResolveArcHeight(float range)
+    {
+        return Mathf.Max(1.2f, range * 0.22f);
     }
 
     public bool TryFireBot(Vector2 direction)
@@ -413,31 +1341,30 @@ public class PlayerShooting : MonoBehaviourPun
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
         string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
-        int plasmaGunCount = CountEquippedPlasmaGuns(equipmentSlots, shipSkinIndex);
-        string signature = shipSkinIndex + ":" + plasmaGunCount;
+        string weaponId = WeaponAttackCatalog.GetPrimaryWeaponId(equipmentSlots, shipSkinIndex);
+        int matchingWeaponCount = CountEquippedWeapon(equipmentSlots, shipSkinIndex, weaponId);
+        string signature = shipSkinIndex + ":" + weaponId + "x" + matchingWeaponCount;
         if (signature == lastAppliedWeaponSignature)
             return;
 
-        ApplyPlayerWeaponProfile(plasmaGunCount);
+        WeaponAttackProfile profile = WeaponAttackCatalog.GetDefaultNormalAttackByWeaponId(weaponId);
+        ApplyPlayerWeaponProfile(profile, matchingWeaponCount);
         lastAppliedWeaponSignature = signature;
     }
 
-    int CountEquippedPlasmaGuns(string[] equipmentSlots, int shipSkinIndex)
+    int CountEquippedWeapon(string[] equipmentSlots, int shipSkinIndex, string weaponId)
     {
-        if (equipmentSlots == null)
+        if (equipmentSlots == null || string.IsNullOrWhiteSpace(weaponId) || string.Equals(weaponId, WeaponAttackCatalog.SimpleGunId, StringComparison.Ordinal))
             return 0;
 
         int count = 0;
-        if (ShipCatalog.IsEquipmentSlotEnabled(0, shipSkinIndex) &&
-            string.Equals(GetEquipmentItem(equipmentSlots, 0), InventoryItemCatalog.PlasmaGunId, StringComparison.Ordinal))
+        for (int slot = 0; slot < 2; slot++)
         {
-            count++;
-        }
+            if (!ShipCatalog.IsEquipmentSlotEnabled(slot, shipSkinIndex))
+                continue;
 
-        if (ShipCatalog.IsEquipmentSlotEnabled(1, shipSkinIndex) &&
-            string.Equals(GetEquipmentItem(equipmentSlots, 1), InventoryItemCatalog.PlasmaGunId, StringComparison.Ordinal))
-        {
-            count++;
+            if (string.Equals(WeaponAttackCatalog.GetWeaponIdForItem(GetEquipmentItem(equipmentSlots, slot)), weaponId, StringComparison.Ordinal))
+                count++;
         }
 
         return count;
@@ -450,24 +1377,40 @@ public class PlayerShooting : MonoBehaviourPun
             : null;
     }
 
-    void ApplyPlayerWeaponProfile(int plasmaGunCount)
+    void ApplyPlayerWeaponProfile(WeaponAttackProfile profile, int matchingWeaponCount)
     {
         if (!baseWeaponProfileCaptured)
             return;
 
-        if (plasmaGunCount > 0)
+        activeSimpleWeaponProfile = profile;
+        simpleUsesDamageProfile = false;
+        simpleShieldDamage = baseBulletDamage;
+        simpleHpDamage = baseBulletDamage;
+        simplePierces = false;
+        simpleAreaDamageRadius = 0f;
+        simpleHitEffectId = string.Empty;
+        simpleFlightTime = 10f;
+
+        if (profile != null && !string.Equals(profile.Id, WeaponAttackCatalog.SimpleGunId, StringComparison.Ordinal))
         {
-            fireRate = Mathf.Max(0.05f, baseFireRate * 2f);
+            fireRate = Mathf.Max(0.05f, profile.AttackCooldown);
             reloadDuration = baseReloadDuration;
-            bulletDamage = Mathf.Max(1, baseBulletDamage * 2);
-            bulletScaleMultiplier = Mathf.Max(baseBulletScaleMultiplier, 2f);
-            bulletColor = PlasmaBulletColor;
+            bulletDamage = Mathf.Max(1, Mathf.Max(profile.HpDamage, profile.ShieldDamage));
+            bulletScaleMultiplier = Mathf.Max(0.2f, profile.ProjectileSize);
+            bulletColor = profile.ProjectileColor;
             muzzleOffsetDistance = baseMuzzleOffsetDistance;
-            bulletRangeMultiplier = Mathf.Max(0.25f, baseBulletRangeMultiplier * 2f);
+            bulletRangeMultiplier = Mathf.Max(0.25f, profile.RangeMultiplier);
             infiniteAmmo = baseInfiniteAmmo;
-            bulletSpeed = baseBulletSpeed;
-            shotSoundId = "corsair";
-            multiShotCount = plasmaGunCount >= 2 ? 2 : 1;
+            bulletSpeed = Mathf.Max(0.5f, profile.ProjectileSpeed);
+            shotSoundId = profile.ShotSoundId ?? string.Empty;
+            multiShotCount = ShouldUseDualMuzzles(profile, matchingWeaponCount) ? 2 : 1;
+            simpleUsesDamageProfile = true;
+            simpleShieldDamage = Mathf.Max(0, profile.ShieldDamage);
+            simpleHpDamage = Mathf.Max(0, profile.HpDamage);
+            simplePierces = profile.Pierces;
+            simpleAreaDamageRadius = Mathf.Max(0f, profile.AreaDamageRadius);
+            simpleHitEffectId = profile.HitEffectId ?? string.Empty;
+            simpleFlightTime = Mathf.Clamp(profile.FlightTime, 0.2f, 30f);
             return;
         }
 
@@ -482,6 +1425,17 @@ public class PlayerShooting : MonoBehaviourPun
         bulletSpeed = baseBulletSpeed;
         shotSoundId = baseShotSoundId;
         multiShotCount = 1;
+    }
+
+    bool ShouldUseDualMuzzles(WeaponAttackProfile profile, int matchingWeaponCount)
+    {
+        if (profile == null)
+            return false;
+
+        if (matchingWeaponCount >= 2)
+            return true;
+
+        return string.Equals(profile.Id, WeaponAttackCatalog.DoubleIonizerId, StringComparison.Ordinal);
     }
 
     void SyncEquippedGadgetProfile()
@@ -670,12 +1624,25 @@ public class PlayerShooting : MonoBehaviourPun
 
     bool SpawnBullet(Vector2 direction, Vector3 spawnPos, int ownerId)
     {
-        GameObject bullet = PhotonNetwork.Instantiate(
-            bulletPrefab.name,
-            spawnPos,
-            Quaternion.identity,
-            0,
-            new object[]
+        object[] data = simpleUsesDamageProfile
+            ? new object[]
+            {
+                ownerId,
+                bulletDamage,
+                bulletScaleMultiplier,
+                bulletColor.r,
+                bulletColor.g,
+                bulletColor.b,
+                bulletColor.a,
+                bulletRangeMultiplier,
+                simpleShieldDamage,
+                simpleHpDamage,
+                simplePierces,
+                simpleAreaDamageRadius,
+                simpleHitEffectId ?? string.Empty,
+                simpleFlightTime
+            }
+            : new object[]
             {
                 ownerId,
                 bulletDamage,
@@ -685,7 +1652,14 @@ public class PlayerShooting : MonoBehaviourPun
                 bulletColor.b,
                 bulletColor.a,
                 bulletRangeMultiplier
-            }
+            };
+
+        GameObject bullet = PhotonNetwork.Instantiate(
+            bulletPrefab.name,
+            spawnPos,
+            Quaternion.identity,
+            0,
+            data
         );
 
         if (bullet == null)
@@ -727,6 +1701,38 @@ public class PlayerShooting : MonoBehaviourPun
         }
 
         return false;
+    }
+
+    public bool CanUseAdvancedShootJoystick()
+    {
+        return photonView != null &&
+               photonView.IsMine &&
+               IsGameStarted() &&
+               IsComplexShootingActive &&
+               RoomSettings.IsAdvancedShootingJoystickEnabled() &&
+               !AreShipControlsBlocked();
+    }
+
+    public bool IsAdvancedShootJoystickEnabled()
+    {
+        return RoomSettings.IsAdvancedShootingJoystickEnabled() && IsComplexShootingActive;
+    }
+
+    public bool TriggerAdvancedAutoAimShot()
+    {
+        if (!CanUseAdvancedShootJoystick())
+            return false;
+
+        WeaponAttackProfile profile = activeComplexWeaponProfile ?? SyncComplexWeaponProfile();
+        if (profile == null)
+            return false;
+
+        complexShootWasPressed = false;
+        complexShootMaxDragMagnitude = 0f;
+        complexLastAimDirection = transform.up;
+        complexLastAimTargetPoint = (Vector2)transform.position + ((Vector2)transform.up * GetComplexRangeWorld(profile));
+        HideAimMarker();
+        return TryFireComplexAttack(profile, ResolveComplexAutoAimDirection(profile), ResolveComplexAutoAimTargetPoint(profile), true, false);
     }
 
     int GetConfiguredMaxAmmo()
@@ -790,6 +1796,21 @@ public class PlayerShooting : MonoBehaviourPun
             photonView.RPC(nameof(RequestStopTractorBeam), RpcTarget.MasterClient, itemId);
     }
 
+    public void CancelActiveGadgetEffectsForShipLoss()
+    {
+        ResetComplexPressState();
+        HideAimMarker();
+
+        if (PhotonNetwork.IsMasterClient)
+        {
+            StopAuthoritativeTractorBeam(true);
+        }
+        else if (photonView != null && photonView.IsMine)
+        {
+            photonView.RPC(nameof(RequestStopTractorBeam), RpcTarget.MasterClient, InventoryItemCatalog.TractorBeamId);
+        }
+    }
+
     public bool IsHoldGadget(string itemId)
     {
         return string.Equals(itemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal);
@@ -822,15 +1843,39 @@ public class PlayerShooting : MonoBehaviourPun
     [PunRPC]
     void PlayLaserSfx()
     {
-        if (shotSoundId == "shoot_small")
+        PlayShotSfx(shotSoundId ?? string.Empty);
+    }
+
+    [PunRPC]
+    void PlayShotSfx(string soundId)
+    {
+        if (soundId == "shoot_small")
         {
             AudioManager.Instance.PlayShootSmallAt(transform.position);
             return;
         }
 
-        if (shotSoundId == "corsair")
+        if (soundId == "artillery")
+        {
+            AudioManager.Instance.PlayArtilleryGunAt(transform.position);
+            return;
+        }
+
+        if (soundId == "corsair")
         {
             AudioManager.Instance.PlayCorsairLaserAt(transform.position);
+            return;
+        }
+
+        if (soundId == "lazer1")
+        {
+            AudioManager.Instance.PlayLazer1At(transform.position);
+            return;
+        }
+
+        if (soundId == "lazer2")
+        {
+            AudioManager.Instance.PlayLazer2At(transform.position);
             return;
         }
 
@@ -946,8 +1991,7 @@ public class PlayerShooting : MonoBehaviourPun
         if (!photonView.IsMine || !IsGameStarted() || string.IsNullOrWhiteSpace(itemId))
             return false;
 
-        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
-        if (repairDocking != null && repairDocking.IsBusy)
+        if (AreShipControlsBlocked())
             return false;
 
         if (!gadgetStates.TryGetValue(itemId, out GadgetRuntimeState state) || state == null)
@@ -963,6 +2007,25 @@ public class PlayerShooting : MonoBehaviourPun
         }
 
         return true;
+    }
+
+    bool AreShipControlsBlocked()
+    {
+        if (GetComponent<EnemyBot>() != null)
+            return false;
+
+        if (AstronautSurvivor.IsAstronautInstantiationData(photonView != null ? photonView.InstantiationData : null) ||
+            GetComponent<AstronautSurvivor>() != null)
+        {
+            return true;
+        }
+
+        PlayerHealth health = GetComponent<PlayerHealth>();
+        if (health != null && (health.IsWreck || health.IsAstronautControlled || health.IsEvacuationAnimating || health.CurrentHP <= 0))
+            return true;
+
+        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
+        return repairDocking != null && repairDocking.IsBusy;
     }
 
     public int GetRemainingGadgetCharges(string itemId)
@@ -1005,6 +2068,9 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal))
             return new Color(0.72f, 0.5f, 0.08f, 0.96f);
 
+        if (string.Equals(itemId, InventoryItemCatalog.LureBeaconId, StringComparison.Ordinal))
+            return new Color(0.68f, 0.2f, 0.72f, 0.96f);
+
         return new Color(0.22f, 0.3f, 0.4f, 0.94f);
     }
 
@@ -1034,6 +2100,9 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(gadgetItemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal))
             return TractorBeamDefaultCharges * equippedCount;
 
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.LureBeaconId, StringComparison.Ordinal))
+            return LureBeaconDefaultCharges * equippedCount;
+
         return 0;
     }
 
@@ -1041,6 +2110,9 @@ public class PlayerShooting : MonoBehaviourPun
     void RequestAuthoritativeGadgetUse(string itemId, PhotonMessageInfo messageInfo)
     {
         if (!PhotonNetwork.IsMasterClient || !IsGameStarted() || string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        if (AreShipControlsBlocked())
             return;
 
         if (photonView == null || photonView.Owner == null || messageInfo.Sender == null || messageInfo.Sender.ActorNumber != photonView.Owner.ActorNumber)
@@ -1070,6 +2142,9 @@ public class PlayerShooting : MonoBehaviourPun
     void RequestStartTractorBeam(string itemId, PhotonMessageInfo messageInfo)
     {
         if (!PhotonNetwork.IsMasterClient || !IsGameStarted() || !string.Equals(itemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal))
+            return;
+
+        if (AreShipControlsBlocked())
             return;
 
         if (photonView == null || photonView.Owner == null || messageInfo.Sender == null || messageInfo.Sender.ActorNumber != photonView.Owner.ActorNumber)
@@ -1145,7 +2220,83 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.MagneticBeamId, StringComparison.Ordinal))
             return TryActivateMagneticBeam();
 
+        if (string.Equals(itemId, InventoryItemCatalog.LureBeaconId, StringComparison.Ordinal))
+            return TryDeployLureBeacon();
+
         return false;
+    }
+
+    bool TryDeployLureBeacon()
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return false;
+
+        Vector2 deployDirection = -(Vector2)transform.up;
+        if (deployDirection.sqrMagnitude < 0.001f)
+            deployDirection = Vector2.down;
+        else
+            deployDirection = deployDirection.normalized;
+
+        Vector3 spawnPosition = ResolveLureBeaconSpawnPosition(deployDirection);
+        GameObject beaconObject = PhotonNetwork.InstantiateRoomObject(
+            "Player",
+            spawnPosition,
+            Quaternion.Euler(0f, 0f, UnityEngine.Random.Range(0f, 360f)),
+            0,
+            new object[]
+            {
+                LureBeaconDecoy.InstantiationMarker,
+                photonView != null ? photonView.ViewID : 0,
+                deployDirection.x,
+                deployDirection.y
+            });
+
+        if (beaconObject == null)
+            return false;
+
+        LureBeaconDecoy.EnsureAttached(beaconObject);
+        return true;
+    }
+
+    Vector3 ResolveLureBeaconSpawnPosition(Vector2 preferredDirection)
+    {
+        Vector2 origin = transform.position;
+        Vector2 fallbackDirection = preferredDirection.sqrMagnitude > 0.001f ? preferredDirection.normalized : Vector2.down;
+        for (int attempt = 0; attempt < 14; attempt++)
+        {
+            float jitter = attempt == 0 ? 0f : UnityEngine.Random.Range(-26f, 26f);
+            Vector2 candidateDirection = Quaternion.Euler(0f, 0f, jitter) * fallbackDirection;
+            if (candidateDirection.sqrMagnitude < 0.001f)
+                candidateDirection = fallbackDirection;
+
+            Vector2 candidate = origin + candidateDirection.normalized * LureBeaconDeployDistance;
+            if (IsLureBeaconSpawnPositionFree(candidate))
+                return new Vector3(candidate.x, candidate.y, 0f);
+        }
+
+        Vector2 fallback = origin + fallbackDirection * LureBeaconDeployDistance;
+        return new Vector3(fallback.x, fallback.y, 0f);
+    }
+
+    bool IsLureBeaconSpawnPositionFree(Vector2 candidate)
+    {
+        Collider2D[] hits = Physics2D.OverlapCircleAll(candidate, LureBeaconSpawnClearanceRadius);
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null || hit.isTrigger)
+                continue;
+
+            if (hit.transform == transform || hit.transform.IsChildOf(transform))
+                continue;
+
+            if (hit.GetComponentInParent<LureBeaconDecoy>() != null)
+                continue;
+
+            return false;
+        }
+
+        return true;
     }
 
     bool TryActivateMagneticBeam()
@@ -1501,6 +2652,213 @@ public class PlayerShooting : MonoBehaviourPun
     }
 }
 
+public sealed class AdvancedShootInputZone : MonoBehaviourPun
+{
+    const string ZoneObjectName = "AdvancedShootInputZone";
+    const float HoldToFloatDelay = 0.12f;
+    const float DragToFloatPixels = 16f;
+
+    PlayerShooting shooting;
+    Joystick shootJoystick;
+    GameObject zoneObject;
+    RectTransform zoneRect;
+    Image zoneImage;
+    AdvancedShootInputZoneSurface surface;
+    bool pointerHeld;
+    bool floatingJoystickActive;
+    int pointerId = int.MinValue;
+    float pointerDownAt;
+    Vector2 pointerDownScreenPosition;
+    Camera pointerCamera;
+
+    void Start()
+    {
+        shooting = GetComponent<PlayerShooting>();
+        if (!photonView.IsMine)
+        {
+            enabled = false;
+            return;
+        }
+
+        EnsureZone();
+        RefreshState();
+    }
+
+    void Update()
+    {
+        if (!photonView.IsMine)
+            return;
+
+        EnsureZone();
+        RefreshState();
+
+        if (!pointerHeld || floatingJoystickActive || shooting == null || !shooting.CanUseAdvancedShootJoystick())
+            return;
+
+        if (Time.time - pointerDownAt >= HoldToFloatDelay)
+            ActivateFloatingJoystick(pointerDownScreenPosition, pointerCamera);
+    }
+
+    void OnDisable()
+    {
+        CancelCurrentPress(true);
+    }
+
+    void OnDestroy()
+    {
+        CancelCurrentPress(true);
+        if (zoneObject != null)
+            Destroy(zoneObject);
+    }
+
+    public void HandlePointerDown(PointerEventData eventData)
+    {
+        if (eventData == null || shooting == null || !shooting.CanUseAdvancedShootJoystick())
+            return;
+
+        pointerHeld = true;
+        floatingJoystickActive = false;
+        pointerId = eventData.pointerId;
+        pointerDownAt = Time.time;
+        pointerDownScreenPosition = eventData.position;
+        pointerCamera = eventData.pressEventCamera;
+    }
+
+    public void HandleDrag(PointerEventData eventData)
+    {
+        if (!IsMatchingPointer(eventData) || shooting == null || !shooting.CanUseAdvancedShootJoystick())
+            return;
+
+        if (!floatingJoystickActive)
+        {
+            if (Vector2.Distance(pointerDownScreenPosition, eventData.position) >= DragToFloatPixels)
+                ActivateFloatingJoystick(pointerDownScreenPosition, pointerCamera);
+            else
+                return;
+        }
+
+        if (shootJoystick != null)
+            shootJoystick.UpdateExternalControl(eventData.position, pointerCamera);
+    }
+
+    public void HandlePointerUp(PointerEventData eventData)
+    {
+        if (!IsMatchingPointer(eventData))
+            return;
+
+        bool triggerTapShot = pointerHeld && !floatingJoystickActive;
+        CancelCurrentPress(true);
+
+        if (triggerTapShot && shooting != null)
+            shooting.TriggerAdvancedAutoAimShot();
+    }
+
+    void EnsureZone()
+    {
+        if (zoneObject != null && zoneRect != null && zoneImage != null && surface != null)
+        {
+            if (shootJoystick == null)
+                shootJoystick = FindShootJoystick();
+            return;
+        }
+
+        GameObject canvas = GameObject.Find("Canvas");
+        if (canvas == null)
+            return;
+
+        Transform existing = canvas.transform.Find(ZoneObjectName);
+        if (existing != null)
+            zoneObject = existing.gameObject;
+        else
+            zoneObject = new GameObject(ZoneObjectName, typeof(RectTransform), typeof(Image), typeof(AdvancedShootInputZoneSurface));
+
+        if (zoneObject.transform.parent != canvas.transform)
+            zoneObject.transform.SetParent(canvas.transform, false);
+
+        zoneRect = zoneObject.GetComponent<RectTransform>();
+        zoneRect.anchorMin = new Vector2(0.5f, 0f);
+        zoneRect.anchorMax = new Vector2(1f, 1f);
+        zoneRect.offsetMin = Vector2.zero;
+        zoneRect.offsetMax = Vector2.zero;
+
+        zoneImage = zoneObject.GetComponent<Image>();
+        zoneImage.color = new Color(1f, 1f, 1f, 0.001f);
+        zoneImage.raycastTarget = true;
+
+        surface = zoneObject.GetComponent<AdvancedShootInputZoneSurface>();
+        surface.Owner = this;
+        zoneObject.transform.SetAsFirstSibling();
+        shootJoystick = FindShootJoystick();
+    }
+
+    void RefreshState()
+    {
+        if (zoneObject == null || shooting == null)
+            return;
+
+        bool active = shooting.CanUseAdvancedShootJoystick();
+        if (zoneObject.activeSelf != active)
+            zoneObject.SetActive(active);
+
+        if (!active)
+            CancelCurrentPress(true);
+    }
+
+    void ActivateFloatingJoystick(Vector2 screenPosition, Camera eventCamera)
+    {
+        if (floatingJoystickActive)
+            return;
+
+        shootJoystick = shootJoystick != null ? shootJoystick : FindShootJoystick();
+        if (shootJoystick == null)
+            return;
+
+        floatingJoystickActive = true;
+        shootJoystick.BeginExternalControl(screenPosition, eventCamera, true);
+    }
+
+    void CancelCurrentPress(bool restoreJoystick)
+    {
+        if (floatingJoystickActive && shootJoystick != null)
+            shootJoystick.EndExternalControl(restoreJoystick);
+
+        pointerHeld = false;
+        floatingJoystickActive = false;
+        pointerId = int.MinValue;
+    }
+
+    bool IsMatchingPointer(PointerEventData eventData)
+    {
+        return pointerHeld && eventData != null && eventData.pointerId == pointerId;
+    }
+
+    static Joystick FindShootJoystick()
+    {
+        GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
+        return shootJoystickObject != null ? shootJoystickObject.GetComponent<Joystick>() : null;
+    }
+}
+
+public sealed class AdvancedShootInputZoneSurface : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler
+{
+    public AdvancedShootInputZone Owner;
+
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        Owner?.HandlePointerDown(eventData);
+    }
+
+    public void OnDrag(PointerEventData eventData)
+    {
+        Owner?.HandleDrag(eventData);
+    }
+
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        Owner?.HandlePointerUp(eventData);
+    }
+}
+
 [RequireComponent(typeof(PlayerShooting))]
 public class ReloadButtonUI : MonoBehaviourPun
 {
@@ -1617,6 +2975,13 @@ public class ReloadButtonUI : MonoBehaviourPun
     void RefreshState()
     {
         if (shooting == null || reloadButton == null || backgroundImage == null || buttonText == null)
+            return;
+
+        bool visible = !shooting.IsComplexShootingActive;
+        if (buttonObject != null && buttonObject.activeSelf != visible)
+            buttonObject.SetActive(visible);
+
+        if (!visible)
             return;
 
         bool canReload = shooting.CanManualReload;

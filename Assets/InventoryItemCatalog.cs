@@ -17,6 +17,7 @@ public enum InventoryItemType
 public enum InventoryItemCategory
 {
     Treasure,
+    SpaceJunk,
     Wreck,
     Weapon,
     Shield,
@@ -140,24 +141,34 @@ public static class InventoryItemCatalog
     public const string AsteroidGoldId = "asteroid_gold_resource";
     public const string AsteroidRareId = "asteroid_rare_resource";
     public const string RichAsteroidId = "rich_asteroid_resource";
-    public const string SpaceJunkId = "space_junk";
+    public const string AsteroidEpicId = "asteroid_epic_resource";
     public const string AsteroidLegendaryId = "asteroid_legendary_resource";
     public const string AsteroidCommonId = AsteroidResourceId;
     public const string AsteroidUncommonId = AsteroidGoldId;
     public const string AsteroidVeryRareId = RichAsteroidId;
-    public const string AsteroidEpicId = SpaceJunkId;
+    public const string LegacySpaceJunkId = "space_junk";
+    public const string SpaceJunkTrashId = "space_junk_trash";
+    public const string SpaceJunkStandardId = "space_junk_standard";
+    public const string SpaceJunkAsteroidId = "space_junk_asteroid";
+    public const string SpaceJunkId = SpaceJunkStandardId;
     public const string DroidScrapId = "droid_scrap";
     public const string CorsairSalvageId = "corsair_salvage";
     public const string SpaceMineWreckId = "space_mine_wreck";
     public const string SpaceTruckWreckId = "space_truck_wreck";
     public const string MothershipCoreId = "mothership_core";
     public const string NeutralFighterSalvageId = "neutral_fighter_salvage";
+    public const string RadarShipSalvageId = "radar_ship_salvage";
     public const string PlasmaGunId = "plasma_gun";
+    public const string TripleGunId = "triple_gun";
+    public const string ArtilleryGunId = "artillery_gun";
+    public const string RailGunId = "rail_gun";
+    public const string DoubleIonizerId = "double_ionizer";
     public const string FusionEngineId = "fusion_engine";
     public const string GadgetMineId = "gadget_mine";
     public const string BatteryId = "battery";
     public const string MagneticBeamId = "magnetic_beam";
     public const string TractorBeamId = "tractor_beam";
+    public const string LureBeaconId = "lure_beacon";
     public const string ShieldReactorId = "shield_reactor";
 
     static readonly Dictionary<string, InventoryItemDefinition> Definitions = BuildDefinitions();
@@ -224,6 +235,7 @@ public static class InventoryItemCatalog
         return GetCategory(itemId) switch
         {
             InventoryItemCategory.Treasure => "Treasure",
+            InventoryItemCategory.SpaceJunk => "Space Junk",
             InventoryItemCategory.Wreck => "Wreck",
             InventoryItemCategory.Weapon => "Weapon",
             InventoryItemCategory.Shield => "Shield",
@@ -378,9 +390,9 @@ public static class InventoryItemCatalog
                 ProjectFileName = "treasure_asteroid_violet_rare.png",
                 SalvageOutputs = new[] { AsteroidRareId, AsteroidRareId }
             },
-            [SpaceJunkId] = new InventoryItemDefinition
+            [AsteroidEpicId] = new InventoryItemDefinition
             {
-                Id = SpaceJunkId,
+                Id = AsteroidEpicId,
                 DisplayName = "Epic Asteroid",
                 ShortLabel = "EPI",
                 Description = "An epic collectible asteroid resource.",
@@ -392,6 +404,34 @@ public static class InventoryItemCatalog
                 ProjectFileName = "treasure_asteroid_burgundy_epic.png",
                 SalvageOutputs = new[] { RichAsteroidId, RichAsteroidId }
             },
+            [LegacySpaceJunkId] = CreateSpaceJunkDefinition(
+                LegacySpaceJunkId,
+                "Space Junk",
+                "JNK",
+                "A recoverable piece of drifting space junk. Useful as a future crafting component.",
+                "space_junk_standard",
+                "space_junk_standard.png"),
+            [SpaceJunkTrashId] = CreateSpaceJunkDefinition(
+                SpaceJunkTrashId,
+                "Space Junk Trash",
+                "JNT",
+                "A battered cloud of recoverable cosmic scrap.",
+                "space_junk_trash",
+                "space_junk_trash.png"),
+            [SpaceJunkStandardId] = CreateSpaceJunkDefinition(
+                SpaceJunkStandardId,
+                "Space Junk",
+                "JNK",
+                "A recoverable piece of drifting space junk. Useful as a future crafting component.",
+                "space_junk_standard",
+                "space_junk_standard.png"),
+            [SpaceJunkAsteroidId] = CreateSpaceJunkDefinition(
+                SpaceJunkAsteroidId,
+                "Space Junk Asteroid",
+                "JNA",
+                "A resource-rich asteroid fragment tangled with abandoned space debris.",
+                "space_junk_asteroid",
+                "space_junk_asteroid.png"),
             [AsteroidLegendaryId] = new InventoryItemDefinition
             {
                 Id = AsteroidLegendaryId,
@@ -404,7 +444,7 @@ public static class InventoryItemCatalog
                 SellValueAstrons = 3200,
                 IconResourcePath = "treasure_asteroid_gold_legendary_resource",
                 ProjectFileName = "treasure_asteroid_gold_legendary.png",
-                SalvageOutputs = new[] { SpaceJunkId, SpaceJunkId }
+                SalvageOutputs = new[] { AsteroidEpicId, AsteroidEpicId }
             },
             [DroidScrapId] = new InventoryItemDefinition
             {
@@ -490,6 +530,20 @@ public static class InventoryItemCatalog
                 ProjectFileName = "neutral_fighter_wreck.png",
                 SalvageOutputs = new[] { AsteroidResourceId, AsteroidResourceId }
             },
+            [RadarShipSalvageId] = new InventoryItemDefinition
+            {
+                Id = RadarShipSalvageId,
+                DisplayName = "Radar Ship Salvage",
+                ShortLabel = "RDS",
+                Description = "Heavy salvage recovered from a destroyed Radar Ship spotter platform.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1800,
+                IconResourcePath = "radar_ship_wreck_resource",
+                ProjectFileName = "radar_ship_wreck.png",
+                SalvageOutputs = new[] { AsteroidGoldId, AsteroidRareId }
+            },
             [PlasmaGunId] = new InventoryItemDefinition
             {
                 Id = PlasmaGunId,
@@ -504,6 +558,66 @@ public static class InventoryItemCatalog
                 IconResourcePath = "plasma_gun_resource",
                 ProjectFileName = "plasma_gun.png",
                 SalvageOutputs = new[] { AsteroidGoldId, AsteroidGoldId }
+            },
+            [TripleGunId] = new InventoryItemDefinition
+            {
+                Id = TripleGunId,
+                DisplayName = "Triple Gun",
+                ShortLabel = "TRI",
+                Description = "A simple spread weapon based on the free starter gun. Fires a light three-shot burst.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Weapon,
+                Rarity = InventoryItemRarity.Common,
+                SellValueAstrons = 250,
+                ShopBuyValueAstronsOverride = 900,
+                IconResourcePath = "triple_gun_resource",
+                ProjectFileName = "triple_gun.png",
+                SalvageOutputs = new[] { AsteroidResourceId }
+            },
+            [ArtilleryGunId] = new InventoryItemDefinition
+            {
+                Id = ArtilleryGunId,
+                DisplayName = "Artillery Gun",
+                ShortLabel = "ART",
+                Description = "An indirect-fire weapon that launches a hot shell in an arc and damages only the landing area.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Weapon,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 900,
+                ShopBuyValueAstronsOverride = 3600,
+                IconResourcePath = "artillery_gun_resource",
+                ProjectFileName = "artillery_gun.png",
+                SalvageOutputs = new[] { AsteroidGoldId, AsteroidResourceId }
+            },
+            [RailGunId] = new InventoryItemDefinition
+            {
+                Id = RailGunId,
+                DisplayName = "Rail Gun",
+                ShortLabel = "RLG",
+                Description = "A long-range piercing rail weapon that fires short red-orange energy slugs at extreme speed.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Weapon,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 2900,
+                ShopBuyValueAstronsOverride = 12000,
+                IconResourcePath = "rail_gun_resource",
+                ProjectFileName = "rail_gun.png",
+                SalvageOutputs = new[] { CorsairSalvageId, AsteroidRareId }
+            },
+            [DoubleIonizerId] = new InventoryItemDefinition
+            {
+                Id = DoubleIonizerId,
+                DisplayName = "Double Ionizer",
+                ShortLabel = "ION",
+                Description = "A dual ion weapon that fires paired blue charges tuned to overload shields.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Weapon,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1300,
+                ShopBuyValueAstronsOverride = 5500,
+                IconResourcePath = "double_ionizer_resource",
+                ProjectFileName = "double_ionizer.png",
+                SalvageOutputs = new[] { NeutralFighterSalvageId, AsteroidGoldId }
             },
             [FusionEngineId] = new InventoryItemDefinition
             {
@@ -575,6 +689,20 @@ public static class InventoryItemCatalog
                 ProjectFileName = "tractor_beam.png",
                 SalvageOutputs = new[] { AsteroidGoldId, AsteroidRareId }
             },
+            [LureBeaconId] = new InventoryItemDefinition
+            {
+                Id = LureBeaconId,
+                DisplayName = "Lure Beacon",
+                ShortLabel = "LUR",
+                Description = "A drifting decoy beacon that mimics a player target and pulls hostile attention away from the ship.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 700,
+                IconResourcePath = "lure_beacon_gadget_resource",
+                ProjectFileName = "lure_beacon_gadget.png",
+                SalvageOutputs = new[] { AsteroidResourceId, AsteroidGoldId }
+            },
             [ShieldReactorId] = new InventoryItemDefinition
             {
                 Id = ShieldReactorId,
@@ -589,6 +717,30 @@ public static class InventoryItemCatalog
                 ProjectFileName = "shield_reactor.png",
                 SalvageOutputs = new[] { AsteroidResourceId, AsteroidGoldId }
             }
+        };
+    }
+
+    static InventoryItemDefinition CreateSpaceJunkDefinition(
+        string id,
+        string displayName,
+        string shortLabel,
+        string description,
+        string iconResourcePath,
+        string projectFileName)
+    {
+        return new InventoryItemDefinition
+        {
+            Id = id,
+            DisplayName = displayName,
+            ShortLabel = shortLabel,
+            Description = description,
+            ItemType = InventoryItemType.Resource,
+            Category = InventoryItemCategory.SpaceJunk,
+            Rarity = InventoryItemRarity.Rare,
+            SellValueAstrons = 500,
+            IconResourcePath = iconResourcePath,
+            ProjectFileName = projectFileName,
+            SalvageOutputs = new[] { AsteroidResourceId, AsteroidResourceId }
         };
     }
 }

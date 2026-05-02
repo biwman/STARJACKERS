@@ -25,8 +25,10 @@ public class MovingSpaceObject : MonoBehaviour
     const float CollisionSpinFlipChance = 0.45f;
     const float SnapshotInterval = 0.045f;
     const float RemoteSmoothing = 16f;
-    const float ImpulseRequestCooldown = 0.05f;
     const float RemotePredictionMaxOffset = 1.1f;
+    const float PushBoostDuration = 0.55f;
+    const float TreasurePushMaxSpeed = 6.2f;
+    const float ObstaclePushMaxSpeed = 4.2f;
 
     static readonly Dictionary<string, MovingSpaceObject> ObjectsById = new Dictionary<string, MovingSpaceObject>();
     static PhysicsMaterial2D sharedBouncyMaterial;
@@ -39,7 +41,6 @@ public class MovingSpaceObject : MonoBehaviour
     float speedMultiplier = 1f;
     float baseAngularSpeed;
     float nextSnapshotTime;
-    float nextImpulseRequestTime;
     bool isAuthority;
     bool movingEnabled;
     bool translateEnabled;
@@ -54,6 +55,8 @@ public class MovingSpaceObject : MonoBehaviour
     bool boundaryCollisionIgnoreInitialized;
     bool lastBoundaryIgnoreSetting;
     Collider2D[] cachedObjectColliders;
+    float pushBoostUntil;
+    float pushBoostMaxSpeed;
 
     public string StableId => stableId;
     public SpaceObjectType ObjectType => objectType;
@@ -159,14 +162,7 @@ public class MovingSpaceObject : MonoBehaviour
 
                 Vector2 impulse = (playerVelocity * 1.25f) / weightFactor;
                 if (isAuthority)
-                {
                     ApplyImpulse(impulse * 0.82f);
-                }
-                else if (player.photonView.IsMine && Time.time >= nextImpulseRequestTime)
-                {
-                    nextImpulseRequestTime = Time.time + ImpulseRequestCooldown;
-                    SpaceObjectMotionSync.RequestImpulse(stableId, impulse);
-                }
             }
         }
 
@@ -189,6 +185,7 @@ public class MovingSpaceObject : MonoBehaviour
         if (!movingEnabled)
             return;
 
+        MarkPushBoost(impulse.magnitude);
         if (translateEnabled)
             rb.linearVelocity += impulse * 0.7f;
         else
@@ -202,6 +199,46 @@ public class MovingSpaceObject : MonoBehaviour
 
             float addedAngular = torqueDirection * Mathf.Lerp(4f, 12f, Mathf.Clamp01(impulse.magnitude / 3f));
             rb.angularVelocity = Mathf.Clamp(rb.angularVelocity + addedAngular, -MaxCollisionAngularSpeed, MaxCollisionAngularSpeed);
+        }
+    }
+
+    public void ApplyPlayerPush(Vector2 impulse, Vector2 playerPosition)
+    {
+        if (rb == null)
+            return;
+
+        ApplySimulationMode();
+        if (!isAuthority || !movingEnabled || !translateEnabled)
+            return;
+
+        if (impulse.sqrMagnitude < 0.0001f)
+            return;
+
+        Vector2 correctedImpulse = impulse;
+        Vector2 awayFromPlayer = rb.position - playerPosition;
+        if (awayFromPlayer.sqrMagnitude > 0.0001f &&
+            Vector2.Dot(correctedImpulse.normalized, awayFromPlayer.normalized) < -0.15f)
+        {
+            correctedImpulse = awayFromPlayer.normalized * correctedImpulse.magnitude;
+        }
+
+        float pushMultiplier = objectType == SpaceObjectType.Treasure ? 1.45f : 1.1f;
+        MarkPushBoost(correctedImpulse.magnitude * pushMultiplier);
+        rb.linearVelocity += correctedImpulse * pushMultiplier;
+
+        if (rb.linearVelocity.sqrMagnitude > 0.001f)
+            cruiseDirection = rb.linearVelocity.normalized;
+
+        if (rotateEnabled)
+        {
+            float torqueDirection = Mathf.Sign(Vector3.Cross(awayFromPlayer.sqrMagnitude > 0.0001f ? awayFromPlayer.normalized : cruiseDirection, correctedImpulse.normalized).z);
+            if (Mathf.Abs(torqueDirection) < 0.1f)
+                torqueDirection = Random.value < 0.5f ? -1f : 1f;
+
+            rb.angularVelocity = Mathf.Clamp(
+                rb.angularVelocity + torqueDirection * Mathf.Lerp(9f, 24f, Mathf.Clamp01(correctedImpulse.magnitude / 8f)),
+                -MaxCollisionAngularSpeed,
+                MaxCollisionAngularSpeed);
         }
     }
 
@@ -266,10 +303,10 @@ public class MovingSpaceObject : MonoBehaviour
         if (isAuthority || rb == null || impulse.sqrMagnitude < 0.0001f)
             return;
 
-        float predictionScale = objectType == SpaceObjectType.Treasure ? 0.105f : 0.075f;
+        float predictionScale = objectType == SpaceObjectType.Treasure ? 0.18f : 0.105f;
         Vector2 offset = impulse * predictionScale;
-        predictedLocalOffset = Vector2.ClampMagnitude(predictedLocalOffset + offset, RemotePredictionMaxOffset);
-        rb.position += offset;
+        float maxOffset = objectType == SpaceObjectType.Treasure ? RemotePredictionMaxOffset * 1.45f : RemotePredictionMaxOffset;
+        predictedLocalOffset = Vector2.ClampMagnitude(predictedLocalOffset + offset, maxOffset);
     }
 
     public void SetMotionState(Vector2 position, Vector2 velocity, float rotation, float angularVelocity, bool authorityState)
@@ -467,7 +504,7 @@ public class MovingSpaceObject : MonoBehaviour
 
         float baseSpeed = GetBaseSpeed();
         float minCruiseSpeed = baseSpeed * MinCruiseSpeedFactor;
-        float maxSpeed = baseSpeed * MaxSpeedMultiplier;
+        float maxSpeed = Mathf.Max(baseSpeed * MaxSpeedMultiplier, GetPushBoostMaxSpeed());
 
         if (rb.linearVelocity.sqrMagnitude > 0.0025f)
         {
@@ -559,6 +596,24 @@ public class MovingSpaceObject : MonoBehaviour
     {
         float baseSpeed = objectType == SpaceObjectType.Obstacle ? ObstacleBaseSpeed : TreasureBaseSpeed;
         return baseSpeed * speedMultiplier;
+    }
+
+    void MarkPushBoost(float impulseMagnitude)
+    {
+        float targetMaxSpeed = objectType == SpaceObjectType.Treasure ? TreasurePushMaxSpeed : ObstaclePushMaxSpeed;
+        pushBoostMaxSpeed = Mathf.Max(
+            pushBoostMaxSpeed,
+            Mathf.Lerp(targetMaxSpeed * 0.62f, targetMaxSpeed, Mathf.Clamp01(impulseMagnitude / 8f)));
+        pushBoostUntil = Time.time + PushBoostDuration;
+    }
+
+    float GetPushBoostMaxSpeed()
+    {
+        if (Time.time <= pushBoostUntil)
+            return pushBoostMaxSpeed;
+
+        pushBoostMaxSpeed = 0f;
+        return 0f;
     }
 
     float GetMassFactor()

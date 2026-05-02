@@ -181,7 +181,7 @@ public class TreasureSpawner : MonoBehaviourPun
             return InventoryItemCatalog.RichAsteroidId;
 
         if (ConsumeWeight(ref roll, weights, 4))
-            return InventoryItemCatalog.SpaceJunkId;
+            return InventoryItemCatalog.AsteroidEpicId;
 
         return InventoryItemCatalog.AsteroidLegendaryId;
     }

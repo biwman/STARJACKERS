@@ -181,6 +181,9 @@ public class AmmoUI : MonoBehaviourPun
         if (PhotonNetwork.CurrentRoom == null)
             return false;
 
+        if (RoomSettings.IsComplexShootingModel())
+            return false;
+
         if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
             value is bool started)
         {

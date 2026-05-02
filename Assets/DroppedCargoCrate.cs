@@ -22,7 +22,9 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
     const float SnapshotInterval = 0.05f;
     const float RemoteSmoothing = 15f;
     const float MaxAngularSpeed = 65f;
-    const float ImpulseRequestCooldown = 0.05f;
+    const float ImpulseRequestCooldown = 0.035f;
+    const float PushBoostDuration = 0.55f;
+    const float PushBoostMaxSpeed = 5.4f;
 
     static Sprite cachedCrateSprite;
 
@@ -43,6 +45,8 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
     float networkAngularVelocity;
     bool hasNetworkState;
     Vector2 predictedLocalOffset;
+    float pushBoostUntil;
+    float pushBoostMaxSpeed;
 
     public bool isBeingCollected;
     public bool HasLoot => !string.IsNullOrWhiteSpace(storedItemId);
@@ -122,7 +126,8 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
                 FitSpriteToTargetSize(spriteRenderer, TargetVisualSize);
             }
 
-            spriteRenderer.sortingOrder = 14;
+            spriteRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+            spriteRenderer.sortingOrder = GameVisualTheme.TreasureSortingOrder;
             spriteRenderer.color = defaultColor;
         }
 
@@ -211,9 +216,10 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
             Vector2 fallbackDirection = driftVelocity.sqrMagnitude > 0.001f ? driftVelocity.normalized : Vector2.down;
             rb.linearVelocity = fallbackDirection * BaseDriftSpeed;
         }
-        else if (rb.linearVelocity.magnitude > MaxDriftSpeed)
+        float maxSpeed = Mathf.Max(MaxDriftSpeed, GetPushBoostMaxSpeed());
+        if (rb.linearVelocity.magnitude > maxSpeed)
         {
-            rb.linearVelocity = rb.linearVelocity.normalized * MaxDriftSpeed;
+            rb.linearVelocity = rb.linearVelocity.normalized * maxSpeed;
         }
 
         driftVelocity = rb.linearVelocity;
@@ -315,40 +321,7 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
             return;
 
         if (isAuthority)
-        {
             ApplyCollisionResponse(collision);
-            return;
-        }
-
-        TryRequestRemoteImpulseFromCollision(collision);
-    }
-
-    void OnCollisionStay2D(Collision2D collision)
-    {
-        if (!initialized || PhotonNetwork.CurrentRoom == null || isAuthority)
-            return;
-
-        TryRequestRemoteImpulseFromCollision(collision);
-    }
-
-    void TryRequestRemoteImpulseFromCollision(Collision2D collision)
-    {
-        if (Time.time < nextImpulseRequestTime)
-            return;
-
-        PlayerMovement player = collision.collider.GetComponentInParent<PlayerMovement>();
-        if (player == null || !player.photonView.IsMine)
-            return;
-
-        if (player.GetComponent<AstronautSurvivor>() != null)
-            return;
-
-        Rigidbody2D playerRb = player.GetComponent<Rigidbody2D>();
-        Vector2 playerVelocity = playerRb != null ? playerRb.linearVelocity : Vector2.zero;
-        if (playerVelocity.sqrMagnitude < 0.02f)
-            return;
-
-        TryRequestRemoteImpulse(playerVelocity * 0.65f);
     }
 
     public bool TryRequestRemoteImpulse(Vector2 impulse)
@@ -370,9 +343,8 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
         if (isAuthority || rb == null)
             return;
 
-        Vector2 offset = impulse * 0.022f;
-        predictedLocalOffset = Vector2.ClampMagnitude(predictedLocalOffset + offset, 0.5f);
-        rb.position += offset;
+        Vector2 offset = impulse * 0.072f;
+        predictedLocalOffset = Vector2.ClampMagnitude(predictedLocalOffset + offset, 1.05f);
     }
 
     void ApplyCollisionResponse(Collision2D collision)
@@ -489,7 +461,8 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
             return;
 
         Vector2 impulse = new Vector2(ConvertToFloat(payload[1]), ConvertToFloat(payload[2]));
-        impulse = Vector2.ClampMagnitude(impulse, 7f);
+        impulse = Vector2.ClampMagnitude(impulse, 12f);
+        MarkPushBoost(impulse.magnitude);
         rb.linearVelocity += impulse;
         driftVelocity = rb.linearVelocity;
         rb.angularVelocity = Mathf.Clamp(rb.angularVelocity + impulse.magnitude * 9f * Mathf.Sign(Random.value - 0.5f), -MaxAngularSpeed, MaxAngularSpeed);
@@ -513,6 +486,23 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
         if (value is int intValue)
             return intValue;
 
+        return 0f;
+    }
+
+    void MarkPushBoost(float impulseMagnitude)
+    {
+        pushBoostMaxSpeed = Mathf.Max(
+            pushBoostMaxSpeed,
+            Mathf.Lerp(PushBoostMaxSpeed * 0.58f, PushBoostMaxSpeed, Mathf.Clamp01(impulseMagnitude / 7f)));
+        pushBoostUntil = Time.time + PushBoostDuration;
+    }
+
+    float GetPushBoostMaxSpeed()
+    {
+        if (Time.time <= pushBoostUntil)
+            return pushBoostMaxSpeed;
+
+        pushBoostMaxSpeed = 0f;
         return 0f;
     }
 

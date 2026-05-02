@@ -161,6 +161,8 @@ public class TreasureCollector : MonoBehaviourPun
             return;
 
         ExtractionZone ez = other.GetComponent<ExtractionZone>();
+        if (ez == null)
+            ez = other.GetComponentInParent<ExtractionZone>();
         if (ez != null)
         {
             currentExtraction = ez;
@@ -173,6 +175,8 @@ public class TreasureCollector : MonoBehaviourPun
             return;
 
         ExtractionZone ez = other.GetComponent<ExtractionZone>();
+        if (ez == null)
+            ez = other.GetComponentInParent<ExtractionZone>();
         if (ez != null && currentExtraction == ez)
         {
             currentExtraction = null;
@@ -192,9 +196,7 @@ public class TreasureCollector : MonoBehaviourPun
                 return;
         }
 
-        if (currentExtraction == null)
-            currentExtraction = ResolveNearbyExtractionZone();
-
+        currentExtraction = ResolveNearbyExtractionZone();
         if (currentExtraction != null)
         {
             if (!isCollecting)
@@ -207,42 +209,46 @@ public class TreasureCollector : MonoBehaviourPun
             return;
         }
 
-        if (IsAstronautMode())
-            return;
-
-        if (!HasLockedCollectibleTarget())
-            RefreshClosestCollectible();
-
-        if (!HasUsableCollectibleTarget())
-            ForceResolveCollectibleAtUsePress();
-
-        if (!PlayerProfileService.Instance.HasFreeShipInventorySlot())
+        if (!IsAstronautMode())
         {
-            Debug.Log("Ship inventory is full. Cannot collect loot.");
-            return;
-        }
+            if (!HasLockedCollectibleTarget())
+                RefreshClosestCollectible();
 
-        if (currentTreasure != null && !isCollecting)
-        {
-            isCollecting = true;
-            StartCollectibleFeedback(currentTreasure.GetComponent<PhotonView>());
-            collectibleUseRoutine = StartCoroutine(CollectTreasureRoutine(currentTreasure));
-            return;
-        }
+            if (!HasUsableCollectibleTarget())
+                ForceResolveCollectibleAtUsePress();
 
-        if (currentWreck != null && currentWreck.HasLoot && !isCollecting)
-        {
-            isCollecting = true;
-            StartCollectibleFeedback(currentWreck.GetComponent<PhotonView>());
-            collectibleUseRoutine = StartCoroutine(LootWreckRoutine(currentWreck));
-            return;
-        }
+            if (HasUsableCollectibleTarget())
+            {
+                if (!PlayerProfileService.Instance.HasFreeShipInventorySlot())
+                {
+                    Debug.Log("Ship inventory is full. Cannot collect loot.");
+                    return;
+                }
 
-        if (currentDroppedCargo != null && currentDroppedCargo.HasLoot && !isCollecting)
-        {
-            isCollecting = true;
-            StartCollectibleFeedback(currentDroppedCargo.GetComponent<PhotonView>());
-            collectibleUseRoutine = StartCoroutine(LootDroppedCargoRoutine(currentDroppedCargo));
+                if (currentTreasure != null && !isCollecting)
+                {
+                    isCollecting = true;
+                    StartCollectibleFeedback(currentTreasure.GetComponent<PhotonView>());
+                    collectibleUseRoutine = StartCoroutine(CollectTreasureRoutine(currentTreasure));
+                    return;
+                }
+
+                if (currentWreck != null && currentWreck.HasLoot && !isCollecting)
+                {
+                    isCollecting = true;
+                    StartCollectibleFeedback(currentWreck.GetComponent<PhotonView>());
+                    collectibleUseRoutine = StartCoroutine(LootWreckRoutine(currentWreck));
+                    return;
+                }
+
+                if (currentDroppedCargo != null && currentDroppedCargo.HasLoot && !isCollecting)
+                {
+                    isCollecting = true;
+                    StartCollectibleFeedback(currentDroppedCargo.GetComponent<PhotonView>());
+                    collectibleUseRoutine = StartCoroutine(LootDroppedCargoRoutine(currentDroppedCargo));
+                    return;
+                }
+            }
         }
     }
 
@@ -341,9 +347,6 @@ public class TreasureCollector : MonoBehaviourPun
     {
         if (extractionZone == null)
             return false;
-
-        if (currentExtraction == extractionZone)
-            return true;
 
         return GetDistanceToExtractionZone(extractionZone) <= ExtractionUseKeepAliveDistance;
     }

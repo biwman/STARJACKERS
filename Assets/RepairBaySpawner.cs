@@ -9,9 +9,12 @@ using UnityEngine;
 public sealed class RepairBaySpawner : MonoBehaviourPunCallbacks
 {
     const string LayoutKey = "repairBayLayout";
+    const string ExtractionLayoutKey = "extractionLayout";
     const string EmptyLayoutSentinel = "__empty__";
     const float Margin = 4.2f;
     const float MinDistanceBetweenBays = 9f;
+    const float MinDistanceFromExtractionZones = 7f;
+    const float ExtractionLayoutWaitTimeout = 2f;
 
     static RepairBaySpawner instance;
 
@@ -56,8 +59,10 @@ public sealed class RepairBaySpawner : MonoBehaviourPunCallbacks
 
         if (PhotonNetwork.IsMasterClient)
         {
+            yield return StartCoroutine(WaitForExtractionLayout());
+
             int seed = ResolveSeed();
-            string layout = BuildLayout(seed);
+            string layout = BuildLayout(seed, GetExtractionPositions());
             ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable
             {
                 [LayoutKey] = layout
@@ -83,7 +88,18 @@ public sealed class RepairBaySpawner : MonoBehaviourPunCallbacks
         }
     }
 
-    string BuildLayout(int seed)
+    IEnumerator WaitForExtractionLayout()
+    {
+        float deadline = Time.realtimeSinceStartup + ExtractionLayoutWaitTimeout;
+        while (PhotonNetwork.CurrentRoom != null &&
+               string.IsNullOrWhiteSpace(GetRoomLayout(ExtractionLayoutKey)) &&
+               Time.realtimeSinceStartup < deadline)
+        {
+            yield return null;
+        }
+    }
+
+    string BuildLayout(int seed, List<Vector2> extractionPositions)
     {
         int count = RoomSettings.GetRepairBayCount();
         if (count <= 0)
@@ -95,22 +111,15 @@ public sealed class RepairBaySpawner : MonoBehaviourPunCallbacks
 
         List<Vector2> positions = new List<Vector2>();
         int attempts = 0;
-        while (positions.Count < count && attempts < 120)
+        while (positions.Count < count && attempts < 600)
         {
             attempts++;
             Vector2 pos = new Vector2(
                 Random.Range(-mapSize.x * 0.5f + Margin, mapSize.x * 0.5f - Margin),
                 Random.Range(-mapSize.y * 0.5f + Margin, mapSize.y * 0.5f - Margin));
 
-            bool tooClose = false;
-            for (int i = 0; i < positions.Count; i++)
-            {
-                if (Vector2.Distance(pos, positions[i]) < MinDistanceBetweenBays)
-                {
-                    tooClose = true;
-                    break;
-                }
-            }
+            bool tooClose = IsTooCloseToAny(pos, positions, MinDistanceBetweenBays) ||
+                            IsTooCloseToAny(pos, extractionPositions, MinDistanceFromExtractionZones);
 
             if (!tooClose)
                 positions.Add(pos);
@@ -139,6 +148,20 @@ public sealed class RepairBaySpawner : MonoBehaviourPunCallbacks
         }
 
         return builder.ToString();
+    }
+
+    bool IsTooCloseToAny(Vector2 candidate, List<Vector2> positions, float minDistance)
+    {
+        if (positions == null || positions.Count == 0)
+            return false;
+
+        for (int i = 0; i < positions.Count; i++)
+        {
+            if (Vector2.Distance(candidate, positions[i]) < minDistance)
+                return true;
+        }
+
+        return false;
     }
 
     void ApplyLayout(string layout)
@@ -186,6 +209,48 @@ public sealed class RepairBaySpawner : MonoBehaviourPunCallbacks
         seed = CombineSeed(seed, RoomSettings.GetRepairBayCount());
         seed = CombineSeed(seed, RoomSettings.GetMapBackgroundIndex());
         return seed;
+    }
+
+    List<Vector2> GetExtractionPositions()
+    {
+        return ParseExtractionLayout(GetRoomLayout(ExtractionLayoutKey));
+    }
+
+    string GetRoomLayout(string key)
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(key, out object value) &&
+            value is string layout)
+        {
+            return layout;
+        }
+
+        return string.Empty;
+    }
+
+    List<Vector2> ParseExtractionLayout(string layout)
+    {
+        List<Vector2> positions = new List<Vector2>();
+        if (string.IsNullOrWhiteSpace(layout))
+            return positions;
+
+        string[] entries = layout.Split(';');
+        for (int i = 0; i < entries.Length; i++)
+        {
+            string[] parts = entries[i].Split(',');
+            if (parts.Length != 2)
+                continue;
+
+            if (!float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) ||
+                !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
+            {
+                continue;
+            }
+
+            positions.Add(new Vector2(x, y));
+        }
+
+        return positions;
     }
 
     int CombineSeed(int seed, int value)

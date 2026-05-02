@@ -12,6 +12,8 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
     const byte ObstacleStateSyncEventCode = 75;
     const byte ObstacleSplitEventCode = 76;
     const float MaxAcceptedImpulseMagnitude = 8f;
+    const float MaxAcceptedPlayerPushMagnitude = 14f;
+    const float MaxPlayerPushDistance = 5.75f;
 
     static SpaceObjectMotionSync instance;
 
@@ -91,6 +93,37 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         object[] payload = { stableId, impulse.x, impulse.y, PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : 0 };
         RaiseEventOptions options = new RaiseEventOptions { Receivers = ReceiverGroup.MasterClient };
         PhotonNetwork.RaiseEvent(ImpulseRequestEventCode, payload, options, SendOptions.SendReliable);
+    }
+
+    public static void RequestPlayerPush(string stableId, Vector2 impulse, Vector2 playerPosition)
+    {
+        if (string.IsNullOrWhiteSpace(stableId))
+            return;
+
+        if (!CanRaiseRoomEvent() || PhotonNetwork.IsMasterClient)
+        {
+            MovingSpaceObject localTarget = MovingSpaceObject.Find(stableId);
+            if (localTarget != null)
+                localTarget.ApplyPlayerPush(impulse, playerPosition);
+
+            return;
+        }
+
+        Player masterClient = PhotonNetwork.MasterClient;
+        if (masterClient == null)
+            return;
+
+        object[] payload =
+        {
+            stableId,
+            impulse.x,
+            impulse.y,
+            PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : 0,
+            playerPosition.x,
+            playerPosition.y
+        };
+        RaiseEventOptions options = new RaiseEventOptions { Receivers = ReceiverGroup.MasterClient };
+        PhotonNetwork.RaiseEvent(ImpulseRequestEventCode, payload, options, SendOptions.SendUnreliable);
     }
 
     public static void BroadcastSpaceMineDetonation(Vector3 worldPosition, float radius)
@@ -226,10 +259,24 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
         if (target == null)
             return;
 
+        bool isPlayerPush = payload.Length >= 6;
         Vector2 impulse = Vector2.ClampMagnitude(
             new Vector2(ConvertToFloat(payload[1]), ConvertToFloat(payload[2])),
-            MaxAcceptedImpulseMagnitude);
-        target.ApplyImpulse(impulse);
+            isPlayerPush ? MaxAcceptedPlayerPushMagnitude : MaxAcceptedImpulseMagnitude);
+
+        if (isPlayerPush)
+        {
+            Vector2 playerPosition = new Vector2(ConvertToFloat(payload[4]), ConvertToFloat(payload[5]));
+            if (Vector2.Distance(target.transform.position, playerPosition) > MaxPlayerPushDistance)
+                return;
+
+            target.ApplyPlayerPush(impulse, playerPosition);
+        }
+        else
+        {
+            target.ApplyImpulse(impulse);
+        }
+
         target.ForceBroadcastSnapshot();
     }
 

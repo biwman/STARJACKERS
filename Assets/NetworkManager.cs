@@ -12,7 +12,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     const float BrowserRecoveryPollSeconds = 1f;
     const float LeaveRoomRetryPollSeconds = 0.5f;
     const float LeaveRoomRetryTimeoutSeconds = 6f;
-    const string RememberedLobbySettingsPrefsKey = "BrawlRaiders.LastLobbySettings.v1";
+    const string RememberedLobbySettingsPrefsKey = "BrawlRaiders.LastLobbySettings.v2";
+    const string FinishedRoundsPrefsKey = "BrawlRaiders.FinishedRounds.v1";
+    const int MaxRememberedFinishedRounds = 64;
 
     enum PendingBrowserAction
     {
@@ -32,6 +34,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         public double CreatedAt;
         public float? RemainingTimeSeconds;
         public bool CanJoin;
+        public bool BlockedByLocalDeath;
+        public string BlockReason;
     }
 
     [Serializable]
@@ -49,6 +53,21 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         public int intValue;
         public float floatValue;
         public bool boolValue;
+    }
+
+    [Serializable]
+    sealed class FinishedRoundRoomsData
+    {
+        public FinishedRoundRoomEntry[] entries;
+    }
+
+    [Serializable]
+    sealed class FinishedRoundRoomEntry
+    {
+        public string roomName;
+        public string roundToken;
+        public string outcome;
+        public double markedAt;
     }
 
     static readonly string[] LobbyVisibleRoomKeys =
@@ -233,6 +252,20 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         instance.LeaveCurrentRoomToSessionBrowser("Returning to active rounds...");
     }
 
+    public static void ReturnToSessionBrowserFromFinishedRound()
+    {
+        MarkCurrentRoundEndedForLocalPlayer();
+        ReturnToSessionBrowserFromRound();
+    }
+
+    public static void MarkCurrentRoundEndedForLocalPlayer(string outcome = null)
+    {
+        if (PhotonNetwork.CurrentRoom == null)
+            return;
+
+        RememberFinishedRound(PhotonNetwork.CurrentRoom.Name, BuildCurrentRoundToken(), outcome);
+    }
+
     public static void RememberCurrentLobbySettings()
     {
         if (PhotonNetwork.CurrentRoom == null)
@@ -264,6 +297,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     {
         instance = this;
         PhotonNetwork.AutomaticallySyncScene = true;
+        PhotonNetwork.KeepAliveInBackground = 120f;
     }
 
     void Start()
@@ -404,6 +438,17 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         joiningLobbyStartedAt = -1f;
         StopLeaveRoomRetryRoutine();
 
+        if (SessionRequested && !PhotonNetwork.InRoom && IsTransientDisconnect(cause))
+        {
+            pendingBrowserAction = PendingBrowserAction.None;
+            pendingRoomName = null;
+            reconnectingForBrowserRecovery = true;
+            PublishBrowserStatus("Reconnecting to multiplayer services...");
+            PhotonNetwork.ConnectUsingSettings();
+            EnsureSessionBrowserRecoveryRoutine();
+            return;
+        }
+
         if (reconnectingForBrowserRecovery && SessionRequested && !PhotonNetwork.InRoom)
         {
             reconnectingForBrowserRecovery = false;
@@ -419,6 +464,46 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             pendingBrowserAction = PendingBrowserAction.None;
             pendingRoomName = null;
             PublishBrowserStatus("Disconnected from multiplayer services.");
+        }
+    }
+
+    void OnApplicationPause(bool paused)
+    {
+        if (!paused)
+            RecoverSessionBrowserConnectionIfNeeded();
+    }
+
+    void OnApplicationFocus(bool focused)
+    {
+        if (focused)
+            RecoverSessionBrowserConnectionIfNeeded();
+    }
+
+    void RecoverSessionBrowserConnectionIfNeeded()
+    {
+        if (!SessionRequested || PhotonNetwork.InRoom || PhotonNetwork.IsConnected)
+            return;
+
+        reconnectingForBrowserRecovery = true;
+        PublishBrowserStatus("Reconnecting to multiplayer services...");
+        PhotonNetwork.ConnectUsingSettings();
+        EnsureSessionBrowserRecoveryRoutine();
+    }
+
+    bool IsTransientDisconnect(DisconnectCause cause)
+    {
+        switch (cause)
+        {
+            case DisconnectCause.ServerTimeout:
+            case DisconnectCause.ClientTimeout:
+            case DisconnectCause.Exception:
+            case DisconnectCause.ExceptionOnConnect:
+            case DisconnectCause.SendException:
+            case DisconnectCause.ReceiveException:
+            case DisconnectCause.DisconnectByServerReasonUnknown:
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -438,6 +523,15 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         if (string.IsNullOrWhiteSpace(PhotonNetwork.NickName))
             PhotonNetwork.NickName = "Player " + PhotonNetwork.LocalPlayer.ActorNumber;
+
+        if (PhotonNetwork.CurrentRoom != null && IsRoomLocallyFinished(PhotonNetwork.CurrentRoom.Name, BuildCurrentRoundToken()))
+        {
+            PublishBrowserStatus("You already ended this round.");
+            SessionRequested = true;
+            SessionBrowserPanelUI.ShowBrowser();
+            LeaveCurrentRoomToSessionBrowser("Returning to active rounds...");
+            return;
+        }
 
         Hashtable props = new Hashtable();
         props[RoomSettings.ScoreKey] = 0;
@@ -554,6 +648,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             MaxPlayers = 4,
             IsVisible = true,
             IsOpen = true,
+            CleanupCacheOnLeave = false,
             CustomRoomProperties = roomProps,
             CustomRoomPropertiesForLobby = LobbyVisibleRoomKeys
         };
@@ -566,6 +661,13 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     {
         if (string.IsNullOrWhiteSpace(roomName))
             return;
+
+        if (IsRoomLocallyFinished(roomName, ResolveCachedRoomToken(roomName)))
+        {
+            PublishBrowserStatus("You already ended this round.");
+            PublishRoomListChanged();
+            return;
+        }
 
         if (PhotonNetwork.InRoom)
         {
@@ -609,12 +711,19 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.SessionHostNameKey] = hostName,
             [RoomSettings.SessionCreatedAtKey] = PhotonNetwork.Time,
             [RoomSettings.RoundDurationKey] = RoomSettings.DefaultRoundDuration,
+            [RoomSettings.EndDisasterWarningSecondsKey] = RoomSettings.DefaultEndDisasterWarningSeconds,
             [RoomSettings.ResourceRichnessKey] = RoomSettings.DefaultResourceRichness,
+            [RoomSettings.SpaceJunkDensityKey] = RoomSettings.DefaultSpaceJunkDensity,
             [RoomSettings.StartTimeKey] = -1d,
             ["gameStarted"] = false,
             [RoomSettings.GadgetChargesStateKey] = string.Empty,
+            [RoomSettings.RepairBayOccupancyStateKey] = string.Empty,
             [RoomSettings.RoundResultsKey] = string.Empty,
-            [RoomSettings.RoundEndReasonKey] = string.Empty
+            [RoomSettings.FinishedRoundResultsKey] = string.Empty,
+            [RoomSettings.RoundEndReasonKey] = string.Empty,
+            [RoomSettings.ShootingModelKey] = RoomSettings.DefaultShootingModel,
+            [RoomSettings.SuperAttackEnabledKey] = RoomSettings.DefaultSuperAttackEnabled,
+            [RoomSettings.HapticsEnabledKey] = RoomSettings.DefaultHapticsEnabled
         };
 
         ApplyRememberedLobbySettings(props);
@@ -717,6 +826,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (key.StartsWith("enemy.", StringComparison.Ordinal))
             return true;
 
+        if (RoomSettings.IsGunSetupKey(key))
+            return true;
+
         switch (key)
         {
             case RoomSettings.SelectedMapKey:
@@ -726,6 +838,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.VisualEffectsEnabledKey:
             case RoomSettings.StartingVfxEnabledKey:
             case RoomSettings.EndDisasterModeKey:
+            case RoomSettings.EndDisasterWarningSecondsKey:
             case RoomSettings.ObstacleDensityKey:
             case RoomSettings.ObstacleDestroyEnabledKey:
             case RoomSettings.ObstacleHpKey:
@@ -733,13 +846,13 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.ObstacleNoBordersKey:
             case RoomSettings.TreasureDensityKey:
             case RoomSettings.ResourceRichnessKey:
+            case RoomSettings.SpaceJunkDensityKey:
             case RoomSettings.NebulaDensityKey:
             case RoomSettings.ExtractionCountKey:
             case RoomSettings.RepairBayCountKey:
             case RoomSettings.BoosterSlowdownKey:
             case RoomSettings.AmmoCountKey:
             case RoomSettings.BoosterRecoveryDelayKey:
-            case RoomSettings.MaxInputBoostPercentKey:
             case RoomSettings.ShipDriftEnabledKey:
             case RoomSettings.LastShipTimerMultiplierKey:
             case RoomSettings.MovingObjectsEnabledKey:
@@ -750,6 +863,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.BulletPushMultiplierKey:
             case RoomSettings.ObstacleWeightFactorKey:
             case RoomSettings.TreasureWeightFactorKey:
+            case RoomSettings.ShootingModelKey:
+            case RoomSettings.SuperAttackEnabledKey:
+            case RoomSettings.HapticsEnabledKey:
                 return true;
             default:
                 return false;
@@ -783,6 +899,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             if (state == RoomSettings.SessionStateSummary || state == RoomSettings.SessionStateClosingLobby)
                 continue;
 
+            string roundToken = BuildRoundToken(info);
+            string localFinishReason = GetLocalFinishedRoundBlockReason(info.Name, roundToken);
+            bool blockedByLocalDeath = !string.IsNullOrWhiteSpace(localFinishReason);
+            bool baseCanJoin = info.IsOpen && !info.RemovedFromList && info.PlayerCount < info.MaxPlayers;
             SessionRoomEntry entry = new SessionRoomEntry
             {
                 RoomName = info.Name,
@@ -793,7 +913,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                 MaxPlayers = info.MaxPlayers,
                 CreatedAt = GetCreatedAt(info),
                 RemainingTimeSeconds = GetRemainingTime(info, state),
-                CanJoin = info.IsOpen && !info.RemovedFromList && info.PlayerCount < info.MaxPlayers
+                CanJoin = baseCanJoin && !blockedByLocalDeath,
+                BlockedByLocalDeath = blockedByLocalDeath,
+                BlockReason = localFinishReason
             };
 
             entries.Add(entry);
@@ -896,6 +1018,173 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         return remaining;
     }
 
+    string ResolveCachedRoomToken(string roomName)
+    {
+        if (string.IsNullOrWhiteSpace(roomName))
+            return string.Empty;
+
+        if (roomListCache.TryGetValue(roomName, out RoomInfo info) && info != null)
+            return BuildRoundToken(info);
+
+        return string.Empty;
+    }
+
+    static string BuildCurrentRoundToken()
+    {
+        if (PhotonNetwork.CurrentRoom == null)
+            return string.Empty;
+
+        string startValue = "nostart";
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.StartTimeKey, out object value) && value != null)
+            startValue = value.ToString();
+
+        return PhotonNetwork.CurrentRoom.Name + "_" + startValue;
+    }
+
+    static string BuildRoundToken(RoomInfo info)
+    {
+        if (info == null || string.IsNullOrWhiteSpace(info.Name))
+            return string.Empty;
+
+        string startValue = "nostart";
+        if (info.CustomProperties.TryGetValue(RoomSettings.StartTimeKey, out object value) && value != null)
+            startValue = value.ToString();
+
+        return info.Name + "_" + startValue;
+    }
+
+    static bool IsRoomLocallyFinished(string roomName, string roundToken)
+    {
+        return FindFinishedRoundEntry(roomName, roundToken) != null;
+    }
+
+    static string GetLocalFinishedRoundBlockReason(string roomName, string roundToken)
+    {
+        FinishedRoundRoomEntry entry = FindFinishedRoundEntry(roomName, roundToken);
+        if (entry == null)
+            return string.Empty;
+
+        return FormatLocalFinishedOutcome(entry.outcome);
+    }
+
+    static FinishedRoundRoomEntry FindFinishedRoundEntry(string roomName, string roundToken)
+    {
+        if (string.IsNullOrWhiteSpace(roomName))
+            return null;
+
+        FinishedRoundRoomsData data = LoadFinishedRoundsData();
+        if (data?.entries == null)
+            return null;
+
+        for (int i = 0; i < data.entries.Length; i++)
+        {
+            FinishedRoundRoomEntry entry = data.entries[i];
+            if (entry == null || !string.Equals(entry.roomName, roomName, StringComparison.Ordinal))
+                continue;
+
+            if (string.IsNullOrWhiteSpace(entry.roundToken) || string.IsNullOrWhiteSpace(roundToken))
+                return entry;
+
+            if (string.Equals(entry.roundToken, roundToken, StringComparison.Ordinal))
+                return entry;
+        }
+
+        return null;
+    }
+
+    static void RememberFinishedRound(string roomName, string roundToken, string outcome = null)
+    {
+        if (string.IsNullOrWhiteSpace(roomName))
+            return;
+
+        FinishedRoundRoomsData data = LoadFinishedRoundsData() ?? new FinishedRoundRoomsData();
+        List<FinishedRoundRoomEntry> entries = data.entries != null
+            ? data.entries.Where(entry => entry != null && !string.IsNullOrWhiteSpace(entry.roomName)).ToList()
+            : new List<FinishedRoundRoomEntry>();
+
+        FinishedRoundRoomEntry previousEntry = entries.FirstOrDefault(entry =>
+            string.Equals(entry.roomName, roomName, StringComparison.Ordinal) &&
+            (string.IsNullOrWhiteSpace(roundToken) ||
+             string.IsNullOrWhiteSpace(entry.roundToken) ||
+             string.Equals(entry.roundToken, roundToken, StringComparison.Ordinal)));
+        string normalizedOutcome = NormalizeLocalFinishedOutcome(outcome);
+        if (string.IsNullOrWhiteSpace(normalizedOutcome) && previousEntry != null)
+            normalizedOutcome = NormalizeLocalFinishedOutcome(previousEntry.outcome);
+        if (string.IsNullOrWhiteSpace(normalizedOutcome))
+            normalizedOutcome = "finished";
+
+        entries.RemoveAll(entry =>
+            string.Equals(entry.roomName, roomName, StringComparison.Ordinal) &&
+            (string.IsNullOrWhiteSpace(roundToken) ||
+             string.IsNullOrWhiteSpace(entry.roundToken) ||
+             string.Equals(entry.roundToken, roundToken, StringComparison.Ordinal)));
+
+        entries.Add(new FinishedRoundRoomEntry
+        {
+            roomName = roomName,
+            roundToken = string.IsNullOrWhiteSpace(roundToken) ? roomName : roundToken,
+            outcome = normalizedOutcome,
+            markedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+        });
+
+        entries = entries
+            .OrderByDescending(entry => entry.markedAt)
+            .Take(MaxRememberedFinishedRounds)
+            .ToList();
+
+        PlayerPrefs.SetString(FinishedRoundsPrefsKey, JsonUtility.ToJson(new FinishedRoundRoomsData { entries = entries.ToArray() }));
+        PlayerPrefs.Save();
+    }
+
+    static string NormalizeLocalFinishedOutcome(string outcome)
+    {
+        return string.IsNullOrWhiteSpace(outcome) ? string.Empty : outcome.Trim().ToLowerInvariant();
+    }
+
+    static string FormatLocalFinishedOutcome(string outcome)
+    {
+        switch (NormalizeLocalFinishedOutcome(outcome))
+        {
+            case "dead":
+                return "YOU DIED";
+            case "lost_in_space":
+                return "LOST";
+            case "time_up":
+                return "TIME UP";
+            case "extracted":
+                return "EXTRACTED";
+            case "evacuated":
+                return "EVACUATED";
+            default:
+                return "FINISHED";
+        }
+    }
+
+    static FinishedRoundRoomsData LoadFinishedRoundsData()
+    {
+        if (!PlayerPrefs.HasKey(FinishedRoundsPrefsKey))
+            return new FinishedRoundRoomsData { entries = Array.Empty<FinishedRoundRoomEntry>() };
+
+        string raw = PlayerPrefs.GetString(FinishedRoundsPrefsKey, string.Empty);
+        if (string.IsNullOrWhiteSpace(raw))
+            return new FinishedRoundRoomsData { entries = Array.Empty<FinishedRoundRoomEntry>() };
+
+        try
+        {
+            FinishedRoundRoomsData data = JsonUtility.FromJson<FinishedRoundRoomsData>(raw);
+            if (data == null)
+                data = new FinishedRoundRoomsData();
+
+            data.entries ??= Array.Empty<FinishedRoundRoomEntry>();
+            return data;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("NetworkManager: failed to load finished round list: " + ex.Message);
+            return new FinishedRoundRoomsData { entries = Array.Empty<FinishedRoundRoomEntry>() };
+        }
+    }
+
     int GetSessionStateSortOrder(string state)
     {
         if (state == RoomSettings.SessionStateInLobby)
@@ -952,6 +1241,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         EnsureDroppedCargoManagerExists();
         EnsureEnemyBotManagerExists();
         EnsureNebulaSpawnerExists();
+        SpaceJunkSpawner.EnsureExists();
 
         if (PhotonNetwork.LocalPlayer != null && string.IsNullOrWhiteSpace(PhotonNetwork.NickName))
         {
@@ -1340,6 +1630,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     {
         PlayerMovement.gameStarted = false;
         PlayerShooting.gameStarted = false;
+        EarlyRoundExitUI.HideAll();
         RoundResultsTracker.ResetForCurrentRoom();
         TreasureCollector.ResetRoundReservations();
         ObstacleSpawner.ResetForSessionTransition();
