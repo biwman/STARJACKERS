@@ -129,7 +129,8 @@ public sealed class SpaceJunkSpawner : MonoBehaviourPun
         }
 
         Random.state = previousState;
-        Debug.Log("Spawned space junk: " + spawnedPositions.Count);
+        if (spawnedPositions.Count > 0)
+            GameVisualTheme.RequestRuntimeRefresh();
     }
 
     int RollTargetCount(string density)

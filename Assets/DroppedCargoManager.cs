@@ -87,6 +87,8 @@ public class DroppedCargoManager : MonoBehaviourPunCallbacks
                 DroppedCargoCrate crate = crateObject.AddComponent<DroppedCargoCrate>();
                 crate.InitializeFromPhotonData();
             }
+
+            GameVisualTheme.RequestRuntimeRefresh();
         }
     }
 

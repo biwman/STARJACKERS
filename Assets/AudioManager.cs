@@ -30,6 +30,7 @@ public class AudioManager : MonoBehaviour
     AudioClip spaceTruckAlertClip;
     AudioClip mothershipEngineClip;
     AudioClip radarShipEngineClip;
+    AudioClip rescueShipEngineClip;
     AudioClip shieldFullPowerClip;
     AudioClip magneticBeamClip;
     AudioClip shootSmallClip;
@@ -61,6 +62,7 @@ public class AudioManager : MonoBehaviour
     public AudioClip FusionEngineClip => fusionEngineClip != null ? fusionEngineClip : engineClip;
     public AudioClip MothershipEngineClip => mothershipEngineClip != null ? mothershipEngineClip : engineClip;
     public AudioClip RadarShipEngineClip => radarShipEngineClip != null ? radarShipEngineClip : mothershipEngineClip != null ? mothershipEngineClip : engineClip;
+    public AudioClip RescueShipEngineClip => rescueShipEngineClip != null ? rescueShipEngineClip : radarShipEngineClip != null ? radarShipEngineClip : mothershipEngineClip != null ? mothershipEngineClip : engineClip;
     public AudioClip DrillingClip => drillingClip;
     public AudioClip AlarmClip => alarmClip;
     public AudioClip CorsairLaserClip => corsairLaserClip;
@@ -137,6 +139,7 @@ public class AudioManager : MonoBehaviour
         spaceTruckAlertClip = Resources.Load<AudioClip>("Audio/alert_3times");
         mothershipEngineClip = Resources.Load<AudioClip>("Audio/mother_ship_sound");
         radarShipEngineClip = Resources.Load<AudioClip>("Audio/radar_ship_sound");
+        rescueShipEngineClip = Resources.Load<AudioClip>("Audio/rescue_ship_sound");
         shieldFullPowerClip = Resources.Load<AudioClip>("Audio/Shield At Full Power");
         magneticBeamClip = Resources.Load<AudioClip>("Audio/magnetic_beam_sound");
         shootSmallClip = Resources.Load<AudioClip>("Audio/shoot_small");
@@ -290,6 +293,16 @@ public class AudioManager : MonoBehaviour
     public void PlayRadarShipIncomingAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(radarShipIncomingClip != null ? radarShipIncomingClip : alarmClip, worldPosition, 0.94f);
+    }
+
+    public void PlayRescueShipIncomingAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(
+            rescueShipEngineClip != null ? rescueShipEngineClip :
+            radarShipEngineClip != null ? radarShipEngineClip :
+            engineClip,
+            worldPosition,
+            0.84f);
     }
 
     public void PlayShieldFullPowerAt(Vector3 worldPosition)

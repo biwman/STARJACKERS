@@ -10,8 +10,6 @@ public class EndScreenUI : MonoBehaviour
 
     public void Show()
     {
-        Debug.Log("END SCREEN UI SHOW");
-
         if (panel == null)
         {
             Debug.LogError("PANEL NULL");

@@ -257,8 +257,6 @@ public class PlayerMovement : MonoBehaviourPun
     {
         if (!photonView.IsMine)
             return;
-
-        Debug.Log("DOTKNALEM: " + other.name);
     }
 
     void OnCollisionEnter2D(Collision2D collision)
@@ -1233,6 +1231,9 @@ public class PlayerMovement : MonoBehaviourPun
         if (enemyBot != null && enemyBot.Kind == EnemyBotKind.RadarShip)
             return AudioManager.Instance.RadarShipEngineClip;
 
+        if (enemyBot != null && enemyBot.Kind == EnemyBotKind.RescueShip)
+            return AudioManager.Instance.RescueShipEngineClip;
+
         if (enemyBot != null && enemyBot.Kind == EnemyBotKind.Mothership)
             return AudioManager.Instance.MothershipEngineClip;
 
@@ -1471,6 +1472,24 @@ public class EngineThrusterVFX : MonoBehaviour
                 {
                     new GradientAlphaKey(0.96f, 0f),
                     new GradientAlphaKey(0.72f, 0.24f),
+                    new GradientAlphaKey(0.28f, 0.7f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+        }
+        else if (enemyTrailProfile != null && enemyTrailProfile.VisualStyle == EnemyTrailVisualStyle.BlueTwin)
+        {
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(0.88f, 0.98f, 1f), 0f),
+                    new GradientColorKey(new Color(0.32f, 0.78f, 1f), 0.18f),
+                    new GradientColorKey(new Color(0.02f, 0.48f, 0.98f), 0.58f),
+                    new GradientColorKey(new Color(0f, 0.1f, 0.26f), 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0.96f, 0f),
+                    new GradientAlphaKey(0.74f, 0.24f),
                     new GradientAlphaKey(0.28f, 0.7f),
                     new GradientAlphaKey(0f, 1f)
                 });

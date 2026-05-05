@@ -368,7 +368,6 @@ public sealed class GunSetupOverlayUI : MonoBehaviour
             string path = GetCsvPath();
             File.WriteAllText(path, BuildCsv(), Encoding.UTF8);
             SetStatus("Exported: " + path);
-            Debug.Log("Gun setup exported to: " + path);
         }
         catch (Exception ex)
         {

@@ -304,13 +304,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     {
         if (PhotonNetwork.InRoom)
         {
-            Debug.Log("Already in room, restoring scene state...");
             RestoreRoomStateAfterSceneLoad();
             return;
         }
 
         PhotonNetwork.GameVersion = Application.version;
-        Debug.Log("Game Version: " + PhotonNetwork.GameVersion);
 
         if (SessionRequested)
         {
@@ -363,8 +361,6 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public override void OnConnectedToMaster()
     {
-        Debug.Log("Connected to Master");
-
         PhotonNetwork.AutomaticallySyncScene = true;
         PlayerProfileService.Instance.ApplyProfileToPhoton();
 
@@ -509,7 +505,6 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedRoom()
     {
-        Debug.Log("Joined Room");
         SessionRequested = false;
         pendingBrowserAction = PendingBrowserAction.None;
         pendingRoomName = null;
@@ -1229,10 +1224,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     void SpawnPlayer()
     {
-        Debug.Log("Spawning player...");
-
         Vector3 spawnPos = GetSpawnPosition();
         PhotonNetwork.Instantiate("Player", spawnPos, Quaternion.identity);
+        GameVisualTheme.RequestRuntimeRefresh();
     }
 
     public void RestoreRoomStateAfterSceneLoad()
@@ -1348,8 +1342,6 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         {
             return;
         }
-
-        Debug.Log("Tworze TreasureSpawner");
 
         GameObject spawner = new GameObject("TreasureSpawner");
         spawner.AddComponent<TreasureSpawner>();

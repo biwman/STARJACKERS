@@ -11,6 +11,10 @@ public class EnemyBotManager : MonoBehaviour
     float nextScanTime;
     readonly System.Collections.Generic.Dictionary<EnemyBotKind, int> spawnedThisRound = new System.Collections.Generic.Dictionary<EnemyBotKind, int>();
     readonly System.Collections.Generic.Dictionary<EnemyBotKind, int> lastHandledRespawnTick = new System.Collections.Generic.Dictionary<EnemyBotKind, int>();
+    bool rescueShipSummonUnlockedThisRound;
+    bool hasRescueShipSummonFocus;
+    Vector2 rescueShipSummonFocusPosition;
+    int rescueShipSummonTargetViewId = -1;
 
     public static void EnsureExists()
     {
@@ -19,6 +23,14 @@ public class EnemyBotManager : MonoBehaviour
 
         GameObject root = new GameObject("EnemyBotManager");
         instance = root.AddComponent<EnemyBotManager>();
+    }
+
+    public static void NotifyRescueShipSummonTrigger(EnemyBot damagedBot)
+    {
+        if (instance == null || damagedBot == null)
+            return;
+
+        instance.RegisterRescueShipSummonTrigger(damagedBot);
     }
 
     void Awake()
@@ -92,6 +104,7 @@ public class EnemyBotManager : MonoBehaviour
             lastHandledStartTime = double.MinValue;
             spawnedThisRound.Clear();
             lastHandledRespawnTick.Clear();
+            ResetRescueShipSummonState();
             return;
         }
 
@@ -104,6 +117,7 @@ public class EnemyBotManager : MonoBehaviour
             lastHandledStartTime = currentStartTime;
             spawnedThisRound.Clear();
             lastHandledRespawnTick.Clear();
+            ResetRescueShipSummonState();
         }
 
         for (int i = 0; i < EnemyBotCatalog.AllDefinitions.Count; i++)
@@ -117,6 +131,12 @@ public class EnemyBotManager : MonoBehaviour
     {
         if (definition == null)
             return;
+
+        if (definition.Kind == EnemyBotKind.RescueShip)
+        {
+            HandleRescueShipSpawn(definition, currentStartTime);
+            return;
+        }
 
         if (!RoomSettings.GetEnemyEnabled(definition.Kind))
         {
@@ -175,10 +195,140 @@ public class EnemyBotManager : MonoBehaviour
         spawnedThisRound[definition.Kind] = spawnBase + missingCount;
     }
 
-    void SpawnEnemy(EnemyBotDefinition definition, int spawnOrdinal)
+    void HandleRescueShipSpawn(EnemyBotDefinition definition, double currentStartTime)
+    {
+        if (!RoomSettings.GetEnemyEnabled(definition.Kind))
+        {
+            DestroyExistingBots(definition.Kind);
+            spawnedThisRound[definition.Kind] = 0;
+            lastHandledRespawnTick.Remove(definition.Kind);
+            ResetRescueShipSummonState();
+            return;
+        }
+
+        double elapsed = currentStartTime > 0d ? PhotonNetwork.Time - currentStartTime : 0d;
+        int spawnSecond = RoomSettings.GetEnemySpawnSecond(definition.Kind);
+        if (currentStartTime > 0d)
+        {
+            if (elapsed < spawnSecond)
+                return;
+        }
+        else if (spawnSecond > 0)
+        {
+            return;
+        }
+
+        if (!rescueShipSummonUnlockedThisRound)
+            return;
+
+        int desiredCount = RoomSettings.GetEnemyCount(definition.Kind);
+        int spawnedCount = GetSpawnedCount(definition.Kind);
+        bool hasSpawnFocus = TryGetRescueShipSpawnFocus(out Vector2 spawnFocus);
+
+        for (int i = spawnedCount; i < desiredCount; i++)
+        {
+            SpawnEnemy(definition, i, true, hasSpawnFocus, spawnFocus);
+            spawnedThisRound[definition.Kind] = i + 1;
+        }
+
+        if (!RoomSettings.GetEnemyRespawnEnabled(definition.Kind))
+            return;
+
+        int respawnInterval = RoomSettings.GetEnemyRespawnIntervalSeconds(definition.Kind);
+        if (respawnInterval <= 0 || elapsed < respawnInterval || elapsed < spawnSecond)
+            return;
+
+        int currentRespawnTick = Mathf.FloorToInt((float)(elapsed / respawnInterval));
+        int lastTick = lastHandledRespawnTick.TryGetValue(definition.Kind, out int storedTick) ? storedTick : 0;
+        if (currentRespawnTick <= lastTick)
+            return;
+
+        lastHandledRespawnTick[definition.Kind] = currentRespawnTick;
+
+        int activeCount = CountActiveNeutralBots(definition.Kind);
+        int missingCount = Mathf.Max(0, desiredCount - activeCount);
+        if (missingCount <= 0)
+            return;
+
+        int spawnBase = GetSpawnedCount(definition.Kind);
+        for (int i = 0; i < missingCount; i++)
+            SpawnEnemy(definition, spawnBase + i, true, hasSpawnFocus, spawnFocus);
+
+        spawnedThisRound[definition.Kind] = spawnBase + missingCount;
+    }
+
+    void RegisterRescueShipSummonTrigger(EnemyBot damagedBot)
+    {
+        if (!PhotonNetwork.IsMasterClient || damagedBot == null || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        bool gameStarted = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object startedValue) &&
+                           startedValue is bool started &&
+                           started;
+        if (!gameStarted)
+            return;
+
+        if (damagedBot.Kind == EnemyBotKind.SpaceMine || damagedBot.Kind == EnemyBotKind.RescueShip)
+            return;
+
+        rescueShipSummonUnlockedThisRound = true;
+        hasRescueShipSummonFocus = true;
+        rescueShipSummonFocusPosition = damagedBot.transform.position;
+        rescueShipSummonTargetViewId = damagedBot.photonView != null ? damagedBot.photonView.ViewID : -1;
+    }
+
+    void ResetRescueShipSummonState()
+    {
+        rescueShipSummonUnlockedThisRound = false;
+        hasRescueShipSummonFocus = false;
+        rescueShipSummonFocusPosition = Vector2.zero;
+        rescueShipSummonTargetViewId = -1;
+    }
+
+    bool TryGetRescueShipSpawnFocus(out Vector2 focusPosition)
+    {
+        if (EnemyRescueShipBehavior.TryFindNearestDamagedAlly(
+                hasRescueShipSummonFocus ? rescueShipSummonFocusPosition : Vector2.zero,
+                null,
+                out PlayerHealth damagedTarget) &&
+            damagedTarget != null)
+        {
+            focusPosition = damagedTarget.transform.position;
+            hasRescueShipSummonFocus = true;
+            rescueShipSummonFocusPosition = focusPosition;
+            PhotonView targetView = damagedTarget.GetComponent<PhotonView>();
+            rescueShipSummonTargetViewId = targetView != null ? targetView.ViewID : -1;
+            return true;
+        }
+
+        if (rescueShipSummonTargetViewId > 0)
+        {
+            PhotonView targetView = PhotonView.Find(rescueShipSummonTargetViewId);
+            if (targetView != null)
+            {
+                focusPosition = targetView.transform.position;
+                hasRescueShipSummonFocus = true;
+                rescueShipSummonFocusPosition = focusPosition;
+                return true;
+            }
+        }
+
+        if (hasRescueShipSummonFocus)
+        {
+            focusPosition = rescueShipSummonFocusPosition;
+            return true;
+        }
+
+        focusPosition = Vector2.zero;
+        return false;
+    }
+
+    void SpawnEnemy(EnemyBotDefinition definition, int spawnOrdinal, bool forceOffscreen = false, bool hasEntryFocus = false, Vector2 entryFocusPosition = default)
     {
         Vector2 mapSize = RoomSettings.GetMapDimensions();
-        Vector2 spawn = GetSafeSpawnPosition(definition, mapSize, spawnOrdinal);
+        Vector2 spawn = forceOffscreen
+            ? GetOffscreenSpawnPosition(definition, mapSize, hasEntryFocus, entryFocusPosition)
+            : GetSafeSpawnPosition(definition, mapSize, spawnOrdinal);
         GameObject botObject = PhotonNetwork.Instantiate("Player", spawn, Quaternion.identity, 0, new object[] { definition.InstantiationMarker });
         if (botObject != null)
         {
@@ -187,6 +337,11 @@ public class EnemyBotManager : MonoBehaviour
                 bot = botObject.AddComponent<EnemyBot>();
 
             bot.InitializeFromPhotonData();
+            GameVisualTheme.RequestRuntimeRefresh();
+            if (definition.Kind == EnemyBotKind.RescueShip)
+            {
+                bot.photonView.RPC(nameof(EnemyBot.PlayRescueShipIncomingRpc), RpcTarget.All, spawn.x, spawn.y, 0f);
+            }
         }
     }
 
@@ -270,6 +425,53 @@ public class EnemyBotManager : MonoBehaviour
         }
 
         return bestCandidate;
+    }
+
+    Vector2 GetOffscreenSpawnPosition(EnemyBotDefinition definition, Vector2 mapSize, bool hasEntryFocus, Vector2 entryFocusPosition)
+    {
+        float halfX = mapSize.x * 0.5f;
+        float halfY = mapSize.y * 0.5f;
+        bool isRescueShip = definition != null && definition.Kind == EnemyBotKind.RescueShip;
+        float margin = isRescueShip
+            ? Mathf.Max(1.2f, definition != null ? definition.TargetSize * 0.45f : 1.2f)
+            : Mathf.Max(4.5f, definition != null ? definition.TargetSize * 1.85f : 4.5f);
+        if (hasEntryFocus)
+        {
+            float clampedX = Mathf.Clamp(entryFocusPosition.x, -halfX + 1f, halfX - 1f);
+            float clampedY = Mathf.Clamp(entryFocusPosition.y, -halfY + 1f, halfY - 1f);
+            float topDistance = Mathf.Abs(halfY - clampedY);
+            float bottomDistance = Mathf.Abs(-halfY - clampedY);
+            float leftDistance = Mathf.Abs(-halfX - clampedX);
+            float rightDistance = Mathf.Abs(halfX - clampedX);
+            float nearestDistance = Mathf.Min(Mathf.Min(topDistance, bottomDistance), Mathf.Min(leftDistance, rightDistance));
+            float lateralJitter = isRescueShip
+                ? 0.18f
+                : Mathf.Min(1.3f, Mathf.Max(0.35f, definition != null ? definition.TargetSize * 0.18f : 0.6f));
+
+            if (Mathf.Approximately(nearestDistance, topDistance))
+                return new Vector2(Mathf.Clamp(clampedX + Random.Range(-lateralJitter, lateralJitter), -halfX, halfX), halfY + margin);
+
+            if (Mathf.Approximately(nearestDistance, bottomDistance))
+                return new Vector2(Mathf.Clamp(clampedX + Random.Range(-lateralJitter, lateralJitter), -halfX, halfX), -halfY - margin);
+
+            if (Mathf.Approximately(nearestDistance, leftDistance))
+                return new Vector2(-halfX - margin, Mathf.Clamp(clampedY + Random.Range(-lateralJitter, lateralJitter), -halfY, halfY));
+
+            return new Vector2(halfX + margin, Mathf.Clamp(clampedY + Random.Range(-lateralJitter, lateralJitter), -halfY, halfY));
+        }
+
+        int edge = Random.Range(0, 4);
+        switch (edge)
+        {
+            case 0:
+                return new Vector2(Random.Range(-halfX, halfX), halfY + margin);
+            case 1:
+                return new Vector2(Random.Range(-halfX, halfX), -halfY - margin);
+            case 2:
+                return new Vector2(-halfX - margin, Random.Range(-halfY, halfY));
+            default:
+                return new Vector2(halfX + margin, Random.Range(-halfY, halfY));
+        }
     }
 
     Vector2[] BuildSpawnCandidates(EnemyBotDefinition definition, Vector2 mapSize, int spawnOrdinal)

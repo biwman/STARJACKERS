@@ -30,7 +30,7 @@ public class GameVisualTheme : MonoBehaviour
     const float ExtractionTargetSize = 4.3f;
     const float BackgroundTileWorldSize = 8f;
     const float DesktopRefreshInterval = 0.75f;
-    const float MobileRefreshInterval = 1.35f;
+    const float RuntimeRefreshDelay = 0.08f;
 
     static GameVisualTheme instance;
 
@@ -52,7 +52,11 @@ public class GameVisualTheme : MonoBehaviour
     Sprite extractionSprite;
     Sprite backgroundSprite;
     float nextRefreshTime;
-    int lastRuntimeSignature = int.MinValue;
+    bool runtimeThemeDirty;
+    bool runtimeReloadAssetsDirty;
+    int lastRuntimeBackgroundIndex = int.MinValue;
+    int lastRuntimeObstacleSizePercent = int.MinValue;
+    string lastRuntimeMapSizeMode = string.Empty;
 #if UNITY_EDITOR
     double nextEditorRefreshTime;
 #endif
@@ -114,6 +118,15 @@ public class GameVisualTheme : MonoBehaviour
         instance.ApplyObstacleVisualInternal(target);
     }
 
+    public static void RequestRuntimeRefresh(bool reloadAssets = false)
+    {
+        EnsureInstance();
+        if (instance == null)
+            return;
+
+        instance.MarkRuntimeThemeDirty(reloadAssets);
+    }
+
 #if UNITY_EDITOR
     static void EnsureEditorInstance()
     {
@@ -137,6 +150,7 @@ public class GameVisualTheme : MonoBehaviour
         LoadAssets();
         nextRefreshTime = 0f;
         ApplyTheme();
+        CaptureRuntimeSettingsSnapshot();
 #if UNITY_EDITOR
         if (!Application.isPlaying)
             EditorApplication.hierarchyChanged += OnEditorHierarchyChanged;
@@ -157,6 +171,8 @@ public class GameVisualTheme : MonoBehaviour
     void Start()
     {
         ApplyTheme();
+        CaptureRuntimeSettingsSnapshot();
+        MarkRuntimeThemeDirty(false);
     }
 
     void Update()
@@ -173,26 +189,65 @@ public class GameVisualTheme : MonoBehaviour
         }
 #endif
 
-        float refreshInterval = Application.isMobilePlatform ? MobileRefreshInterval : DesktopRefreshInterval;
-        if (Time.unscaledTime < nextRefreshTime)
+        RefreshRuntimeSettingsIfNeeded();
+        if (!runtimeThemeDirty || Time.unscaledTime < nextRefreshTime)
             return;
 
-        nextRefreshTime = Time.unscaledTime + refreshInterval;
-        int currentSignature = CalculateRuntimeSignature();
-        if (currentSignature == lastRuntimeSignature)
-            return;
+        runtimeThemeDirty = false;
+        if (runtimeReloadAssetsDirty)
+        {
+            runtimeReloadAssetsDirty = false;
+            LoadAssets();
+        }
 
-        lastRuntimeSignature = currentSignature;
-        LoadAssets();
         ApplyTheme();
+        nextRefreshTime = 0f;
     }
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         LoadAssets();
         nextRefreshTime = 0f;
-        lastRuntimeSignature = int.MinValue;
         ApplyTheme();
+        CaptureRuntimeSettingsSnapshot();
+        MarkRuntimeThemeDirty(false);
+    }
+
+    void MarkRuntimeThemeDirty(bool reloadAssets, float delay = RuntimeRefreshDelay)
+    {
+        runtimeThemeDirty = true;
+        runtimeReloadAssetsDirty |= reloadAssets;
+
+        float requestedRefreshTime = Time.unscaledTime + Mathf.Max(0f, delay);
+        if (nextRefreshTime <= 0f || requestedRefreshTime < nextRefreshTime)
+            nextRefreshTime = requestedRefreshTime;
+    }
+
+    void CaptureRuntimeSettingsSnapshot()
+    {
+        lastRuntimeBackgroundIndex = RoomSettings.GetMapBackgroundIndex();
+        lastRuntimeMapSizeMode = RoomSettings.GetMapSizeMode();
+        lastRuntimeObstacleSizePercent = RoomSettings.GetObstacleSizePercent();
+    }
+
+    void RefreshRuntimeSettingsIfNeeded()
+    {
+        int backgroundIndex = RoomSettings.GetMapBackgroundIndex();
+        string mapSizeMode = RoomSettings.GetMapSizeMode();
+        int obstacleSizePercent = RoomSettings.GetObstacleSizePercent();
+
+        bool backgroundChanged = backgroundIndex != lastRuntimeBackgroundIndex;
+        if (!backgroundChanged &&
+            string.Equals(mapSizeMode, lastRuntimeMapSizeMode, System.StringComparison.Ordinal) &&
+            obstacleSizePercent == lastRuntimeObstacleSizePercent)
+        {
+            return;
+        }
+
+        lastRuntimeBackgroundIndex = backgroundIndex;
+        lastRuntimeMapSizeMode = mapSizeMode;
+        lastRuntimeObstacleSizePercent = obstacleSizePercent;
+        MarkRuntimeThemeDirty(backgroundChanged, 0f);
     }
 
 #if UNITY_EDITOR
@@ -719,89 +774,6 @@ public class GameVisualTheme : MonoBehaviour
             maxScale = 1f;
 
         collider2D.radius = worldRadius / maxScale;
-    }
-
-    int CalculateRuntimeSignature()
-    {
-        unchecked
-        {
-            int signature = 17;
-            PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
-            Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
-            ExtractionZone[] extractionZones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
-            ShipWreck[] wrecks = FindObjectsByType<ShipWreck>(FindObjectsInactive.Exclude);
-            DroppedCargoCrate[] droppedCrates = FindObjectsByType<DroppedCargoCrate>(FindObjectsInactive.Exclude);
-
-            signature = signature * 31 + players.Length;
-            signature = signature * 31 + treasures.Length;
-            signature = signature * 31 + extractionZones.Length;
-            signature = signature * 31 + wrecks.Length;
-            signature = signature * 31 + droppedCrates.Length;
-            signature = signature * 31 + RoomSettings.GetMapBackgroundIndex();
-            signature = signature * 31 + RoomSettings.GetMapSizeMode().GetHashCode();
-            signature = signature * 31 + RoomSettings.GetObstacleSizePercent();
-
-            for (int i = 0; i < players.Length; i++)
-            {
-                PlayerHealth player = players[i];
-                if (player == null)
-                    continue;
-
-                PhotonView view = player.GetComponent<PhotonView>();
-                signature = signature * 31 + (view != null ? view.ViewID : 0);
-                signature = signature * 31 + (player.IsWreck ? 1 : 0);
-                signature = signature * 31 + (player.IsBotControlled ? 1 : 0);
-                signature = signature * 31 + (player.IsAstronautControlled ? 1 : 0);
-
-                if (view != null && view.Owner != null)
-                    signature = signature * 31 + RoomSettings.GetPlayerShipSkin(view.Owner, 0);
-            }
-
-            for (int i = 0; i < treasures.Length; i++)
-            {
-                Treasure treasure = treasures[i];
-                if (treasure == null)
-                    continue;
-
-                PhotonView view = treasure.GetComponent<PhotonView>();
-                signature = signature * 31 + (view != null ? view.ViewID : treasure.GetHashCode());
-                signature = signature * 31 + (string.IsNullOrWhiteSpace(treasure.itemId) ? 0 : treasure.itemId.GetHashCode());
-            }
-
-            for (int i = 0; i < wrecks.Length; i++)
-            {
-                ShipWreck wreck = wrecks[i];
-                if (wreck == null)
-                    continue;
-
-                PhotonView view = wreck.GetComponent<PhotonView>();
-                signature = signature * 31 + (view != null ? view.ViewID : wreck.GetHashCode());
-                signature = signature * 31 + wreck.SourceShipSkinIndex;
-                signature = signature * 31 + (wreck.HasLoot ? 1 : 0);
-            }
-
-            for (int i = 0; i < droppedCrates.Length; i++)
-            {
-                DroppedCargoCrate crate = droppedCrates[i];
-                if (crate == null)
-                    continue;
-
-                PhotonView view = crate.GetComponent<PhotonView>();
-                signature = signature * 31 + (view != null ? view.ViewID : crate.GetHashCode());
-                signature = signature * 31 + (crate.HasLoot ? 1 : 0);
-                signature = signature * 31 + (string.IsNullOrWhiteSpace(crate.StoredItemId) ? 0 : crate.StoredItemId.GetHashCode());
-            }
-
-            SpriteRenderer[] renderers = FindObjectsByType<SpriteRenderer>(FindObjectsInactive.Exclude);
-            int obstacleCount = 0;
-            for (int i = 0; i < renderers.Length; i++)
-            {
-                if (renderers[i] != null && renderers[i].gameObject.name.StartsWith("Obstacle"))
-                    obstacleCount++;
-            }
-            signature = signature * 31 + obstacleCount;
-            return signature;
-        }
     }
 
     Sprite LoadSpriteFromProjectOrResources(string projectFileName, string resourcesPath)

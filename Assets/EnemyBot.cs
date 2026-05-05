@@ -14,7 +14,275 @@ public enum EnemyBotKind
     SpaceTruck,
     Mothership,
     NeutralFighter,
-    RadarShip
+    RadarShip,
+    RescueShip
+}
+
+public sealed class RescueShipBeamVfx : MonoBehaviour
+{
+    const int BeamPointCount = 18;
+    const float EffectZOffset = -0.075f;
+    const int SortingOrderOffset = 276;
+
+    static readonly Dictionary<int, RescueShipBeamVfx> ActiveBySourceViewId = new Dictionary<int, RescueShipBeamVfx>();
+    static Material sharedMaterial;
+    static AudioClip rescueShipBeamClip;
+
+    Transform source;
+    Transform target;
+    LineRenderer coreLine;
+    LineRenderer glowLine;
+    AudioSource audioSource;
+    int sourceViewId;
+    int sortingLayerId;
+    int sortingOrder = 2400;
+
+    public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId)
+    {
+        StopBeam(sourcePhotonViewId);
+
+        PhotonView sourceView = PhotonView.Find(sourcePhotonViewId);
+        PhotonView targetView = PhotonView.Find(targetPhotonViewId);
+        if (sourceView == null || targetView == null)
+            return;
+
+        GameObject effect = new GameObject("RescueShipBeamVfx_" + sourcePhotonViewId);
+        RescueShipBeamVfx vfx = effect.AddComponent<RescueShipBeamVfx>();
+        vfx.Initialize(sourceView.transform, targetView.transform, sourcePhotonViewId);
+        ActiveBySourceViewId[sourcePhotonViewId] = vfx;
+    }
+
+    public static void StopBeam(int sourcePhotonViewId)
+    {
+        if (!ActiveBySourceViewId.TryGetValue(sourcePhotonViewId, out RescueShipBeamVfx vfx))
+            return;
+
+        ActiveBySourceViewId.Remove(sourcePhotonViewId);
+        if (vfx != null)
+            Destroy(vfx.gameObject);
+    }
+
+    void Initialize(Transform sourceTransform, Transform targetTransform, int resolvedSourceViewId)
+    {
+        source = sourceTransform;
+        target = targetTransform;
+        sourceViewId = resolvedSourceViewId;
+
+        SpriteRenderer sourceRenderer = source != null ? source.GetComponentInChildren<SpriteRenderer>() : null;
+        if (sourceRenderer != null)
+        {
+            sortingLayerId = sourceRenderer.sortingLayerID;
+            sortingOrder = sourceRenderer.sortingOrder + SortingOrderOffset;
+        }
+
+        if (source != null)
+            gameObject.layer = source.gameObject.layer;
+
+        glowLine = CreateLine("RescueBeamGlow", 0.34f, sortingOrder);
+        coreLine = CreateLine("RescueBeamCore", 0.12f, sortingOrder + 1);
+        CreateAudioSource();
+    }
+
+    void Update()
+    {
+        if (source == null || target == null)
+        {
+            StopBeam(sourceViewId);
+            return;
+        }
+
+        UpdateBeam();
+        UpdateAudio();
+    }
+
+    void OnDestroy()
+    {
+        if (ActiveBySourceViewId.TryGetValue(sourceViewId, out RescueShipBeamVfx active) && active == this)
+            ActiveBySourceViewId.Remove(sourceViewId);
+
+        if (audioSource != null)
+            audioSource.Stop();
+    }
+
+    void UpdateBeam()
+    {
+        Vector3 start = GetSourcePoint();
+        Vector3 end = GetTargetPoint(start);
+        Vector3 delta = end - start;
+        Vector3 direction = delta.sqrMagnitude > 0.0001f ? delta.normalized : source.up;
+        Vector3 perpendicular = Vector3.Cross(direction, Vector3.forward);
+        float distance = Mathf.Max(0.1f, delta.magnitude);
+        float pulse = Mathf.Sin(Time.time * 6.5f) * 0.5f + 0.5f;
+        float wave = Mathf.Lerp(0.02f, 0.08f, pulse) * Mathf.Clamp01(distance / 8f);
+
+        UpdateLine(glowLine, start, end, perpendicular, wave, pulse, false);
+        UpdateLine(coreLine, start, end, perpendicular, wave * 0.38f, pulse, true);
+    }
+
+    void UpdateLine(LineRenderer line, Vector3 start, Vector3 end, Vector3 perpendicular, float wave, float pulse, bool core)
+    {
+        if (line == null)
+            return;
+
+        line.enabled = true;
+        for (int i = 0; i < line.positionCount; i++)
+        {
+            float t = i / (float)(line.positionCount - 1);
+            Vector3 point = Vector3.Lerp(start, end, t);
+            float taper = Mathf.Sin(t * Mathf.PI);
+            float ripple = Mathf.Sin((t * Mathf.PI * 5f) + Time.time * 9f) * wave * taper;
+            float shimmer = Mathf.Sin((t * Mathf.PI * 12f) - Time.time * 5.5f) * wave * 0.22f * taper;
+            point += perpendicular * (ripple + shimmer);
+            point.z = source.position.z + EffectZOffset;
+            line.SetPosition(i, point);
+        }
+
+        float alpha = core ? Mathf.Lerp(0.78f, 1f, pulse) : Mathf.Lerp(0.36f, 0.62f, pulse);
+        line.colorGradient = core ? BuildCoreGradient(alpha) : BuildGlowGradient(alpha);
+        line.widthMultiplier = core
+            ? Mathf.Lerp(0.09f, 0.16f, pulse)
+            : Mathf.Lerp(0.24f, 0.38f, pulse);
+    }
+
+    Vector3 GetSourcePoint()
+    {
+        SpriteRenderer renderer = source != null ? source.GetComponentInChildren<SpriteRenderer>() : null;
+        if (renderer == null)
+            return source != null ? source.position : Vector3.zero;
+
+        Bounds bounds = renderer.bounds;
+        float side = Mathf.Sign((target != null ? target.position.x : source.position.x) - source.position.x);
+        if (Mathf.Abs(side) < 0.1f)
+            side = 1f;
+
+        return new Vector3(
+            source.position.x + bounds.extents.x * 0.58f * side,
+            source.position.y - bounds.extents.y * 0.12f,
+            source.position.z);
+    }
+
+    Vector3 GetTargetPoint(Vector3 sourcePoint)
+    {
+        Collider2D collider = target != null ? target.GetComponent<Collider2D>() : null;
+        if (collider != null)
+            return collider.ClosestPoint(sourcePoint);
+
+        return target != null ? target.position : sourcePoint;
+    }
+
+    LineRenderer CreateLine(string objectName, float width, int order)
+    {
+        GameObject lineObject = new GameObject(objectName);
+        lineObject.transform.SetParent(transform, false);
+        if (source != null)
+            lineObject.layer = source.gameObject.layer;
+
+        LineRenderer line = lineObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.positionCount = BeamPointCount;
+        line.widthMultiplier = width;
+        line.numCapVertices = 14;
+        line.numCornerVertices = 10;
+        line.alignment = LineAlignment.View;
+        line.textureMode = LineTextureMode.Stretch;
+        line.material = GetMaterial();
+        line.sortingLayerID = sortingLayerId;
+        line.sortingOrder = order;
+        line.widthCurve = new AnimationCurve(
+            new Keyframe(0f, 0.22f),
+            new Keyframe(0.14f, 0.92f),
+            new Keyframe(0.78f, 0.74f),
+            new Keyframe(1f, 0.2f));
+        return line;
+    }
+
+    void CreateAudioSource()
+    {
+        audioSource = gameObject.AddComponent<AudioSource>();
+        audioSource.clip = GetRescueShipBeamClip();
+        audioSource.loop = true;
+        audioSource.playOnAwake = false;
+        audioSource.volume = 0.72f;
+        audioSource.spatialBlend = 1f;
+        audioSource.rolloffMode = AudioRolloffMode.Linear;
+        audioSource.minDistance = 4f;
+        audioSource.maxDistance = 22f;
+
+        if (audioSource.clip != null)
+            audioSource.Play();
+    }
+
+    void UpdateAudio()
+    {
+        transform.position = source != null ? source.position : transform.position;
+        if (audioSource != null && audioSource.clip != null && !audioSource.isPlaying)
+            audioSource.Play();
+    }
+
+    static Gradient BuildCoreGradient(float alpha)
+    {
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(0.92f, 1f, 1f), 0f),
+                new GradientColorKey(new Color(0.48f, 0.92f, 1f), 0.46f),
+                new GradientColorKey(new Color(0.08f, 0.62f, 1f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(alpha, 0f),
+                new GradientAlphaKey(alpha * 0.86f, 0.55f),
+                new GradientAlphaKey(alpha * 0.34f, 1f)
+            });
+        return gradient;
+    }
+
+    static Gradient BuildGlowGradient(float alpha)
+    {
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(0.56f, 0.9f, 1f), 0f),
+                new GradientColorKey(new Color(0.2f, 0.62f, 1f), 0.5f),
+                new GradientColorKey(new Color(0.02f, 0.2f, 0.48f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(alpha * 0.78f, 0f),
+                new GradientAlphaKey(alpha * 0.54f, 0.52f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        return gradient;
+    }
+
+    static AudioClip GetRescueShipBeamClip()
+    {
+        if (rescueShipBeamClip != null)
+            return rescueShipBeamClip;
+
+        rescueShipBeamClip = Resources.Load<AudioClip>("Audio/rescue_ship_beam");
+        return rescueShipBeamClip;
+    }
+
+    static Material GetMaterial()
+    {
+        if (sharedMaterial != null)
+            return sharedMaterial;
+
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null)
+            shader = Shader.Find("Unlit/Color");
+
+        sharedMaterial = new Material(shader)
+        {
+            name = "RescueShipBeamVfxMaterial",
+            color = Color.white
+        };
+        sharedMaterial.renderQueue = 3350;
+        return sharedMaterial;
+    }
 }
 
 public static class EnemyTargetingUtility
@@ -137,7 +405,8 @@ public enum EnemyMovementModel
     RouteExtractionZones,
     Mothership,
     NeutralFighter,
-    RadarShip
+    RadarShip,
+    RescueShip
 }
 
 public enum EnemySpawnPattern
@@ -151,7 +420,8 @@ public enum EnemyTrailVisualStyle
     None,
     OrangeSmall,
     RedLarge,
-    GreenTwin
+    GreenTwin,
+    BlueTwin
 }
 
 [System.Serializable]
@@ -975,6 +1245,85 @@ public static class EnemyBotCatalog
         },
         new EnemyBotDefinition
         {
+            Kind = EnemyBotKind.RescueShip,
+            Id = "rescue_ship",
+            DisplayName = "Rescue Ship",
+            InstantiationMarker = "enemy_bot_rescue_ship",
+            VisualResourcePath = "rescue_ship_resource",
+            EditorAssetPath = "Assets/rescue_ship.png",
+            TargetSize = 2.18f,
+            PhysicsMass = 20f,
+            LinearDamping = 0.1f,
+            AngularDamping = 0.3f,
+            DefaultHp = 85,
+            DefaultShield = 95,
+            DefaultSpeedMultiplier = 1.9f,
+            DefaultEnabled = false,
+            DefaultCount = 1,
+            DefaultSpawnSecond = 0,
+            Movement = new EnemyMovementProfile
+            {
+                Model = EnemyMovementModel.RescueShip,
+                SpawnPattern = EnemySpawnPattern.WideCorners,
+                MoveSpeed = 0.96f,
+                TurnResponsiveness = 155f,
+                DetectionRadius = 18f,
+                DisengageRadius = 22f,
+                OrbitDistance = 2.6f,
+                PreferredDistance = 3.1f,
+                ShootDistance = 0f,
+                RepathInterval = 0.18f,
+                TargetRefreshInterval = 0.2f,
+                IdleDriftTurnSpeed = 14f,
+                OrbitAngularSpeed = 0.25f
+            },
+            Weapon = new EnemyWeaponProfile
+            {
+                AmmoCount = 0,
+                ReloadDuration = 0f,
+                FireRate = 0f,
+                Damage = 0,
+                BulletScaleMultiplier = 0f,
+                BulletColor = new Color(0.54f, 0.9f, 1f, 1f),
+                BulletSpeed = 0f,
+                MuzzleOffsetDistance = 0f,
+                InfiniteAmmo = true,
+                RotateTowardAim = false,
+                Range = 0f,
+                ShotSoundId = string.Empty
+            },
+            Wreck = new EnemyWreckProfile
+            {
+                Mass = 22f,
+                LinearDamping = 0.84f,
+                AngularDamping = 1.08f,
+                DriftSpeed = 0.07f,
+                AngularVelocityRange = 1.15f,
+                RewardItemId = InventoryItemCatalog.RescueShipSalvageId,
+                DestroyWhenEmpty = false,
+                BaseColor = new Color(0.48f, 0.54f, 0.6f, 0.98f),
+                VisualResourcePath = "rescue_ship_wreck_resource",
+                EditorAssetPath = "Assets/rescue_ship_wreck.png"
+            },
+            Trails = new EnemyTrailProfile
+            {
+                RootOffsetFactors = new Vector2(0f, -0.44f),
+                RootRotationZ = 180f,
+                TrailOffsetFactors = new[]
+                {
+                    new Vector2(-0.34f, 0.06f),
+                    new Vector2(0.34f, 0.06f)
+                },
+                MinTrailTime = 0.42f,
+                MaxTrailTime = 1.18f,
+                MinTrailWidth = 0.05f,
+                MaxTrailWidth = 0.18f,
+                EmissionThreshold = 0.015f,
+                VisualStyle = EnemyTrailVisualStyle.BlueTwin
+            }
+        },
+        new EnemyBotDefinition
+        {
             Kind = EnemyBotKind.Mothership,
             Id = "mothership",
             DisplayName = "Mothership",
@@ -1124,6 +1473,7 @@ public class EnemyBot : MonoBehaviourPun
     public bool IsSpaceMine => kind == EnemyBotKind.SpaceMine;
     public bool IsSpaceTruck => kind == EnemyBotKind.SpaceTruck;
     public bool IsRadarShip => kind == EnemyBotKind.RadarShip;
+    public bool IsRescueShip => kind == EnemyBotKind.RescueShip;
     public bool IsMothership => kind == EnemyBotKind.Mothership;
     public bool IsPlayerPlacedMine => isPlayerPlacedMine;
     public bool IsSummonedDrone => isSummonedDrone;
@@ -1203,7 +1553,7 @@ public class EnemyBot : MonoBehaviourPun
 
     void PlaySpawnTeleportVfx()
     {
-        if (spawnTeleportVfxPlayed || !IsGameStarted() || isPlayerPlacedMine)
+        if (spawnTeleportVfxPlayed || !IsGameStarted() || isPlayerPlacedMine || kind == EnemyBotKind.RescueShip)
             return;
 
         spawnTeleportVfxPlayed = true;
@@ -1330,6 +1680,9 @@ public class EnemyBot : MonoBehaviourPun
                     case EnemyMovementModel.RadarShip:
                         behavior = gameObject.AddComponent<EnemyRadarShipBehavior>();
                         break;
+                    case EnemyMovementModel.RescueShip:
+                        behavior = gameObject.AddComponent<EnemyRescueShipBehavior>();
+                        break;
                     case EnemyMovementModel.Mothership:
                         behavior = gameObject.AddComponent<EnemyMothershipBehavior>();
                         break;
@@ -1361,6 +1714,7 @@ public class EnemyBot : MonoBehaviourPun
             EnemyMovementModel.Drift => existingBehavior is EnemyMineBehavior,
             EnemyMovementModel.RouteExtractionZones => existingBehavior is EnemySpaceTruckBehavior,
             EnemyMovementModel.RadarShip => existingBehavior is EnemyRadarShipBehavior,
+            EnemyMovementModel.RescueShip => existingBehavior is EnemyRescueShipBehavior,
             EnemyMovementModel.Mothership => existingBehavior is EnemyMothershipBehavior,
             EnemyMovementModel.NeutralFighter => existingBehavior is EnemyNeutralFighterBehavior,
             _ => existingBehavior is EnemyDroneBehavior
@@ -1640,6 +1994,9 @@ public class EnemyBot : MonoBehaviourPun
         if (!wasHit)
             return;
 
+        if (kind != EnemyBotKind.SpaceMine && kind != EnemyBotKind.RescueShip)
+            EnemyBotManager.NotifyRescueShipSummonTrigger(this);
+
         if (kind == EnemyBotKind.Mothership && behavior is EnemyMothershipBehavior mothershipBehavior)
             mothershipBehavior.NotifyDamageSource(attackerViewID);
 
@@ -1723,6 +2080,24 @@ public class EnemyBot : MonoBehaviourPun
     public void SpawnRadarStrikeImpactRpc(float x, float y, float radius)
     {
         RadarStrikeVfx.SpawnImpact(new Vector2(x, y), radius);
+    }
+
+    [PunRPC]
+    public void PlayRescueShipIncomingRpc(float x, float y, float z)
+    {
+        AudioManager.Instance.PlayRescueShipIncomingAt(new Vector3(x, y, z));
+    }
+
+    [PunRPC]
+    public void StartRescueShipBeamRpc(int targetViewId)
+    {
+        RescueShipBeamVfx.StartBeam(photonView != null ? photonView.ViewID : 0, targetViewId);
+    }
+
+    [PunRPC]
+    public void StopRescueShipBeamRpc()
+    {
+        RescueShipBeamVfx.StopBeam(photonView != null ? photonView.ViewID : 0);
     }
 
     public static Vector3 ResolveSpaceMineDetonationPosition(int sourceViewId, Vector3 fallbackWorldPosition)
@@ -3158,6 +3533,479 @@ public class EnemySpaceTruckBehavior : EnemyBotBehaviorBase
             return;
 
         targetZoneIndex = (targetZoneIndex + 1) % extractionZones.Length;
+    }
+}
+
+[RequireComponent(typeof(EnemyBot))]
+public class EnemyRescueShipBehavior : EnemyBotBehaviorBase
+{
+    const float HealRange = 5.9f;
+    const float BeamBreakRange = 7.7f;
+    const float HealPerSecond = 10f;
+    const float HealStandOffDistance = 4.3f;
+    const float HealAnchorTolerance = 0.92f;
+    const float MinimumHealLockDuration = 1f;
+    const float PatrolTurnIntervalMin = 1.35f;
+    const float PatrolTurnIntervalMax = 2.6f;
+    const float PatrolSpeedMultiplier = 0.78f;
+    const float EntrySpeedMultiplier = 2.45f;
+    const float MapEdgeMargin = 2.6f;
+    const float MapEdgeSteerWeight = 0.82f;
+    const float RecoveryEdgeThreshold = 2.1f;
+    const float AvoidanceScanRadius = 2.1f;
+    const float AvoidanceWeight = 0.4f;
+
+    Rigidbody2D rb;
+    PhotonView view;
+    PlayerHealth health;
+    EnemyMovementProfile movement;
+    Collider2D bodyCollider;
+    readonly System.Collections.Generic.List<Collider2D> wallColliders = new System.Collections.Generic.List<Collider2D>(4);
+    PlayerHealth currentHealTarget;
+    Vector2 patrolDirection = Vector2.up;
+    float nextTargetRefreshTime;
+    float nextPatrolTurnTime;
+    float healAccumulator;
+    float healLockEndTime;
+    int activeBeamTargetViewId = -1;
+    bool wallCollisionsIgnoredWhileEntering;
+
+    public override void Initialize(EnemyBot owner)
+    {
+        base.Initialize(owner);
+        rb = owner.GetComponent<Rigidbody2D>();
+        view = owner.GetComponent<PhotonView>();
+        health = owner.GetComponent<PlayerHealth>();
+        movement = owner.Definition != null ? owner.Definition.Movement : null;
+        bodyCollider = owner.GetComponent<Collider2D>();
+        RefreshWallColliders();
+
+        int seed = view != null ? view.ViewID : Random.Range(1, 9999);
+        float angle = Mathf.Abs(seed * 0.193f) % (Mathf.PI * 2f);
+        patrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+        nextPatrolTurnTime = Time.time + Random.Range(PatrolTurnIntervalMin, PatrolTurnIntervalMax);
+    }
+
+    void OnDisable()
+    {
+        SetWallCollisionIgnored(false);
+        StopBeam();
+    }
+
+    void OnDestroy()
+    {
+        SetWallCollisionIgnored(false);
+        StopBeam();
+    }
+
+    public override void TickBehavior()
+    {
+        if (bot == null || view == null || !view.IsMine || rb == null || movement == null)
+            return;
+
+        if (health != null && health.IsWreck)
+        {
+            StopBeam();
+            return;
+        }
+
+        RefreshTargetIfNeeded();
+
+        bool enteringMap = !IsInsidePlayableBounds(rb.position);
+        SetWallCollisionIgnored(enteringMap);
+        bool hadActiveHealingState = currentHealTarget != null || activeBeamTargetViewId > 0 || healLockEndTime > Time.time;
+        bool canHealCurrentTarget = IsHealableTarget(currentHealTarget, bot);
+        Vector2 desiredDirection;
+        bool withinHealRange = false;
+
+        if (canHealCurrentTarget)
+        {
+            desiredDirection = ResolveHealDirection(currentHealTarget, out withinHealRange);
+        }
+        else
+        {
+            currentHealTarget = null;
+            if (hadActiveHealingState)
+                EnterPatrolMode(enteringMap);
+            desiredDirection = enteringMap ? (-rb.position).normalized : ResolvePatrolDirection();
+        }
+
+        desiredDirection = ApplyAvoidance(desiredDirection);
+        desiredDirection = ApplyMapEdgeSteering(desiredDirection);
+        if (!canHealCurrentTarget && IsNearMapEdge(rb.position, RecoveryEdgeThreshold))
+            desiredDirection = Vector2.Lerp(desiredDirection.normalized, (-rb.position).normalized, 0.72f).normalized;
+        if (desiredDirection.sqrMagnitude <= 0.001f)
+            desiredDirection = patrolDirection.sqrMagnitude > 0.001f ? patrolDirection : Vector2.up;
+
+        bool sustainHealLock = canHealCurrentTarget
+            && activeBeamTargetViewId > 0
+            && Time.time < healLockEndTime
+            && Vector2.Distance(rb.position, GetTargetPoint(currentHealTarget)) <= BeamBreakRange;
+        bool healingThisFrame = canHealCurrentTarget && (withinHealRange || sustainHealLock);
+
+        float speedMultiplier = enteringMap ? EntrySpeedMultiplier : canHealCurrentTarget ? 1f : PatrolSpeedMultiplier;
+        if (healingThisFrame)
+            speedMultiplier = 0.16f;
+
+        Vector2 desiredVelocity = desiredDirection.normalized * (bot.EffectiveMoveSpeed * speedMultiplier);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, healingThisFrame ? 0.24f : 0.14f);
+
+        Vector2 aimDirection = canHealCurrentTarget
+            ? (GetTargetPoint(currentHealTarget) - rb.position)
+            : rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity.normalized : desiredDirection;
+        RotateHullToward(aimDirection);
+
+        if (healingThisFrame)
+        {
+            PhotonView targetView = currentHealTarget != null ? currentHealTarget.GetComponent<PhotonView>() : null;
+            int targetViewId = targetView != null ? targetView.ViewID : -1;
+            bool startedNewBeam = targetViewId > 0 && activeBeamTargetViewId != targetViewId;
+            StartBeam(currentHealTarget);
+            if (startedNewBeam)
+                healLockEndTime = Time.time + MinimumHealLockDuration;
+            ApplyHealing(currentHealTarget);
+        }
+        else
+        {
+            healAccumulator = 0f;
+            healLockEndTime = 0f;
+            StopBeam();
+        }
+    }
+
+    public static bool TryFindNearestDamagedAlly(Vector2 origin, EnemyBot selfBot, out PlayerHealth result)
+    {
+        result = null;
+        float bestDistance = float.MaxValue;
+        PlayerHealth[] candidates = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            PlayerHealth candidate = candidates[i];
+            if (!IsHealableTarget(candidate, selfBot))
+                continue;
+
+            float distance = Vector2.Distance(origin, candidate.transform.position);
+            if (distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            result = candidate;
+        }
+
+        return result != null;
+    }
+
+    static bool IsHealableTarget(PlayerHealth candidate, EnemyBot selfBot)
+    {
+        if (candidate == null || candidate.IsWreck || candidate.IsEvacuationAnimating || !candidate.IsBotControlled)
+            return false;
+
+        EnemyBot candidateBot = candidate.GetComponent<EnemyBot>();
+        if (candidateBot == null || candidateBot == selfBot)
+            return false;
+
+        if (candidateBot.Kind == EnemyBotKind.SpaceMine || candidateBot.Kind == EnemyBotKind.RescueShip)
+            return false;
+
+        return candidate.CurrentHP < candidate.maxHP || candidate.CurrentShield < candidate.MaxShield;
+    }
+
+    void RefreshTargetIfNeeded()
+    {
+        if (Time.time < healLockEndTime && IsHealableTarget(currentHealTarget, bot))
+            return;
+
+        if (Time.time < nextTargetRefreshTime)
+            return;
+
+        nextTargetRefreshTime = Time.time + Mathf.Max(0.14f, movement.TargetRefreshInterval);
+        TryFindNearestDamagedAlly(rb.position, bot, out currentHealTarget);
+    }
+
+    Vector2 ResolveHealDirection(PlayerHealth target, out bool withinRange)
+    {
+        Vector2 targetPoint = GetTargetPoint(target);
+        Vector2 anchorPoint = GetHealAnchorPoint(targetPoint);
+        Vector2 toAnchor = anchorPoint - rb.position;
+        float anchorDistance = toAnchor.magnitude;
+        float targetDistance = Vector2.Distance(rb.position, targetPoint);
+        withinRange = targetDistance <= HealRange && anchorDistance <= HealAnchorTolerance;
+        if (anchorDistance <= 0.001f)
+            return patrolDirection.sqrMagnitude > 0.001f ? patrolDirection : Vector2.up;
+
+        if (targetDistance <= BeamBreakRange)
+            return toAnchor / anchorDistance;
+
+        return toAnchor / anchorDistance;
+    }
+
+    Vector2 ResolvePatrolDirection()
+    {
+        if (IsNearMapEdge(rb.position, RecoveryEdgeThreshold))
+            return (-rb.position).normalized;
+
+        if (Time.time >= nextPatrolTurnTime)
+        {
+            nextPatrolTurnTime = Time.time + Random.Range(PatrolTurnIntervalMin, PatrolTurnIntervalMax);
+            float angle = Mathf.Atan2(patrolDirection.y, patrolDirection.x) + Random.Range(-0.5f, 0.5f);
+            patrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+        }
+
+        return patrolDirection;
+    }
+
+    void EnterPatrolMode(bool enteringMap)
+    {
+        healAccumulator = 0f;
+        healLockEndTime = 0f;
+        StopBeam();
+
+        Vector2 fallbackDirection;
+        if (enteringMap || IsNearMapEdge(rb.position, RecoveryEdgeThreshold))
+        {
+            fallbackDirection = (-rb.position).sqrMagnitude > 0.001f ? (-rb.position).normalized : Vector2.up;
+        }
+        else if (rb.linearVelocity.sqrMagnitude > 0.001f)
+        {
+            fallbackDirection = rb.linearVelocity.normalized;
+        }
+        else
+        {
+            fallbackDirection = patrolDirection.sqrMagnitude > 0.001f ? patrolDirection.normalized : Vector2.up;
+        }
+
+        patrolDirection = fallbackDirection;
+        nextPatrolTurnTime = Time.time + Random.Range(PatrolTurnIntervalMin, PatrolTurnIntervalMax);
+        rb.linearVelocity = patrolDirection * (bot.EffectiveMoveSpeed * Mathf.Max(PatrolSpeedMultiplier, 0.92f));
+    }
+
+    Vector2 ApplyAvoidance(Vector2 desiredDirection)
+    {
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
+        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        Vector2 avoidance = Vector2.zero;
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null || hit.attachedRigidbody == rb)
+                continue;
+
+            if (!IsAvoidedObject(hit))
+                continue;
+
+            Vector2 closest = hit.ClosestPoint(rb.position);
+            Vector2 away = rb.position - closest;
+            if (away.sqrMagnitude <= 0.0001f)
+                away = rb.position - (Vector2)hit.transform.position;
+
+            float distance = Mathf.Max(0.1f, away.magnitude);
+            if (distance > AvoidanceScanRadius)
+                continue;
+
+            avoidance += away.normalized * Mathf.Clamp01((AvoidanceScanRadius - distance) / AvoidanceScanRadius);
+        }
+
+        if (avoidance.sqrMagnitude <= 0.001f)
+            return desiredDirection;
+
+        Vector2 result = (desired + avoidance.normalized * AvoidanceWeight).normalized;
+        return Vector2.Dot(result, desired) < 0.1f
+            ? (desired * 0.76f + avoidance.normalized * 0.24f).normalized
+            : result;
+    }
+
+    bool IsAvoidedObject(Collider2D hit)
+    {
+        if (hit.GetComponentInParent<ObstacleChunk>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<Treasure>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<ShipWreck>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<DroppedCargoCrate>() != null)
+            return true;
+
+        EnemyBot otherBot = hit.GetComponentInParent<EnemyBot>();
+        return otherBot != null && otherBot != bot;
+    }
+
+    Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
+    {
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
+        float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
+        Vector2 predicted = rb.position + desired * Mathf.Max(1.2f, bot.EffectiveMoveSpeed * 1.8f);
+        Vector2 inward = Vector2.zero;
+
+        if (predicted.x > halfX)
+            inward.x -= Mathf.InverseLerp(halfX + 1.8f, halfX, predicted.x);
+        else if (predicted.x < -halfX)
+            inward.x += Mathf.InverseLerp(-halfX - 1.8f, -halfX, predicted.x);
+
+        if (predicted.y > halfY)
+            inward.y -= Mathf.InverseLerp(halfY + 1.8f, halfY, predicted.y);
+        else if (predicted.y < -halfY)
+            inward.y += Mathf.InverseLerp(-halfY - 1.8f, -halfY, predicted.y);
+
+        if (inward.sqrMagnitude <= 0.001f)
+            return desiredDirection;
+
+        return (desired * (1f - MapEdgeSteerWeight) + inward.normalized * MapEdgeSteerWeight).normalized;
+    }
+
+    bool IsInsidePlayableBounds(Vector2 position)
+    {
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = mapSize.x * 0.5f;
+        float halfY = mapSize.y * 0.5f;
+        return Mathf.Abs(position.x) <= halfX && Mathf.Abs(position.y) <= halfY;
+    }
+
+    bool IsNearMapEdge(Vector2 position, float threshold)
+    {
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = mapSize.x * 0.5f;
+        float halfY = mapSize.y * 0.5f;
+        return halfX - Mathf.Abs(position.x) <= threshold || halfY - Mathf.Abs(position.y) <= threshold;
+    }
+
+    Vector2 GetHealAnchorPoint(Vector2 targetPoint)
+    {
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = mapSize.x * 0.5f;
+        float halfY = mapSize.y * 0.5f;
+        float leftClearance = targetPoint.x + halfX;
+        float rightClearance = halfX - targetPoint.x;
+        float bottomClearance = targetPoint.y + halfY;
+        float topClearance = halfY - targetPoint.y;
+
+        Vector2 inward = (-targetPoint).sqrMagnitude > 0.001f ? (-targetPoint).normalized : Vector2.up;
+        float smallestClearance = Mathf.Min(Mathf.Min(leftClearance, rightClearance), Mathf.Min(bottomClearance, topClearance));
+        if (smallestClearance == leftClearance)
+            inward = Vector2.right;
+        else if (smallestClearance == rightClearance)
+            inward = Vector2.left;
+        else if (smallestClearance == bottomClearance)
+            inward = Vector2.up;
+        else if (smallestClearance == topClearance)
+            inward = Vector2.down;
+
+        return targetPoint + inward.normalized * HealStandOffDistance;
+    }
+
+    void RefreshWallColliders()
+    {
+        wallColliders.Clear();
+        string[] wallNames = { "WallTop", "WallBottom", "WallLeft", "WallRight" };
+        for (int i = 0; i < wallNames.Length; i++)
+        {
+            GameObject wall = GameObject.Find(wallNames[i]);
+            if (wall == null)
+                continue;
+
+            Collider2D wallCollider = wall.GetComponent<Collider2D>();
+            if (wallCollider != null)
+                wallColliders.Add(wallCollider);
+        }
+    }
+
+    void SetWallCollisionIgnored(bool ignored)
+    {
+        if (bodyCollider == null)
+            return;
+
+        if (wallColliders.Count == 0 || wallColliders.TrueForAll(collider => collider == null))
+            RefreshWallColliders();
+
+        if (wallCollisionsIgnoredWhileEntering == ignored)
+            return;
+
+        wallCollisionsIgnoredWhileEntering = ignored;
+        for (int i = 0; i < wallColliders.Count; i++)
+        {
+            Collider2D wallCollider = wallColliders[i];
+            if (wallCollider == null)
+                continue;
+
+            Physics2D.IgnoreCollision(bodyCollider, wallCollider, ignored);
+        }
+    }
+
+    Vector2 GetTargetPoint(PlayerHealth target)
+    {
+        if (target == null)
+            return rb.position;
+
+        Collider2D collider = target.GetComponentInChildren<Collider2D>();
+        if (collider != null)
+            return collider.ClosestPoint(rb.position);
+
+        return target.transform.position;
+    }
+
+    void RotateHullToward(Vector2 direction)
+    {
+        if (direction.sqrMagnitude <= 0.001f)
+            return;
+
+        float targetAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg + 90f;
+        float nextAngle = Mathf.MoveTowardsAngle(rb.rotation, targetAngle, movement.TurnResponsiveness * Time.fixedDeltaTime);
+        rb.MoveRotation(nextAngle);
+    }
+
+    void StartBeam(PlayerHealth target)
+    {
+        PhotonView targetView = target != null ? target.GetComponent<PhotonView>() : null;
+        if (targetView == null || bot == null || bot.photonView == null)
+            return;
+
+        if (activeBeamTargetViewId == targetView.ViewID)
+            return;
+
+        StopBeam();
+        activeBeamTargetViewId = targetView.ViewID;
+        bot.photonView.RPC(nameof(EnemyBot.StartRescueShipBeamRpc), RpcTarget.All, activeBeamTargetViewId);
+    }
+
+    void StopBeam()
+    {
+        if (activeBeamTargetViewId <= 0 || bot == null || bot.photonView == null)
+        {
+            activeBeamTargetViewId = -1;
+            return;
+        }
+
+        bot.photonView.RPC(nameof(EnemyBot.StopRescueShipBeamRpc), RpcTarget.All);
+        activeBeamTargetViewId = -1;
+    }
+
+    void ApplyHealing(PlayerHealth target)
+    {
+        if (target == null)
+            return;
+
+        healAccumulator += HealPerSecond * Time.fixedDeltaTime;
+        int wholePoints = Mathf.FloorToInt(healAccumulator);
+        if (wholePoints <= 0)
+            return;
+
+        healAccumulator -= wholePoints;
+        target.RepairVitalsAuthority(wholePoints);
+        if (target.HasFullVitals)
+        {
+            if (Time.time >= healLockEndTime)
+            {
+                currentHealTarget = null;
+                nextTargetRefreshTime = 0f;
+                healLockEndTime = 0f;
+                StopBeam();
+            }
+        }
     }
 }
 

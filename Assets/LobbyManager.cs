@@ -14,6 +14,13 @@ using UnityEditor;
 
 public class LobbyManager : MonoBehaviourPunCallbacks
 {
+    enum LobbyScreen
+    {
+        MapSelection,
+        MapDetails,
+        DeveloperSettings
+    }
+
     const float BottomActionButtonsY = -422f;
     const float BottomActionReadyX = 350f;
     const float BottomActionBackX = 810f;
@@ -23,8 +30,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     const float LeftViewportHeight = 960f;
     const float LeftColumnX = -560f;
     const float LeftColumnTopY = -220f;
-    const float RightTableWidth = 1240f;
-    const float RightTableHeight = 760f;
+    const float RightTableWidth = 1120f;
+    const float RightTableHeight = 620f;
     const float RightTableX = 330f;
     const float RightTableY = -290f;
     const float MapSelectionButtonX = 500f;
@@ -32,8 +39,21 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     const float MapSelectionButtonWidth = 330f;
     const float MapSelectionButtonHeight = 180f;
     const float EnemyNameColumnWidth = 180f;
-    const float EnemyColumnWidth = 106f;
-    const float EnemyRowHeight = 96f;
+    const float EnemyColumnWidth = 98f;
+    const float EnemyRowHeight = 62f;
+    const float FullScreenSideMargin = 34f;
+    const float FullScreenTopMargin = 24f;
+    const float FullScreenBottomMargin = 34f;
+    const float LobbyTopBarHeight = 70f;
+    const float MapTileWidth = 520f;
+    const float MapTileHeight = 250f;
+    const float MapTileSpacingX = 48f;
+    const float MapTileSpacingY = 36f;
+    const float MapSelectionContentTopY = -140f;
+    const float TopActionButtonWidth = 270f;
+    const float TopActionButtonHeight = 72f;
+    const float BottomWideButtonWidth = 430f;
+    const float BottomWideButtonHeight = 88f;
 
     static readonly string[] GameplayHudObjectNames =
     {
@@ -185,10 +205,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     readonly Dictionary<string, TMP_Text> enemyRowLabels = new Dictionary<string, TMP_Text>();
     readonly Dictionary<string, TMP_Text> enemyHeaderLabels = new Dictionary<string, TMP_Text>();
     readonly Dictionary<int, Sprite> mapBackgroundPreviewCache = new Dictionary<int, Sprite>();
+    readonly List<Button> fullscreenMapTileButtons = new List<Button>();
     ScrollRect leftSettingsScrollRect;
     RectTransform leftSettingsViewportRect;
     RectTransform leftSettingsContentRect;
     RectTransform enemyTableRootRect;
+    RectTransform weaponSettingsRootRect;
     GameObject mapSelectionOverlayObject;
     TMP_Text mapSelectionOverlayTitleText;
     Button mapSelectionOverlayCloseButton;
@@ -196,6 +218,42 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     RectTransform mapSelectionContentRect;
     readonly List<Button> mapSelectionTileButtons = new List<Button>();
     bool leftSettingsScrollInitialized;
+    LobbyScreen currentScreen = LobbyScreen.MapSelection;
+    LobbyScreen previousMapScreenBeforeDeveloperSettings = LobbyScreen.MapSelection;
+    string selectedMapId;
+    GameObject lobbyTopBarRootObject;
+    GameObject fullScreenLobbyRootObject;
+    RectTransform fullScreenLobbyRootRect;
+    TMP_Text lobbyTopBarNicknameText;
+    TMP_Text lobbyTopBarGamesText;
+    TMP_Text lobbyTopBarLevelXpText;
+    TMP_Text lobbyTopBarAstronsText;
+    GameObject lobbyTopStatBannerObject;
+    Button exitLobbyButton;
+    TMP_Text exitLobbyText;
+    Button developerSettingsButton;
+    TMP_Text developerSettingsText;
+    Button launchButton;
+    TMP_Text launchText;
+    Button developerBackButton;
+    TMP_Text developerBackText;
+    Button developerGunSetupButton;
+    TMP_Text developerGunSetupText;
+    Button developerCheatButton;
+    TMP_Text developerCheatText;
+    GameObject developerCheatOverlayObject;
+    TMP_Text developerCheatAstronsText;
+    TMP_Text developerCheatStatusText;
+    Button developerCheatAddMoneyButton;
+    Button developerCheatCloseButton;
+    GameObject mapSelectionRootObject;
+    RectTransform mapSelectionTilesRootRect;
+    TMP_Text mapSelectionScreenTitleText;
+    GameObject mapDetailsRootObject;
+    Image mapDetailsPreviewImage;
+    TMP_Text mapDetailsNameText;
+    TMP_Text mapDetailsDescriptionText;
+    GameObject developerSettingsRootObject;
 
     CanvasGroup EnsureCanvasGroup()
     {
@@ -208,17 +266,1219 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return cg;
     }
 
+    RectTransform EnsureFullScreenLobbyRoot()
+    {
+        Canvas canvas = GetComponentInParent<Canvas>(true);
+        if (canvas == null)
+            return transform as RectTransform;
+
+        bool createdRoot = false;
+        if (fullScreenLobbyRootObject == null || !fullScreenLobbyRootObject.scene.IsValid())
+        {
+            Transform existing = canvas.transform.Find("LobbyFullScreenRoot");
+            if (existing != null)
+                fullScreenLobbyRootObject = existing.gameObject;
+            else
+            {
+                fullScreenLobbyRootObject = new GameObject("LobbyFullScreenRoot", typeof(RectTransform));
+                createdRoot = true;
+            }
+        }
+
+        if (fullScreenLobbyRootObject.transform.parent != canvas.transform)
+            fullScreenLobbyRootObject.transform.SetParent(canvas.transform, false);
+
+        fullScreenLobbyRootRect = fullScreenLobbyRootObject.GetComponent<RectTransform>();
+        fullScreenLobbyRootRect.anchorMin = Vector2.zero;
+        fullScreenLobbyRootRect.anchorMax = Vector2.one;
+        fullScreenLobbyRootRect.pivot = new Vector2(0.5f, 0.5f);
+        fullScreenLobbyRootRect.offsetMin = Vector2.zero;
+        fullScreenLobbyRootRect.offsetMax = Vector2.zero;
+        fullScreenLobbyRootRect.anchoredPosition = Vector2.zero;
+        fullScreenLobbyRootObject.transform.SetAsLastSibling();
+        if (createdRoot)
+            fullScreenLobbyRootObject.SetActive(false);
+        return fullScreenLobbyRootRect;
+    }
+
+    bool ShouldShowFullScreenLobby()
+    {
+        if (!PhotonNetwork.InRoom)
+            return false;
+        if (RoomSettings.GetSessionState() != RoomSettings.SessionStateInLobby)
+            return false;
+
+        CanvasGroup cg = EnsureCanvasGroup();
+        return cg != null && cg.alpha > 0.01f && cg.interactable && cg.blocksRaycasts;
+    }
+
+    void EnsureLobbyRootFullScreen()
+    {
+        RectTransform rect = transform as RectTransform;
+        if (rect == null)
+            return;
+
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+        rect.anchoredPosition = Vector2.zero;
+    }
+
+    void EnsureFullScreenLobbyUiExists()
+    {
+        RectTransform fullScreenRoot = EnsureFullScreenLobbyRoot();
+        if (lobbyTopBarRootObject == null || !lobbyTopBarRootObject.scene.IsValid())
+        {
+            Transform misplaced = transform.Find("LobbyTopBarRoot");
+            if (misplaced != null)
+            {
+                lobbyTopBarRootObject = misplaced.gameObject;
+                if (fullScreenRoot != null)
+                    lobbyTopBarRootObject.transform.SetParent(fullScreenRoot.transform, false);
+            }
+            else
+            {
+                lobbyTopBarRootObject = FindOrCreateChild(fullScreenRoot != null ? fullScreenRoot.gameObject : gameObject, "LobbyTopBarRoot", typeof(RectTransform), typeof(Image));
+            }
+            RectTransform rect = lobbyTopBarRootObject.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(1440f, 120f);
+
+            Image bg = lobbyTopBarRootObject.GetComponent<Image>();
+            bg.color = new Color(0f, 0f, 0f, 0f);
+            bg.raycastTarget = false;
+
+            lobbyTopBarNicknameText = CreateTopBarText("LobbyTopBarNickname", new Vector2(34f, -42f), new Vector2(310f, 42f), TextAlignmentOptions.Left);
+            lobbyTopBarGamesText = CreateTopBarText("LobbyTopBarGames", new Vector2(394f, -40f), new Vector2(170f, 42f), TextAlignmentOptions.Left);
+            lobbyTopBarLevelXpText = CreateTopBarText("LobbyTopBarLevelXp", new Vector2(592f, -40f), new Vector2(420f, 42f), TextAlignmentOptions.Left);
+            lobbyTopBarAstronsText = CreateTopBarText("LobbyTopBarAstrons", new Vector2(1112f, -40f), new Vector2(266f, 42f), TextAlignmentOptions.Left);
+        }
+        else if (fullScreenRoot != null && lobbyTopBarRootObject.transform.parent != fullScreenRoot.transform)
+        {
+            lobbyTopBarRootObject.transform.SetParent(fullScreenRoot.transform, false);
+        }
+
+        EnsureLobbyActionButtons();
+        EnsureLobbyMapSelectionScreen();
+        EnsureLobbyMapDetailsScreen();
+        EnsureLobbyDeveloperSettingsRoot();
+        EnsureLobbyCheatOverlay();
+    }
+
+    TMP_Text CreateTopBarText(string name, Vector2 anchoredPosition, Vector2 size, TextAlignmentOptions alignment)
+    {
+        Transform existing = lobbyTopBarRootObject.transform.Find(name);
+        TMP_Text text = existing != null ? existing.GetComponent<TMP_Text>() : null;
+        if (text == null)
+            text = CreateStandaloneLabel(lobbyTopBarRootObject.transform, name, string.Empty, anchoredPosition, size, 26f, alignment);
+
+        text.fontSize = 26f;
+        text.alignment = alignment;
+        text.characterSpacing = 0f;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.color = new Color(0.95f, 0.98f, 1f, 1f);
+        return text;
+    }
+
+    void EnsureLobbyActionButtons()
+    {
+        RectTransform fullScreenRoot = EnsureFullScreenLobbyRoot();
+        if ((exitLobbyButton == null || !exitLobbyButton.gameObject.scene.IsValid()) && fullScreenRoot != null)
+        {
+            Transform existing = fullScreenRoot.transform.Find("LobbyExitProfileBackButton");
+            if (existing != null)
+                exitLobbyButton = existing.GetComponent<Button>();
+        }
+        if ((developerSettingsButton == null || !developerSettingsButton.gameObject.scene.IsValid()) && fullScreenRoot != null)
+        {
+            Transform existing = fullScreenRoot.transform.Find("LobbyDeveloperSettingsWideProfileBackButton");
+            if (existing == null)
+                existing = fullScreenRoot.transform.Find("LobbyDeveloperSettingsProfileBackButton");
+            if (existing != null)
+                developerSettingsButton = existing.GetComponent<Button>();
+        }
+        if ((developerBackButton == null || !developerBackButton.gameObject.scene.IsValid()) && fullScreenRoot != null)
+        {
+            Transform existing = fullScreenRoot.transform.Find("LobbyDeveloperBackProfileBackButton");
+            if (existing != null)
+                developerBackButton = existing.GetComponent<Button>();
+        }
+        if ((launchButton == null || !launchButton.gameObject.scene.IsValid()) && fullScreenRoot != null)
+        {
+            Transform existing = fullScreenRoot.transform.Find("LobbyLaunchSaveAndRunButton");
+            if (existing != null)
+                launchButton = existing.GetComponent<Button>();
+        }
+
+        exitLobbyButton = EnsureTopActionButton(ref exitLobbyText, exitLobbyButton, "LobbyExitProfileBackButton", "LobbyExitProfileBackText", "EXIT LOBBY", OnExitLobbyClicked);
+        developerSettingsButton = EnsureBottomActionButton(ref developerSettingsText, developerSettingsButton, "LobbyDeveloperSettingsWideProfileBackButton", "LobbyDeveloperSettingsWideProfileBackText", "DEVELOPER SETTINGS", OnDeveloperSettingsClicked);
+        developerBackButton = EnsureTopActionButton(ref developerBackText, developerBackButton, "LobbyDeveloperBackProfileBackButton", "LobbyDeveloperBackProfileBackText", "BACK", OnDeveloperBackClicked);
+        launchButton = EnsureBottomRightActionButton(ref launchText, launchButton, "LobbyLaunchSaveAndRunButton", "LobbyLaunchSaveAndRunText", "LAUNCH", OnLaunchClicked);
+        developerGunSetupButton = EnsureTopActionButton(ref developerGunSetupText, developerGunSetupButton, "LobbyDeveloperGunSetupWideProfileBackButton", "LobbyDeveloperGunSetupWideProfileBackText", "GUN SETUP", OpenGunSetup);
+        developerCheatButton = EnsureTopActionButton(ref developerCheatText, developerCheatButton, "LobbyDeveloperCheatWideProfileBackButton", "LobbyDeveloperCheatWideProfileBackText", "CHEAT", OnDeveloperCheatClicked);
+
+        ApplyLobbyBackPalette(exitLobbyButton);
+        ApplyLobbyBackPalette(developerSettingsButton);
+        ApplyLobbyBackPalette(developerBackButton);
+        ApplyLobbyBackPalette(developerGunSetupButton);
+        ApplyLobbyBackPalette(developerCheatButton);
+
+        if (fullScreenRoot != null)
+        {
+            if (exitLobbyButton != null && exitLobbyButton.transform.parent != fullScreenRoot.transform)
+                exitLobbyButton.transform.SetParent(fullScreenRoot.transform, false);
+            if (developerSettingsButton != null && developerSettingsButton.transform.parent != fullScreenRoot.transform)
+                developerSettingsButton.transform.SetParent(fullScreenRoot.transform, false);
+            if (developerBackButton != null && developerBackButton.transform.parent != fullScreenRoot.transform)
+                developerBackButton.transform.SetParent(fullScreenRoot.transform, false);
+            if (launchButton != null && launchButton.transform.parent != fullScreenRoot.transform)
+                launchButton.transform.SetParent(fullScreenRoot.transform, false);
+            if (developerGunSetupButton != null && developerGunSetupButton.transform.parent != fullScreenRoot.transform)
+                developerGunSetupButton.transform.SetParent(fullScreenRoot.transform, false);
+            if (developerCheatButton != null && developerCheatButton.transform.parent != fullScreenRoot.transform)
+                developerCheatButton.transform.SetParent(fullScreenRoot.transform, false);
+        }
+
+        HideLegacyLobbyButtons();
+    }
+
+    Button EnsureTopActionButton(ref TMP_Text textField, Button existingButton, string buttonName, string textName, string label, UnityEngine.Events.UnityAction callback)
+    {
+        Button button = EnsureSettingButton(ref textField, existingButton, buttonName, textName, Vector2.zero, callback);
+        if (button == null)
+            return null;
+
+        textField.text = label;
+        RectTransform rect = button.GetComponent<RectTransform>();
+        if (rect != null)
+        {
+            rect.anchorMin = new Vector2(1f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(1f, 1f);
+        }
+
+        return button;
+    }
+
+    Button EnsureBottomActionButton(ref TMP_Text textField, Button existingButton, string buttonName, string textName, string label, UnityEngine.Events.UnityAction callback)
+    {
+        Button button = EnsureSettingButton(ref textField, existingButton, buttonName, textName, Vector2.zero, callback);
+        if (button == null)
+            return null;
+
+        textField.text = label;
+        RectTransform rect = button.GetComponent<RectTransform>();
+        if (rect != null)
+        {
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(0f, 0f);
+            rect.pivot = new Vector2(0f, 0f);
+        }
+
+        return button;
+    }
+
+    Button EnsureBottomRightActionButton(ref TMP_Text textField, Button existingButton, string buttonName, string textName, string label, UnityEngine.Events.UnityAction callback)
+    {
+        Button button = EnsureSettingButton(ref textField, existingButton, buttonName, textName, Vector2.zero, callback);
+        if (button == null)
+            return null;
+
+        textField.text = label;
+        RectTransform rect = button.GetComponent<RectTransform>();
+        if (rect != null)
+        {
+            rect.anchorMin = new Vector2(1f, 0f);
+            rect.anchorMax = new Vector2(1f, 0f);
+            rect.pivot = new Vector2(1f, 0f);
+        }
+
+        return button;
+    }
+
+    void ApplyLobbyBackPalette(Button button)
+    {
+        if (button == null)
+            return;
+
+        ColorBlock colors = button.colors;
+        colors.normalColor = new Color(0.12f, 0.19f, 0.33f, 0.98f);
+        colors.highlightedColor = new Color(0.18f, 0.28f, 0.46f, 1f);
+        colors.selectedColor = colors.highlightedColor;
+        colors.pressedColor = new Color(0.08f, 0.12f, 0.22f, 1f);
+        colors.disabledColor = new Color(0.18f, 0.24f, 0.32f, 0.48f);
+        colors.colorMultiplier = 1f;
+        colors.fadeDuration = 0.08f;
+        button.colors = colors;
+    }
+
+    void HideLegacyLobbyButtons()
+    {
+        foreach (Button button in Resources.FindObjectsOfTypeAll<Button>())
+        {
+            if (button == null || !button.gameObject.scene.IsValid())
+                continue;
+
+            if (button == developerSettingsButton)
+                continue;
+
+            if (button.gameObject.name == "LobbyDeveloperSettingsProfileBackButton")
+                button.gameObject.SetActive(false);
+        }
+    }
+
+    void EnsureLobbyMapSelectionScreen()
+    {
+        RectTransform fullScreenRoot = EnsureFullScreenLobbyRoot();
+        if (mapSelectionRootObject == null || !mapSelectionRootObject.scene.IsValid())
+        {
+            Transform misplaced = transform.Find("LobbyMapSelectionScreen");
+            if (misplaced != null)
+            {
+                mapSelectionRootObject = misplaced.gameObject;
+                if (fullScreenRoot != null)
+                    mapSelectionRootObject.transform.SetParent(fullScreenRoot.transform, false);
+            }
+            else
+            {
+                mapSelectionRootObject = FindOrCreateChild(fullScreenRoot != null ? fullScreenRoot.gameObject : gameObject, "LobbyMapSelectionScreen", typeof(RectTransform), typeof(Image));
+            }
+            RectTransform rootRect = mapSelectionRootObject.GetComponent<RectTransform>();
+            rootRect.anchorMin = Vector2.zero;
+            rootRect.anchorMax = Vector2.one;
+            rootRect.offsetMin = Vector2.zero;
+            rootRect.offsetMax = Vector2.zero;
+            Image rootImage = mapSelectionRootObject.GetComponent<Image>();
+            rootImage.color = new Color(0f, 0f, 0f, 0f);
+            rootImage.raycastTarget = false;
+
+            mapSelectionScreenTitleText = CreateStandaloneLabel(mapSelectionRootObject.transform, "MapSelectionHeader", "SELECT MAP", new Vector2(FullScreenSideMargin, -116f), new Vector2(420f, 34f), 30f, TextAlignmentOptions.Left);
+
+            GameObject tilesRoot = FindOrCreateChild(mapSelectionRootObject, "MapSelectionTilesRoot", typeof(RectTransform));
+            mapSelectionTilesRootRect = tilesRoot.GetComponent<RectTransform>();
+            mapSelectionTilesRootRect.anchorMin = new Vector2(0f, 1f);
+            mapSelectionTilesRootRect.anchorMax = new Vector2(0f, 1f);
+            mapSelectionTilesRootRect.pivot = new Vector2(0f, 1f);
+            mapSelectionTilesRootRect.anchoredPosition = new Vector2(FullScreenSideMargin, -160f);
+            mapSelectionTilesRootRect.sizeDelta = new Vector2(1700f, 760f);
+
+            fullscreenMapTileButtons.Clear();
+            IReadOnlyList<LobbyMapDefinition> maps = LobbyMapCatalog.AllMaps;
+            for (int i = 0; i < maps.Count; i++)
+            {
+                LobbyMapDefinition map = maps[i];
+                GameObject tileObject = new GameObject("FullScreenMapTile_" + map.Id, typeof(RectTransform), typeof(Image), typeof(Button));
+                tileObject.transform.SetParent(mapSelectionTilesRootRect, false);
+                Image tileImage = tileObject.GetComponent<Image>();
+                tileImage.color = new Color(0.1f, 0.16f, 0.24f, 0.96f);
+                tileImage.type = Image.Type.Sliced;
+                Button tileButton = tileObject.GetComponent<Button>();
+                string mapId = map.Id;
+                tileButton.onClick.AddListener(() =>
+                {
+                    AudioManager.Instance?.PlayClick();
+                    OnMapTileSelected(mapId);
+                });
+                fullscreenMapTileButtons.Add(tileButton);
+            }
+        }
+        else if (fullScreenRoot != null && mapSelectionRootObject.transform.parent != fullScreenRoot.transform)
+        {
+            mapSelectionRootObject.transform.SetParent(fullScreenRoot.transform, false);
+        }
+    }
+
+    void EnsureLobbyMapDetailsScreen()
+    {
+        RectTransform fullScreenRoot = EnsureFullScreenLobbyRoot();
+        if (mapDetailsRootObject == null || !mapDetailsRootObject.scene.IsValid())
+        {
+            Transform misplaced = transform.Find("LobbyMapDetailsScreen");
+            if (misplaced != null)
+            {
+                mapDetailsRootObject = misplaced.gameObject;
+                if (fullScreenRoot != null)
+                    mapDetailsRootObject.transform.SetParent(fullScreenRoot.transform, false);
+            }
+            else
+            {
+                mapDetailsRootObject = FindOrCreateChild(fullScreenRoot != null ? fullScreenRoot.gameObject : gameObject, "LobbyMapDetailsScreen", typeof(RectTransform), typeof(Image));
+            }
+            RectTransform rootRect = mapDetailsRootObject.GetComponent<RectTransform>();
+            rootRect.anchorMin = Vector2.zero;
+            rootRect.anchorMax = Vector2.one;
+            rootRect.offsetMin = Vector2.zero;
+            rootRect.offsetMax = Vector2.zero;
+            Image rootImage = mapDetailsRootObject.GetComponent<Image>();
+            rootImage.color = new Color(0f, 0f, 0f, 0f);
+            rootImage.raycastTarget = false;
+
+            GameObject previewObject = FindOrCreateChild(mapDetailsRootObject, "MapDetailsPreview", typeof(RectTransform), typeof(Image));
+            RectTransform previewRect = previewObject.GetComponent<RectTransform>();
+            previewRect.anchorMin = new Vector2(0f, 1f);
+            previewRect.anchorMax = new Vector2(0f, 1f);
+            previewRect.pivot = new Vector2(0f, 1f);
+            previewRect.anchoredPosition = new Vector2(FullScreenSideMargin, -170f);
+            previewRect.sizeDelta = new Vector2(980f, 720f);
+            mapDetailsPreviewImage = previewObject.GetComponent<Image>();
+            mapDetailsPreviewImage.color = Color.white;
+            mapDetailsPreviewImage.raycastTarget = false;
+
+            mapDetailsNameText = CreateStandaloneLabel(mapDetailsRootObject.transform, "MapDetailsName", "MAP", new Vector2(1048f, -170f), new Vector2(420f, 40f), 30f, TextAlignmentOptions.Left);
+            mapDetailsDescriptionText = CreateStandaloneLabel(mapDetailsRootObject.transform, "MapDetailsDescription", string.Empty, new Vector2(1048f, -234f), new Vector2(460f, 540f), 22f, TextAlignmentOptions.TopLeft);
+            mapDetailsDescriptionText.fontStyle = FontStyles.Normal;
+            mapDetailsDescriptionText.textWrappingMode = TextWrappingModes.Normal;
+            mapDetailsDescriptionText.lineSpacing = 6f;
+        }
+        else if (fullScreenRoot != null && mapDetailsRootObject.transform.parent != fullScreenRoot.transform)
+        {
+            mapDetailsRootObject.transform.SetParent(fullScreenRoot.transform, false);
+        }
+    }
+
+    void EnsureLobbyDeveloperSettingsRoot()
+    {
+        RectTransform fullScreenRoot = EnsureFullScreenLobbyRoot();
+        if (developerSettingsRootObject == null || !developerSettingsRootObject.scene.IsValid())
+        {
+            Transform misplaced = transform.Find("LobbyDeveloperSettingsScreen");
+            if (misplaced != null)
+            {
+                developerSettingsRootObject = misplaced.gameObject;
+                if (fullScreenRoot != null)
+                    developerSettingsRootObject.transform.SetParent(fullScreenRoot.transform, false);
+            }
+            else
+            {
+                developerSettingsRootObject = FindOrCreateChild(fullScreenRoot != null ? fullScreenRoot.gameObject : gameObject, "LobbyDeveloperSettingsScreen", typeof(RectTransform));
+            }
+            RectTransform rootRect = developerSettingsRootObject.GetComponent<RectTransform>();
+            rootRect.anchorMin = Vector2.zero;
+            rootRect.anchorMax = Vector2.one;
+            rootRect.offsetMin = Vector2.zero;
+            rootRect.offsetMax = Vector2.zero;
+        }
+        else if (fullScreenRoot != null && developerSettingsRootObject.transform.parent != fullScreenRoot.transform)
+        {
+            developerSettingsRootObject.transform.SetParent(fullScreenRoot.transform, false);
+        }
+    }
+
+    void SwitchLobbyScreen(LobbyScreen screen)
+    {
+        currentScreen = screen;
+        RefreshLobbyScreenVisibility();
+        RefreshLobbyTopBar();
+        RefreshLobbyScreenContent();
+    }
+
+    void RefreshLobbyTopBar()
+    {
+        EnsureFullScreenLobbyUiExists();
+
+        PlayerProfileData profile = PlayerProfileService.Instance != null ? PlayerProfileService.Instance.CurrentProfile : null;
+        string nickname = profile != null && !string.IsNullOrWhiteSpace(profile.Nickname)
+            ? profile.Nickname
+            : (!string.IsNullOrWhiteSpace(PhotonNetwork.NickName) ? PhotonNetwork.NickName : "Pilot");
+        int games = profile != null ? profile.GamesPlayed : 0;
+        int xp = profile != null ? profile.TotalXp : 0;
+        int astrons = profile != null ? profile.Astrons : 0;
+        int level = RoundXpBalance.GetLevelForTotalXp(xp);
+
+        if (lobbyTopBarNicknameText != null)
+            lobbyTopBarNicknameText.text = nickname;
+        if (lobbyTopBarGamesText != null)
+            lobbyTopBarGamesText.text = "Games: " + games;
+        if (lobbyTopBarLevelXpText != null)
+            lobbyTopBarLevelXpText.text = "Level: " + level + "  XP: " + xp;
+        if (lobbyTopBarAstronsText != null)
+            lobbyTopBarAstronsText.text = "Astrons: " + astrons;
+    }
+
+    void EnsureLobbyTopStatBanner(float rootWidth)
+    {
+        if (lobbyTopBarRootObject == null)
+            return;
+
+        if (lobbyTopStatBannerObject == null)
+        {
+            lobbyTopStatBannerObject = new GameObject("LobbyTopStatBanner", typeof(RectTransform), typeof(Image));
+            lobbyTopStatBannerObject.transform.SetParent(lobbyTopBarRootObject.transform, false);
+
+            GameObject innerPanelObject = new GameObject("InnerPanel", typeof(RectTransform), typeof(Image));
+            innerPanelObject.transform.SetParent(lobbyTopStatBannerObject.transform, false);
+
+            GameObject topAccentObject = new GameObject("TopAccent", typeof(RectTransform), typeof(Image));
+            topAccentObject.transform.SetParent(lobbyTopStatBannerObject.transform, false);
+
+            GameObject bottomAccentObject = new GameObject("BottomAccent", typeof(RectTransform), typeof(Image));
+            bottomAccentObject.transform.SetParent(lobbyTopStatBannerObject.transform, false);
+
+            GameObject leftAccentObject = new GameObject("LeftAccent", typeof(RectTransform), typeof(Image));
+            leftAccentObject.transform.SetParent(lobbyTopStatBannerObject.transform, false);
+
+            GameObject rightAccentObject = new GameObject("RightAccent", typeof(RectTransform), typeof(Image));
+            rightAccentObject.transform.SetParent(lobbyTopStatBannerObject.transform, false);
+        }
+
+        float bannerX = 168f;
+        float bannerWidth = Mathf.Clamp(rootWidth - bannerX - 270f, 620f, 1120f);
+
+        RectTransform rect = lobbyTopStatBannerObject.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 0.5f);
+        rect.anchoredPosition = new Vector2(bannerX, -40f);
+        rect.sizeDelta = new Vector2(bannerWidth, 58f);
+
+        Image frame = lobbyTopStatBannerObject.GetComponent<Image>();
+        frame.color = new Color(0.33f, 0.39f, 0.47f, 0.94f);
+        frame.raycastTarget = false;
+
+        Transform innerPanel = lobbyTopStatBannerObject.transform.Find("InnerPanel");
+        if (innerPanel != null)
+        {
+            RectTransform innerRect = innerPanel.GetComponent<RectTransform>();
+            innerRect.anchorMin = Vector2.zero;
+            innerRect.anchorMax = Vector2.one;
+            innerRect.pivot = new Vector2(0.5f, 0.5f);
+            innerRect.offsetMin = new Vector2(8f, 8f);
+            innerRect.offsetMax = new Vector2(-8f, -8f);
+
+            Image innerImage = innerPanel.GetComponent<Image>();
+            innerImage.color = new Color(0.05f, 0.09f, 0.13f, 0.78f);
+            innerImage.raycastTarget = false;
+        }
+
+        ConfigureLobbyTopBannerAccent("TopAccent", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -7f), new Vector2(128f, 4f), new Color(0.35f, 0.82f, 1f, 0.32f));
+        ConfigureLobbyTopBannerAccent("BottomAccent", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 7f), new Vector2(96f, 3f), new Color(0.35f, 0.82f, 1f, 0.24f));
+        ConfigureLobbyTopBannerAccent("LeftAccent", new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(12f, 0f), new Vector2(6f, 22f), new Color(0.35f, 0.82f, 1f, 0.78f));
+        ConfigureLobbyTopBannerAccent("RightAccent", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-12f, 0f), new Vector2(6f, 22f), new Color(0.35f, 0.82f, 1f, 0.78f));
+
+        lobbyTopStatBannerObject.transform.SetAsFirstSibling();
+    }
+
+    void EnsureLobbyCheatOverlay()
+    {
+        RectTransform fullScreenRoot = EnsureFullScreenLobbyRoot();
+        if (developerCheatOverlayObject != null && developerCheatOverlayObject.scene.IsValid())
+        {
+            if (fullScreenRoot != null && developerCheatOverlayObject.transform.parent != fullScreenRoot.transform)
+                developerCheatOverlayObject.transform.SetParent(fullScreenRoot.transform, false);
+            return;
+        }
+
+        GameObject overlayObject = new GameObject("LobbyDeveloperCheatOverlay", typeof(RectTransform), typeof(Image));
+        overlayObject.transform.SetParent(fullScreenRoot != null ? fullScreenRoot.transform : transform, false);
+        developerCheatOverlayObject = overlayObject;
+
+        RectTransform overlayRect = overlayObject.GetComponent<RectTransform>();
+        overlayRect.anchorMin = Vector2.zero;
+        overlayRect.anchorMax = Vector2.one;
+        overlayRect.offsetMin = Vector2.zero;
+        overlayRect.offsetMax = Vector2.zero;
+
+        Image overlay = overlayObject.GetComponent<Image>();
+        overlay.color = new Color(0.03f, 0.04f, 0.06f, 0.72f);
+
+        GameObject panel = new GameObject("LobbyDeveloperCheatPanel", typeof(RectTransform), typeof(Image));
+        panel.transform.SetParent(overlayObject.transform, false);
+        RectTransform panelRect = panel.GetComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.anchoredPosition = new Vector2(0f, 6f);
+        panelRect.sizeDelta = new Vector2(620f, 380f);
+
+        Image panelImage = panel.GetComponent<Image>();
+        panelImage.color = new Color(0.11f, 0.1f, 0.14f, 0.98f);
+
+        TMP_Text title = CreateStandaloneLabel(panel.transform, "CheatBrowserTitle", "CHEAT", new Vector2(100f, -40f), new Vector2(420f, 34f), 30f, TextAlignmentOptions.Center);
+        title.characterSpacing = 3f;
+        title.rectTransform.anchorMin = new Vector2(0.5f, 1f);
+        title.rectTransform.anchorMax = new Vector2(0.5f, 1f);
+        title.rectTransform.pivot = new Vector2(0.5f, 1f);
+
+        TMP_Text hint = CreateStandaloneLabel(panel.transform, "CheatBrowserHint", "This is temporary solution to speed up tests.", new Vector2(50f, -106f), new Vector2(520f, 64f), 19f, TextAlignmentOptions.Center);
+        hint.rectTransform.anchorMin = new Vector2(0.5f, 1f);
+        hint.rectTransform.anchorMax = new Vector2(0.5f, 1f);
+        hint.rectTransform.pivot = new Vector2(0.5f, 1f);
+        hint.fontStyle = FontStyles.Normal;
+        hint.textWrappingMode = TextWrappingModes.Normal;
+        hint.color = new Color(0.86f, 0.9f, 0.96f, 0.96f);
+
+        developerCheatAstronsText = CreateStandaloneLabel(panel.transform, "CheatAstronsText", "Astrons: 0", new Vector2(90f, -166f), new Vector2(440f, 28f), 20f, TextAlignmentOptions.Center);
+        developerCheatAstronsText.rectTransform.anchorMin = new Vector2(0.5f, 1f);
+        developerCheatAstronsText.rectTransform.anchorMax = new Vector2(0.5f, 1f);
+        developerCheatAstronsText.rectTransform.pivot = new Vector2(0.5f, 1f);
+        developerCheatAstronsText.fontStyle = FontStyles.Normal;
+        developerCheatAstronsText.color = new Color(0.94f, 0.84f, 0.44f, 1f);
+
+        developerCheatAddMoneyButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddMoneyButton", "ADD MONEY", new Vector2(0f, -212f), new Vector2(260f, 62f), new Color(0.5f, 0.22f, 0.18f, 1f), new Color(0.7f, 0.3f, 0.22f, 1f), OnDeveloperCheatAddMoneyClicked);
+
+        developerCheatStatusText = CreateStandaloneLabel(panel.transform, "CheatStatusText", string.Empty, new Vector2(60f, -292f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
+        developerCheatStatusText.rectTransform.anchorMin = new Vector2(0.5f, 1f);
+        developerCheatStatusText.rectTransform.anchorMax = new Vector2(0.5f, 1f);
+        developerCheatStatusText.rectTransform.pivot = new Vector2(0.5f, 1f);
+        developerCheatStatusText.fontStyle = FontStyles.Normal;
+        developerCheatStatusText.color = new Color(0.74f, 0.86f, 0.94f, 0.96f);
+
+        developerCheatCloseButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatCloseButton", "CLOSE", new Vector2(0f, -318f), new Vector2(220f, 52f), new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f), HideDeveloperCheatOverlay);
+
+        developerCheatOverlayObject.SetActive(false);
+    }
+
+    Button CreateLobbyOverlayButton(Transform parent, string name, string label, Vector2 anchoredPosition, Vector2 size, Color baseColor, Color highlightedColor, UnityEngine.Events.UnityAction callback)
+    {
+        GameObject buttonObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+        buttonObject.transform.SetParent(parent, false);
+
+        RectTransform rect = buttonObject.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 1f);
+        rect.anchorMax = new Vector2(0.5f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = anchoredPosition;
+        rect.sizeDelta = size;
+
+        Image image = buttonObject.GetComponent<Image>();
+        image.color = baseColor;
+        image.type = Image.Type.Sliced;
+
+        Button button = buttonObject.GetComponent<Button>();
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(() => PlayUiClickAndInvoke(callback));
+        ColorBlock colors = button.colors;
+        colors.normalColor = baseColor;
+        colors.highlightedColor = highlightedColor;
+        colors.selectedColor = highlightedColor;
+        colors.pressedColor = baseColor * 0.82f;
+        colors.disabledColor = new Color(baseColor.r, baseColor.g, baseColor.b, 0.45f);
+        colors.colorMultiplier = 1f;
+        colors.fadeDuration = 0.08f;
+        button.colors = colors;
+
+        TMP_Text text = CreateStandaloneLabel(buttonObject.transform, name + "Text", label, Vector2.zero, size, 24f, TextAlignmentOptions.Center);
+        RectTransform textRect = text.rectTransform;
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.pivot = new Vector2(0.5f, 0.5f);
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+        text.fontSize = 24f;
+        text.fontStyle = FontStyles.Bold;
+        text.characterSpacing = 2f;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+
+        return button;
+    }
+
+    void PlayUiClickAndInvoke(UnityEngine.Events.UnityAction callback)
+    {
+        AudioManager.Instance?.PlayClick();
+        callback?.Invoke();
+    }
+
+    void HideDeveloperCheatOverlay()
+    {
+        if (developerCheatOverlayObject != null)
+            developerCheatOverlayObject.SetActive(false);
+    }
+
+    void HideFullScreenLobbyFlow(bool resetScreen = true)
+    {
+        HideDeveloperCheatOverlay();
+
+        if (mapSelectionRootObject != null)
+            mapSelectionRootObject.SetActive(false);
+        if (mapDetailsRootObject != null)
+            mapDetailsRootObject.SetActive(false);
+        if (developerSettingsRootObject != null)
+            developerSettingsRootObject.SetActive(false);
+        if (lobbyTopBarRootObject != null)
+            lobbyTopBarRootObject.SetActive(false);
+        if (fullScreenLobbyRootObject != null)
+            fullScreenLobbyRootObject.SetActive(false);
+
+        if (exitLobbyButton != null)
+            exitLobbyButton.gameObject.SetActive(false);
+        if (developerSettingsButton != null)
+            developerSettingsButton.gameObject.SetActive(false);
+        if (launchButton != null)
+            launchButton.gameObject.SetActive(false);
+        if (developerBackButton != null)
+            developerBackButton.gameObject.SetActive(false);
+        if (developerGunSetupButton != null)
+            developerGunSetupButton.gameObject.SetActive(false);
+        if (developerCheatButton != null)
+            developerCheatButton.gameObject.SetActive(false);
+
+        if (leftSettingsViewportRect != null)
+            leftSettingsViewportRect.gameObject.SetActive(false);
+        if (enemyTableRootRect != null)
+            enemyTableRootRect.gameObject.SetActive(false);
+        if (weaponSettingsRootRect != null)
+            weaponSettingsRootRect.gameObject.SetActive(false);
+
+        if (resetScreen)
+        {
+            currentScreen = LobbyScreen.MapSelection;
+            if (PhotonNetwork.InRoom)
+                selectedMapId = RoomSettings.GetSelectedLobbyMapId();
+        }
+    }
+
+    void RefreshDeveloperCheatOverlay(string statusMessage = null, bool busy = false)
+    {
+        if (developerCheatOverlayObject == null)
+            return;
+
+        PlayerProfileData profile = PlayerProfileService.Instance != null ? PlayerProfileService.Instance.CurrentProfile : null;
+        int astrons = profile != null ? profile.Astrons : 0;
+        if (developerCheatAstronsText != null)
+            developerCheatAstronsText.text = "Astrons: " + astrons;
+
+        if (statusMessage != null && developerCheatStatusText != null)
+            developerCheatStatusText.text = statusMessage;
+
+        if (developerCheatAddMoneyButton != null)
+            developerCheatAddMoneyButton.interactable = !busy;
+        if (developerCheatCloseButton != null)
+            developerCheatCloseButton.interactable = !busy;
+    }
+
+    void ConfigureLobbyTopBannerAccent(string childName, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 sizeDelta, Color color)
+    {
+        if (lobbyTopStatBannerObject == null)
+            return;
+
+        Transform child = lobbyTopStatBannerObject.transform.Find(childName);
+        if (child == null)
+            return;
+
+        RectTransform rect = child.GetComponent<RectTransform>();
+        rect.anchorMin = anchorMin;
+        rect.anchorMax = anchorMax;
+        rect.pivot = pivot;
+        rect.anchoredPosition = anchoredPosition;
+        rect.sizeDelta = sizeDelta;
+
+        Image image = child.GetComponent<Image>();
+        image.color = color;
+        image.raycastTarget = false;
+    }
+
+    void RefreshLobbyScreenVisibility()
+    {
+        EnsureFullScreenLobbyUiExists();
+
+        bool shouldShowFullScreen = ShouldShowFullScreenLobby();
+        if (!shouldShowFullScreen)
+        {
+            if (mapSelectionRootObject != null)
+                mapSelectionRootObject.SetActive(false);
+            if (mapDetailsRootObject != null)
+                mapDetailsRootObject.SetActive(false);
+            if (developerSettingsRootObject != null)
+                developerSettingsRootObject.SetActive(false);
+            if (lobbyTopBarRootObject != null)
+                lobbyTopBarRootObject.SetActive(false);
+            if (fullScreenLobbyRootObject != null)
+                fullScreenLobbyRootObject.SetActive(false);
+            if (exitLobbyButton != null)
+                exitLobbyButton.gameObject.SetActive(false);
+            if (developerSettingsButton != null)
+                developerSettingsButton.gameObject.SetActive(false);
+            if (launchButton != null)
+                launchButton.gameObject.SetActive(false);
+            if (developerBackButton != null)
+                developerBackButton.gameObject.SetActive(false);
+            if (developerGunSetupButton != null)
+                developerGunSetupButton.gameObject.SetActive(false);
+            if (developerCheatButton != null)
+                developerCheatButton.gameObject.SetActive(false);
+            if (leftSettingsViewportRect != null)
+                leftSettingsViewportRect.gameObject.SetActive(false);
+            if (enemyTableRootRect != null)
+                enemyTableRootRect.gameObject.SetActive(false);
+            if (weaponSettingsRootRect != null)
+                weaponSettingsRootRect.gameObject.SetActive(false);
+            return;
+        }
+
+        bool showMapSelection = currentScreen == LobbyScreen.MapSelection;
+        bool showMapDetails = currentScreen == LobbyScreen.MapDetails;
+        bool showDeveloperSettings = currentScreen == LobbyScreen.DeveloperSettings;
+
+        if (mapSelectionRootObject != null)
+        {
+            mapSelectionRootObject.SetActive(showMapSelection);
+            mapSelectionRootObject.transform.SetAsFirstSibling();
+        }
+        if (mapDetailsRootObject != null)
+        {
+            mapDetailsRootObject.SetActive(showMapDetails);
+            mapDetailsRootObject.transform.SetAsFirstSibling();
+        }
+        if (developerSettingsRootObject != null)
+        {
+            developerSettingsRootObject.SetActive(showDeveloperSettings);
+            developerSettingsRootObject.transform.SetAsFirstSibling();
+        }
+        if (lobbyTopBarRootObject != null)
+            lobbyTopBarRootObject.SetActive(true);
+        if (fullScreenLobbyRootObject != null)
+        {
+            fullScreenLobbyRootObject.SetActive(showMapSelection || showMapDetails || showDeveloperSettings);
+            fullScreenLobbyRootObject.transform.SetAsLastSibling();
+        }
+
+        if (exitLobbyButton != null)
+            exitLobbyButton.gameObject.SetActive(showMapSelection || showDeveloperSettings);
+        if (developerSettingsButton != null)
+            developerSettingsButton.gameObject.SetActive(showMapSelection || showMapDetails);
+        if (launchButton != null)
+            launchButton.gameObject.SetActive(showMapDetails);
+        if (developerBackButton != null)
+            developerBackButton.gameObject.SetActive(showMapDetails || showDeveloperSettings);
+        if (developerGunSetupButton != null)
+            developerGunSetupButton.gameObject.SetActive(showDeveloperSettings);
+        if (developerCheatButton != null)
+            developerCheatButton.gameObject.SetActive(showDeveloperSettings);
+        if (!showDeveloperSettings)
+            HideDeveloperCheatOverlay();
+
+        if (leftSettingsViewportRect != null)
+            leftSettingsViewportRect.gameObject.SetActive(showDeveloperSettings);
+        if (enemyTableRootRect != null)
+            enemyTableRootRect.gameObject.SetActive(showDeveloperSettings);
+        if (weaponSettingsRootRect != null)
+            weaponSettingsRootRect.gameObject.SetActive(false);
+        if (gunSetupSettingButton != null)
+            gunSetupSettingButton.gameObject.SetActive(false);
+
+        if (playerStatusListText != null)
+            playerStatusListText.gameObject.SetActive(false);
+        if (readyButton != null)
+            readyButton.gameObject.SetActive(false);
+        if (backToRoundsButton != null)
+            backToRoundsButton.gameObject.SetActive(false);
+        if (mapSelectionButton != null)
+            mapSelectionButton.gameObject.SetActive(false);
+        if (mapSelectionOverlayObject != null)
+            mapSelectionOverlayObject.SetActive(false);
+
+        LayoutFullScreenLobbyUi();
+    }
+
+    void RefreshLobbyScreenContent()
+    {
+        RefreshFullScreenMapSelectionUi();
+        RefreshMapDetailsUi();
+        RefreshDeveloperSettingsUi();
+    }
+
+    void LayoutFullScreenLobbyUi()
+    {
+        RectTransform canvasRect = EnsureFullScreenLobbyRoot();
+        float canvasWidth = canvasRect != null && canvasRect.rect.width > 0f ? canvasRect.rect.width : 1920f;
+        float canvasHeight = canvasRect != null && canvasRect.rect.height > 0f ? canvasRect.rect.height : 1080f;
+        float contentTop = FullScreenTopMargin + LobbyTopBarHeight + 56f;
+        float bottomReserved = BottomWideButtonHeight + FullScreenBottomMargin + 30f;
+        float usableHeight = Mathf.Max(420f, canvasHeight - contentTop - bottomReserved);
+        float tileHeight = Mathf.Min(MapTileHeight, (usableHeight - MapTileSpacingY) * 0.5f);
+        float tileWidth = Mathf.Min(MapTileWidth, (canvasWidth - FullScreenSideMargin * 2f - MapTileSpacingX * 2f) / 3f);
+        float previewWidth = Mathf.Min(980f, canvasWidth * 0.56f);
+        float previewHeight = Mathf.Min(720f, usableHeight);
+        float detailsStartX = FullScreenSideMargin + previewWidth + 34f;
+        float detailsWidth = Mathf.Max(320f, canvasWidth - detailsStartX - FullScreenSideMargin);
+
+        if (lobbyTopBarRootObject != null)
+        {
+            RectTransform rect = lobbyTopBarRootObject.GetComponent<RectTransform>();
+            float rootWidth = Mathf.Max(820f, canvasWidth);
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(0f, -FullScreenTopMargin);
+            rect.sizeDelta = new Vector2(rootWidth, 110f);
+            EnsureLobbyTopStatBanner(rootWidth);
+
+            if (lobbyTopBarNicknameText != null)
+            {
+                RectTransform nicknameRect = lobbyTopBarNicknameText.rectTransform;
+                nicknameRect.anchorMin = new Vector2(0f, 1f);
+                nicknameRect.anchorMax = new Vector2(0f, 1f);
+                nicknameRect.pivot = new Vector2(0f, 0.5f);
+                nicknameRect.anchoredPosition = new Vector2(26f, -40f);
+                nicknameRect.sizeDelta = new Vector2(140f, 42f);
+                lobbyTopBarNicknameText.fontSize = 30f;
+                lobbyTopBarNicknameText.enableAutoSizing = true;
+                lobbyTopBarNicknameText.fontSizeMin = 22f;
+                lobbyTopBarNicknameText.fontSizeMax = 30f;
+            }
+            if (lobbyTopBarGamesText != null)
+            {
+                float bannerX = 168f;
+                RectTransform gamesRect = lobbyTopBarGamesText.rectTransform;
+                gamesRect.anchorMin = new Vector2(0f, 1f);
+                gamesRect.anchorMax = new Vector2(0f, 1f);
+                gamesRect.pivot = new Vector2(0f, 0.5f);
+                gamesRect.anchoredPosition = new Vector2(bannerX + 22f, -40f);
+                gamesRect.sizeDelta = new Vector2(165f, 42f);
+                lobbyTopBarGamesText.fontSize = 30f;
+                lobbyTopBarGamesText.enableAutoSizing = true;
+                lobbyTopBarGamesText.fontSizeMin = 22f;
+                lobbyTopBarGamesText.fontSizeMax = 30f;
+            }
+            if (lobbyTopBarLevelXpText != null)
+            {
+                float bannerX = 168f;
+                RectTransform xpRect = lobbyTopBarLevelXpText.rectTransform;
+                xpRect.anchorMin = new Vector2(0f, 1f);
+                xpRect.anchorMax = new Vector2(0f, 1f);
+                xpRect.pivot = new Vector2(0f, 0.5f);
+                xpRect.anchoredPosition = new Vector2(bannerX + 210f, -40f);
+                xpRect.sizeDelta = new Vector2(380f, 42f);
+                lobbyTopBarLevelXpText.fontSize = 30f;
+                lobbyTopBarLevelXpText.enableAutoSizing = true;
+                lobbyTopBarLevelXpText.fontSizeMin = 22f;
+                lobbyTopBarLevelXpText.fontSizeMax = 30f;
+            }
+            if (lobbyTopBarAstronsText != null)
+            {
+                float bannerX = 168f;
+                float bannerWidth = Mathf.Clamp(rootWidth - bannerX - 270f, 620f, 1120f);
+                RectTransform astronsRect = lobbyTopBarAstronsText.rectTransform;
+                astronsRect.anchorMin = new Vector2(0f, 1f);
+                astronsRect.anchorMax = new Vector2(0f, 1f);
+                astronsRect.pivot = new Vector2(0f, 0.5f);
+                astronsRect.anchoredPosition = new Vector2(bannerX + bannerWidth - 220f, -40f);
+                astronsRect.sizeDelta = new Vector2(210f, 42f);
+                lobbyTopBarAstronsText.fontSize = 30f;
+                lobbyTopBarAstronsText.enableAutoSizing = true;
+                lobbyTopBarAstronsText.fontSizeMin = 22f;
+                lobbyTopBarAstronsText.fontSizeMax = 30f;
+            }
+            lobbyTopBarRootObject.transform.SetAsLastSibling();
+        }
+
+        LayoutActionButton(exitLobbyButton, new Vector2(-FullScreenSideMargin, -FullScreenTopMargin), new Vector2(TopActionButtonWidth, TopActionButtonHeight));
+        LayoutActionButton(developerBackButton, new Vector2(-FullScreenSideMargin, -FullScreenTopMargin), new Vector2(220f, TopActionButtonHeight));
+        LayoutBottomButton(developerSettingsButton, new Vector2(FullScreenSideMargin, FullScreenBottomMargin), new Vector2(390f, 66f), false);
+        LayoutBottomButton(launchButton, new Vector2(-FullScreenSideMargin, FullScreenBottomMargin), new Vector2(360f, 108f), true);
+        LayoutActionButton(developerGunSetupButton, new Vector2(-FullScreenSideMargin - 240f, -FullScreenTopMargin), new Vector2(220f, TopActionButtonHeight));
+        LayoutActionButton(developerCheatButton, new Vector2(-FullScreenSideMargin - 480f, -FullScreenTopMargin), new Vector2(220f, TopActionButtonHeight));
+
+        if (mapSelectionTilesRootRect != null)
+        {
+            int columns = 3;
+            float totalWidth = columns * tileWidth + (columns - 1) * MapTileSpacingX;
+            float startX = Mathf.Max(0f, (canvasWidth - FullScreenSideMargin * 2f - totalWidth) * 0.5f);
+            mapSelectionTilesRootRect.anchoredPosition = new Vector2(FullScreenSideMargin, -contentTop);
+            mapSelectionTilesRootRect.sizeDelta = new Vector2(canvasWidth - FullScreenSideMargin * 2f, usableHeight);
+            for (int i = 0; i < fullscreenMapTileButtons.Count; i++)
+            {
+                RectTransform tileRect = fullscreenMapTileButtons[i].GetComponent<RectTransform>();
+                int column = i % columns;
+                int row = i / columns;
+                tileRect.anchorMin = new Vector2(0f, 1f);
+                tileRect.anchorMax = new Vector2(0f, 1f);
+                tileRect.pivot = new Vector2(0f, 1f);
+                tileRect.anchoredPosition = new Vector2(startX + column * (tileWidth + MapTileSpacingX), -row * (tileHeight + MapTileSpacingY));
+                tileRect.sizeDelta = new Vector2(tileWidth, tileHeight);
+            }
+            if (mapSelectionScreenTitleText != null)
+                mapSelectionScreenTitleText.rectTransform.anchoredPosition = new Vector2(FullScreenSideMargin, -(contentTop - 30f));
+        }
+
+        if (mapDetailsRootObject != null)
+        {
+            RectTransform previewRect = mapDetailsPreviewImage != null ? mapDetailsPreviewImage.rectTransform : null;
+            if (previewRect != null)
+            {
+                previewRect.anchoredPosition = new Vector2(FullScreenSideMargin, -contentTop);
+                previewRect.sizeDelta = new Vector2(previewWidth, previewHeight);
+            }
+
+            if (mapDetailsNameText != null)
+            {
+                RectTransform nameRect = mapDetailsNameText.rectTransform;
+                nameRect.anchoredPosition = new Vector2(detailsStartX, -contentTop);
+                nameRect.sizeDelta = new Vector2(detailsWidth, 40f);
+            }
+
+            if (mapDetailsDescriptionText != null)
+            {
+                RectTransform descRect = mapDetailsDescriptionText.rectTransform;
+                descRect.anchoredPosition = new Vector2(detailsStartX, -contentTop - 64f);
+                descRect.sizeDelta = new Vector2(detailsWidth, Mathf.Max(300f, previewHeight - 80f));
+            }
+        }
+    }
+
+    void LayoutActionButton(Button button, Vector2 anchoredFromTopRight, Vector2 size)
+    {
+        if (button == null)
+            return;
+
+        RectTransform rect = button.GetComponent<RectTransform>();
+        if (rect == null)
+            return;
+
+        rect.anchorMin = new Vector2(1f, 1f);
+        rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(1f, 1f);
+        rect.anchoredPosition = anchoredFromTopRight;
+        rect.sizeDelta = size;
+        button.transform.SetAsLastSibling();
+    }
+
+    void LayoutBottomButton(Button button, Vector2 anchoredFromCorner, Vector2 size, bool rightAnchored)
+    {
+        if (button == null)
+            return;
+
+        RectTransform rect = button.GetComponent<RectTransform>();
+        if (rect == null)
+            return;
+
+        rect.anchorMin = rightAnchored ? new Vector2(1f, 0f) : new Vector2(0f, 0f);
+        rect.anchorMax = rightAnchored ? new Vector2(1f, 0f) : new Vector2(0f, 0f);
+        rect.pivot = rightAnchored ? new Vector2(1f, 0f) : new Vector2(0f, 0f);
+        rect.anchoredPosition = anchoredFromCorner;
+        rect.sizeDelta = size;
+        button.transform.SetAsLastSibling();
+    }
+
+    void RefreshFullScreenMapSelectionUi()
+    {
+        EnsureFullScreenLobbyUiExists();
+        LobbyMapDefinition selectedMap = LobbyMapCatalog.Get(selectedMapId) ?? LobbyMapCatalog.Get(RoomSettings.GetSelectedLobbyMapId()) ?? LobbyMapCatalog.GetDefault();
+        bool isHost = PhotonNetwork.IsMasterClient;
+
+        for (int i = 0; i < fullscreenMapTileButtons.Count && i < LobbyMapCatalog.AllMaps.Count; i++)
+        {
+            LobbyMapDefinition map = LobbyMapCatalog.AllMaps[i];
+            Button tileButton = fullscreenMapTileButtons[i];
+            EnsureFullScreenMapTileVisual(tileButton, map);
+
+            Image tileImage = tileButton.GetComponent<Image>();
+            Image previewImage = tileButton.transform.Find("TilePreviewImage")?.GetComponent<Image>();
+            if (previewImage != null)
+            {
+                previewImage.sprite = LoadLobbyBackgroundSprite(map.MapBackgroundIndex);
+                previewImage.color = Color.white;
+            }
+
+            bool isSelected = selectedMap != null && selectedMap.Id == map.Id;
+            tileButton.interactable = isHost;
+            ColorBlock tileColors = tileButton.colors;
+            tileColors.normalColor = isSelected ? new Color(0.3f, 0.78f, 0.98f, 1f) : new Color(0.1f, 0.16f, 0.24f, 0.96f);
+            tileColors.highlightedColor = isSelected ? new Color(0.38f, 0.86f, 1f, 1f) : new Color(0.16f, 0.24f, 0.36f, 1f);
+            tileColors.selectedColor = tileColors.highlightedColor;
+            tileColors.pressedColor = new Color(0.08f, 0.12f, 0.18f, 1f);
+            tileColors.disabledColor = new Color(0.16f, 0.18f, 0.22f, 0.72f);
+            tileColors.colorMultiplier = 1f;
+            tileButton.colors = tileColors;
+
+            if (tileImage != null)
+                tileImage.color = tileColors.normalColor;
+        }
+
+        if (mapSelectionScreenTitleText != null)
+            mapSelectionScreenTitleText.text = "MAP SELECTION";
+    }
+
+    void EnsureFullScreenMapTileVisual(Button tileButton, LobbyMapDefinition map)
+    {
+        if (tileButton == null)
+            return;
+
+        Image rootImage = tileButton.GetComponent<Image>();
+        if (rootImage != null)
+        {
+            rootImage.raycastTarget = true;
+            rootImage.sprite = null;
+            rootImage.type = Image.Type.Sliced;
+        }
+
+        GameObject previewObject = FindOrCreateChild(tileButton.gameObject, "TilePreviewImage", typeof(RectTransform), typeof(Image));
+        Image previewImage = previewObject.GetComponent<Image>();
+        RectTransform previewRect = previewImage.rectTransform;
+        previewRect.anchorMin = Vector2.zero;
+        previewRect.anchorMax = Vector2.one;
+        previewRect.pivot = new Vector2(0.5f, 0.5f);
+        previewRect.offsetMin = new Vector2(4f, 4f);
+        previewRect.offsetMax = new Vector2(-4f, -4f);
+        previewImage.type = Image.Type.Simple;
+        previewImage.preserveAspect = false;
+        previewImage.raycastTarget = false;
+        previewImage.color = Color.white;
+
+        GameObject labelBackdropObject = FindOrCreateChild(tileButton.gameObject, "TileLabelBackdrop", typeof(RectTransform), typeof(Image));
+        Image labelBackdrop = labelBackdropObject.GetComponent<Image>();
+        RectTransform labelBackdropRect = labelBackdrop.rectTransform;
+        labelBackdropRect.anchorMin = new Vector2(0f, 1f);
+        labelBackdropRect.anchorMax = new Vector2(1f, 1f);
+        labelBackdropRect.pivot = new Vector2(0.5f, 1f);
+        labelBackdropRect.anchoredPosition = Vector2.zero;
+        labelBackdropRect.sizeDelta = new Vector2(0f, 58f);
+        labelBackdrop.color = new Color(0.02f, 0.04f, 0.08f, 0.7f);
+        labelBackdrop.raycastTarget = false;
+
+        Transform existingTitle = tileButton.transform.Find("TileTitle");
+        TMP_Text tileTitle = existingTitle != null
+            ? existingTitle.GetComponent<TMP_Text>()
+            : CreateStandaloneLabel(tileButton.transform, "TileTitle", map.DisplayName, new Vector2(0f, -14f), new Vector2(360f, 30f), 26f, TextAlignmentOptions.Center);
+        if (tileTitle != null)
+        {
+            tileTitle.text = map.DisplayName;
+            RectTransform titleRect = tileTitle.rectTransform;
+            titleRect.anchorMin = new Vector2(0.5f, 1f);
+            titleRect.anchorMax = new Vector2(0.5f, 1f);
+            titleRect.pivot = new Vector2(0.5f, 1f);
+            titleRect.anchoredPosition = new Vector2(0f, -14f);
+            titleRect.sizeDelta = new Vector2(420f, 30f);
+            tileTitle.fontSize = 26f;
+            tileTitle.alignment = TextAlignmentOptions.Center;
+        }
+
+        Transform existingSubtitle = tileButton.transform.Find("TileSubtitle");
+        if (existingSubtitle != null)
+            existingSubtitle.gameObject.SetActive(false);
+    }
+
+    void RefreshMapDetailsUi()
+    {
+        EnsureFullScreenLobbyUiExists();
+        LobbyMapDefinition selectedMap = LobbyMapCatalog.Get(selectedMapId) ?? LobbyMapCatalog.Get(RoomSettings.GetSelectedLobbyMapId()) ?? LobbyMapCatalog.GetDefault();
+        if (selectedMap == null)
+            return;
+
+        if (mapDetailsPreviewImage != null)
+        {
+            mapDetailsPreviewImage.sprite = LoadLobbyBackgroundSprite(selectedMap.MapBackgroundIndex);
+            mapDetailsPreviewImage.color = Color.white;
+        }
+
+        if (mapDetailsNameText != null)
+            mapDetailsNameText.text = selectedMap.DisplayName;
+        if (mapDetailsDescriptionText != null)
+            mapDetailsDescriptionText.text = selectedMap.Description;
+
+        if (launchButton != null)
+            launchButton.interactable = PhotonNetwork.IsMasterClient && PhotonNetwork.InRoom && RoomSettings.GetSessionState() == RoomSettings.SessionStateInLobby;
+    }
+
+    void RefreshDeveloperSettingsUi()
+    {
+        EnsureHostSettingsUiExists();
+        EnsureWeaponSettingsPanel();
+        LayoutDeveloperSettingsRoots();
+        LayoutDeveloperWeaponButtons();
+    }
+
+    void EnsureWeaponSettingsPanel()
+    {
+        if (weaponSettingsRootRect != null && weaponSettingsRootRect.gameObject.scene.IsValid())
+            return;
+
+        GameObject panelObject = FindOrCreateChild(developerSettingsRootObject != null ? developerSettingsRootObject : gameObject, "WeaponSettingsPanel", typeof(RectTransform), typeof(Image));
+        weaponSettingsRootRect = panelObject.GetComponent<RectTransform>();
+        weaponSettingsRootRect.anchorMin = new Vector2(0.5f, 1f);
+        weaponSettingsRootRect.anchorMax = new Vector2(0.5f, 1f);
+        weaponSettingsRootRect.pivot = new Vector2(0.5f, 1f);
+
+        Image bg = panelObject.GetComponent<Image>();
+        bg.color = new Color(0f, 0f, 0f, 0f);
+        bg.raycastTarget = false;
+
+        Transform staleTitle = panelObject.transform.Find("WeaponSettingsTitle");
+        if (staleTitle != null)
+            staleTitle.gameObject.SetActive(false);
+    }
+
+    void LayoutDeveloperSettingsRoots()
+    {
+        if (developerSettingsRootObject != null)
+            developerSettingsRootObject.transform.SetAsLastSibling();
+
+        if (leftSettingsViewportRect != null)
+        {
+            if (leftSettingsViewportRect.transform.parent != developerSettingsRootObject.transform)
+                leftSettingsViewportRect.transform.SetParent(developerSettingsRootObject.transform, false);
+            leftSettingsViewportRect.anchorMin = new Vector2(0f, 1f);
+            leftSettingsViewportRect.anchorMax = new Vector2(0f, 1f);
+            leftSettingsViewportRect.pivot = new Vector2(0f, 1f);
+            leftSettingsViewportRect.anchoredPosition = new Vector2(FullScreenSideMargin, -118f);
+            leftSettingsViewportRect.sizeDelta = new Vector2(660f, 840f);
+        }
+
+        if (enemyTableRootRect != null)
+        {
+            if (enemyTableRootRect.transform.parent != developerSettingsRootObject.transform)
+                enemyTableRootRect.transform.SetParent(developerSettingsRootObject.transform, false);
+            enemyTableRootRect.anchorMin = new Vector2(0f, 1f);
+            enemyTableRootRect.anchorMax = new Vector2(0f, 1f);
+            enemyTableRootRect.pivot = new Vector2(0f, 1f);
+            enemyTableRootRect.anchoredPosition = new Vector2(740f, -118f);
+            enemyTableRootRect.sizeDelta = new Vector2(1120f, 620f);
+        }
+
+        if (weaponSettingsRootRect != null)
+        {
+            if (weaponSettingsRootRect.transform.parent != developerSettingsRootObject.transform)
+                weaponSettingsRootRect.transform.SetParent(developerSettingsRootObject.transform, false);
+            weaponSettingsRootRect.anchorMin = new Vector2(0f, 1f);
+            weaponSettingsRootRect.anchorMax = new Vector2(0f, 1f);
+            weaponSettingsRootRect.pivot = new Vector2(0f, 1f);
+            weaponSettingsRootRect.anchoredPosition = new Vector2(740f, -760f);
+            weaponSettingsRootRect.sizeDelta = new Vector2(1120f, 190f);
+        }
+    }
+
+    void LayoutDeveloperWeaponButtons()
+    {
+        if (weaponSettingsRootRect != null)
+            weaponSettingsRootRect.gameObject.SetActive(false);
+    }
+
+    void AttachWeaponSettingToPanel(Button button, float x, float y, float width)
+    {
+        if (button == null || weaponSettingsRootRect == null)
+            return;
+
+        button.transform.SetParent(weaponSettingsRootRect, false);
+        RectTransform rect = button.GetComponent<RectTransform>();
+        if (rect == null)
+            return;
+
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = new Vector2(x, y);
+        rect.sizeDelta = new Vector2(width, 60f);
+    }
+
     void Start()
     {
         PlayerMovement.gameStarted = false;
         PlayerShooting.gameStarted = false;
+        EnsureLobbyRootFullScreen();
 
         EnsurePlayerStatusListExists();
         EnsureHostSettingsUiExists();
         EnsureLobbyNavigationUiExists();
+        EnsureFullScreenLobbyUiExists();
 
         if (PhotonNetwork.InRoom)
         {
+            selectedMapId = RoomSettings.GetSelectedLobbyMapId();
             ShowLobby();
             EnsureDefaultRoomSettings();
         }
@@ -238,7 +1498,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (readyButton != null)
         {
             readyButton.onClick.RemoveListener(ToggleReady);
-            readyButton.onClick.AddListener(ToggleReady);
+            readyButton.onClick.AddListener(() => PlayUiClickAndInvoke(ToggleReady));
         }
 
         if (PhotonNetwork.InRoom)
@@ -248,12 +1508,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         RefreshPlayerStatusList();
         RefreshHostSettingsUi();
+        RefreshLobbyTopBar();
 
         if (PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
             value is bool started && started)
         {
-            Debug.Log("GAME ALREADY STARTED (Start)");
             HideLobby();
         }
 
@@ -277,11 +1537,14 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public override void OnJoinedRoom()
     {
         hasRecordedCurrentRound = false;
+        EnsureLobbyRootFullScreen();
         EnsurePlayerStatusListExists();
         EnsureHostSettingsUiExists();
         EnsureLobbyNavigationUiExists();
+        EnsureFullScreenLobbyUiExists();
         EnsureBottomActionButtonsLayout();
         EnsureDefaultRoomSettings();
+        selectedMapId = RoomSettings.GetSelectedLobbyMapId();
 
         bool started = PhotonNetwork.CurrentRoom != null &&
                        PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
@@ -298,6 +1561,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             SetReady(false);
             RefreshPlayerStatusList();
             RefreshHostSettingsUi();
+            RefreshLobbyTopBar();
         }
     }
 
@@ -351,8 +1615,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void CheckAllReady()
     {
-        Debug.Log("SPRAWDZAM READY");
-
         foreach (Player p in PhotonNetwork.PlayerList)
         {
             if (!p.CustomProperties.TryGetValue("ready", out object readyValue))
@@ -366,8 +1628,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             }
         }
 
-        Debug.Log("WSZYSCY GOTOWI");
-
         if (PhotonNetwork.IsMasterClient)
         {
             StartGame();
@@ -376,7 +1636,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void StartGame()
     {
-        Debug.Log("START GRY");
         NetworkManager.RememberCurrentLobbySettings();
         GameTimer.StartGame();
     }
@@ -385,7 +1644,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     {
         if (ContainsLobbySettingChange(propertiesThatChanged))
         {
+            selectedMapId = RoomSettings.GetSelectedLobbyMapId();
             RefreshHostSettingsUi();
+            RefreshLobbyScreenContent();
             NetworkManager.RememberCurrentLobbySettings();
         }
 
@@ -400,7 +1661,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (started)
         {
-            Debug.Log("GAME STARTED (ROOM PROP)");
             HideLobby();
             if (!hasRecordedCurrentRound)
             {
@@ -410,7 +1670,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         }
         else
         {
-            Debug.Log("GAME RESET TO LOBBY");
             PlayerMovement.gameStarted = false;
             PlayerShooting.gameStarted = false;
             hasRecordedCurrentRound = false;
@@ -424,6 +1683,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                 SetReady(false);
                 RefreshPlayerStatusList();
                 RefreshHostSettingsUi();
+                RefreshLobbyTopBar();
             }
         }
     }
@@ -456,6 +1716,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         PlayerShooting.gameStarted = true;
         SetGameplayHudVisible(true);
         HideMapSelectionOverlay();
+        HideFullScreenLobbyFlow();
 
         CanvasGroup cg = EnsureCanvasGroup();
         cg.alpha = 0;
@@ -466,6 +1727,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     void ShowLobby()
     {
         SetGameplayHudVisible(false);
+        EnsureLobbyRootFullScreen();
+        EnsureFullScreenLobbyUiExists();
+        if (fullScreenLobbyRootObject != null)
+        {
+            fullScreenLobbyRootObject.SetActive(true);
+            fullScreenLobbyRootObject.transform.SetAsLastSibling();
+        }
+        if (string.IsNullOrWhiteSpace(selectedMapId))
+            selectedMapId = RoomSettings.GetSelectedLobbyMapId();
 
         CanvasGroup cg = EnsureCanvasGroup();
         cg.alpha = 1;
@@ -473,6 +1743,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         cg.blocksRaycasts = true;
         HideMapSelectionOverlay();
         EnsureBottomActionButtonsLayout();
+        SwitchLobbyScreen(LobbyScreen.MapSelection);
     }
 
     void SetGameplayHudVisible(bool visible)
@@ -649,7 +1920,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(superAttackSettingButton, "FEELING");
         AttachLeftSectionButton(advancedShootingJoystickSettingButton, "FEELING");
         AttachLeftSectionButton(hapticsSettingButton, "FEELING");
-        AttachLeftSectionButton(gunSetupSettingButton, "FEELING");
 
         LayoutLeftSectionButtons();
         EnsureEnemySettingsUiExists();
@@ -695,7 +1965,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             mapSelectionButton = buttonObject.GetComponent<Button>();
             mapSelectionButton.transition = Selectable.Transition.ColorTint;
             mapSelectionButton.onClick.RemoveAllListeners();
-            mapSelectionButton.onClick.AddListener(OnMapSelectionClicked);
+            mapSelectionButton.onClick.AddListener(() => PlayUiClickAndInvoke(OnMapSelectionClicked));
 
             GameObject labelBackdropObject = FindOrCreateChild(buttonObject, "MapLabelBackdrop", typeof(RectTransform), typeof(Image));
             RectTransform labelBackdropRect = labelBackdropObject.GetComponent<RectTransform>();
@@ -832,7 +2102,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (mapSelectionOverlayCloseButton != null)
         {
             mapSelectionOverlayCloseButton.onClick.RemoveAllListeners();
-            mapSelectionOverlayCloseButton.onClick.AddListener(HideMapSelectionOverlay);
+            mapSelectionOverlayCloseButton.onClick.AddListener(() => PlayUiClickAndInvoke(HideMapSelectionOverlay));
 
             RectTransform closeRect = closeButtonObject.GetComponent<RectTransform>();
             closeRect.anchorMin = new Vector2(1f, 1f);
@@ -899,7 +2169,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
             Button tileButton = tileObject.GetComponent<Button>();
             string mapId = map.Id;
-            tileButton.onClick.AddListener(() => OnMapTileSelected(mapId));
+            tileButton.onClick.AddListener(() =>
+            {
+                AudioManager.Instance?.PlayClick();
+                OnMapTileSelected(mapId);
+            });
             mapSelectionTileButtons.Add(tileButton);
 
             GameObject tileLabelBackdrop = FindOrCreateChild(tileObject, "TileLabelBackdrop", typeof(RectTransform), typeof(Image));
@@ -1012,14 +2286,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.InRoom || RoomSettings.GetSessionState() != RoomSettings.SessionStateInLobby)
             return;
 
-        EnsureLobbyMapUiExists();
-        RefreshLobbyMapSelectionUi(PhotonNetwork.IsMasterClient);
-
-        if (mapSelectionOverlayObject != null)
-        {
-            mapSelectionOverlayObject.SetActive(true);
-            mapSelectionOverlayObject.transform.SetAsLastSibling();
-        }
+        selectedMapId = RoomSettings.GetSelectedLobbyMapId();
+        SwitchLobbyScreen(LobbyScreen.MapSelection);
     }
 
     void HideMapSelectionOverlay()
@@ -1034,11 +2302,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             return;
 
         LobbyMapDefinition selectedMap = LobbyMapCatalog.Get(mapId);
+        if (selectedMap == null)
+            return;
+        selectedMapId = selectedMap != null ? selectedMap.Id : selectedMapId;
         Hashtable props = new Hashtable();
         LobbyMapCatalog.ApplyToProperties(selectedMap, props);
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         HideMapSelectionOverlay();
         RefreshHostSettingsUi();
+        SwitchLobbyScreen(LobbyScreen.MapDetails);
     }
 
     Sprite LoadLobbyBackgroundSprite(int backgroundIndex)
@@ -1106,7 +2378,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         for (int i = 0; i < EnemyBotCatalog.AllDefinitions.Count; i++)
         {
             EnemyBotDefinition definition = EnemyBotCatalog.AllDefinitions[i];
-            float rowY = -132f - (i * EnemyRowHeight);
+            float rowY = -112f - (i * EnemyRowHeight);
             EnsureEnemyRowLabel(definition, new Vector2(26f, rowY));
 
             EnsureEnemySettingButton(definition, "enabled", GetEnemyCellPosition(0, rowY), () => CycleEnemyEnabled(definition.Kind));
@@ -1141,7 +2413,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                 rect.anchorMax = new Vector2(0f, 1f);
                 rect.pivot = new Vector2(0f, 1f);
                 rect.anchoredPosition = anchoredPosition;
-                rect.sizeDelta = new Vector2(EnemyColumnWidth - 8f, 58f);
+                rect.sizeDelta = new Vector2(EnemyColumnWidth - 8f, 42f);
             }
         }
 
@@ -1163,13 +2435,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void EnsureSettingsLayoutContainers()
     {
+        Transform desiredParent = developerSettingsRootObject != null ? developerSettingsRootObject.transform : transform;
+
         if (leftSettingsViewportRect != null && leftSettingsViewportRect.gameObject.scene.IsValid())
         {
+            if (leftSettingsViewportRect.transform.parent != desiredParent)
+                leftSettingsViewportRect.transform.SetParent(desiredParent, false);
             ApplyLeftSettingsViewportLayout();
             return;
         }
 
-        GameObject viewportObject = FindOrCreateChild(gameObject, "LobbySettingsViewport", typeof(RectTransform), typeof(Image), typeof(Mask), typeof(ScrollRect));
+        GameObject viewportObject = FindOrCreateChild(developerSettingsRootObject != null ? developerSettingsRootObject : gameObject, "LobbySettingsViewport", typeof(RectTransform), typeof(Image), typeof(Mask), typeof(ScrollRect));
         leftSettingsViewportRect = viewportObject.GetComponent<RectTransform>();
         leftSettingsViewportRect.anchorMin = new Vector2(0.5f, 1f);
         leftSettingsViewportRect.anchorMax = new Vector2(0.5f, 1f);
@@ -1231,34 +2507,41 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     void EnsureEnemyTableUiExists()
     {
         if (enemyTableRootRect != null && enemyTableRootRect.gameObject.scene.IsValid())
-            return;
+        {
+            if (developerSettingsRootObject != null && enemyTableRootRect.transform.parent != developerSettingsRootObject.transform)
+                enemyTableRootRect.transform.SetParent(developerSettingsRootObject.transform, false);
+        }
+        else
+        {
+            GameObject tableObject = FindOrCreateChild(developerSettingsRootObject != null ? developerSettingsRootObject : gameObject, "EnemySettingsTable", typeof(RectTransform), typeof(Image));
+            enemyTableRootRect = tableObject.GetComponent<RectTransform>();
+        }
 
-        GameObject tableObject = FindOrCreateChild(gameObject, "EnemySettingsTable", typeof(RectTransform), typeof(Image));
-        enemyTableRootRect = tableObject.GetComponent<RectTransform>();
         enemyTableRootRect.anchorMin = new Vector2(0.5f, 1f);
         enemyTableRootRect.anchorMax = new Vector2(0.5f, 1f);
         enemyTableRootRect.pivot = new Vector2(0.5f, 1f);
         enemyTableRootRect.anchoredPosition = new Vector2(RightTableX, RightTableY);
         enemyTableRootRect.sizeDelta = new Vector2(RightTableWidth, RightTableHeight);
 
-        Image bg = tableObject.GetComponent<Image>();
-        bg.color = new Color(0.06f, 0.09f, 0.13f, 0.82f);
+        Image bg = enemyTableRootRect.GetComponent<Image>();
+        bg.color = new Color(0f, 0f, 0f, 0f);
+        bg.raycastTarget = false;
 
         EnsureTableHeaderLabel("EnemyTableTitle", "ENEMIES", new Vector2(24f, -18f), new Vector2(220f, 30f), 24f, TextAlignmentOptions.Left);
-        EnsureTableHeaderLabel("EnemyHeader_ACTIVE", "ACTIVE", GetEnemyHeaderPosition(0), new Vector2(EnemyColumnWidth - 8f, 26f), 16f, TextAlignmentOptions.Center);
-        EnsureTableHeaderLabel("EnemyHeader_COUNT", "COUNT", GetEnemyHeaderPosition(1), new Vector2(EnemyColumnWidth - 8f, 26f), 16f, TextAlignmentOptions.Center);
-        EnsureTableHeaderLabel("EnemyHeader_RESPAWN", "RESPAWN", GetEnemyHeaderPosition(2), new Vector2(EnemyColumnWidth - 8f, 26f), 16f, TextAlignmentOptions.Center);
-        EnsureTableHeaderLabel("EnemyHeader_HP", "HP", GetEnemyHeaderPosition(3), new Vector2(EnemyColumnWidth - 8f, 26f), 16f, TextAlignmentOptions.Center);
-        EnsureTableHeaderLabel("EnemyHeader_SHIELD", "SHIELD", GetEnemyHeaderPosition(4), new Vector2(EnemyColumnWidth - 8f, 26f), 16f, TextAlignmentOptions.Center);
-        EnsureTableHeaderLabel("EnemyHeader_DAMAGE", "DAMAGE", GetEnemyHeaderPosition(5), new Vector2(EnemyColumnWidth - 8f, 26f), 15f, TextAlignmentOptions.Center);
-        EnsureTableHeaderLabel("EnemyHeader_SPEED", "SPEED", GetEnemyHeaderPosition(6), new Vector2(EnemyColumnWidth - 8f, 26f), 16f, TextAlignmentOptions.Center);
-        EnsureTableHeaderLabel("EnemyHeader_FIRSTRESPAWN", "FIRST\nRESPAWN", GetEnemyHeaderPosition(7), new Vector2(EnemyColumnWidth - 8f, 42f), 14f, TextAlignmentOptions.Center);
-        EnsureTableHeaderLabel("EnemyHeader_RESPAWNLOOP", "RESPAWN\nLOOP", GetEnemyHeaderPosition(8), new Vector2(EnemyColumnWidth - 8f, 42f), 14f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_ACTIVE", "ACTIVE", GetEnemyHeaderPosition(0), new Vector2(EnemyColumnWidth - 8f, 26f), 14f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_COUNT", "COUNT", GetEnemyHeaderPosition(1), new Vector2(EnemyColumnWidth - 8f, 26f), 14f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_RESPAWN", "RESPAWN", GetEnemyHeaderPosition(2), new Vector2(EnemyColumnWidth - 8f, 26f), 14f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_HP", "HP", GetEnemyHeaderPosition(3), new Vector2(EnemyColumnWidth - 8f, 26f), 14f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_SHIELD", "SHIELD", GetEnemyHeaderPosition(4), new Vector2(EnemyColumnWidth - 8f, 26f), 14f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_DAMAGE", "DAMAGE", GetEnemyHeaderPosition(5), new Vector2(EnemyColumnWidth - 8f, 26f), 13f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_SPEED", "SPEED", GetEnemyHeaderPosition(6), new Vector2(EnemyColumnWidth - 8f, 26f), 14f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_FIRSTRESPAWN", "FIRST\nRESPAWN", GetEnemyHeaderPosition(7), new Vector2(EnemyColumnWidth - 8f, 38f), 12f, TextAlignmentOptions.Center);
+        EnsureTableHeaderLabel("EnemyHeader_RESPAWNLOOP", "RESPAWN\nLOOP", GetEnemyHeaderPosition(8), new Vector2(EnemyColumnWidth - 8f, 38f), 12f, TextAlignmentOptions.Center);
     }
 
     Vector2 GetEnemyHeaderPosition(int columnIndex)
     {
-        return new Vector2(EnemyNameColumnWidth + 18f + (columnIndex * EnemyColumnWidth), -58f);
+        return new Vector2(EnemyNameColumnWidth + 18f + (columnIndex * EnemyColumnWidth), -54f);
     }
 
     void EnsureEnemyRowLabel(EnemyBotDefinition definition, Vector2 anchoredPosition)
@@ -1268,7 +2551,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (!enemyRowLabels.TryGetValue(definition.Id, out TMP_Text label) || label == null || !label.gameObject.scene.IsValid())
         {
-            label = CreateStandaloneLabel(enemyTableRootRect.transform, "EnemyRowLabel_" + definition.Id, definition.DisplayName.ToUpperInvariant(), anchoredPosition, new Vector2(EnemyNameColumnWidth - 12f, 32f), 18f, TextAlignmentOptions.Left);
+            label = CreateStandaloneLabel(enemyTableRootRect.transform, "EnemyRowLabel_" + definition.Id, definition.DisplayName.ToUpperInvariant(), anchoredPosition, new Vector2(EnemyNameColumnWidth - 12f, 28f), 16f, TextAlignmentOptions.Left);
             enemyRowLabels[definition.Id] = label;
         }
 
@@ -1360,7 +2643,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             return;
 
         RectTransform sectionRect = EnsureLeftSectionContainer(sectionName);
-        button.transform.SetParent(sectionRect, false);
+        if (button.transform.parent != sectionRect)
+            button.transform.SetParent(sectionRect, false);
 
         RectTransform buttonRect = button.GetComponent<RectTransform>();
         if (buttonRect != null)
@@ -1830,7 +3114,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         }
 
         button.onClick.RemoveAllListeners();
-        button.onClick.AddListener(callback);
+        button.onClick.AddListener(() => PlayUiClickAndInvoke(callback));
 
         Image image = button.GetComponent<Image>();
         if (image != null)
@@ -2478,6 +3762,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     {
         EnsureHostSettingsUiExists();
         EnsureLobbyNavigationUiExists();
+        EnsureFullScreenLobbyUiExists();
         EnsureBottomActionButtonsLayout();
 
         bool isHost = PhotonNetwork.IsMasterClient;
@@ -2612,17 +3897,29 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(advancedShootingJoystickSettingButton, isHost);
         SetSettingButtonState(hapticsSettingButton, isHost);
         SetSettingButtonState(gunSetupSettingButton, isHost);
+        if (developerGunSetupButton != null)
+            developerGunSetupButton.interactable = isHost;
         SetSettingButtonState(obstacleWeightSettingButton, isHost);
         SetSettingButtonState(treasureWeightSettingButton, isHost);
         RefreshLobbyMapSelectionUi(isHost);
         RefreshLobbyNavigationButton();
         RefreshEnemySettingTexts(isHost);
+        RefreshLobbyTopBar();
+        RefreshLobbyScreenContent();
+        if (ShouldShowFullScreenLobby())
+            LayoutFullScreenLobbyUi();
     }
 
     void RefreshLobbyNavigationButton()
     {
         if (backToRoundsButton == null)
             return;
+
+        if (ShouldShowFullScreenLobby())
+        {
+            backToRoundsButton.gameObject.SetActive(false);
+            return;
+        }
 
         bool inLobbyState = PhotonNetwork.InRoom && RoomSettings.GetSessionState() == RoomSettings.SessionStateInLobby;
         backToRoundsButton.interactable = inLobbyState;
@@ -2751,8 +4048,91 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.InRoom || RoomSettings.GetSessionState() != RoomSettings.SessionStateInLobby)
             return;
 
+        HideFullScreenLobbyFlow();
         HideMapSelectionOverlay();
         NetworkManager.ReturnToSessionBrowserFromLobby();
+    }
+
+    void OnExitLobbyClicked()
+    {
+        OnBackToRoundsClicked();
+    }
+
+    public override void OnLeftRoom()
+    {
+        HideFullScreenLobbyFlow();
+
+        CanvasGroup cg = EnsureCanvasGroup();
+        cg.alpha = 0f;
+        cg.interactable = false;
+        cg.blocksRaycasts = false;
+    }
+
+    void OnDeveloperSettingsClicked()
+    {
+        previousMapScreenBeforeDeveloperSettings = currentScreen == LobbyScreen.MapDetails ? LobbyScreen.MapDetails : LobbyScreen.MapSelection;
+        SwitchLobbyScreen(LobbyScreen.DeveloperSettings);
+    }
+
+    void OnDeveloperBackClicked()
+    {
+        if (currentScreen == LobbyScreen.MapDetails)
+        {
+            SwitchLobbyScreen(LobbyScreen.MapSelection);
+            return;
+        }
+
+        SwitchLobbyScreen(previousMapScreenBeforeDeveloperSettings);
+    }
+
+    void OnDeveloperCheatClicked()
+    {
+        if (PlayerProfileService.Instance == null || developerCheatOverlayObject == null)
+            return;
+
+        RefreshDeveloperCheatOverlay(string.Empty);
+        developerCheatOverlayObject.SetActive(true);
+        developerCheatOverlayObject.transform.SetAsLastSibling();
+    }
+
+    async void OnDeveloperCheatAddMoneyClicked()
+    {
+        if (PlayerProfileService.Instance == null || developerCheatOverlayObject == null)
+            return;
+
+        if (developerCheatAddMoneyButton != null)
+            developerCheatAddMoneyButton.interactable = false;
+
+        try
+        {
+            RefreshDeveloperCheatOverlay("Adding 5000 Astrons...", true);
+            await PlayerProfileService.Instance.AddAstronsAsync(5000);
+            RefreshLobbyTopBar();
+            RefreshDeveloperCheatOverlay("Added 5000 Astrons.");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Developer cheat add money failed: " + ex);
+            RefreshDeveloperCheatOverlay("Could not add Astrons.");
+        }
+        finally
+        {
+            RefreshDeveloperCheatOverlay();
+        }
+    }
+
+    void OnLaunchClicked()
+    {
+        if (!PhotonNetwork.InRoom || RoomSettings.GetSessionState() != RoomSettings.SessionStateInLobby)
+            return;
+
+        if (PhotonNetwork.IsMasterClient)
+        {
+            StartGame();
+            return;
+        }
+
+        SetReady(true);
     }
 
     Button GetEnemySettingButton(EnemyBotKind kind, string suffix)

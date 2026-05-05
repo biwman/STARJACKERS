@@ -31,7 +31,6 @@ public class TreasureSpawner : MonoBehaviourPun
         mapSizeX = mapSize.x;
         mapSizeY = mapSize.y;
 
-        Debug.Log("TreasureSpawner Start");
         StartCoroutine(SpawnWhenRoundStarts());
     }
 
@@ -49,7 +48,6 @@ public class TreasureSpawner : MonoBehaviourPun
         if (!PhotonNetwork.IsMasterClient)
             yield break;
 
-        Debug.Log("Master spawning treasures for started round");
         SpawnTreasures();
     }
 
@@ -92,7 +90,8 @@ public class TreasureSpawner : MonoBehaviourPun
             }
         }
 
-        Debug.Log("Spawned treasures: " + spawned);
+        if (spawned > 0)
+            GameVisualTheme.RequestRuntimeRefresh();
     }
 
     bool IsFarEnough(Vector2 candidate, List<Vector2> positions, float minDistance)

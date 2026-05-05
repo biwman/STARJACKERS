@@ -948,7 +948,8 @@ public enum ShipType
     Explorer = 0,
     Viper = 1,
     Avenger = 2,
-    Arrow = 3
+    Arrow = 3,
+    Invader = 4
 }
 
 public sealed class PlayerShipDefinition
@@ -1021,7 +1022,10 @@ public static class ShipCatalog
     public const int ArrowSmoothSkinIndex = 9;
     public const int ArrowSportySkinIndex = 10;
     public const int ArrowSharkSkinIndex = 11;
-    public const int MaxShipSkinIndex = ArrowSharkSkinIndex;
+    public const int InvaderCamoSkinIndex = 12;
+    public const int InvaderVolcanicSkinIndex = 13;
+    public const int InvaderGoldplateSkinIndex = 14;
+    public const int MaxShipSkinIndex = InvaderGoldplateSkinIndex;
 
     static readonly PlayerShipDefinition ExplorerDefinition = new PlayerShipDefinition(
         ShipType.Explorer,
@@ -1104,12 +1108,31 @@ public static class ShipCatalog
             new Vector2(1.82f, 0.28f)
         });
 
+    static readonly PlayerShipDefinition InvaderDefinition = new PlayerShipDefinition(
+        ShipType.Invader,
+        "Invader",
+        new[] { InvaderCamoSkinIndex, InvaderVolcanicSkinIndex, InvaderGoldplateSkinIndex },
+        9,
+        2,
+        1,
+        1,
+        0,
+        2,
+        72,
+        62,
+        5.4f,
+        1.08f,
+        5.4f,
+        25,
+        new[] { new Vector2(0f, 0.18f) });
+
     static readonly Dictionary<ShipType, PlayerShipDefinition> Definitions = new Dictionary<ShipType, PlayerShipDefinition>
     {
         { ShipType.Explorer, ExplorerDefinition },
         { ShipType.Viper, ViperDefinition },
         { ShipType.Avenger, AvengerDefinition },
-        { ShipType.Arrow, ArrowDefinition }
+        { ShipType.Arrow, ArrowDefinition },
+        { ShipType.Invader, InvaderDefinition }
     };
 
     public static PlayerShipDefinition GetShipDefinition(int skinIndex)
@@ -1126,6 +1149,7 @@ public static class ShipCatalog
     {
         return skinIndex switch
         {
+            >= InvaderCamoSkinIndex => ShipType.Invader,
             >= ArrowSmoothSkinIndex => ShipType.Arrow,
             >= AvengerDarkGreenSkinIndex => ShipType.Avenger,
             >= ViperStandardSkinIndex => ShipType.Viper,
@@ -1159,6 +1183,9 @@ public static class ShipCatalog
             case ArrowSmoothSkinIndex: return "Smooth";
             case ArrowSportySkinIndex: return "Sporty";
             case ArrowSharkSkinIndex: return "Shark";
+            case InvaderCamoSkinIndex: return "Camo";
+            case InvaderVolcanicSkinIndex: return "Volcanic";
+            case InvaderGoldplateSkinIndex: return "Goldplate";
             default: return "Skin";
         }
     }
@@ -1276,6 +1303,9 @@ public static class ShipCatalog
             ArrowSmoothSkinIndex => "Visuals/Ships/arrow_skin_smooth_resource",
             ArrowSportySkinIndex => "Visuals/Ships/arrow_skin_sporty_resource",
             ArrowSharkSkinIndex => "Visuals/Ships/arrow_skin_shark_resource",
+            InvaderCamoSkinIndex => "Visuals/Ships/invader_camo_resource",
+            InvaderVolcanicSkinIndex => "Visuals/Ships/invader_volcanic_resource",
+            InvaderGoldplateSkinIndex => "Visuals/Ships/invader_goldplate_resource",
             _ => "Visuals/Ships/ship1_resource"
         };
     }
@@ -1296,6 +1326,9 @@ public static class ShipCatalog
             ArrowSmoothSkinIndex => "Assets/Resources/Visuals/Ships/arrow_skin_smooth_resource.png",
             ArrowSportySkinIndex => "Assets/Resources/Visuals/Ships/arrow_skin_sporty_resource.png",
             ArrowSharkSkinIndex => "Assets/Resources/Visuals/Ships/arrow_skin_shark_resource.png",
+            InvaderCamoSkinIndex => "Assets/Resources/Visuals/Ships/invader_camo_resource.png",
+            InvaderVolcanicSkinIndex => "Assets/Resources/Visuals/Ships/invader_volcanic_resource.png",
+            InvaderGoldplateSkinIndex => "Assets/Resources/Visuals/Ships/invader_goldplate_resource.png",
             _ => "Assets/Resources/Visuals/Ships/ship1_resource.png"
         };
     }
@@ -1316,6 +1349,9 @@ public static class ShipCatalog
             ArrowSmoothSkinIndex => "Assets/arrow_skin_smooth.png",
             ArrowSportySkinIndex => "Assets/arrow_skin_sporty.png",
             ArrowSharkSkinIndex => "Assets/arrow_skin_shark.png",
+            InvaderCamoSkinIndex => "Assets/invader_camo.png",
+            InvaderVolcanicSkinIndex => "Assets/invader_volcanic.png",
+            InvaderGoldplateSkinIndex => "Assets/invader_goldplate.png",
             _ => "Assets/ship1.png"
         };
     }
@@ -1327,6 +1363,7 @@ public static class ShipCatalog
             ShipType.Viper => "wrak2_resource",
             ShipType.Avenger => "wrak3_resource",
             ShipType.Arrow => "Visuals/Ships/arrow_ship_wreck_resource",
+            ShipType.Invader => "Visuals/Ships/invader_wreck_resource",
             _ => "wrak1_resource"
         };
     }
@@ -1338,6 +1375,7 @@ public static class ShipCatalog
             ShipType.Viper => "Assets/Resources/wrak2_resource.png",
             ShipType.Avenger => "Assets/Resources/wrak3_resource.png",
             ShipType.Arrow => "Assets/Resources/Visuals/Ships/arrow_ship_wreck_resource.png",
+            ShipType.Invader => "Assets/Resources/Visuals/Ships/invader_wreck_resource.png",
             _ => "Assets/Resources/wrak1_resource.png"
         };
     }
@@ -1349,6 +1387,7 @@ public static class ShipCatalog
             ShipType.Viper => "Assets/wrak2.png",
             ShipType.Avenger => "Assets/wrak3.png",
             ShipType.Arrow => "Assets/arrow_ship_wreck.png",
+            ShipType.Invader => "Assets/invader_wreck.png",
             _ => "Assets/wrak1.png"
         };
     }

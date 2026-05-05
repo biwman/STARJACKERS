@@ -236,7 +236,6 @@ public class PlayerShooting : MonoBehaviourPun
             advancedShootInputZone = gameObject.AddComponent<AdvancedShootInputZone>();
         }
 
-        Debug.Log("PlayerShooting START");
     }
 
     void Update()
@@ -285,7 +284,6 @@ public class PlayerShooting : MonoBehaviourPun
             if (shootJoystickObject != null)
             {
                 shootJoystick = shootJoystickObject.GetComponent<Joystick>();
-                Debug.Log("ShootJoystick found");
             }
         }
 

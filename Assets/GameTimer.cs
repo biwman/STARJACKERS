@@ -124,8 +124,6 @@ public class GameTimer : MonoBehaviourPun
 
     System.Collections.IEnumerator EndGameAfterTimeUpSync()
     {
-        Debug.Log("KONIEC GRY");
-
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         foreach (PlayerHealth p in players)
         {
@@ -139,7 +137,8 @@ public class GameTimer : MonoBehaviourPun
                 {
                     if (!p.IsAstronautControlled)
                     {
-                        pv.RPC(nameof(PlayerHealth.ClearLocalShipInventoryForWreck), pv.Owner);
+                        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(pv.Owner, 0);
+                        pv.RPC(nameof(PlayerHealth.ClearLocalShipInventoryForWreck), pv.Owner, shipSkinIndex);
                     }
 
                     int currentScore = RoundResultsTracker.GetKnownScore(pv.Owner, p.gameObject);

@@ -122,6 +122,8 @@ public class PlayerHealth : MonoBehaviourPun
                 }
             }
         }
+
+        GameVisualTheme.RequestRuntimeRefresh();
     }
 
     void Update()
@@ -826,6 +828,8 @@ public class PlayerHealth : MonoBehaviourPun
 
             renderer.color = Color.white;
         }
+
+        GameVisualTheme.RequestRuntimeRefresh();
     }
 
     [PunRPC]
@@ -847,6 +851,9 @@ public class PlayerHealth : MonoBehaviourPun
         EnemyBot bot = GetComponent<EnemyBot>();
         if (bot != null)
         {
+            if ((EnemyBotKind)kindValue == EnemyBotKind.RescueShip && bot.photonView != null)
+                bot.photonView.RPC(nameof(EnemyBot.StopRescueShipBeamRpc), RpcTarget.All);
+
             if ((EnemyBotKind)kindValue == EnemyBotKind.Mothership)
                 bot.ConvertMothershipTurretsToWreckVisuals();
 
@@ -907,6 +914,8 @@ public class PlayerHealth : MonoBehaviourPun
 
             renderer.color = baseColor;
         }
+
+        GameVisualTheme.RequestRuntimeRefresh();
     }
 
     [PunRPC]

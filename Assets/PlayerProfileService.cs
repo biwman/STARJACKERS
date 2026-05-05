@@ -199,16 +199,46 @@ public class PlayerProfileService : MonoBehaviour
         try
         {
             IsBusy = true;
+            SaveProfileLocally(nickname, shipSkinIndex);
+            await SaveCurrentProfileToCloudAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("PlayerProfileService save failed: " + ex);
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
-            CurrentProfile = new PlayerProfileData
-            {
-                Nickname = SanitizeNickname(nickname),
-                ShipSkinIndex = Mathf.Clamp(shipSkinIndex, 0, ShipCatalog.MaxShipSkinIndex),
-                GamesPlayed = CurrentProfile != null ? CurrentProfile.GamesPlayed : 0,
-                TotalXp = CurrentProfile != null ? CurrentProfile.TotalXp : 0,
-                Astrons = CurrentProfile != null ? CurrentProfile.Astrons : 0,
-                Inventory = CurrentProfile != null && CurrentProfile.Inventory != null ? CurrentProfile.Inventory.Clone() : PlayerInventoryData.Default()
-            };
+    public void SaveProfileLocally(string nickname, int shipSkinIndex)
+    {
+        EnsureInventory();
+
+        CurrentProfile = new PlayerProfileData
+        {
+            Nickname = SanitizeNickname(nickname),
+            ShipSkinIndex = Mathf.Clamp(shipSkinIndex, 0, ShipCatalog.MaxShipSkinIndex),
+            GamesPlayed = CurrentProfile != null ? CurrentProfile.GamesPlayed : 0,
+            TotalXp = CurrentProfile != null ? CurrentProfile.TotalXp : 0,
+            Astrons = CurrentProfile != null ? CurrentProfile.Astrons : 0,
+            Inventory = CurrentProfile != null && CurrentProfile.Inventory != null ? CurrentProfile.Inventory.Clone() : PlayerInventoryData.Default()
+        };
+
+        ApplyProfileToPhoton();
+        NotifyProfileChanged();
+    }
+
+    public async Task SaveCurrentProfileToCloudAsync()
+    {
+        await EnsureInitializedAsync();
+
+        try
+        {
+            IsBusy = true;
+            EnsureInventory();
 
             var data = new Dictionary<string, object>
             {
@@ -223,13 +253,6 @@ public class PlayerProfileService : MonoBehaviour
             await RunCloudOperationWithRetryAsync(
                 () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
                 "save profile");
-            ApplyProfileToPhoton();
-            NotifyProfileChanged();
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("PlayerProfileService save failed: " + ex);
-            throw;
         }
         finally
         {

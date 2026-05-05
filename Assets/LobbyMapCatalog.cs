@@ -38,6 +38,7 @@ public sealed class LobbyMapDefinition
 {
     public string Id { get; }
     public string DisplayName { get; }
+    public string Description { get; }
     public float RoundDurationSeconds { get; }
     public string MapSize { get; }
     public float LoneShipTimerMultiplier { get; }
@@ -60,6 +61,7 @@ public sealed class LobbyMapDefinition
     public LobbyMapDefinition(
         string id,
         string displayName,
+        string description,
         float roundDurationSeconds,
         string mapSize,
         float loneShipTimerMultiplier,
@@ -81,6 +83,7 @@ public sealed class LobbyMapDefinition
     {
         Id = id;
         DisplayName = displayName;
+        Description = string.IsNullOrWhiteSpace(description) ? displayName : description;
         RoundDurationSeconds = roundDurationSeconds;
         MapSize = mapSize;
         LoneShipTimerMultiplier = loneShipTimerMultiplier;
@@ -109,6 +112,7 @@ public static class LobbyMapCatalog
         new LobbyMapDefinition(
             "just_space",
             "JUST SPACE",
+            "A wide-open sector with balanced resources and clean sightlines. Good for learning routes, ranged duels, and long chases.",
             240f,
             "very_large",
             1f,
@@ -132,10 +136,12 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
+            new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
         new LobbyMapDefinition(
             "noob_haven",
             "NOOB HAVEN",
+            "A calmer map with forgiving spacing and lower pressure. Great for easier extraction runs and lighter early fights.",
             240f,
             "large",
             1f,
@@ -159,10 +165,12 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
+            new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
         new LobbyMapDefinition(
             "minefield",
             "MINEFIELD",
+            "A tighter zone packed with hazards and dense resources. Movement discipline matters here more than raw speed.",
             240f,
             "medium",
             1f,
@@ -186,10 +194,12 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
+            new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
         new LobbyMapDefinition(
             "pirate_bay",
             "PIRATE BAY",
+            "A dangerous resource-rich area with active pirate presence. Expect pressure, ambushes, and frequent contested loot.",
             240f,
             "large",
             1f,
@@ -213,10 +223,12 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
+            new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
         new LobbyMapDefinition(
             "mothership",
             "MOTHERSHIP",
+            "A high-threat battleground centered around the largest enemy presence. Best suited for prepared crews and heavier builds.",
             240f,
             "large",
             1f,
@@ -240,6 +252,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
+            new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, true, 1, false, 200, 200, 1f, 0, 90))
     };
 

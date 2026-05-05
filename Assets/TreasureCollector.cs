@@ -221,7 +221,6 @@ public class TreasureCollector : MonoBehaviourPun
             {
                 if (!PlayerProfileService.Instance.HasFreeShipInventorySlot())
                 {
-                    Debug.Log("Ship inventory is full. Cannot collect loot.");
                     return;
                 }
 
@@ -1226,11 +1225,7 @@ public class TreasureCollector : MonoBehaviourPun
         try
         {
             bool stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
-            if (!stored)
-            {
-                Debug.Log("No free ship slot for looted wreck item.");
-            }
-            else
+            if (stored)
             {
                 AddScore(RoundXpTracker.RecordWreckLooted(photonView.Owner, false));
                 ShowPickupToast(itemId);
@@ -1262,8 +1257,6 @@ public class TreasureCollector : MonoBehaviourPun
                 AddScore(RoundXpTracker.RecordWreckLooted(photonView.Owner, playerWreck));
                 ShowPickupToast(itemId);
             }
-            else
-                Debug.Log("No free ship slot for reserved wreck loot item.");
         }
         catch (System.Exception ex)
         {
@@ -1286,8 +1279,6 @@ public class TreasureCollector : MonoBehaviourPun
                 AddScore(RoundXpTracker.RecordDroppedCargoLooted(photonView.Owner));
                 ShowPickupToast(itemId);
             }
-            else
-                Debug.Log("No free ship slot for reserved dropped cargo item.");
         }
         catch (System.Exception ex)
         {
@@ -1356,11 +1347,7 @@ public class TreasureCollector : MonoBehaviourPun
         try
         {
             bool stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
-            if (!stored)
-            {
-                Debug.Log("Collected item, but ship inventory has no free slot.");
-            }
-            else
+            if (stored)
             {
                 ShowPickupToast(itemId);
             }

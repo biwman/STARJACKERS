@@ -1,6 +1,7 @@
 using System.Collections;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 #if UNITY_EDITOR
@@ -11,6 +12,12 @@ using UnityEditor;
 public class UIRuntimeStyler : MonoBehaviour
 {
     static UIRuntimeStyler instance;
+    static Sprite playButtonShapeSprite;
+    static Sprite whitePixelSprite;
+    static Sprite cachedPlayRocketSprite;
+    static Sprite cachedCraftingIconSprite;
+    static Sprite cachedTraderIconSprite;
+    static Sprite cachedInventoryIconSprite;
 #if UNITY_EDITOR
     double nextEditorRefreshTime;
 #endif
@@ -50,6 +57,18 @@ public class UIRuntimeStyler : MonoBehaviour
 
         if (Application.isPlaying)
             DontDestroyOnLoad(root);
+    }
+
+    public static void RefreshStyles()
+    {
+        EnsureInstance();
+        if (instance == null)
+            return;
+
+        if (Application.isPlaying)
+            instance.StartCoroutine(instance.ApplyStylesDeferred());
+        else
+            instance.ApplyStylesImmediate();
     }
 
 #if UNITY_EDITOR
@@ -174,6 +193,7 @@ public class UIRuntimeStyler : MonoBehaviour
 
         string role = ResolveButtonRole(button, text);
         Image useVisual = role == "use" ? GetOrCreateUseButtonVisual(button.transform) : null;
+        Image framedVisual = IsFramedButtonRole(role) ? GetOrCreateSaveRunButtonVisual(button.transform) : null;
 
         image.type = Image.Type.Sliced;
         image.raycastTarget = true;
@@ -194,10 +214,27 @@ public class UIRuntimeStyler : MonoBehaviour
                 targetSize = new Vector2(220f, 62f);
                 break;
             case "save_run":
-                baseColor = new Color(0.08f, 0.58f, 0.18f, 1f);
-                highlighted = new Color(0.12f, 0.68f, 0.23f, 1f);
-                pressed = new Color(0.05f, 0.42f, 0.13f, 1f);
-                targetSize = new Vector2(294f, 84f);
+                baseColor = new Color(0.11f, 0.38f, 0.21f, 0.98f);
+                highlighted = new Color(0.15f, 0.5f, 0.28f, 1f);
+                pressed = new Color(0.08f, 0.24f, 0.15f, 1f);
+                targetSize = new Vector2(396f, 114f);
+                break;
+            case "nav_crafting":
+            case "nav_trader":
+            case "nav_inventory":
+            case "nav_back":
+            case "nav_back_wide":
+            case "skin_choice":
+                baseColor = button.colors.normalColor;
+                highlighted = button.colors.highlightedColor;
+                pressed = button.colors.pressedColor;
+                targetSize = role == "skin_choice"
+                    ? new Vector2(196f, 56f)
+                    : role == "nav_back_wide"
+                        ? new Vector2(390f, 66f)
+                    : role == "nav_back"
+                        ? new Vector2(216f, 62f)
+                        : new Vector2(326f, 88f);
                 break;
             case "restart":
                 baseColor = new Color(0.85f, 0.45f, 0.18f, 0.96f);
@@ -221,9 +258,9 @@ public class UIRuntimeStyler : MonoBehaviour
         }
 
         rect.sizeDelta = targetSize;
-        if (role == "save_run")
-            rect.anchoredPosition = new Vector2(296f, -816f);
-        image.color = role == "use" ? new Color(1f, 1f, 1f, 0.02f) : baseColor;
+        image.color = role == "use" || IsFramedButtonRole(role)
+            ? new Color(1f, 1f, 1f, 0.02f)
+            : baseColor;
 
         ColorBlock colors = button.colors;
         colors.normalColor = baseColor;
@@ -235,7 +272,7 @@ public class UIRuntimeStyler : MonoBehaviour
         colors.fadeDuration = 0.08f;
         button.colors = colors;
 
-        if (role != "use")
+        if (role != "use" && role != "save_run")
         {
             ApplyOutline(image.gameObject, new Color(0f, 0f, 0f, 0.24f), new Vector2(2f, -2f));
         }
@@ -243,21 +280,82 @@ public class UIRuntimeStyler : MonoBehaviour
         if (text != null)
         {
             text.color = textColor;
-            text.fontSize = role == "use" ? 30f : role == "save_run" ? 30f : 26f;
+            text.fontSize = role == "use" ? 30f : role == "save_run" ? 30f : IsNavButtonRole(role) ? 26f : 26f;
             text.fontStyle = FontStyles.Bold;
             text.textWrappingMode = TextWrappingModes.NoWrap;
             text.alignment = TextAlignmentOptions.Center;
-            text.characterSpacing = role == "use" ? 3f : role == "save_run" ? 5f : 5f;
+            text.characterSpacing = role == "use" ? 3f : role == "save_run" ? 5f : IsNavButtonRole(role) ? 3.5f : 5f;
             text.margin = new Vector4(12f, 6f, 12f, 6f);
+
+            RectTransform textRect = text.rectTransform;
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.pivot = new Vector2(0.5f, 0.5f);
+            if (role == "save_run")
+            {
+                text.fontSize = 40f;
+                text.characterSpacing = 4.5f;
+                text.alignment = TextAlignmentOptions.Center;
+                textRect.offsetMin = new Vector2(118f, 10f);
+                textRect.offsetMax = new Vector2(-28f, -10f);
+                ApplyOutline(text.gameObject, new Color(0f, 0f, 0f, 0.48f), new Vector2(2f, -2f));
+            }
+            else if (IsNavButtonRole(role) || role == "skin_choice")
+            {
+                text.fontSize = role == "skin_choice" ? 20f : 26f;
+                text.characterSpacing = role == "skin_choice" ? 2f : 3f;
+                text.alignment = TextAlignmentOptions.Center;
+                if (role == "nav_back")
+                {
+                    textRect.offsetMin = new Vector2(18f, 8f);
+                    textRect.offsetMax = new Vector2(-18f, -8f);
+                }
+                else if (role == "nav_back_wide")
+                {
+                    text.fontSize = 22f;
+                    text.characterSpacing = 2f;
+                    textRect.offsetMin = new Vector2(24f, 8f);
+                    textRect.offsetMax = new Vector2(-24f, -8f);
+                }
+                else if (role == "skin_choice")
+                {
+                    textRect.offsetMin = new Vector2(16f, 6f);
+                    textRect.offsetMax = new Vector2(-16f, -6f);
+                }
+                else
+                {
+                    textRect.offsetMin = new Vector2(136f, 8f);
+                    textRect.offsetMax = new Vector2(-24f, -8f);
+                }
+                ApplyOutline(text.gameObject, new Color(0f, 0f, 0f, 0.44f), new Vector2(2f, -2f));
+            }
+            else
+            {
+                textRect.offsetMin = Vector2.zero;
+                textRect.offsetMax = Vector2.zero;
+            }
         }
 
         if (role == "use")
         {
             ConfigureUseButtonVisual(button, useVisual, baseColor, highlighted, pressed);
         }
+        else if (role == "save_run")
+        {
+            ConfigureSaveRunButtonVisual(button, framedVisual, baseColor, highlighted, pressed);
+        }
+        else if (IsNavButtonRole(role) || role == "skin_choice")
+        {
+            ConfigureNavButtonVisual(button, framedVisual, role, baseColor, highlighted, pressed);
+        }
         else if (useVisual != null)
         {
             useVisual.gameObject.SetActive(false);
+            button.targetGraphic = image;
+        }
+        else if (framedVisual != null)
+        {
+            framedVisual.gameObject.SetActive(false);
             button.targetGraphic = image;
         }
     }
@@ -272,6 +370,24 @@ public class UIRuntimeStyler : MonoBehaviour
 
         if (name.Contains("saveandrun") || label.Contains("save & run"))
             return "save_run";
+
+        if (name.Contains("profilecraftingnavbutton"))
+            return "nav_crafting";
+
+        if (name.Contains("profileinventorynavbutton"))
+            return "nav_inventory";
+
+        if (name.Contains("shopbutton"))
+            return "nav_trader";
+
+        if (name.Contains("developersettingswideprofilebackbutton"))
+            return "nav_back_wide";
+
+        if (name.Contains("shipselectionbackbutton") || name.Contains("profilebackbutton"))
+            return "nav_back";
+
+        if (name.Contains("shipselectionskinbutton"))
+            return "skin_choice";
 
         if (name.Contains("restart") || label.Contains("restart"))
             return "restart";
@@ -297,6 +413,8 @@ public class UIRuntimeStyler : MonoBehaviour
         return name.StartsWith("PlayerSlot", System.StringComparison.Ordinal) ||
                name.StartsWith("ShipSlot", System.StringComparison.Ordinal) ||
                name.StartsWith("CraftingSlot", System.StringComparison.Ordinal) ||
+               name.StartsWith("RecipeResultButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("ShopItemCardButton", System.StringComparison.Ordinal) ||
                name.StartsWith("MainGun", System.StringComparison.Ordinal) ||
                name.StartsWith("Shield", System.StringComparison.Ordinal) ||
                name.StartsWith("Engine", System.StringComparison.Ordinal) ||
@@ -307,14 +425,16 @@ public class UIRuntimeStyler : MonoBehaviour
                name.StartsWith("BrowserRefreshButton", System.StringComparison.Ordinal) ||
                name.StartsWith("BrowserNewRoundButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShipPreviewButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("ShipPreviewHitbox", System.StringComparison.Ordinal) ||
                name.StartsWith("CraftingCatalogButton", System.StringComparison.Ordinal) ||
                name.StartsWith("CraftingRecipeCloseButton", System.StringComparison.Ordinal) ||
-               name.StartsWith("ShopButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShopBuyButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShopCloseButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("EnemySettingButton_", System.StringComparison.Ordinal) ||
                name.StartsWith("ItemPreviewSellButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ItemPreviewSalvageButton", System.StringComparison.Ordinal) ||
-               name.StartsWith("CraftButton", System.StringComparison.Ordinal);
+               name.StartsWith("CraftButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("FullScreenMapTile_", System.StringComparison.Ordinal);
     }
 
     void StyleJoysticks()
@@ -481,6 +601,12 @@ public class UIRuntimeStyler : MonoBehaviour
         GameObject buttonObject = FindSceneObjectByName(objectName);
         if (buttonObject == null)
             return;
+
+        for (Transform current = buttonObject.transform; current != null; current = current.parent)
+        {
+            if (current.name == "LobbyFullScreenRoot" || current.name == "LobbyDeveloperSettingsScreen")
+                return;
+        }
 
         Button button = buttonObject.GetComponent<Button>();
         Image image = buttonObject.GetComponent<Image>();
@@ -680,6 +806,195 @@ public class UIRuntimeStyler : MonoBehaviour
         ApplyOutline(visual.gameObject, new Color(0f, 0f, 0f, 0.22f), new Vector2(2f, -2f));
     }
 
+    void ConfigureSaveRunButtonVisual(Button button, Image visual, Color baseColor, Color highlighted, Color pressed)
+    {
+        if (visual == null)
+            return;
+
+        RectTransform rootRect = visual.rectTransform;
+        rootRect.anchorMin = Vector2.zero;
+        rootRect.anchorMax = Vector2.one;
+        rootRect.pivot = new Vector2(0.5f, 0.5f);
+        rootRect.offsetMin = Vector2.zero;
+        rootRect.offsetMax = Vector2.zero;
+
+        visual.sprite = GetPlayButtonShapeSprite();
+        visual.type = Image.Type.Simple;
+        visual.preserveAspect = false;
+        visual.raycastTarget = false;
+        visual.color = button.interactable
+            ? new Color(0.39f, 0.45f, 0.53f, 0.98f)
+            : new Color(0.2f, 0.22f, 0.25f, 0.72f);
+        visual.gameObject.SetActive(true);
+
+        Image panel = GetOrCreateChildImage(visual.transform, "SaveRunPanel");
+        panel.rectTransform.anchorMin = Vector2.zero;
+        panel.rectTransform.anchorMax = Vector2.one;
+        panel.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        panel.rectTransform.offsetMin = new Vector2(8f, 8f);
+        panel.rectTransform.offsetMax = new Vector2(-8f, -8f);
+        panel.rectTransform.anchoredPosition = Vector2.zero;
+        panel.sprite = GetPlayButtonShapeSprite();
+        panel.type = Image.Type.Simple;
+        panel.preserveAspect = false;
+        panel.raycastTarget = false;
+        panel.color = button.interactable ? baseColor : button.colors.disabledColor;
+
+        Image innerShade = GetOrCreateChildImage(panel.transform, "SaveRunInnerShade");
+        innerShade.rectTransform.anchorMin = Vector2.zero;
+        innerShade.rectTransform.anchorMax = Vector2.one;
+        innerShade.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        innerShade.rectTransform.offsetMin = new Vector2(12f, 10f);
+        innerShade.rectTransform.offsetMax = new Vector2(-12f, -10f);
+        innerShade.sprite = GetPlayButtonShapeSprite();
+        innerShade.type = Image.Type.Simple;
+        innerShade.raycastTarget = false;
+        innerShade.color = button.interactable
+            ? new Color(0.03f, 0.06f, 0.1f, 0.55f)
+            : new Color(0.02f, 0.03f, 0.05f, 0.44f);
+
+        Color accentColor = button.interactable
+            ? new Color(0.42f, 0.9f, 0.58f, 0.95f)
+            : new Color(0.38f, 0.42f, 0.46f, 0.4f);
+        Color accentSoftColor = button.interactable
+            ? new Color(0.42f, 0.9f, 0.58f, 0.3f)
+            : new Color(0.38f, 0.42f, 0.46f, 0.14f);
+
+        ConfigureAccentBar(GetOrCreateChildImage(visual.transform, "SaveRunLeftAccent"), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(14f, 0f), new Vector2(7f, 42f), accentColor);
+        ConfigureAccentBar(GetOrCreateChildImage(visual.transform, "SaveRunRightAccent"), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-14f, 0f), new Vector2(7f, 42f), accentColor);
+        ConfigureAccentBar(GetOrCreateChildImage(visual.transform, "SaveRunTopAccent"), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -8f), new Vector2(86f, 5f), accentSoftColor);
+        ConfigureAccentBar(GetOrCreateChildImage(visual.transform, "SaveRunBottomAccent"), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 8f), new Vector2(70f, 4f), accentSoftColor);
+
+        Image icon = GetOrCreateChildImage(visual.transform, "SaveRunIcon");
+        icon.rectTransform.anchorMin = new Vector2(0f, 0.5f);
+        icon.rectTransform.anchorMax = new Vector2(0f, 0.5f);
+        icon.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        icon.rectTransform.anchoredPosition = new Vector2(72f, 0f);
+        icon.rectTransform.sizeDelta = new Vector2(60f, 68f);
+        icon.raycastTarget = false;
+        icon.preserveAspect = true;
+        icon.sprite = LoadPlayRocketSprite();
+        icon.color = button.interactable
+            ? new Color(0.94f, 0.98f, 1f, 0.98f)
+            : new Color(0.55f, 0.58f, 0.62f, 0.75f);
+        icon.enabled = icon.sprite != null;
+
+        TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+        SaveRunButtonVisualController controller = button.GetComponent<SaveRunButtonVisualController>();
+        if (controller == null)
+            controller = button.gameObject.AddComponent<SaveRunButtonVisualController>();
+        controller.Configure(button, visual.rectTransform, panel.rectTransform, innerShade.rectTransform,
+            GetOrCreateChildImage(visual.transform, "SaveRunLeftAccent").rectTransform,
+            GetOrCreateChildImage(visual.transform, "SaveRunRightAccent").rectTransform,
+            GetOrCreateChildImage(visual.transform, "SaveRunTopAccent").rectTransform,
+            GetOrCreateChildImage(visual.transform, "SaveRunBottomAccent").rectTransform,
+            icon.rectTransform, label != null ? label.rectTransform : null, panel, innerShade,
+            icon, label, baseColor, highlighted, pressed);
+
+        ApplyOutline(visual.gameObject, new Color(0f, 0f, 0f, 0.42f), new Vector2(4f, -4f));
+        button.targetGraphic = panel;
+    }
+
+    void ConfigureNavButtonVisual(Button button, Image visual, string role, Color baseColor, Color highlighted, Color pressed)
+    {
+        if (visual == null)
+            return;
+
+        RectTransform rootRect = visual.rectTransform;
+        rootRect.anchorMin = Vector2.zero;
+        rootRect.anchorMax = Vector2.one;
+        rootRect.pivot = new Vector2(0.5f, 0.5f);
+        rootRect.offsetMin = Vector2.zero;
+        rootRect.offsetMax = Vector2.zero;
+
+        visual.sprite = GetPlayButtonShapeSprite();
+        visual.type = Image.Type.Simple;
+        visual.preserveAspect = false;
+        visual.raycastTarget = false;
+        visual.color = button.interactable
+            ? new Color(0.36f, 0.42f, 0.5f, 0.98f)
+            : new Color(0.2f, 0.22f, 0.25f, 0.72f);
+        visual.gameObject.SetActive(true);
+
+        Image panel = GetOrCreateChildImage(visual.transform, "SaveRunPanel");
+        panel.rectTransform.anchorMin = Vector2.zero;
+        panel.rectTransform.anchorMax = Vector2.one;
+        panel.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        panel.rectTransform.offsetMin = new Vector2(8f, 8f);
+        panel.rectTransform.offsetMax = new Vector2(-8f, -8f);
+        panel.rectTransform.anchoredPosition = Vector2.zero;
+        panel.sprite = GetPlayButtonShapeSprite();
+        panel.type = Image.Type.Simple;
+        panel.preserveAspect = false;
+        panel.raycastTarget = false;
+        panel.color = button.interactable ? baseColor : button.colors.disabledColor;
+
+        Image innerShade = GetOrCreateChildImage(panel.transform, "SaveRunInnerShade");
+        innerShade.rectTransform.anchorMin = Vector2.zero;
+        innerShade.rectTransform.anchorMax = Vector2.one;
+        innerShade.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        innerShade.rectTransform.offsetMin = new Vector2(9f, 8f);
+        innerShade.rectTransform.offsetMax = new Vector2(-9f, -8f);
+        innerShade.sprite = GetPlayButtonShapeSprite();
+        innerShade.type = Image.Type.Simple;
+        innerShade.raycastTarget = false;
+        innerShade.color = button.interactable
+            ? new Color(0.03f, 0.06f, 0.1f, 0.55f)
+            : new Color(0.02f, 0.03f, 0.05f, 0.44f);
+
+        Color accentColor = button.interactable
+            ? new Color(0.35f, 0.82f, 1f, 0.95f)
+            : new Color(0.38f, 0.42f, 0.46f, 0.4f);
+        Color accentSoftColor = button.interactable
+            ? new Color(0.35f, 0.82f, 1f, 0.28f)
+            : new Color(0.38f, 0.42f, 0.46f, 0.14f);
+
+        RectTransform leftAccent = GetOrCreateChildImage(visual.transform, "SaveRunLeftAccent").rectTransform;
+        RectTransform rightAccent = GetOrCreateChildImage(visual.transform, "SaveRunRightAccent").rectTransform;
+        RectTransform topAccent = GetOrCreateChildImage(visual.transform, "SaveRunTopAccent").rectTransform;
+        RectTransform bottomAccent = GetOrCreateChildImage(visual.transform, "SaveRunBottomAccent").rectTransform;
+        ConfigureAccentBar(leftAccent.GetComponent<Image>(), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(12f, 0f), new Vector2(6f, 26f), accentColor);
+        ConfigureAccentBar(rightAccent.GetComponent<Image>(), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-12f, 0f), new Vector2(6f, 26f), accentColor);
+        ConfigureAccentBar(topAccent.GetComponent<Image>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -7f), new Vector2(52f, 4f), accentSoftColor);
+        ConfigureAccentBar(bottomAccent.GetComponent<Image>(), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 7f), new Vector2(42f, 3f), accentSoftColor);
+
+        Image icon = GetOrCreateChildImage(visual.transform, "SaveRunIcon");
+        icon.rectTransform.anchorMin = new Vector2(0f, 0.5f);
+        icon.rectTransform.anchorMax = new Vector2(0f, 0.5f);
+        icon.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        icon.rectTransform.anchoredPosition = new Vector2(58f, 0f);
+        icon.rectTransform.sizeDelta = new Vector2(36f, 36f);
+        icon.raycastTarget = false;
+        icon.preserveAspect = true;
+        icon.sprite = role == "nav_back" || role == "nav_back_wide" || role == "skin_choice" ? null : LoadNavIconSprite(role);
+        icon.color = button.interactable
+            ? new Color(0.94f, 0.98f, 1f, 0.98f)
+            : new Color(0.55f, 0.58f, 0.62f, 0.75f);
+        icon.enabled = icon.sprite != null;
+
+        TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+        SaveRunButtonVisualController controller = button.GetComponent<SaveRunButtonVisualController>();
+        if (controller == null)
+            controller = button.gameObject.AddComponent<SaveRunButtonVisualController>();
+        controller.Configure(button, visual.rectTransform, panel.rectTransform, innerShade.rectTransform,
+            leftAccent, rightAccent, topAccent, bottomAccent,
+            icon.rectTransform, label != null ? label.rectTransform : null, panel, innerShade,
+            icon, label, baseColor, highlighted, pressed);
+
+        ApplyOutline(visual.gameObject, new Color(0f, 0f, 0f, 0.38f), new Vector2(4f, -4f));
+        button.targetGraphic = panel;
+    }
+
+    static bool IsFramedButtonRole(string role)
+    {
+        return role == "save_run" || IsNavButtonRole(role) || role == "skin_choice";
+    }
+
+    static bool IsNavButtonRole(string role)
+    {
+        return role == "nav_crafting" || role == "nav_trader" || role == "nav_inventory" || role == "nav_back" || role == "nav_back_wide";
+    }
+
     bool IsSceneObject(GameObject obj)
     {
         return obj != null && obj.scene.IsValid();
@@ -743,5 +1058,412 @@ public class UIRuntimeStyler : MonoBehaviour
         Image image = visualObject.GetComponent<Image>();
         image.raycastTarget = false;
         return image;
+    }
+
+    Image GetOrCreateSaveRunButtonVisual(Transform parent)
+    {
+        Transform existing = parent.Find("SaveRunButtonVisual");
+        GameObject visualObject;
+
+        if (existing != null)
+        {
+            visualObject = existing.gameObject;
+        }
+        else
+        {
+            visualObject = new GameObject("SaveRunButtonVisual", typeof(RectTransform), typeof(Image));
+            visualObject.transform.SetParent(parent, false);
+            visualObject.transform.SetAsFirstSibling();
+        }
+
+        Image image = visualObject.GetComponent<Image>();
+        image.raycastTarget = false;
+        return image;
+    }
+
+    Image GetOrCreateChildImage(Transform parent, string childName)
+    {
+        Transform existing = parent.Find(childName);
+        GameObject childObject;
+
+        if (existing != null)
+        {
+            childObject = existing.gameObject;
+        }
+        else
+        {
+            childObject = new GameObject(childName, typeof(RectTransform), typeof(Image));
+            childObject.transform.SetParent(parent, false);
+        }
+
+        Image image = childObject.GetComponent<Image>();
+        image.raycastTarget = false;
+        return image;
+    }
+
+    void ConfigureAccentBar(Image image, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 size, Color color)
+    {
+        image.sprite = GetWhitePixelSprite();
+        image.type = Image.Type.Simple;
+        image.preserveAspect = false;
+        image.raycastTarget = false;
+        image.color = color;
+        RectTransform rect = image.rectTransform;
+        rect.anchorMin = anchorMin;
+        rect.anchorMax = anchorMax;
+        rect.pivot = pivot;
+        rect.anchoredPosition = anchoredPosition;
+        rect.sizeDelta = size;
+    }
+
+    static Sprite LoadPlayRocketSprite()
+    {
+        if (cachedPlayRocketSprite != null)
+            return cachedPlayRocketSprite;
+
+        Texture2D texture = Resources.Load<Texture2D>("UI/play_button_launch_tight");
+        if (texture == null)
+            return null;
+
+        cachedPlayRocketSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            100f);
+        cachedPlayRocketSprite.name = "RuntimePlayButtonRocketSprite";
+        cachedPlayRocketSprite.hideFlags = HideFlags.HideAndDontSave;
+
+        return cachedPlayRocketSprite;
+    }
+
+    static Sprite LoadNavIconSprite(string role)
+    {
+        switch (role)
+        {
+            case "nav_crafting":
+                return LoadRuntimeUiSprite("UI/icon_crafting", ref cachedCraftingIconSprite, "RuntimeCraftingIconSprite");
+            case "nav_trader":
+                return LoadRuntimeUiSprite("UI/icon_trader", ref cachedTraderIconSprite, "RuntimeTraderIconSprite");
+            case "nav_inventory":
+                return LoadRuntimeUiSprite("UI/icon_inventory", ref cachedInventoryIconSprite, "RuntimeInventoryIconSprite");
+            default:
+                return null;
+        }
+    }
+
+    static Sprite LoadRuntimeUiSprite(string resourcePath, ref Sprite cache, string spriteName)
+    {
+        if (cache != null)
+            return cache;
+
+        Texture2D texture = Resources.Load<Texture2D>(resourcePath);
+        if (texture == null)
+            return null;
+
+        try
+        {
+            Texture2D maskTexture = new Texture2D(texture.width, texture.height, TextureFormat.RGBA32, false);
+            maskTexture.name = spriteName + "_Texture";
+            maskTexture.hideFlags = HideFlags.HideAndDontSave;
+
+            Color[] sourcePixels = texture.GetPixels();
+            Color[] outputPixels = new Color[sourcePixels.Length];
+            for (int i = 0; i < sourcePixels.Length; i++)
+            {
+                Color source = sourcePixels[i];
+                float luminance = (source.r + source.g + source.b) / 3f;
+                float alpha = source.a * Mathf.Clamp01(1f - luminance);
+                outputPixels[i] = new Color(1f, 1f, 1f, alpha);
+            }
+
+            maskTexture.SetPixels(outputPixels);
+            maskTexture.Apply(false, true);
+
+            cache = Sprite.Create(
+                maskTexture,
+                new Rect(0f, 0f, maskTexture.width, maskTexture.height),
+                new Vector2(0.5f, 0.5f),
+                100f);
+            cache.name = spriteName;
+            cache.hideFlags = HideFlags.HideAndDontSave;
+            return cache;
+        }
+        catch (System.ArgumentException)
+        {
+            Sprite fallback = Resources.Load<Sprite>(resourcePath);
+            if (fallback != null)
+                return fallback;
+
+            return null;
+        }
+    }
+
+    static Sprite GetWhitePixelSprite()
+    {
+        if (whitePixelSprite != null)
+            return whitePixelSprite;
+
+        Texture2D texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+        texture.name = "RuntimeWhitePixel";
+        texture.hideFlags = HideFlags.HideAndDontSave;
+        texture.SetPixel(0, 0, Color.white);
+        texture.Apply(false, true);
+
+        whitePixelSprite = Sprite.Create(texture, new Rect(0f, 0f, 1f, 1f), new Vector2(0.5f, 0.5f), 1f);
+        whitePixelSprite.name = "RuntimeWhitePixelSprite";
+        whitePixelSprite.hideFlags = HideFlags.HideAndDontSave;
+        return whitePixelSprite;
+    }
+
+    static Sprite GetPlayButtonShapeSprite()
+    {
+        if (playButtonShapeSprite != null)
+            return playButtonShapeSprite;
+
+        const int width = 320;
+        const int height = 92;
+        const float bevel = 18f;
+
+        Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        texture.name = "RuntimePlayButtonShape";
+        texture.hideFlags = HideFlags.HideAndDontSave;
+
+        Color[] pixels = new Color[width * height];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                float coverage = GetChamferCoverage(x, y, width, height, bevel);
+                pixels[y * width + x] = new Color(1f, 1f, 1f, coverage);
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply(false, true);
+
+        playButtonShapeSprite = Sprite.Create(texture, new Rect(0f, 0f, width, height), new Vector2(0.5f, 0.5f), 100f);
+        playButtonShapeSprite.name = "RuntimePlayButtonShapeSprite";
+        playButtonShapeSprite.hideFlags = HideFlags.HideAndDontSave;
+        return playButtonShapeSprite;
+    }
+
+    static float GetChamferCoverage(int x, int y, int width, int height, float bevel)
+    {
+        float[] sampleOffsets = { 0.2f, 0.5f, 0.8f };
+        float inside = 0f;
+        float samples = 0f;
+
+        for (int sx = 0; sx < sampleOffsets.Length; sx++)
+        {
+            for (int sy = 0; sy < sampleOffsets.Length; sy++)
+            {
+                samples += 1f;
+                float px = x + sampleOffsets[sx];
+                float py = y + sampleOffsets[sy];
+                if (IsInsideChamferedRect(px, py, width, height, bevel))
+                    inside += 1f;
+            }
+        }
+
+        return inside / samples;
+    }
+
+    static bool IsInsideChamferedRect(float x, float y, float width, float height, float bevel)
+    {
+        float maxX = width - 1f;
+        float maxY = height - 1f;
+
+        if (x < 0f || y < 0f || x > maxX || y > maxY)
+            return false;
+
+        if (x + y < bevel)
+            return false;
+
+        if ((maxX - x) + y < bevel)
+            return false;
+
+        if (x + (maxY - y) < bevel)
+            return false;
+
+        if ((maxX - x) + (maxY - y) < bevel)
+            return false;
+
+        return true;
+    }
+}
+
+class SaveRunButtonVisualController : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler
+{
+    Button button;
+    RectTransform visualRootRect;
+    RectTransform panelRect;
+    RectTransform innerShadeRect;
+    RectTransform leftAccentRect;
+    RectTransform rightAccentRect;
+    RectTransform topAccentRect;
+    RectTransform bottomAccentRect;
+    RectTransform iconRect;
+    RectTransform labelRect;
+    Image panelImage;
+    Image innerShadeImage;
+    Image iconImage;
+    TMP_Text labelText;
+    Color baseColor;
+    Color highlightedColor;
+    Color pressedColor;
+    bool pointerDown;
+    bool pointerInside;
+
+    public void Configure(Button targetButton, RectTransform visualRoot, RectTransform panel, RectTransform innerShade,
+        RectTransform leftAccent, RectTransform rightAccent, RectTransform topAccent, RectTransform bottomAccent,
+        RectTransform icon, RectTransform label, Image panelImageRef, Image innerShadeImageRef, Image iconImageRef,
+        TMP_Text labelTextRef, Color baseTint, Color highlightedTint, Color pressedTint)
+    {
+        button = targetButton;
+        visualRootRect = visualRoot;
+        panelRect = panel;
+        innerShadeRect = innerShade;
+        leftAccentRect = leftAccent;
+        rightAccentRect = rightAccent;
+        topAccentRect = topAccent;
+        bottomAccentRect = bottomAccent;
+        iconRect = icon;
+        labelRect = label;
+        panelImage = panelImageRef;
+        innerShadeImage = innerShadeImageRef;
+        iconImage = iconImageRef;
+        labelText = labelTextRef;
+        baseColor = baseTint;
+        highlightedColor = highlightedTint;
+        pressedColor = pressedTint;
+        ApplyStateImmediate();
+    }
+
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        pointerDown = true;
+        ApplyStateImmediate();
+    }
+
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        pointerDown = false;
+        ApplyStateImmediate();
+    }
+
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        pointerInside = true;
+        ApplyStateImmediate();
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        pointerInside = false;
+        pointerDown = false;
+        ApplyStateImmediate();
+    }
+
+    void OnDisable()
+    {
+        pointerDown = false;
+        pointerInside = false;
+    }
+
+    void LateUpdate()
+    {
+        ApplyStateImmediate();
+    }
+
+    void ApplyStateImmediate()
+    {
+        if (button == null || panelRect == null || visualRootRect == null || panelImage == null)
+            return;
+
+        bool disabled = !button.interactable;
+        bool pressed = !disabled && pointerDown;
+        bool hovered = !disabled && pointerInside;
+
+        if (visualRootRect != null)
+            visualRootRect.localScale = pressed ? new Vector3(0.985f, 0.965f, 1f) : Vector3.one;
+
+        panelRect.anchoredPosition = pressed ? new Vector2(0f, -3.5f) : hovered ? new Vector2(0f, -1f) : Vector2.zero;
+
+        if (innerShadeRect != null)
+            innerShadeRect.anchoredPosition = pressed ? new Vector2(0f, 2f) : Vector2.zero;
+
+        if (iconRect != null)
+            iconRect.anchoredPosition = pressed ? new Vector2(50f, -2f) : hovered ? new Vector2(50f, -0.5f) : new Vector2(50f, 0f);
+
+        if (labelRect != null)
+            labelRect.anchoredPosition = pressed ? new Vector2(0f, -2f) : hovered ? new Vector2(0f, -0.5f) : Vector2.zero;
+
+        panelImage.color = disabled
+            ? button.colors.disabledColor
+            : pressed ? pressedColor : hovered ? highlightedColor : baseColor;
+
+        if (innerShadeImage != null)
+        {
+            innerShadeImage.color = disabled
+                ? new Color(0.02f, 0.03f, 0.05f, 0.4f)
+                : pressed
+                    ? new Color(0.02f, 0.04f, 0.07f, 0.78f)
+                    : hovered
+                        ? new Color(0.04f, 0.08f, 0.12f, 0.66f)
+                        : new Color(0.03f, 0.06f, 0.1f, 0.55f);
+        }
+
+        Color hardAccent = disabled
+            ? new Color(0.34f, 0.37f, 0.4f, 0.32f)
+            : pressed
+                ? new Color(0.56f, 0.9f, 1f, 1f)
+                : hovered
+                    ? new Color(0.45f, 0.86f, 1f, 0.98f)
+                    : new Color(0.35f, 0.82f, 1f, 0.95f);
+        Color softAccent = disabled
+            ? new Color(0.34f, 0.37f, 0.4f, 0.16f)
+            : pressed
+                ? new Color(0.56f, 0.9f, 1f, 0.62f)
+                : hovered
+                    ? new Color(0.45f, 0.86f, 1f, 0.46f)
+                    : new Color(0.35f, 0.82f, 1f, 0.34f);
+
+        ApplyAccentState(leftAccentRect, pressed ? new Vector2(8f, 40f) : hovered ? new Vector2(7f, 37f) : new Vector2(6f, 34f), hardAccent);
+        ApplyAccentState(rightAccentRect, pressed ? new Vector2(8f, 40f) : hovered ? new Vector2(7f, 37f) : new Vector2(6f, 34f), hardAccent);
+        ApplyAccentState(topAccentRect, pressed ? new Vector2(92f, 6f) : hovered ? new Vector2(80f, 5f) : new Vector2(68f, 4f), softAccent);
+        ApplyAccentState(bottomAccentRect, pressed ? new Vector2(76f, 5f) : hovered ? new Vector2(66f, 4f) : new Vector2(56f, 3f), softAccent);
+
+        if (iconImage != null)
+        {
+            iconImage.color = disabled
+                ? new Color(0.55f, 0.58f, 0.62f, 0.75f)
+                : pressed
+                    ? new Color(1f, 1f, 1f, 1f)
+                    : hovered
+                        ? new Color(0.97f, 1f, 1f, 1f)
+                        : new Color(0.94f, 0.98f, 1f, 0.98f);
+        }
+
+        if (labelText != null)
+        {
+            labelText.color = disabled
+                ? new Color(0.62f, 0.66f, 0.71f, 0.82f)
+                : pressed
+                    ? new Color(1f, 1f, 1f, 1f)
+                    : hovered
+                        ? new Color(0.97f, 1f, 1f, 1f)
+                        : Color.white;
+        }
+    }
+
+    static void ApplyAccentState(RectTransform rect, Vector2 size, Color color)
+    {
+        if (rect == null)
+            return;
+
+        rect.sizeDelta = size;
+        Image image = rect.GetComponent<Image>();
+        if (image != null)
+            image.color = color;
     }
 }

@@ -158,6 +158,7 @@ public static class InventoryItemCatalog
     public const string MothershipCoreId = "mothership_core";
     public const string NeutralFighterSalvageId = "neutral_fighter_salvage";
     public const string RadarShipSalvageId = "radar_ship_salvage";
+    public const string RescueShipSalvageId = "rescue_ship_salvage";
     public const string PlasmaGunId = "plasma_gun";
     public const string TripleGunId = "triple_gun";
     public const string ArtilleryGunId = "artillery_gun";
@@ -543,6 +544,20 @@ public static class InventoryItemCatalog
                 IconResourcePath = "radar_ship_wreck_resource",
                 ProjectFileName = "radar_ship_wreck.png",
                 SalvageOutputs = new[] { AsteroidGoldId, AsteroidRareId }
+            },
+            [RescueShipSalvageId] = new InventoryItemDefinition
+            {
+                Id = RescueShipSalvageId,
+                DisplayName = "Rescue Ship Salvage",
+                ShortLabel = "RSC",
+                Description = "Support-platform salvage recovered from a destroyed Rescue Ship.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1400,
+                IconResourcePath = "rescue_ship_wreck_resource",
+                ProjectFileName = "rescue_ship_wreck.png",
+                SalvageOutputs = new[] { AsteroidGoldId, AsteroidGoldId, AsteroidResourceId }
             },
             [PlasmaGunId] = new InventoryItemDefinition
             {

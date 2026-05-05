@@ -47,7 +47,6 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         mapSizeX = mapSize.x;
         mapSizeY = mapSize.y;
 
-        Debug.Log("ObstacleSpawner Start");
         StartCoroutine(InitializeWhenRoundStarts());
     }
 

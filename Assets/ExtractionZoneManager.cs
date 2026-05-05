@@ -14,10 +14,14 @@ public class ExtractionZoneManager : MonoBehaviourPunCallbacks
     const string ExtractionLayoutKey = "extractionLayout";
     const float Margin = 3.5f;
     const float MinZoneDistance = 8f;
+    const float HideSceneZonesRetryInterval = 0.25f;
+    const int HideSceneZonesRetryCount = 8;
 
     static ExtractionZoneManager instance;
 
     bool lastStartedState;
+    float nextSceneZoneHideRetryTime;
+    int sceneZoneHideRetriesRemaining;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -44,12 +48,12 @@ public class ExtractionZoneManager : MonoBehaviourPunCallbacks
 
     void Start()
     {
-        HideSceneZones();
+        ScheduleSceneZoneHide();
     }
 
     void Update()
     {
-        HideSceneZones();
+        RunScheduledSceneZoneHide();
 
         if (!PhotonNetwork.InRoom)
             return;
@@ -97,7 +101,24 @@ public class ExtractionZoneManager : MonoBehaviourPunCallbacks
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        ScheduleSceneZoneHide();
+    }
+
+    void ScheduleSceneZoneHide()
+    {
         HideSceneZones();
+        sceneZoneHideRetriesRemaining = HideSceneZonesRetryCount;
+        nextSceneZoneHideRetryTime = Time.unscaledTime + HideSceneZonesRetryInterval;
+    }
+
+    void RunScheduledSceneZoneHide()
+    {
+        if (sceneZoneHideRetriesRemaining <= 0 || Time.unscaledTime < nextSceneZoneHideRetryTime)
+            return;
+
+        HideSceneZones();
+        sceneZoneHideRetriesRemaining--;
+        nextSceneZoneHideRetryTime = Time.unscaledTime + HideSceneZonesRetryInterval;
     }
 
     void HideSceneZones()
@@ -125,6 +146,8 @@ public class ExtractionZoneManager : MonoBehaviourPunCallbacks
         {
             PhotonNetwork.Instantiate("ExtractionZone", new Vector3(position.x, position.y, 0f), Quaternion.identity);
         }
+
+        GameVisualTheme.RequestRuntimeRefresh();
     }
 
     void DestroyRuntimeZones()

@@ -52,7 +52,6 @@ public class GameManager : MonoBehaviourPunCallbacks
         {
             if (IsRoundStopped())
             {
-                Debug.Log("LOCAL READY AFTER HOST RESTART");
                 NetworkManager networkManager = FindAnyObjectByType<NetworkManager>();
                 if (networkManager != null)
                 {
@@ -65,7 +64,6 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         if (restartInProgress) return;
 
-        Debug.Log("RESTART GAME");
         StartCoroutine(RestartAfterCleanup());
     }
 
@@ -73,7 +71,6 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient) return;
 
-        Debug.Log("GAME ENDED");
         EarlyRoundExitUI.HideAll();
 
         RoundResultsSnapshotData snapshot = RoundResultsTracker.BuildSnapshot(endReason);

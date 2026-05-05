@@ -35,6 +35,8 @@ public class ExtractionZone : MonoBehaviourPun
         cachedMessageObject = FindExtractionMessage();
         if (cachedMessageObject != null)
             cachedMessageObject.SetActive(false);
+
+        GameVisualTheme.RequestRuntimeRefresh();
     }
 
     void LateUpdate()
@@ -157,7 +159,6 @@ public class ExtractionZone : MonoBehaviourPun
             return;
 
         isEvacuating = true;
-        Debug.Log("EVACUATION!");
 
         PlayerHealth[] playersBeforeEvacuation = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         Collider2D[] hits = GetPlayersInsideZone();
@@ -233,7 +234,6 @@ public class ExtractionZone : MonoBehaviourPun
 
         processedPlayers.Add(playerView.ViewID);
 
-        Debug.Log("Evacuating: " + playerView.Owner.NickName);
         int finalScore = RoundResultsTracker.GetKnownScore(playerView.Owner, playerView.gameObject);
         string outcome = playerHealth.IsAstronautControlled ? "evacuated" : "extracted";
         finalScore = RoundResultsTracker.RecordOutcome(playerView.Owner, finalScore, outcome);

@@ -46,6 +46,7 @@ public class Treasure : MonoBehaviourPun
             ? "treasure_" + photonView.ViewID
             : "treasure_" + gameObject.name;
         movingObject.Configure(stableId, MovingSpaceObject.SpaceObjectType.Treasure);
+        GameVisualTheme.RequestRuntimeRefresh();
     }
 
     void InitializeFromPhotonData()
