@@ -67,7 +67,8 @@ public class SpaceObjectMotionSync : MonoBehaviour, IOnEventCallback
 
         object[] payload = { stableId, position.x, position.y, velocity.x, velocity.y, rotation, angularVelocity };
         RaiseEventOptions options = new RaiseEventOptions { Receivers = ReceiverGroup.Others };
-        PhotonNetwork.RaiseEvent(SnapshotEventCode, payload, options, SendOptions.SendUnreliable);
+        if (PhotonNetwork.RaiseEvent(SnapshotEventCode, payload, options, SendOptions.SendUnreliable))
+            PerformanceDiagnosticsOverlay.RecordMotionSnapshotSent();
     }
 
     public static void RequestImpulse(string stableId, Vector2 impulse)

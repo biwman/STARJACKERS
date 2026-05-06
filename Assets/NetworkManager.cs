@@ -32,6 +32,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         public int PlayerCount;
         public int MaxPlayers;
         public double CreatedAt;
+        public string MapName;
         public float? RemainingTimeSeconds;
         public bool CanJoin;
         public bool BlockedByLocalDeath;
@@ -77,7 +78,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RoomSettings.SessionHostNameKey,
         RoomSettings.SessionCreatedAtKey,
         RoomSettings.RoundDurationKey,
-        RoomSettings.StartTimeKey
+        RoomSettings.StartTimeKey,
+        RoomSettings.SelectedMapKey
     };
 
     static NetworkManager instance;
@@ -640,7 +642,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         Hashtable roomProps = BuildInitialRoomProperties();
         RoomOptions options = new RoomOptions
         {
-            MaxPlayers = 4,
+            MaxPlayers = 8,
             IsVisible = true,
             IsOpen = true,
             CleanupCacheOnLeave = false,
@@ -664,6 +666,13 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return;
         }
 
+        if (TryGetJoinBlockReason(roomName, out string blockReason))
+        {
+            PublishBrowserStatus(blockReason);
+            PublishRoomListChanged();
+            return;
+        }
+
         if (PhotonNetwork.InRoom)
         {
             LeaveCurrentRoomToSessionBrowser("Leaving current round...", true);
@@ -682,6 +691,31 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         PublishBrowserStatus("Joining selected round...");
         PhotonNetwork.JoinRoom(roomName);
+    }
+
+    bool TryGetJoinBlockReason(string roomName, out string reason)
+    {
+        reason = string.Empty;
+        if (string.IsNullOrWhiteSpace(roomName) || !roomListCache.TryGetValue(roomName, out RoomInfo info) || info == null)
+            return false;
+
+        string state = GetSessionState(info);
+        float? remainingTime = GetRemainingTime(info, state);
+        if (state == RoomSettings.SessionStateInPlay &&
+            remainingTime.HasValue &&
+            remainingTime.Value < 50f)
+        {
+            reason = "TOO LATE TO JOIN";
+            return true;
+        }
+
+        if (!info.IsOpen || info.RemovedFromList || info.PlayerCount >= info.MaxPlayers)
+        {
+            reason = "This round is full or closed.";
+            return true;
+        }
+
+        return false;
     }
 
     string BuildRoomName()
@@ -718,7 +752,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.RoundEndReasonKey] = string.Empty,
             [RoomSettings.ShootingModelKey] = RoomSettings.DefaultShootingModel,
             [RoomSettings.SuperAttackEnabledKey] = RoomSettings.DefaultSuperAttackEnabled,
-            [RoomSettings.HapticsEnabledKey] = RoomSettings.DefaultHapticsEnabled
+            [RoomSettings.InventoryLossEnabledKey] = RoomSettings.DefaultInventoryLossEnabled,
+            [RoomSettings.EquipmentLossEnabledKey] = RoomSettings.DefaultEquipmentLossEnabled,
+            [RoomSettings.HapticsEnabledKey] = RoomSettings.DefaultHapticsEnabled,
+            [RoomSettings.FpsCounterEnabledKey] = RoomSettings.DefaultFpsCounterEnabled
         };
 
         ApplyRememberedLobbySettings(props);
@@ -850,6 +887,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.BoosterRecoveryDelayKey:
             case RoomSettings.ShipDriftEnabledKey:
             case RoomSettings.LastShipTimerMultiplierKey:
+            case RoomSettings.InventoryLossEnabledKey:
+            case RoomSettings.EquipmentLossEnabledKey:
             case RoomSettings.MovingObjectsEnabledKey:
             case RoomSettings.EnemyBotsEnabledKey:
             case RoomSettings.CorsairEnabledKey:
@@ -861,6 +900,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.ShootingModelKey:
             case RoomSettings.SuperAttackEnabledKey:
             case RoomSettings.HapticsEnabledKey:
+            case RoomSettings.FpsCounterEnabledKey:
                 return true;
             default:
                 return false;
@@ -897,6 +937,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             string roundToken = BuildRoundToken(info);
             string localFinishReason = GetLocalFinishedRoundBlockReason(info.Name, roundToken);
             bool blockedByLocalDeath = !string.IsNullOrWhiteSpace(localFinishReason);
+            float? remainingTime = GetRemainingTime(info, state);
+            bool tooLateToJoin = state == RoomSettings.SessionStateInPlay &&
+                                 remainingTime.HasValue &&
+                                 remainingTime.Value < 50f;
             bool baseCanJoin = info.IsOpen && !info.RemovedFromList && info.PlayerCount < info.MaxPlayers;
             SessionRoomEntry entry = new SessionRoomEntry
             {
@@ -907,10 +951,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                 PlayerCount = info.PlayerCount,
                 MaxPlayers = info.MaxPlayers,
                 CreatedAt = GetCreatedAt(info),
-                RemainingTimeSeconds = GetRemainingTime(info, state),
-                CanJoin = baseCanJoin && !blockedByLocalDeath,
+                MapName = GetMapDisplayName(info),
+                RemainingTimeSeconds = remainingTime,
+                CanJoin = baseCanJoin && !blockedByLocalDeath && !tooLateToJoin,
                 BlockedByLocalDeath = blockedByLocalDeath,
-                BlockReason = localFinishReason
+                BlockReason = tooLateToJoin ? "TOO LATE TO JOIN" : localFinishReason
             };
 
             entries.Add(entry);
@@ -921,6 +966,20 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             .ThenByDescending(entry => entry.CreatedAt)
             .ThenBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    string GetMapDisplayName(RoomInfo info)
+    {
+        string mapId = RoomSettings.DefaultLobbyMapId;
+        if (info.CustomProperties.TryGetValue(RoomSettings.SelectedMapKey, out object value) &&
+            value is string selectedMapId &&
+            !string.IsNullOrWhiteSpace(selectedMapId))
+        {
+            mapId = selectedMapId;
+        }
+
+        LobbyMapDefinition definition = LobbyMapCatalog.Get(mapId);
+        return definition != null ? definition.DisplayName : mapId;
     }
 
     void PublishRoomListChanged()
@@ -1304,7 +1363,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             new Vector2(-spawnX, -spawnY),
             new Vector2(spawnX, spawnY),
             new Vector2(-spawnX, spawnY),
-            new Vector2(spawnX, -spawnY)
+            new Vector2(spawnX, -spawnY),
+            new Vector2(0f, spawnY),
+            new Vector2(0f, -spawnY),
+            new Vector2(-spawnX, 0f),
+            new Vector2(spawnX, 0f)
         };
 
         Player[] playerOrder = PhotonNetwork.PlayerList
@@ -1637,6 +1700,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         QueueDestroyFromComponents<NebulaField>(queued);
         QueueDestroyFromComponents<TreasureSpawner>(queued);
         QueueDestroyFromComponents<NebulaSpawner>(queued);
+        QueueDestroyFromComponents<RepairBay>(queued);
+        QueueDestroyFromComponents<RepairBaySpawner>(queued);
         QueueDestroyFromComponents<EnemyBotManager>(queued);
         QueueDestroyFromComponents<DroppedCargoManager>(queued);
 

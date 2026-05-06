@@ -368,6 +368,28 @@ public class PlayerProfileService : MonoBehaviour
         await SaveInventoryOnlyAsync();
     }
 
+    public async Task ApplyShipLossAsync(int shipSkinIndex, bool loseShipInventory, bool loseEquipment)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        bool changed = false;
+        if (loseShipInventory)
+        {
+            CurrentProfile.Inventory.SetShipSlots(BuildPostLossShipInventory(CurrentProfile.Inventory.ShipSlots, shipSkinIndex));
+            changed = true;
+        }
+
+        if (loseEquipment)
+        {
+            CurrentProfile.Inventory.EquipmentSlots = new string[PlayerInventoryData.EquipmentSlotCount];
+            changed = true;
+        }
+
+        if (changed)
+            await SaveInventoryOnlyAsync();
+    }
+
     public async Task<bool> MoveShipItemWithinShipAsync(int sourceIndex, int targetIndex)
     {
         await EnsureInitializedAsync();

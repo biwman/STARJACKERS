@@ -138,7 +138,12 @@ public class GameTimer : MonoBehaviourPun
                     if (!p.IsAstronautControlled)
                     {
                         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(pv.Owner, 0);
-                        pv.RPC(nameof(PlayerHealth.ClearLocalShipInventoryForWreck), pv.Owner, shipSkinIndex);
+                        pv.RPC(
+                            nameof(PlayerHealth.ApplyLocalShipLossForWreck),
+                            pv.Owner,
+                            shipSkinIndex,
+                            RoomSettings.IsInventoryLossEnabled(),
+                            RoomSettings.IsEquipmentLossEnabled());
                     }
 
                     int currentScore = RoundResultsTracker.GetKnownScore(pv.Owner, p.gameObject);

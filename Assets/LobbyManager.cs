@@ -144,6 +144,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text boosterDelaySettingText;
     public TMP_Text shipDriftSettingText;
     public TMP_Text deathTimerSettingText;
+    public TMP_Text inventoryLossSettingText;
+    public TMP_Text equipmentLossSettingText;
     public TMP_Text movingObjectsSettingText;
     public TMP_Text enemyBotsSettingText;
     public TMP_Text corsairSettingText;
@@ -157,6 +159,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text superAttackSettingText;
     public TMP_Text advancedShootingJoystickSettingText;
     public TMP_Text hapticsSettingText;
+    public TMP_Text fpsCounterSettingText;
     public TMP_Text gunSetupSettingText;
     public Button roundSettingButton;
     public Button mapSizeSettingButton;
@@ -181,6 +184,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button boosterDelaySettingButton;
     public Button shipDriftSettingButton;
     public Button deathTimerSettingButton;
+    public Button inventoryLossSettingButton;
+    public Button equipmentLossSettingButton;
     public Button movingObjectsSettingButton;
     public Button bulletPushSettingButton;
     public Button obstacleWeightSettingButton;
@@ -190,6 +195,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button superAttackSettingButton;
     public Button advancedShootingJoystickSettingButton;
     public Button hapticsSettingButton;
+    public Button fpsCounterSettingButton;
     public Button gunSetupSettingButton;
     public Button backToRoundsButton;
     public TMP_Text backToRoundsText;
@@ -1874,10 +1880,13 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         HideDeprecatedSettingButton("MaxInputBoostSettingButton", "MaxInputBoostSettingText");
         shipDriftSettingButton = EnsureSettingButton(ref shipDriftSettingText, shipDriftSettingButton, "ShipDriftSettingButton", "ShipDriftSettingText", Vector2.zero, CycleShipDriftEnabled);
         deathTimerSettingButton = EnsureSettingButton(ref deathTimerSettingText, deathTimerSettingButton, "DeathTimerSettingButton", "DeathTimerSettingText", Vector2.zero, CycleLastShipTimerMultiplier);
+        inventoryLossSettingButton = EnsureSettingButton(ref inventoryLossSettingText, inventoryLossSettingButton, "InventoryLossSettingButton", "InventoryLossSettingText", Vector2.zero, CycleInventoryLossEnabled);
+        equipmentLossSettingButton = EnsureSettingButton(ref equipmentLossSettingText, equipmentLossSettingButton, "EquipmentLossSettingButton", "EquipmentLossSettingText", Vector2.zero, CycleEquipmentLossEnabled);
         shootingModelSettingButton = EnsureSettingButton(ref shootingModelSettingText, shootingModelSettingButton, "ShootingModelSettingButton", "ShootingModelSettingText", Vector2.zero, CycleShootingModel);
         superAttackSettingButton = EnsureSettingButton(ref superAttackSettingText, superAttackSettingButton, "SuperAttackSettingButton", "SuperAttackSettingText", Vector2.zero, CycleSuperAttackEnabled);
         advancedShootingJoystickSettingButton = EnsureSettingButton(ref advancedShootingJoystickSettingText, advancedShootingJoystickSettingButton, "AdvancedShootingJoystickSettingButton", "AdvancedShootingJoystickSettingText", Vector2.zero, CycleAdvancedShootingJoystickEnabled);
         hapticsSettingButton = EnsureSettingButton(ref hapticsSettingText, hapticsSettingButton, "HapticsSettingButton", "HapticsSettingText", Vector2.zero, CycleHapticsEnabled);
+        fpsCounterSettingButton = EnsureSettingButton(ref fpsCounterSettingText, fpsCounterSettingButton, "FpsCounterSettingButton", "FpsCounterSettingText", Vector2.zero, CycleFpsCounterEnabled);
         gunSetupSettingButton = EnsureSettingButton(ref gunSetupSettingText, gunSetupSettingButton, "GunSetupSettingButton", "GunSetupSettingText", Vector2.zero, OpenGunSetup);
         movingObjectsSettingButton = EnsureSettingButton(ref movingObjectsSettingText, movingObjectsSettingButton, "MovingObjectsSettingButton", "MovingObjectsSettingText", Vector2.zero, CycleMovingObjectsEnabled);
         bulletPushSettingButton = EnsureSettingButton(ref bulletPushSettingText, bulletPushSettingButton, "BulletPushSettingButton", "BulletPushSettingText", Vector2.zero, CycleBulletPushMultiplier);
@@ -1888,6 +1897,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(roundSettingButton, "ROUND RULES");
         AttachLeftSectionButton(mapSizeSettingButton, "ROUND RULES");
         AttachLeftSectionButton(deathTimerSettingButton, "ROUND RULES");
+        AttachLeftSectionButton(inventoryLossSettingButton, "ROUND RULES");
+        AttachLeftSectionButton(equipmentLossSettingButton, "ROUND RULES");
 
         AttachLeftSectionButton(obstacleSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(obstacleDestroySettingButton, "ENVIRONMENT");
@@ -1920,6 +1931,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(superAttackSettingButton, "FEELING");
         AttachLeftSectionButton(advancedShootingJoystickSettingButton, "FEELING");
         AttachLeftSectionButton(hapticsSettingButton, "FEELING");
+
+        AttachLeftSectionButton(fpsCounterSettingButton, "DIAGNOSTICS");
 
         LayoutLeftSectionButtons();
         EnsureEnemySettingsUiExists();
@@ -2493,6 +2506,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         EnsureLeftSectionContainer("ENVIRONMENT");
         EnsureLeftSectionContainer("COSMETICS");
         EnsureLeftSectionContainer("FEELING");
+        EnsureLeftSectionContainer("DIAGNOSTICS");
     }
 
     void ApplyLeftSettingsViewportLayout()
@@ -2944,6 +2958,18 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.InventoryLossEnabledKey))
+        {
+            props[RoomSettings.InventoryLossEnabledKey] = RoomSettings.DefaultInventoryLossEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.EquipmentLossEnabledKey))
+        {
+            props[RoomSettings.EquipmentLossEnabledKey] = RoomSettings.DefaultEquipmentLossEnabled;
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.MovingObjectsEnabledKey))
         {
             props[RoomSettings.MovingObjectsEnabledKey] = RoomSettings.DefaultMovingObjectsMode;
@@ -3077,6 +3103,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.HapticsEnabledKey))
         {
             props[RoomSettings.HapticsEnabledKey] = RoomSettings.DefaultHapticsEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.FpsCounterEnabledKey))
+        {
+            props[RoomSettings.FpsCounterEnabledKey] = RoomSettings.DefaultFpsCounterEnabled;
             changed = true;
         }
 
@@ -3391,6 +3423,28 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         CycleFloatSetting(RoomSettings.LastShipTimerMultiplierKey, LastShipTimerMultiplierOptions, GetLastShipTimerMultiplier(), RoomSettings.DefaultLastShipTimerMultiplier);
     }
 
+    void CycleInventoryLossEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.InventoryLossEnabledKey] = !RoomSettings.IsInventoryLossEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
+    void CycleEquipmentLossEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.EquipmentLossEnabledKey] = !RoomSettings.IsEquipmentLossEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
     void CycleMovingObjectsEnabled()
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
@@ -3631,6 +3685,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RefreshHostSettingsUi();
     }
 
+    void CycleFpsCounterEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.FpsCounterEnabledKey] = !RoomSettings.IsFpsCounterEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
     void CycleIntSetting(string key, int[] options, int current, int fallbackIndexValue)
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
@@ -3836,6 +3901,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (deathTimerSettingText != null)
             deathTimerSettingText.text = "LONE SHIP TIMER: " + FormatLastShipTimerMultiplier(GetLastShipTimerMultiplier());
 
+        if (inventoryLossSettingText != null)
+            inventoryLossSettingText.text = "INVENTORY LOSS: " + (RoomSettings.IsInventoryLossEnabled() ? "YES" : "NO");
+
+        if (equipmentLossSettingText != null)
+            equipmentLossSettingText.text = "EQUIPMENT LOSS: " + (RoomSettings.IsEquipmentLossEnabled() ? "YES" : "NO");
+
         if (movingObjectsSettingText != null)
             movingObjectsSettingText.text = "MOVING OBJECTS: " + FormatMovingObjectsMode(GetMovingObjectsMode());
 
@@ -3856,6 +3927,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (hapticsSettingText != null)
             hapticsSettingText.text = "HAPTICS: " + (RoomSettings.AreHapticsEnabled() ? "ON" : "OFF");
+
+        if (fpsCounterSettingText != null)
+            fpsCounterSettingText.text = "FPS COUNTER: " + (RoomSettings.IsFpsCounterEnabled() ? "YES" : "NO");
 
         if (gunSetupSettingText != null)
             gunSetupSettingText.text = "GUN SETUP";
@@ -3889,6 +3963,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(boosterDelaySettingButton, isHost);
         SetSettingButtonState(shipDriftSettingButton, isHost);
         SetSettingButtonState(deathTimerSettingButton, isHost);
+        SetSettingButtonState(inventoryLossSettingButton, isHost);
+        SetSettingButtonState(equipmentLossSettingButton, isHost);
         SetSettingButtonState(movingObjectsSettingButton, isHost);
         SetSettingButtonState(bulletPushSettingButton, isHost);
         SetSettingButtonState(batteringSettingButton, isHost);
@@ -3896,6 +3972,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(superAttackSettingButton, isHost);
         SetSettingButtonState(advancedShootingJoystickSettingButton, isHost);
         SetSettingButtonState(hapticsSettingButton, isHost);
+        SetSettingButtonState(fpsCounterSettingButton, isHost);
         SetSettingButtonState(gunSetupSettingButton, isHost);
         if (developerGunSetupButton != null)
             developerGunSetupButton.interactable = isHost;
@@ -4188,6 +4265,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.BoosterRecoveryDelayKey) ||
                changedProps.ContainsKey(RoomSettings.ShipDriftEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.LastShipTimerMultiplierKey) ||
+               changedProps.ContainsKey(RoomSettings.InventoryLossEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.EquipmentLossEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.MovingObjectsEnabledKey) ||
                ContainsEnemyRoomSettingChange(changedProps) ||
                changedProps.ContainsKey(RoomSettings.BulletPushMultiplierKey) ||
@@ -4196,6 +4275,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.SuperAttackEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.AdvancedShootingJoystickEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.HapticsEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.FpsCounterEnabledKey) ||
                ContainsGunSetupRoomSettingChange(changedProps) ||
                changedProps.ContainsKey(RoomSettings.ObstacleWeightFactorKey) ||
                changedProps.ContainsKey(RoomSettings.TreasureWeightFactorKey);

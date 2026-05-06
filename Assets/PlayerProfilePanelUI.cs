@@ -90,6 +90,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
     readonly Dictionary<string, GameObject> gameplayHudObjectsByName = new Dictionary<string, GameObject>();
 
     GameObject panelObject;
+    Transform cachedCanvasTransform;
+    bool profilePanelVisibilityInitialized;
+    bool profilePanelVisible;
+    bool profileDuplicatePanelsChecked;
     TMP_InputField nicknameInput;
     TMP_Text accountText;
     TMP_Text statusText;
@@ -267,8 +271,13 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        cachedCanvasTransform = null;
+        profileDuplicatePanelsChecked = false;
+        profilePanelVisibilityInitialized = false;
+        gameplayHudObjectsByName.Clear();
         EnsurePanel();
         RefreshView();
+        RefreshVisibility();
     }
 
     void OnProfileChanged(PlayerProfileData profile)
@@ -284,7 +293,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
     void Update()
     {
         EnsurePanel();
-        RefreshVisibility();
+        if (!RefreshVisibility())
+            return;
+
         ApplyProfileScreenLayout();
         UpdateSkinButtonVisuals();
         ApplySaveAndRunButtonStyle();
@@ -295,22 +306,37 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void EnsurePanel()
     {
-        GameObject canvasObject = GameObject.Find("Canvas");
-        if (canvasObject == null)
+        Transform canvasTransform = GetCanvasTransform();
+        if (canvasTransform == null)
             return;
 
-        DestroyDuplicateProfilePanels(canvasObject.transform);
+        if (!profileDuplicatePanelsChecked)
+        {
+            DestroyDuplicateProfilePanels(canvasTransform);
+            profileDuplicatePanelsChecked = true;
+        }
 
         if (panelObject != null && panelObject.scene.IsValid())
         {
-            if (panelObject.transform.parent != canvasObject.transform)
-                panelObject.transform.SetParent(canvasObject.transform, false);
+            if (panelObject.transform.parent != canvasTransform)
+                panelObject.transform.SetParent(canvasTransform, false);
 
             return;
         }
 
-        CreatePanel(canvasObject.transform);
+        CreatePanel(canvasTransform);
         RefreshView();
+    }
+
+    Transform GetCanvasTransform()
+    {
+        if (cachedCanvasTransform != null && cachedCanvasTransform.gameObject.scene.IsValid())
+            return cachedCanvasTransform;
+
+        GameObject canvasObject = GameObject.Find("Canvas");
+        cachedCanvasTransform = canvasObject != null ? canvasObject.transform : null;
+        profileDuplicatePanelsChecked = false;
+        return cachedCanvasTransform;
     }
 
     void DestroyDuplicateProfilePanels(Transform canvasTransform)
@@ -2044,7 +2070,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         rowImage.color = new Color(0.12f, 0.16f, 0.21f, 0.98f);
 
         Button resultButton = CreateButton(rowObject.transform, "RecipeResultButton", string.Empty, new Vector2(-228f, -10f), new Vector2(174f, 174f), () => OnCraftingRecipeSelected(recipe.Id));
-        resultButton.interactable = craftable && !inventoryActionInProgress;
+        resultButton.interactable = !inventoryActionInProgress;
 
         Image resultButtonImage = resultButton.GetComponent<Image>();
         if (resultButtonImage != null)
@@ -2263,6 +2289,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (profile == null)
             return;
 
+        ShowItemPreview(ProfileItemSource.None, -1, recipe.OutputItemId);
+
         PlayerInventoryData workingInventory = profile.Inventory != null ? profile.Inventory.Clone() : PlayerInventoryData.Default();
         if (!TryPrepareCraftingRecipe(workingInventory, recipe, out string failureMessage))
         {
@@ -2277,7 +2305,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         {
             await PlayerProfileService.Instance.SaveInventorySnapshotAsync(workingInventory);
             HideCraftingRecipeBrowser();
-            HideItemPreview();
+            ShowItemPreview(ProfileItemSource.None, -1, recipe.OutputItemId);
             RefreshView();
             SetStatus("Crafting slots prepared for " + InventoryItemCatalog.GetDisplayName(recipe.OutputItemId) + ".");
         }
@@ -5087,10 +5115,40 @@ public class PlayerProfilePanelUI : MonoBehaviour
     }
 #endif
 
-    void RefreshVisibility()
+    bool RefreshVisibility()
     {
         if (panelObject == null)
-            return;
+            return false;
+
+        bool show = !PhotonNetwork.InRoom;
+        bool changed = !profilePanelVisibilityInitialized || profilePanelVisible != show;
+        profilePanelVisibilityInitialized = true;
+        profilePanelVisible = show;
+
+        if (!show)
+        {
+            if (panelObject.activeSelf)
+                panelObject.SetActive(false);
+
+            if (changed)
+            {
+                SetGameplayHudVisible(true);
+                if (splashScreenObject != null)
+                    splashScreenObject.SetActive(false);
+                HideShipImageModal();
+                HideCraftingRecipeBrowser();
+                HideShopBrowser();
+                HideCheatBrowser();
+            }
+
+            return false;
+        }
+
+        if (!panelObject.activeSelf)
+            panelObject.SetActive(true);
+
+        if (changed)
+            SetGameplayHudVisible(false);
 
         bool splashShowing = splashScreenObject != null && splashHideTime > 0f && Time.unscaledTime < splashHideTime;
         if (splashScreenObject != null)
@@ -5100,29 +5158,16 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 splashScreenObject.transform.SetAsLastSibling();
         }
 
-        bool show = !PhotonNetwork.InRoom;
-        panelObject.SetActive(show);
-        SetGameplayHudVisible(!show);
-
-        if (!show)
+        bool browserVisible = SessionBrowserPanelUI.IsVisible;
+        SetInteractable(!NetworkManager.SessionRequested || !browserVisible);
+        if (statusText != null &&
+            (statusText.text == "Connecting..." || statusText.text == "Loading active rounds...") &&
+            !NetworkManager.SessionRequested)
         {
-            HideShipImageModal();
-            HideCraftingRecipeBrowser();
-            HideShopBrowser();
-            HideCheatBrowser();
+            statusText.text = string.Empty;
         }
 
-        if (show)
-        {
-            bool browserVisible = SessionBrowserPanelUI.IsVisible;
-            SetInteractable(!NetworkManager.SessionRequested || !browserVisible);
-            if (statusText != null &&
-                (statusText.text == "Connecting..." || statusText.text == "Loading active rounds...") &&
-                !NetworkManager.SessionRequested)
-            {
-                statusText.text = string.Empty;
-            }
-        }
+        return true;
     }
 
     void SetStatus(string value)
@@ -5413,6 +5458,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
         else
         {
+            if (currentScreen == ProfileScreen.Home && ShipCatalog.IsEquipmentSlotEnabled(slotIndex, selectedSkin))
+            {
+                HideItemPreview();
+                SetStatus(string.Empty);
+                SwitchToScreen(ProfileScreen.Inventory);
+                return;
+            }
+
             HideItemPreview();
             SetStatus(string.Empty);
         }
@@ -6658,10 +6711,13 @@ public class SessionBrowserPanelUI : MonoBehaviour
     static bool visibleRequested;
 
     GameObject panelObject;
+    Transform cachedCanvasTransform;
     TMP_Text statusText;
     TMP_Text emptyStateText;
     ScrollRect roomListScrollRect;
     RectTransform roomListContentRect;
+    bool browserPanelVisibilityInitialized;
+    bool browserPanelVisible;
     readonly List<GameObject> rowObjects = new List<GameObject>();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -6725,12 +6781,15 @@ public class SessionBrowserPanelUI : MonoBehaviour
 
     void Update()
     {
-        EnsurePanel();
+        if (panelObject == null || !panelObject.scene.IsValid())
+            EnsurePanel();
         RefreshVisibility();
     }
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        cachedCanvasTransform = null;
+        browserPanelVisibilityInitialized = false;
         EnsurePanel();
         RefreshVisibility();
         if (IsVisible)
@@ -6754,21 +6813,31 @@ public class SessionBrowserPanelUI : MonoBehaviour
 
     void EnsurePanel()
     {
-        GameObject canvasObject = GameObject.Find("Canvas");
-        if (canvasObject == null)
+        Transform canvasTransform = GetCanvasTransform();
+        if (canvasTransform == null)
             return;
 
         if (panelObject != null && panelObject.scene.IsValid())
         {
-            if (panelObject.transform.parent != canvasObject.transform)
-                panelObject.transform.SetParent(canvasObject.transform, false);
+            if (panelObject.transform.parent != canvasTransform)
+                panelObject.transform.SetParent(canvasTransform, false);
 
             return;
         }
 
-        CreatePanel(canvasObject.transform);
+        CreatePanel(canvasTransform);
         RefreshStatus();
         RebuildRoomList(NetworkManager.GetSessionRooms());
+    }
+
+    Transform GetCanvasTransform()
+    {
+        if (cachedCanvasTransform != null && cachedCanvasTransform.gameObject.scene.IsValid())
+            return cachedCanvasTransform;
+
+        GameObject canvasObject = GameObject.Find("Canvas");
+        cachedCanvasTransform = canvasObject != null ? canvasObject.transform : null;
+        return cachedCanvasTransform;
     }
 
     void CreatePanel(Transform parent)
@@ -6854,9 +6923,15 @@ public class SessionBrowserPanelUI : MonoBehaviour
             return;
 
         bool shouldShow = visibleRequested && !PhotonNetwork.InRoom;
-        panelObject.SetActive(shouldShow);
+        bool changed = !browserPanelVisibilityInitialized || browserPanelVisible != shouldShow;
+        browserPanelVisibilityInitialized = true;
+        browserPanelVisible = shouldShow;
+
+        if (panelObject.activeSelf != shouldShow)
+            panelObject.SetActive(shouldShow);
+
         CanvasGroup canvasGroup = panelObject.GetComponent<CanvasGroup>();
-        if (canvasGroup != null)
+        if (changed && canvasGroup != null)
         {
             canvasGroup.alpha = shouldShow ? 1f : 0f;
             canvasGroup.interactable = shouldShow;
@@ -6970,7 +7045,7 @@ public class SessionBrowserPanelUI : MonoBehaviour
 
     string BuildMetaLine(NetworkManager.SessionRoomEntry room)
     {
-        string meta = "Host: " + room.HostName + "    Players: " + room.PlayerCount + "/" + room.MaxPlayers;
+        string meta = "Host: " + room.HostName + "    Map: " + room.MapName + "    Players: " + room.PlayerCount + "/" + room.MaxPlayers;
         if (room.RemainingTimeSeconds.HasValue)
         {
             meta += "    Remaining: " + FormatDuration(room.RemainingTimeSeconds.Value);
@@ -6978,13 +7053,15 @@ public class SessionBrowserPanelUI : MonoBehaviour
 
         if (room.BlockedByLocalDeath)
             meta += "    You cannot rejoin this round.";
+        else if (!room.CanJoin && !string.IsNullOrWhiteSpace(room.BlockReason))
+            meta += "    " + room.BlockReason;
 
         return meta;
     }
 
     string BuildStateLabel(NetworkManager.SessionRoomEntry room)
     {
-        if (room.BlockedByLocalDeath)
+        if (room.BlockedByLocalDeath || (!room.CanJoin && !string.IsNullOrWhiteSpace(room.BlockReason)))
             return string.IsNullOrWhiteSpace(room.BlockReason) ? "ENDED" : room.BlockReason;
 
         if (room.State == RoomSettings.SessionStateInPlay)
@@ -6997,6 +7074,9 @@ public class SessionBrowserPanelUI : MonoBehaviour
     {
         if (room.BlockedByLocalDeath)
             return "ENDED";
+
+        if (!room.CanJoin && !string.IsNullOrWhiteSpace(room.BlockReason))
+            return "LOCKED";
 
         return room.CanJoin ? "JOIN" : "FULL";
     }

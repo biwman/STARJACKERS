@@ -30,6 +30,19 @@ public sealed class RepairBay : MonoBehaviour
         return bay;
     }
 
+    public static void ClearAllRuntimeBays()
+    {
+        List<RepairBay> bays = new List<RepairBay>(BaysById.Values);
+        BaysById.Clear();
+
+        for (int i = 0; i < bays.Count; i++)
+        {
+            RepairBay bay = bays[i];
+            if (bay != null && bay.gameObject != null && bay.gameObject.scene.IsValid())
+                Destroy(bay.gameObject);
+        }
+    }
+
     public static RepairBay FindClosestUsable(Vector2 position)
     {
         RepairBay best = null;

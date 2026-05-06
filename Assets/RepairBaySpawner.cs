@@ -41,6 +41,12 @@ public sealed class RepairBaySpawner : MonoBehaviourPunCallbacks
         instance = this;
     }
 
+    void OnDestroy()
+    {
+        if (instance == this)
+            instance = null;
+    }
+
     void Start()
     {
         StartCoroutine(InitializeWhenRoundStarts());
@@ -170,6 +176,7 @@ public sealed class RepairBaySpawner : MonoBehaviourPunCallbacks
             return;
 
         layoutApplied = true;
+        RepairBay.ClearAllRuntimeBays();
         if (string.Equals(layout, EmptyLayoutSentinel, System.StringComparison.Ordinal))
             return;
 

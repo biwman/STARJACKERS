@@ -9,6 +9,8 @@ public class PlayerMovement : MonoBehaviourPun
     public static bool gameStarted = false;
 
     private Rigidbody2D rb;
+    bool networkBodyAuthorityApplied;
+    bool lastNetworkBodyAuthority;
     public float speed = 5f;
     public float depletedSpeedMultiplier = 0.7f;
     public float boosterDuration = 5f;
@@ -99,6 +101,7 @@ public class PlayerMovement : MonoBehaviourPun
             rb.constraints = RigidbodyConstraints2D.FreezeRotation;
             rb.angularVelocity = 0f;
         }
+        ConfigureNetworkRigidbodyAuthority();
 
         ApplyPlayerCollisionMaterial();
 
@@ -157,6 +160,7 @@ public class PlayerMovement : MonoBehaviourPun
     void Update()
     {
         EnsureBotBootstrap();
+        ConfigureNetworkRigidbodyAuthority();
 
         if (GetComponent<EnemyBot>() != null)
         {
@@ -1276,6 +1280,27 @@ public class PlayerMovement : MonoBehaviourPun
                 currentCollider.sharedMaterial = playerCollisionMaterial;
             }
         }
+    }
+
+    void ConfigureNetworkRigidbodyAuthority()
+    {
+        if (rb == null || photonView == null || !PhotonNetwork.InRoom)
+            return;
+
+        bool hasAuthority = photonView.IsMine;
+        if (networkBodyAuthorityApplied && lastNetworkBodyAuthority == hasAuthority)
+            return;
+
+        networkBodyAuthorityApplied = true;
+        lastNetworkBodyAuthority = hasAuthority;
+
+        rb.bodyType = hasAuthority ? RigidbodyType2D.Dynamic : RigidbodyType2D.Kinematic;
+        rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+        rb.constraints = RigidbodyConstraints2D.FreezeRotation;
+        rb.angularVelocity = 0f;
+
+        if (!hasAuthority)
+            rb.linearVelocity = Vector2.zero;
     }
 }
 

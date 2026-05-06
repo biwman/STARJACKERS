@@ -471,10 +471,15 @@ public class PlayerHealth : MonoBehaviourPun
 
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView.Owner, 0);
         string[] currentShipSlots = PlayerProfileService.GetPlayerShipInventorySlots(photonView.Owner);
-        string wreckLoot = PlayerProfileService.SerializeShipInventorySlots(PlayerProfileService.BuildLossWreckLoot(currentShipSlots, shipSkinIndex));
+        bool inventoryLossEnabled = RoomSettings.IsInventoryLossEnabled();
+        bool equipmentLossEnabled = RoomSettings.IsEquipmentLossEnabled();
+        string[] wreckLootSlots = inventoryLossEnabled
+            ? PlayerProfileService.BuildLossWreckLoot(currentShipSlots, shipSkinIndex)
+            : new string[PlayerInventoryData.ShipSlotCount];
+        string wreckLoot = PlayerProfileService.SerializeShipInventorySlots(wreckLootSlots);
         Vector3 astronautSpawnPosition = FindSafeAstronautSpawnPosition();
         RoundXpTracker.RecordPlayerShipDestroyed(photonView.Owner);
-        photonView.RPC(nameof(ClearLocalShipInventoryForWreck), photonView.Owner, shipSkinIndex);
+        photonView.RPC(nameof(ApplyLocalShipLossForWreck), photonView.Owner, shipSkinIndex, inventoryLossEnabled, equipmentLossEnabled);
         photonView.RPC(nameof(SpawnAstronautAfterDestruction), photonView.Owner, astronautSpawnPosition.x, astronautSpawnPosition.y, transform.eulerAngles.z);
         photonView.RPC(nameof(BecomeWreck), RpcTarget.All, wreckLoot, shipSkinIndex);
     }
@@ -681,24 +686,24 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
-    public async void ClearLocalShipInventoryForWreck(int shipSkinIndex)
+    public void ClearLocalShipInventoryForWreck(int shipSkinIndex)
+    {
+        ApplyLocalShipLossForWreck(shipSkinIndex, true, false);
+    }
+
+    [PunRPC]
+    public async void ApplyLocalShipLossForWreck(int shipSkinIndex, bool loseShipInventory, bool loseEquipment)
     {
         if (!photonView.IsMine)
             return;
 
         try
         {
-            string[] currentShipSlots = PlayerProfileService.Instance.CurrentProfile != null &&
-                                        PlayerProfileService.Instance.CurrentProfile.Inventory != null
-                ? PlayerProfileService.Instance.CurrentProfile.Inventory.ShipSlots
-                : null;
-
-            string[] postLossInventory = PlayerProfileService.BuildPostLossShipInventory(currentShipSlots, shipSkinIndex);
-            await PlayerProfileService.Instance.ReplaceShipInventoryAsync(postLossInventory);
+            await PlayerProfileService.Instance.ApplyShipLossAsync(shipSkinIndex, loseShipInventory, loseEquipment);
         }
         catch (System.Exception ex)
         {
-            Debug.LogError("Failed to clear ship inventory for wreck: " + ex);
+            Debug.LogError("Failed to apply local ship loss: " + ex);
         }
     }
 

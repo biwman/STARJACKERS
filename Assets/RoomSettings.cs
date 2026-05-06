@@ -29,6 +29,8 @@ public static class RoomSettings
     public const string KillRewardPercentKey = "killRewardPercent";
     public const string DeathRetainPercentKey = "deathRetainPercent";
     public const string TimeUpRetainPercentKey = "timeUpRetainPercent";
+    public const string InventoryLossEnabledKey = "inventoryLossEnabled";
+    public const string EquipmentLossEnabledKey = "equipmentLossEnabled";
     public const string MapSizeKey = "mapSize";
     public const string MapBackgroundKey = "mapBackground";
     public const string SelectedMapKey = "selectedMap";
@@ -37,6 +39,7 @@ public static class RoomSettings
     public const string EndDisasterModeKey = "endDisasterMode";
     public const string EndDisasterWarningSecondsKey = "endDisasterWarningSeconds";
     public const string HapticsEnabledKey = "hapticsEnabled";
+    public const string FpsCounterEnabledKey = "fpsCounterEnabled";
     public const string MovingObjectsEnabledKey = "movingObjectsEnabled";
     public const string EnemyBotsEnabledKey = "enemyBotsEnabled";
     public const string CorsairEnabledKey = "corsairEnabled";
@@ -76,12 +79,15 @@ public static class RoomSettings
     public const int DefaultKillRewardPercent = 50;
     public const int DefaultDeathRetainPercent = 25;
     public const int DefaultTimeUpRetainPercent = 25;
+    public const bool DefaultInventoryLossEnabled = true;
+    public const bool DefaultEquipmentLossEnabled = false;
     public const string DefaultMapSize = "medium";
     public const int DefaultMapBackground = 5;
     public const string DefaultLobbyMapId = "just_space";
     public const bool DefaultVisualEffectsEnabled = true;
     public const bool DefaultStartingVfxEnabled = true;
     public const bool DefaultHapticsEnabled = true;
+    public const bool DefaultFpsCounterEnabled = false;
     public const string EndDisasterOff = "off";
     public const string EndDisasterMeteor = "meteor";
     public const string DefaultEndDisasterMode = EndDisasterMeteor;
@@ -280,6 +286,30 @@ public static class RoomSettings
         return GetInt(TimeUpRetainPercentKey, DefaultTimeUpRetainPercent, 0, 100);
     }
 
+    public static bool IsInventoryLossEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(InventoryLossEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultInventoryLossEnabled;
+    }
+
+    public static bool IsEquipmentLossEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(EquipmentLossEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultEquipmentLossEnabled;
+    }
+
     public static string GetMapSizeMode()
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -352,6 +382,18 @@ public static class RoomSettings
         }
 
         return DefaultHapticsEnabled;
+    }
+
+    public static bool IsFpsCounterEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(FpsCounterEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultFpsCounterEnabled;
     }
 
     public static string GetEndDisasterMode()

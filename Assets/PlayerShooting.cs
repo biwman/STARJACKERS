@@ -110,6 +110,8 @@ public class PlayerShooting : MonoBehaviourPun
     float complexSuperPressStartedAt;
     float complexShootMaxDragMagnitude;
     float complexSuperMaxDragMagnitude;
+    bool complexShootCanceledByCenteredAim;
+    bool complexSuperCanceledByCenteredAim;
     Vector2 complexLastAimDirection = Vector2.up;
     Vector2 complexLastSuperAimDirection = Vector2.up;
     Vector2 complexLastAimTargetPoint;
@@ -361,14 +363,17 @@ public class PlayerShooting : MonoBehaviourPun
                 complexShootWasPressed = true;
                 complexShootPressStartedAt = Time.time;
                 complexShootMaxDragMagnitude = 0f;
+                complexShootCanceledByCenteredAim = false;
                 complexLastAimDirection = transform.up;
                 complexLastAimTargetPoint = (Vector2)transform.position + ((Vector2)transform.up * GetComplexRangeWorld(profile));
             }
 
             Vector2 raw = GetCurrentShootRawInput();
+            float markerThreshold = GetManualShootMarkerThreshold();
             complexShootMaxDragMagnitude = Mathf.Max(complexShootMaxDragMagnitude, raw.magnitude);
-            if (raw.magnitude >= GetManualShootMarkerThreshold())
+            if (raw.magnitude >= markerThreshold)
             {
+                complexShootCanceledByCenteredAim = false;
                 complexLastAimDirection = raw.normalized;
                 if (IsArcWeaponProfile(profile))
                     complexLastAimTargetPoint = ResolveArcTargetPointFromInput(profile, raw);
@@ -377,6 +382,8 @@ public class PlayerShooting : MonoBehaviourPun
             }
             else
             {
+                if (complexShootMaxDragMagnitude >= markerThreshold)
+                    complexShootCanceledByCenteredAim = true;
                 HideAimMarker();
             }
             return;
@@ -390,6 +397,14 @@ public class PlayerShooting : MonoBehaviourPun
 
     void ReleaseComplexNormalInput(WeaponAttackProfile profile)
     {
+        if (complexShootCanceledByCenteredAim)
+        {
+            complexShootWasPressed = false;
+            complexShootCanceledByCenteredAim = false;
+            HideAimMarker();
+            return;
+        }
+
         bool wasTap = IsAdvancedShootJoystickEnabled()
             ? complexShootMaxDragMagnitude <= ComplexTapMaxDragMagnitude
             : Time.time - complexShootPressStartedAt <= ComplexTapMaxDuration &&
@@ -403,6 +418,7 @@ public class PlayerShooting : MonoBehaviourPun
             : complexLastAimTargetPoint;
 
         complexShootWasPressed = false;
+        complexShootCanceledByCenteredAim = false;
         HideAimMarker();
         TryFireComplexAttack(profile, direction, targetPoint, true, false);
     }
@@ -415,6 +431,16 @@ public class PlayerShooting : MonoBehaviourPun
         return shootJoystick.rawInputVector.sqrMagnitude > 0.0001f
             ? shootJoystick.rawInputVector
             : shootJoystick.inputVector;
+    }
+
+    Vector2 GetCurrentSuperRawInput()
+    {
+        if (superJoystick == null)
+            return Vector2.zero;
+
+        return superJoystick.rawInputVector.sqrMagnitude > 0.0001f
+            ? superJoystick.rawInputVector
+            : superJoystick.inputVector;
     }
 
     float GetManualShootMarkerThreshold()
@@ -452,14 +478,16 @@ public class PlayerShooting : MonoBehaviourPun
                 complexSuperWasPressed = true;
                 complexSuperPressStartedAt = Time.time;
                 complexSuperMaxDragMagnitude = 0f;
+                complexSuperCanceledByCenteredAim = false;
                 complexLastSuperAimDirection = transform.up;
                 complexLastSuperAimTargetPoint = (Vector2)transform.position + ((Vector2)transform.up * GetComplexRangeWorld(superProfile));
             }
 
-            Vector2 raw = superJoystick.inputVector;
+            Vector2 raw = GetCurrentSuperRawInput();
             complexSuperMaxDragMagnitude = Mathf.Max(complexSuperMaxDragMagnitude, raw.magnitude);
             if (raw.magnitude >= ManualAimThreshold)
             {
+                complexSuperCanceledByCenteredAim = false;
                 complexLastSuperAimDirection = raw.normalized;
                 if (IsArcWeaponProfile(superProfile))
                     complexLastSuperAimTargetPoint = ResolveArcTargetPointFromInput(superProfile, raw);
@@ -468,6 +496,8 @@ public class PlayerShooting : MonoBehaviourPun
             }
             else
             {
+                if (complexSuperMaxDragMagnitude >= ManualAimThreshold)
+                    complexSuperCanceledByCenteredAim = true;
                 HideAimMarker();
             }
             return true;
@@ -475,6 +505,14 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (!complexSuperWasPressed)
             return false;
+
+        if (complexSuperCanceledByCenteredAim)
+        {
+            complexSuperWasPressed = false;
+            complexSuperCanceledByCenteredAim = false;
+            HideAimMarker();
+            return true;
+        }
 
         bool wasTap = Time.time - complexSuperPressStartedAt <= ComplexTapMaxDuration &&
                       complexSuperMaxDragMagnitude <= ComplexTapMaxDragMagnitude;
@@ -486,6 +524,7 @@ public class PlayerShooting : MonoBehaviourPun
             : complexLastSuperAimTargetPoint;
 
         complexSuperWasPressed = false;
+        complexSuperCanceledByCenteredAim = false;
         HideAimMarker();
         if (TryFireComplexAttack(superProfile, direction, targetPoint, false, true))
             superCharge = 0f;
@@ -497,6 +536,8 @@ public class PlayerShooting : MonoBehaviourPun
     {
         complexShootWasPressed = false;
         complexSuperWasPressed = false;
+        complexShootCanceledByCenteredAim = false;
+        complexSuperCanceledByCenteredAim = false;
     }
 
     WeaponAttackProfile SyncComplexWeaponProfile()

@@ -340,9 +340,25 @@ public class EnemyBotManager : MonoBehaviour
             GameVisualTheme.RequestRuntimeRefresh();
             if (definition.Kind == EnemyBotKind.RescueShip)
             {
-                bot.photonView.RPC(nameof(EnemyBot.PlayRescueShipIncomingRpc), RpcTarget.All, spawn.x, spawn.y, 0f);
+                StartCoroutine(PlayRescueShipIncomingAfterBootstrap(bot.photonView.ViewID, spawn));
             }
         }
+    }
+
+    System.Collections.IEnumerator PlayRescueShipIncomingAfterBootstrap(int viewId, Vector2 spawn)
+    {
+        yield return null;
+        yield return null;
+
+        PhotonView view = PhotonView.Find(viewId);
+        if (view == null)
+            yield break;
+
+        EnemyBot bot = view.GetComponent<EnemyBot>();
+        if (bot == null)
+            yield break;
+
+        view.RPC(nameof(EnemyBot.PlayRescueShipIncomingRpc), RpcTarget.All, spawn.x, spawn.y, 0f);
     }
 
     int GetSpawnedCount(EnemyBotKind kind)
