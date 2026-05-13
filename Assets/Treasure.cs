@@ -42,10 +42,16 @@ public class Treasure : MonoBehaviourPun
             movingObject = gameObject.AddComponent<MovingSpaceObject>();
         }
 
+        bool isContainer = InventoryItemCatalog.IsContainerItem(itemId);
+        bool isRandomLootWreck = InventoryItemCatalog.IsRandomLootWreckItem(itemId);
+        string stablePrefix = isRandomLootWreck ? "random_loot_wreck_" : isContainer ? "container_" : "treasure_";
         string stableId = photonView != null
-            ? "treasure_" + photonView.ViewID
-            : "treasure_" + gameObject.name;
-        movingObject.Configure(stableId, MovingSpaceObject.SpaceObjectType.Treasure);
+            ? stablePrefix + photonView.ViewID
+            : stablePrefix + gameObject.name;
+        MovingSpaceObject.SpaceObjectType objectType = isContainer || isRandomLootWreck
+            ? MovingSpaceObject.SpaceObjectType.Container
+            : MovingSpaceObject.SpaceObjectType.Treasure;
+        movingObject.Configure(stableId, objectType);
         GameVisualTheme.RequestRuntimeRefresh();
     }
 
@@ -63,6 +69,12 @@ public class Treasure : MonoBehaviourPun
 
     public float GetColliderSizeMultiplier()
     {
+        if (InventoryItemCatalog.IsRandomLootWreckItem(itemId))
+            return 0.82f;
+
+        if (InventoryItemCatalog.IsContainerItem(itemId))
+            return 0.78f;
+
         switch (InventoryItemCatalog.GetRarity(itemId))
         {
             case InventoryItemRarity.Uncommon:

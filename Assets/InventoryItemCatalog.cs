@@ -23,6 +23,7 @@ public enum InventoryItemCategory
     Shield,
     Engine,
     Gadget,
+    QuestItem,
     Resource,
     Misc
 }
@@ -50,7 +51,9 @@ public class InventoryItemDefinition
     public int SellValueAstrons;
     public int ShopBuyValueAstronsOverride = -1;
     public string IconResourcePath;
+    public string IconSpriteName;
     public string ProjectFileName;
+    public bool CanEnterSafePocket = true;
     public string[] SalvageOutputs;
 
     Sprite cachedIcon;
@@ -62,11 +65,17 @@ public class InventoryItemDefinition
 
         if (!string.IsNullOrWhiteSpace(IconResourcePath))
         {
+            Sprite[] sprites = Resources.LoadAll<Sprite>(IconResourcePath);
+            cachedIcon = GetNamedSprite(sprites, IconSpriteName);
+            if (cachedIcon != null)
+            {
+                return cachedIcon;
+            }
+
             cachedIcon = Resources.Load<Sprite>(IconResourcePath);
             if (cachedIcon != null)
                 return cachedIcon;
 
-            Sprite[] sprites = Resources.LoadAll<Sprite>(IconResourcePath);
             cachedIcon = GetLargestSprite(sprites);
             if (cachedIcon != null)
             {
@@ -91,11 +100,23 @@ public class InventoryItemDefinition
             return null;
 
         string assetPath = "Assets/" + ProjectFileName;
+        UnityEngine.Object[] assets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+        if (!string.IsNullOrWhiteSpace(IconSpriteName))
+        {
+            for (int i = 0; i < assets.Length; i++)
+            {
+                if (assets[i] is Sprite sprite && string.Equals(sprite.name, IconSpriteName, StringComparison.Ordinal))
+                {
+                    cachedIcon = sprite;
+                    return cachedIcon;
+                }
+            }
+        }
+
         cachedIcon = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
         if (cachedIcon != null)
             return cachedIcon;
 
-        UnityEngine.Object[] assets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
         for (int i = 0; i < assets.Length; i++)
         {
             if (assets[i] is Sprite sprite)
@@ -105,6 +126,21 @@ public class InventoryItemDefinition
             }
         }
 #endif
+
+        return null;
+    }
+
+    static Sprite GetNamedSprite(Sprite[] sprites, string spriteName)
+    {
+        if (sprites == null || sprites.Length == 0 || string.IsNullOrWhiteSpace(spriteName))
+            return null;
+
+        for (int i = 0; i < sprites.Length; i++)
+        {
+            Sprite candidate = sprites[i];
+            if (candidate != null && string.Equals(candidate.name, spriteName, StringComparison.Ordinal))
+                return candidate;
+        }
 
         return null;
     }
@@ -151,6 +187,11 @@ public static class InventoryItemCatalog
     public const string SpaceJunkStandardId = "space_junk_standard";
     public const string SpaceJunkAsteroidId = "space_junk_asteroid";
     public const string SpaceJunkId = SpaceJunkStandardId;
+    public const string ContainerIdPrefix = "container_";
+    public const int ContainerVariantCount = 9;
+    public const string RandomLootWreckIdPrefix = "random_loot_wreck_";
+    public const int RandomLootWreckVariantCount = 9;
+    public const string CashSuitcaseId = "cash_suitcase";
     public const string DroidScrapId = "droid_scrap";
     public const string CorsairSalvageId = "corsair_salvage";
     public const string SpaceMineWreckId = "space_mine_wreck";
@@ -159,18 +200,29 @@ public static class InventoryItemCatalog
     public const string NeutralFighterSalvageId = "neutral_fighter_salvage";
     public const string RadarShipSalvageId = "radar_ship_salvage";
     public const string RescueShipSalvageId = "rescue_ship_salvage";
+    public const string PirateFighterSalvageId = "pirate_fighter_salvage";
+    public const string PirateBaseCoreId = "pirate_base_core";
     public const string PlasmaGunId = "plasma_gun";
     public const string TripleGunId = "triple_gun";
     public const string ArtilleryGunId = "artillery_gun";
     public const string RailGunId = "rail_gun";
     public const string DoubleIonizerId = "double_ionizer";
+    public const string AstroCutterId = "astro_cutter";
     public const string FusionEngineId = "fusion_engine";
+    public const string FuelTankId = "fuel_tank";
+    public const string SuperBoosterId = "super_booster";
     public const string GadgetMineId = "gadget_mine";
     public const string BatteryId = "battery";
     public const string MagneticBeamId = "magnetic_beam";
     public const string TractorBeamId = "tractor_beam";
     public const string LureBeaconId = "lure_beacon";
+    public const string AutoTurretId = "auto_turret";
+    public const string GuidanceSystemId = "guidance_system";
+    public const string LootingFriendId = "looting_friend";
+    public const string SpaceDrillId = "space_drill";
+    public const string SpaceTrapId = "space_trap";
     public const string ShieldReactorId = "shield_reactor";
+    public const string AlienTransmitterId = "alien_transmitter";
 
     static readonly Dictionary<string, InventoryItemDefinition> Definitions = BuildDefinitions();
 
@@ -184,6 +236,97 @@ public static class InventoryItemCatalog
     }
 
     public static Sprite GetIcon(string itemId) => GetDefinition(itemId)?.GetIcon();
+
+    public static bool CanEnterSafePocket(string itemId)
+    {
+        InventoryItemDefinition definition = GetDefinition(itemId);
+        return definition == null || definition.CanEnterSafePocket;
+    }
+
+    public static string GetContainerItemId(int variantIndex)
+    {
+        int clampedIndex = Mathf.Clamp(variantIndex, 0, ContainerVariantCount - 1);
+        return ContainerIdPrefix + (clampedIndex + 1).ToString("00");
+    }
+
+    public static bool IsContainerItem(string itemId)
+    {
+        return GetContainerVariantIndex(itemId) >= 0;
+    }
+
+    public static int GetContainerVariantIndex(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId) ||
+            !itemId.StartsWith(ContainerIdPrefix, StringComparison.Ordinal) ||
+            itemId.Length <= ContainerIdPrefix.Length)
+        {
+            return -1;
+        }
+
+        string suffix = itemId.Substring(ContainerIdPrefix.Length);
+        if (!int.TryParse(suffix, out int oneBasedIndex))
+            return -1;
+
+        int zeroBasedIndex = oneBasedIndex - 1;
+        return zeroBasedIndex >= 0 && zeroBasedIndex < ContainerVariantCount ? zeroBasedIndex : -1;
+    }
+
+    public static string[] GetContainerItemIds()
+    {
+        string[] itemIds = new string[ContainerVariantCount];
+        for (int i = 0; i < itemIds.Length; i++)
+            itemIds[i] = GetContainerItemId(i);
+
+        return itemIds;
+    }
+
+    public static string GetRandomLootWreckItemId(int variantIndex)
+    {
+        int clampedIndex = Mathf.Clamp(variantIndex, 0, RandomLootWreckVariantCount - 1);
+        return RandomLootWreckIdPrefix + (clampedIndex + 1).ToString("00");
+    }
+
+    public static bool IsRandomLootWreckItem(string itemId)
+    {
+        return GetRandomLootWreckVariantIndex(itemId) >= 0;
+    }
+
+    public static int GetRandomLootWreckVariantIndex(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId) ||
+            !itemId.StartsWith(RandomLootWreckIdPrefix, StringComparison.Ordinal) ||
+            itemId.Length <= RandomLootWreckIdPrefix.Length)
+        {
+            return -1;
+        }
+
+        string suffix = itemId.Substring(RandomLootWreckIdPrefix.Length);
+        if (!int.TryParse(suffix, out int oneBasedIndex))
+            return -1;
+
+        int zeroBasedIndex = oneBasedIndex - 1;
+        return zeroBasedIndex >= 0 && zeroBasedIndex < RandomLootWreckVariantCount ? zeroBasedIndex : -1;
+    }
+
+    public static string[] GetEquipmentItemIdsByCategory(InventoryItemCategory category)
+    {
+        List<string> itemIds = new List<string>();
+        foreach (InventoryItemDefinition definition in Definitions.Values)
+        {
+            if (definition == null ||
+                definition.ItemType != InventoryItemType.Equipment ||
+                definition.Category != category ||
+                string.IsNullOrWhiteSpace(definition.Id))
+            {
+                continue;
+            }
+
+            itemIds.Add(definition.Id);
+        }
+
+        itemIds.Sort(StringComparer.Ordinal);
+        return itemIds.ToArray();
+    }
 
     public static IReadOnlyList<InventoryItemDefinition> GetAllDefinitions()
     {
@@ -242,6 +385,7 @@ public static class InventoryItemCatalog
             InventoryItemCategory.Shield => "Shield",
             InventoryItemCategory.Engine => "Engine",
             InventoryItemCategory.Gadget => "Gadget",
+            InventoryItemCategory.QuestItem => "Quest Items",
             InventoryItemCategory.Resource => "Resource",
             _ => "Misc"
         };
@@ -333,7 +477,7 @@ public static class InventoryItemCatalog
 
     static Dictionary<string, InventoryItemDefinition> BuildDefinitions()
     {
-        return new Dictionary<string, InventoryItemDefinition>(StringComparer.Ordinal)
+        Dictionary<string, InventoryItemDefinition> definitions = new Dictionary<string, InventoryItemDefinition>(StringComparer.Ordinal)
         {
             [AsteroidResourceId] = new InventoryItemDefinition
             {
@@ -387,8 +531,8 @@ public static class InventoryItemCatalog
                 Category = InventoryItemCategory.Treasure,
                 Rarity = InventoryItemRarity.VeryRare,
                 SellValueAstrons = 800,
-                IconResourcePath = "treasure_asteroid_violet_rare_resource",
-                ProjectFileName = "treasure_asteroid_violet_rare.png",
+                IconResourcePath = "treasure_asteroid_violet_very_rare_resource",
+                ProjectFileName = "treasure_asteroid_violet_very_rare.png",
                 SalvageOutputs = new[] { AsteroidRareId, AsteroidRareId }
             },
             [AsteroidEpicId] = new InventoryItemDefinition
@@ -446,6 +590,21 @@ public static class InventoryItemCatalog
                 IconResourcePath = "treasure_asteroid_gold_legendary_resource",
                 ProjectFileName = "treasure_asteroid_gold_legendary.png",
                 SalvageOutputs = new[] { AsteroidEpicId, AsteroidEpicId }
+            },
+            [CashSuitcaseId] = new InventoryItemDefinition
+            {
+                Id = CashSuitcaseId,
+                DisplayName = "Cash Suitcase",
+                ShortLabel = "CSH",
+                Description = "A sealed suitcase packed with high-value factory payout credits.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Treasure,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 5000,
+                IconResourcePath = "Cash_Suitcase",
+                ProjectFileName = "Resources/Cash_Suitcase.png",
+                CanEnterSafePocket = false,
+                SalvageOutputs = new[] { AsteroidCommonId }
             },
             [DroidScrapId] = new InventoryItemDefinition
             {
@@ -559,6 +718,34 @@ public static class InventoryItemCatalog
                 ProjectFileName = "rescue_ship_wreck.png",
                 SalvageOutputs = new[] { AsteroidGoldId, AsteroidGoldId, AsteroidResourceId }
             },
+            [PirateFighterSalvageId] = new InventoryItemDefinition
+            {
+                Id = PirateFighterSalvageId,
+                DisplayName = "Pirate Fighter Salvage",
+                ShortLabel = "PFS",
+                Description = "Rare combat salvage recovered from a destroyed Pirate Fighter.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 900,
+                IconResourcePath = "pirate_fighter_wreck_resource",
+                ProjectFileName = "pirate_fighter_wreck.png",
+                SalvageOutputs = new[] { AsteroidGoldId, AsteroidResourceId }
+            },
+            [PirateBaseCoreId] = new InventoryItemDefinition
+            {
+                Id = PirateBaseCoreId,
+                DisplayName = "Pirate Base Core",
+                ShortLabel = "PBC",
+                Description = "A legendary command core recovered from a destroyed Pirate Base.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 5000,
+                IconResourcePath = "pirate_base_wreck_resource",
+                ProjectFileName = "pirate_base_wreck.png",
+                SalvageOutputs = new[] { AsteroidEpicId, AsteroidRareId }
+            },
             [PlasmaGunId] = new InventoryItemDefinition
             {
                 Id = PlasmaGunId,
@@ -634,6 +821,20 @@ public static class InventoryItemCatalog
                 ProjectFileName = "double_ionizer.png",
                 SalvageOutputs = new[] { NeutralFighterSalvageId, AsteroidGoldId }
             },
+            [AstroCutterId] = new InventoryItemDefinition
+            {
+                Id = AstroCutterId,
+                DisplayName = "Astro Cutter",
+                ShortLabel = "CUT",
+                Description = "A medium-range continuous beam weapon tuned to carve through obstacles and meteor rock.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Weapon,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 2900,
+                IconResourcePath = "astro_cutter_resource",
+                ProjectFileName = "astro_cutter.png",
+                SalvageOutputs = new[] { RadarShipSalvageId, AsteroidRareId }
+            },
             [FusionEngineId] = new InventoryItemDefinition
             {
                 Id = FusionEngineId,
@@ -647,6 +848,34 @@ public static class InventoryItemCatalog
                 IconResourcePath = "fusion_engine_icon_resource",
                 ProjectFileName = "fusion_ engine.png",
                 SalvageOutputs = new[] { AsteroidRareId }
+            },
+            [FuelTankId] = new InventoryItemDefinition
+            {
+                Id = FuelTankId,
+                DisplayName = "Fuel Tank",
+                ShortLabel = "FUE",
+                Description = "An auxiliary engine-slot tank that increases maximum booster duration for the whole round.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Engine,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1600,
+                IconResourcePath = "fuel_tank_resource",
+                ProjectFileName = "fuel_tank.png",
+                SalvageOutputs = new[] { SpaceTruckWreckId, AsteroidResourceId }
+            },
+            [SuperBoosterId] = new InventoryItemDefinition
+            {
+                Id = SuperBoosterId,
+                DisplayName = "Super Booster",
+                ShortLabel = "SBO",
+                Description = "An engine-slot burst system that launches the ship forward at extreme speed without consuming normal booster charge.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Engine,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 2300,
+                IconResourcePath = "super_booster_resource",
+                ProjectFileName = "super_booster.png",
+                SalvageOutputs = new[] { SpaceTruckWreckId, AsteroidRareId, AsteroidGoldId }
             },
             [GadgetMineId] = new InventoryItemDefinition
             {
@@ -718,6 +947,76 @@ public static class InventoryItemCatalog
                 ProjectFileName = "lure_beacon_gadget.png",
                 SalvageOutputs = new[] { AsteroidResourceId, AsteroidGoldId }
             },
+            [AutoTurretId] = new InventoryItemDefinition
+            {
+                Id = AutoTurretId,
+                DisplayName = "Auto Turret",
+                ShortLabel = "TUR",
+                Description = "A single-use deployable turret that anchors behind the ship and fires paired neutral-fighter shots at the nearest enemy.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1400,
+                IconResourcePath = "auto_turret_top_down_resource",
+                ProjectFileName = "auto_turret_top_down.png",
+                SalvageOutputs = new[] { NeutralFighterSalvageId, SpaceMineWreckId }
+            },
+            [GuidanceSystemId] = new InventoryItemDefinition
+            {
+                Id = GuidanceSystemId,
+                DisplayName = "Guidance System",
+                ShortLabel = "GUI",
+                Description = "A short-lived tactical navigator that points toward extraction, valuable loot, and the nearest hostile contact.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 3000,
+                IconResourcePath = "guidance_system_resource",
+                ProjectFileName = "guidance_system.png",
+                SalvageOutputs = new[] { RadarShipSalvageId, SpaceJunkStandardId }
+            },
+            [LootingFriendId] = new InventoryItemDefinition
+            {
+                Id = LootingFriendId,
+                DisplayName = "Looting Friend",
+                ShortLabel = "LFR",
+                Description = "A passive companion drone that follows the ship and automatically collects nearby loot while the pilot keeps flying.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 2400,
+                IconResourcePath = "looting_friend_top_down_resource",
+                ProjectFileName = "looting_friend_top_down.png",
+                SalvageOutputs = new[] { DroidScrapId, SpaceJunkStandardId, AsteroidRareId }
+            },
+            [SpaceDrillId] = new InventoryItemDefinition
+            {
+                Id = SpaceDrillId,
+                DisplayName = "Space Drill",
+                ShortLabel = "DRL",
+                Description = "A fragile autonomous mining drone that extracts the nearest lootable asteroid and returns the loot to the ship.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1600,
+                IconResourcePath = "space_drill_top_down_resource",
+                ProjectFileName = "space_drill_top_down.png",
+                SalvageOutputs = new[] { DroidScrapId, AsteroidRareId }
+            },
+            [SpaceTrapId] = new InventoryItemDefinition
+            {
+                Id = SpaceTrapId,
+                DisplayName = "Space Trap",
+                ShortLabel = "TRP",
+                Description = "A single-use trap kit that arms a nearby loot object with a boosted mine explosion when looted.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1300,
+                IconResourcePath = "space_trap_top_down_resource",
+                ProjectFileName = "space_trap_top_down.png",
+                SalvageOutputs = new[] { SpaceMineWreckId, AsteroidGoldId }
+            },
             [ShieldReactorId] = new InventoryItemDefinition
             {
                 Id = ShieldReactorId,
@@ -731,8 +1030,52 @@ public static class InventoryItemCatalog
                 IconResourcePath = "shield_reactor_resource",
                 ProjectFileName = "shield_reactor.png",
                 SalvageOutputs = new[] { AsteroidResourceId, AsteroidGoldId }
+            },
+            [AlienTransmitterId] = new InventoryItemDefinition
+            {
+                Id = AlienTransmitterId,
+                DisplayName = "Alien Transmitter",
+                ShortLabel = "ALT",
+                Description = "A unique alien signal device recovered from Space Mayhem. It is a quest item for future projects and special events.",
+                ItemType = InventoryItemType.Quest,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 0,
+                ShopBuyValueAstronsOverride = 0,
+                IconResourcePath = "alien_transmitter_resource",
+                ProjectFileName = "alien_transmitter.png",
+                SalvageOutputs = Array.Empty<string>()
             }
         };
+
+        AddContainerDefinitions(definitions);
+        return definitions;
+    }
+
+    static void AddContainerDefinitions(Dictionary<string, InventoryItemDefinition> definitions)
+    {
+        if (definitions == null)
+            return;
+
+        for (int i = 0; i < ContainerVariantCount; i++)
+        {
+            string itemId = GetContainerItemId(i);
+            definitions[itemId] = new InventoryItemDefinition
+            {
+                Id = itemId,
+                DisplayName = "Container",
+                ShortLabel = "CNT",
+                Description = "A small drifting cargo container recovered from deep space.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Treasure,
+                Rarity = InventoryItemRarity.Common,
+                SellValueAstrons = 100,
+                IconResourcePath = "kontenery_9",
+                IconSpriteName = "kontenery_9_" + i,
+                ProjectFileName = "Resources/kontenery_9.png",
+                SalvageOutputs = new[] { AsteroidUncommonId }
+            };
+        }
     }
 
     static InventoryItemDefinition CreateSpaceJunkDefinition(

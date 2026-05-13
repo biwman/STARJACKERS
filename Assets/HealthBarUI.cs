@@ -9,6 +9,9 @@ public class HealthBarUI : MonoBehaviourPun
     const string HpBarName = "HP_Bar";
     const string LabelName = "HealthLabel";
     const string ValueName = "HealthValue";
+    const float BarWidth = 440f;
+    const float BarHeight = 36f;
+    const float TopOffset = -20f;
 
     Slider hpBar;
     RectTransform hpRect;
@@ -51,12 +54,13 @@ public class HealthBarUI : MonoBehaviourPun
         if (hpBar == null || hpRect == null)
             return;
 
-        hpRect.sizeDelta = new Vector2(560f, 44f);
-        hpRect.anchoredPosition = new Vector2(0f, -76f);
+        hpRect.sizeDelta = new Vector2(BarWidth, BarHeight);
+        hpRect.anchoredPosition = new Vector2(0f, TopOffset);
 
         backgroundImage = FindImage(hpBar.transform, "Background");
         fillImage = hpBar.fillRect != null ? hpBar.fillRect.GetComponent<Image>() : null;
         handleImage = FindImage(hpBar.transform, "Handle");
+        HideHandle();
 
         if (backgroundImage != null)
         {
@@ -71,8 +75,8 @@ public class HealthBarUI : MonoBehaviourPun
         hpBar.transition = Selectable.Transition.None;
         hpBar.targetGraphic = backgroundImage;
 
-        labelText = GetOrCreateText(LabelName, new Vector2(16f, 0f), TextAlignmentOptions.Left, "HEALTH");
-        valueText = GetOrCreateText(ValueName, new Vector2(-16f, 0f), TextAlignmentOptions.Right, string.Empty);
+        labelText = GetOrCreateText(LabelName, new Vector2(12f, 0f), TextAlignmentOptions.Left, "HEALTH");
+        valueText = GetOrCreateText(ValueName, new Vector2(-12f, 0f), TextAlignmentOptions.Right, string.Empty);
     }
 
     void RefreshVisuals()
@@ -111,12 +115,7 @@ public class HealthBarUI : MonoBehaviourPun
             fillImage.color = Color.Lerp(low, mid, t);
         }
 
-        if (handleImage != null)
-        {
-            handleImage.color = normalized >= 0.999f
-                ? new Color(0.96f, 0.38f, 0.4f, 1f)
-                : new Color(0.6f, 0.64f, 0.7f, 1f);
-        }
+        HideHandle();
     }
 
     void UpdateVisibility()
@@ -171,7 +170,7 @@ public class HealthBarUI : MonoBehaviourPun
 
         TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
         text.text = initialText;
-        text.fontSize = 20f;
+        text.fontSize = 14f;
         text.color = Color.white;
         text.alignment = alignment;
         text.textWrappingMode = TextWrappingModes.NoWrap;
@@ -197,5 +196,14 @@ public class HealthBarUI : MonoBehaviourPun
         }
 
         return null;
+    }
+
+    void HideHandle()
+    {
+        if (handleImage == null)
+            return;
+
+        handleImage.enabled = false;
+        handleImage.raycastTarget = false;
     }
 }

@@ -75,6 +75,14 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     static readonly float[] RoundDurationOptions = { 60f, 90f, 120f, 150f, 180f, 210f, 240f, 270f, 300f, 330f, 360f };
     static readonly string[] DensityOptions = { "none", "low", "medium", "high" };
+    static readonly string[] NebulaSizeOptions =
+    {
+        RoomSettings.NebulaSizeVerySmall,
+        RoomSettings.NebulaSizeSmall,
+        RoomSettings.NebulaSizeNormal,
+        RoomSettings.NebulaSizeBig,
+        RoomSettings.NebulaSizeVeryBig
+    };
     static readonly string[] ResourceRichnessOptions =
     {
         RoomSettings.ResourceRichnessVeryLow,
@@ -91,12 +99,23 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RoomSettings.SpaceJunkDensityMedium,
         RoomSettings.SpaceJunkDensityHigh
     };
+    static readonly string[] ContainersDensityOptions =
+    {
+        RoomSettings.ContainersDensityNone,
+        RoomSettings.ContainersDensityVeryLow,
+        RoomSettings.ContainersDensityLow,
+        RoomSettings.ContainersDensityMedium,
+        RoomSettings.ContainersDensityHigh,
+        RoomSettings.ContainersDensityVeryHigh
+    };
     static readonly string[] MapSizeOptions = { "small", "medium", "large", "very_large", "super_large" };
-    static readonly int[] MapBackgroundOptions = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
+    static readonly int[] MapBackgroundOptions = Enumerable.Range(1, RoomSettings.MaxMapBackground).ToArray();
     static readonly int[] ObstacleHpOptions = { 50, 100, 150, 200, 250, 300, 350, 400, 450, 500 };
     static readonly int[] ObstacleSizePercentOptions = { 50, 100, 150, 200, 250, 300, 350, 400, 450, 500 };
     static readonly int[] ExtractionCountOptions = { 1, 2, 3, 4 };
     static readonly int[] RepairBayCountOptions = { 0, 1, 2 };
+    static readonly int[] SpaceFactoryCountOptions = { 0, 1, 2 };
+    static readonly int[] RandomLootWreckCountOptions = { 0, 1, 2, 3, 4, 5 };
     static readonly int[] BoosterSlowdownOptions = { 30, 40, 50, 60, 70, 80, 90, 100 };
     static readonly int[] AmmoCountOptions = { 5, 10, 15, 20, 25, 30 };
     static readonly int[] BoosterRecoveryDelayOptions = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
@@ -105,7 +124,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     static readonly int[] EnemyCountOptions = { 1, 2, 3, 4, 5 };
     static readonly int[] SpaceMineCountOptions = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 };
     static readonly int[] EnemyHpOptions = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200 };
+    static readonly int[] HeavyEnemyHpOptions = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 300, 400, 500 };
     static readonly int[] EnemyShieldOptions = { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200 };
+    static readonly int[] HeavyEnemyShieldOptions = { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 300, 500, 750, 1000 };
     static readonly int[] EnemyDamageOptions = { 0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200 };
     static readonly float[] EnemySpeedOptions = { 0.25f, 0.5f, 1f, 1.5f, 2f };
     static readonly int[] EnemySpawnSecondOptions = { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120 };
@@ -136,9 +157,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text treasureSettingText;
     public TMP_Text resourceRichnessSettingText;
     public TMP_Text spaceJunkSettingText;
+    public TMP_Text containersSettingText;
+    public TMP_Text randomLootWreckSettingText;
     public TMP_Text nebulaSettingText;
+    public TMP_Text fireNebulaSettingText;
+    public TMP_Text nebulaSizeSettingText;
+    public TMP_Text fireNebulaSizeSettingText;
     public TMP_Text extractionSettingText;
     public TMP_Text repairBaySettingText;
+    public TMP_Text spaceFactorySettingText;
     public TMP_Text boosterSettingText;
     public TMP_Text ammoSettingText;
     public TMP_Text boosterDelaySettingText;
@@ -146,6 +173,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text deathTimerSettingText;
     public TMP_Text inventoryLossSettingText;
     public TMP_Text equipmentLossSettingText;
+    public TMP_Text crazyEnemiesEffectSettingText;
+    public TMP_Text fogOfWarEffectSettingText;
     public TMP_Text movingObjectsSettingText;
     public TMP_Text enemyBotsSettingText;
     public TMP_Text corsairSettingText;
@@ -176,9 +205,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button treasureSettingButton;
     public Button resourceRichnessSettingButton;
     public Button spaceJunkSettingButton;
+    public Button containersSettingButton;
+    public Button randomLootWreckSettingButton;
     public Button nebulaSettingButton;
+    public Button fireNebulaSettingButton;
+    public Button nebulaSizeSettingButton;
+    public Button fireNebulaSizeSettingButton;
     public Button extractionSettingButton;
     public Button repairBaySettingButton;
+    public Button spaceFactorySettingButton;
     public Button boosterSettingButton;
     public Button ammoSettingButton;
     public Button boosterDelaySettingButton;
@@ -186,6 +221,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button deathTimerSettingButton;
     public Button inventoryLossSettingButton;
     public Button equipmentLossSettingButton;
+    public Button crazyEnemiesEffectSettingButton;
+    public Button fogOfWarEffectSettingButton;
     public Button movingObjectsSettingButton;
     public Button bulletPushSettingButton;
     public Button obstacleWeightSettingButton;
@@ -228,6 +265,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     LobbyScreen previousMapScreenBeforeDeveloperSettings = LobbyScreen.MapSelection;
     string selectedMapId;
     GameObject lobbyTopBarRootObject;
+    SharedPlayerTopBarUI lobbyTopBar;
     GameObject fullScreenLobbyRootObject;
     RectTransform fullScreenLobbyRootRect;
     TMP_Text lobbyTopBarNicknameText;
@@ -241,6 +279,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     TMP_Text developerSettingsText;
     Button launchButton;
     TMP_Text launchText;
+    Coroutine launchStartRecoveryRoutine;
     Button developerBackButton;
     TMP_Text developerBackText;
     Button developerGunSetupButton;
@@ -249,9 +288,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     TMP_Text developerCheatText;
     GameObject developerCheatOverlayObject;
     TMP_Text developerCheatAstronsText;
+    TMP_Text developerCheatXpText;
     TMP_Text developerCheatStatusText;
     Button developerCheatAddMoneyButton;
+    Button developerCheatAddXpButton;
+    Button developerCheatResetAccountButton;
     Button developerCheatCloseButton;
+    GameObject developerCheatResetConfirmObject;
+    Button developerCheatResetConfirmYesButton;
+    Button developerCheatResetConfirmCancelButton;
     GameObject mapSelectionRootObject;
     RectTransform mapSelectionTilesRootRect;
     TMP_Text mapSelectionScreenTitleText;
@@ -358,22 +403,34 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             Image bg = lobbyTopBarRootObject.GetComponent<Image>();
             bg.color = new Color(0f, 0f, 0f, 0f);
             bg.raycastTarget = false;
-
-            lobbyTopBarNicknameText = CreateTopBarText("LobbyTopBarNickname", new Vector2(34f, -42f), new Vector2(310f, 42f), TextAlignmentOptions.Left);
-            lobbyTopBarGamesText = CreateTopBarText("LobbyTopBarGames", new Vector2(394f, -40f), new Vector2(170f, 42f), TextAlignmentOptions.Left);
-            lobbyTopBarLevelXpText = CreateTopBarText("LobbyTopBarLevelXp", new Vector2(592f, -40f), new Vector2(420f, 42f), TextAlignmentOptions.Left);
-            lobbyTopBarAstronsText = CreateTopBarText("LobbyTopBarAstrons", new Vector2(1112f, -40f), new Vector2(266f, 42f), TextAlignmentOptions.Left);
         }
         else if (fullScreenRoot != null && lobbyTopBarRootObject.transform.parent != fullScreenRoot.transform)
         {
             lobbyTopBarRootObject.transform.SetParent(fullScreenRoot.transform, false);
         }
 
+        ConfigureSharedLobbyTopBar();
+
         EnsureLobbyActionButtons();
         EnsureLobbyMapSelectionScreen();
         EnsureLobbyMapDetailsScreen();
         EnsureLobbyDeveloperSettingsRoot();
         EnsureLobbyCheatOverlay();
+    }
+
+    void ConfigureSharedLobbyTopBar()
+    {
+        if (lobbyTopBarRootObject == null)
+            return;
+
+        lobbyTopBar = SharedPlayerTopBarUI.Ensure(lobbyTopBarRootObject, false);
+        if (lobbyTopBar == null)
+            return;
+
+        lobbyTopBarNicknameText = lobbyTopBar.NicknameText;
+        lobbyTopBarGamesText = lobbyTopBar.GamesText;
+        lobbyTopBarLevelXpText = lobbyTopBar.LevelXpText;
+        lobbyTopBarAstronsText = lobbyTopBar.AstronsText;
     }
 
     TMP_Text CreateTopBarText(string name, Vector2 anchoredPosition, Vector2 size, TextAlignmentOptions alignment)
@@ -704,6 +761,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             lobbyTopBarLevelXpText.text = "Level: " + level + "  XP: " + xp;
         if (lobbyTopBarAstronsText != null)
             lobbyTopBarAstronsText.text = "Astrons: " + astrons;
+        if (lobbyTopBar != null)
+            lobbyTopBar.SetProfile(profile, nickname, string.Empty, true);
     }
 
     void EnsureLobbyTopStatBanner(float rootWidth)
@@ -799,7 +858,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         panelRect.anchorMax = new Vector2(0.5f, 0.5f);
         panelRect.pivot = new Vector2(0.5f, 0.5f);
         panelRect.anchoredPosition = new Vector2(0f, 6f);
-        panelRect.sizeDelta = new Vector2(620f, 380f);
+        panelRect.sizeDelta = new Vector2(620f, 560f);
 
         Image panelImage = panel.GetComponent<Image>();
         panelImage.color = new Color(0.11f, 0.1f, 0.14f, 0.98f);
@@ -818,25 +877,80 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         hint.textWrappingMode = TextWrappingModes.Normal;
         hint.color = new Color(0.86f, 0.9f, 0.96f, 0.96f);
 
-        developerCheatAstronsText = CreateStandaloneLabel(panel.transform, "CheatAstronsText", "Astrons: 0", new Vector2(90f, -166f), new Vector2(440f, 28f), 20f, TextAlignmentOptions.Center);
+        developerCheatAstronsText = CreateStandaloneLabel(panel.transform, "CheatAstronsText", "Astrons: 0", new Vector2(90f, -156f), new Vector2(440f, 28f), 20f, TextAlignmentOptions.Center);
         developerCheatAstronsText.rectTransform.anchorMin = new Vector2(0.5f, 1f);
         developerCheatAstronsText.rectTransform.anchorMax = new Vector2(0.5f, 1f);
         developerCheatAstronsText.rectTransform.pivot = new Vector2(0.5f, 1f);
         developerCheatAstronsText.fontStyle = FontStyles.Normal;
         developerCheatAstronsText.color = new Color(0.94f, 0.84f, 0.44f, 1f);
 
-        developerCheatAddMoneyButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddMoneyButton", "ADD MONEY", new Vector2(0f, -212f), new Vector2(260f, 62f), new Color(0.5f, 0.22f, 0.18f, 1f), new Color(0.7f, 0.3f, 0.22f, 1f), OnDeveloperCheatAddMoneyClicked);
+        developerCheatXpText = CreateStandaloneLabel(panel.transform, "CheatXpText", "Level: 1  XP: 0", new Vector2(90f, -190f), new Vector2(440f, 28f), 20f, TextAlignmentOptions.Center);
+        developerCheatXpText.rectTransform.anchorMin = new Vector2(0.5f, 1f);
+        developerCheatXpText.rectTransform.anchorMax = new Vector2(0.5f, 1f);
+        developerCheatXpText.rectTransform.pivot = new Vector2(0.5f, 1f);
+        developerCheatXpText.fontStyle = FontStyles.Normal;
+        developerCheatXpText.color = new Color(0.74f, 0.92f, 1f, 1f);
 
-        developerCheatStatusText = CreateStandaloneLabel(panel.transform, "CheatStatusText", string.Empty, new Vector2(60f, -292f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
+        developerCheatAddMoneyButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddMoneyButton", "ADD MONEY", new Vector2(0f, -244f), new Vector2(260f, 58f), new Color(0.5f, 0.22f, 0.18f, 1f), new Color(0.7f, 0.3f, 0.22f, 1f), OnDeveloperCheatAddMoneyClicked);
+        developerCheatAddXpButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddXpButton", "ADD XP", new Vector2(0f, -314f), new Vector2(260f, 58f), new Color(0.16f, 0.38f, 0.5f, 1f), new Color(0.22f, 0.52f, 0.7f, 1f), OnDeveloperCheatAddXpClicked);
+        developerCheatResetAccountButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatResetAccountButton", "RESET ACCOUNT", new Vector2(0f, -384f), new Vector2(260f, 58f), new Color(0.52f, 0.14f, 0.18f, 1f), new Color(0.72f, 0.2f, 0.25f, 1f), OnDeveloperCheatResetAccountClicked);
+
+        developerCheatStatusText = CreateStandaloneLabel(panel.transform, "CheatStatusText", string.Empty, new Vector2(60f, -456f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
         developerCheatStatusText.rectTransform.anchorMin = new Vector2(0.5f, 1f);
         developerCheatStatusText.rectTransform.anchorMax = new Vector2(0.5f, 1f);
         developerCheatStatusText.rectTransform.pivot = new Vector2(0.5f, 1f);
         developerCheatStatusText.fontStyle = FontStyles.Normal;
         developerCheatStatusText.color = new Color(0.74f, 0.86f, 0.94f, 0.96f);
 
-        developerCheatCloseButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatCloseButton", "CLOSE", new Vector2(0f, -318f), new Vector2(220f, 52f), new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f), HideDeveloperCheatOverlay);
+        developerCheatCloseButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatCloseButton", "CLOSE", new Vector2(0f, -494f), new Vector2(220f, 52f), new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f), HideDeveloperCheatOverlay);
+
+        CreateDeveloperCheatResetConfirm(overlayObject.transform);
 
         developerCheatOverlayObject.SetActive(false);
+    }
+
+    void CreateDeveloperCheatResetConfirm(Transform parent)
+    {
+        developerCheatResetConfirmObject = new GameObject("LobbyDeveloperCheatResetConfirm", typeof(RectTransform), typeof(Image));
+        developerCheatResetConfirmObject.transform.SetParent(parent, false);
+        RectTransform overlayRect = developerCheatResetConfirmObject.GetComponent<RectTransform>();
+        overlayRect.anchorMin = Vector2.zero;
+        overlayRect.anchorMax = Vector2.one;
+        overlayRect.offsetMin = Vector2.zero;
+        overlayRect.offsetMax = Vector2.zero;
+
+        Image overlay = developerCheatResetConfirmObject.GetComponent<Image>();
+        overlay.color = new Color(0.01f, 0.015f, 0.025f, 0.78f);
+        overlay.raycastTarget = true;
+
+        GameObject panel = new GameObject("LobbyDeveloperCheatResetConfirmPanel", typeof(RectTransform), typeof(Image));
+        panel.transform.SetParent(developerCheatResetConfirmObject.transform, false);
+        RectTransform panelRect = panel.GetComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.anchoredPosition = Vector2.zero;
+        panelRect.sizeDelta = new Vector2(640f, 330f);
+
+        Image panelImage = panel.GetComponent<Image>();
+        panelImage.color = new Color(0.13f, 0.09f, 0.11f, 0.98f);
+
+        TMP_Text title = CreateStandaloneLabel(panel.transform, "LobbyDeveloperCheatResetTitle", "RESET ACCOUNT", new Vector2(40f, -36f), new Vector2(560f, 36f), 26f, TextAlignmentOptions.Center);
+        title.rectTransform.anchorMin = new Vector2(0.5f, 1f);
+        title.rectTransform.anchorMax = new Vector2(0.5f, 1f);
+        title.rectTransform.pivot = new Vector2(0.5f, 1f);
+
+        TMP_Text body = CreateStandaloneLabel(panel.transform, "LobbyDeveloperCheatResetText", "This will reset XP, level, Astrons, inventory, equipment and unlocked pilots. Continue?", new Vector2(40f, -102f), new Vector2(560f, 96f), 20f, TextAlignmentOptions.Center);
+        body.rectTransform.anchorMin = new Vector2(0.5f, 1f);
+        body.rectTransform.anchorMax = new Vector2(0.5f, 1f);
+        body.rectTransform.pivot = new Vector2(0.5f, 1f);
+        body.fontStyle = FontStyles.Normal;
+        body.textWrappingMode = TextWrappingModes.Normal;
+
+        developerCheatResetConfirmYesButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatResetYesButton", "YES", new Vector2(-122f, -238f), new Vector2(190f, 56f), new Color(0.56f, 0.12f, 0.16f, 1f), new Color(0.74f, 0.18f, 0.22f, 1f), OnDeveloperCheatResetConfirmClicked);
+        developerCheatResetConfirmCancelButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatResetCancelButton", "CANCEL", new Vector2(122f, -238f), new Vector2(190f, 56f), new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f), HideDeveloperCheatResetConfirm);
+
+        developerCheatResetConfirmObject.SetActive(false);
     }
 
     Button CreateLobbyOverlayButton(Transform parent, string name, string label, Vector2 anchoredPosition, Vector2 size, Color baseColor, Color highlightedColor, UnityEngine.Events.UnityAction callback)
@@ -893,6 +1007,13 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     {
         if (developerCheatOverlayObject != null)
             developerCheatOverlayObject.SetActive(false);
+        HideDeveloperCheatResetConfirm();
+    }
+
+    void HideDeveloperCheatResetConfirm()
+    {
+        if (developerCheatResetConfirmObject != null)
+            developerCheatResetConfirmObject.SetActive(false);
     }
 
     void HideFullScreenLobbyFlow(bool resetScreen = true)
@@ -948,13 +1069,42 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (developerCheatAstronsText != null)
             developerCheatAstronsText.text = "Astrons: " + astrons;
 
+        int totalXp = profile != null ? profile.TotalXp : 0;
+        if (developerCheatXpText != null)
+            developerCheatXpText.text = "Level: " + RoundXpBalance.GetLevelForTotalXp(totalXp) + "  XP: " + totalXp;
+
         if (statusMessage != null && developerCheatStatusText != null)
             developerCheatStatusText.text = statusMessage;
 
         if (developerCheatAddMoneyButton != null)
             developerCheatAddMoneyButton.interactable = !busy;
+        if (developerCheatAddXpButton != null)
+            developerCheatAddXpButton.interactable = !busy;
+        if (developerCheatResetAccountButton != null)
+            developerCheatResetAccountButton.interactable = !busy;
+        if (developerCheatResetConfirmYesButton != null)
+            developerCheatResetConfirmYesButton.interactable = !busy;
+        if (developerCheatResetConfirmCancelButton != null)
+            developerCheatResetConfirmCancelButton.interactable = !busy;
         if (developerCheatCloseButton != null)
             developerCheatCloseButton.interactable = !busy;
+
+        EnsureDeveloperCheatLayering();
+    }
+
+    void EnsureDeveloperCheatLayering()
+    {
+        if (developerCheatOverlayObject == null || !developerCheatOverlayObject.activeSelf)
+            return;
+
+        RectTransform fullScreenRoot = EnsureFullScreenLobbyRoot();
+        if (fullScreenRoot != null && developerCheatOverlayObject.transform.parent != fullScreenRoot.transform)
+            developerCheatOverlayObject.transform.SetParent(fullScreenRoot.transform, false);
+
+        developerCheatOverlayObject.transform.SetAsLastSibling();
+
+        if (developerCheatResetConfirmObject != null && developerCheatResetConfirmObject.activeSelf)
+            developerCheatResetConfirmObject.transform.SetAsLastSibling();
     }
 
     void ConfigureLobbyTopBannerAccent(string childName, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 sizeDelta, Color color)
@@ -1046,7 +1196,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (exitLobbyButton != null)
             exitLobbyButton.gameObject.SetActive(showMapSelection || showDeveloperSettings);
         if (developerSettingsButton != null)
-            developerSettingsButton.gameObject.SetActive(showMapSelection || showMapDetails);
+            developerSettingsButton.gameObject.SetActive(showMapDetails);
         if (launchButton != null)
             launchButton.gameObject.SetActive(showMapDetails);
         if (developerBackButton != null)
@@ -1112,64 +1262,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = new Vector2(0f, -FullScreenTopMargin);
             rect.sizeDelta = new Vector2(rootWidth, 110f);
-            EnsureLobbyTopStatBanner(rootWidth);
 
-            if (lobbyTopBarNicknameText != null)
-            {
-                RectTransform nicknameRect = lobbyTopBarNicknameText.rectTransform;
-                nicknameRect.anchorMin = new Vector2(0f, 1f);
-                nicknameRect.anchorMax = new Vector2(0f, 1f);
-                nicknameRect.pivot = new Vector2(0f, 0.5f);
-                nicknameRect.anchoredPosition = new Vector2(26f, -40f);
-                nicknameRect.sizeDelta = new Vector2(140f, 42f);
-                lobbyTopBarNicknameText.fontSize = 30f;
-                lobbyTopBarNicknameText.enableAutoSizing = true;
-                lobbyTopBarNicknameText.fontSizeMin = 22f;
-                lobbyTopBarNicknameText.fontSizeMax = 30f;
-            }
-            if (lobbyTopBarGamesText != null)
-            {
-                float bannerX = 168f;
-                RectTransform gamesRect = lobbyTopBarGamesText.rectTransform;
-                gamesRect.anchorMin = new Vector2(0f, 1f);
-                gamesRect.anchorMax = new Vector2(0f, 1f);
-                gamesRect.pivot = new Vector2(0f, 0.5f);
-                gamesRect.anchoredPosition = new Vector2(bannerX + 22f, -40f);
-                gamesRect.sizeDelta = new Vector2(165f, 42f);
-                lobbyTopBarGamesText.fontSize = 30f;
-                lobbyTopBarGamesText.enableAutoSizing = true;
-                lobbyTopBarGamesText.fontSizeMin = 22f;
-                lobbyTopBarGamesText.fontSizeMax = 30f;
-            }
-            if (lobbyTopBarLevelXpText != null)
-            {
-                float bannerX = 168f;
-                RectTransform xpRect = lobbyTopBarLevelXpText.rectTransform;
-                xpRect.anchorMin = new Vector2(0f, 1f);
-                xpRect.anchorMax = new Vector2(0f, 1f);
-                xpRect.pivot = new Vector2(0f, 0.5f);
-                xpRect.anchoredPosition = new Vector2(bannerX + 210f, -40f);
-                xpRect.sizeDelta = new Vector2(380f, 42f);
-                lobbyTopBarLevelXpText.fontSize = 30f;
-                lobbyTopBarLevelXpText.enableAutoSizing = true;
-                lobbyTopBarLevelXpText.fontSizeMin = 22f;
-                lobbyTopBarLevelXpText.fontSizeMax = 30f;
-            }
-            if (lobbyTopBarAstronsText != null)
-            {
-                float bannerX = 168f;
-                float bannerWidth = Mathf.Clamp(rootWidth - bannerX - 270f, 620f, 1120f);
-                RectTransform astronsRect = lobbyTopBarAstronsText.rectTransform;
-                astronsRect.anchorMin = new Vector2(0f, 1f);
-                astronsRect.anchorMax = new Vector2(0f, 1f);
-                astronsRect.pivot = new Vector2(0f, 0.5f);
-                astronsRect.anchoredPosition = new Vector2(bannerX + bannerWidth - 220f, -40f);
-                astronsRect.sizeDelta = new Vector2(210f, 42f);
-                lobbyTopBarAstronsText.fontSize = 30f;
-                lobbyTopBarAstronsText.enableAutoSizing = true;
-                lobbyTopBarAstronsText.fontSizeMin = 22f;
-                lobbyTopBarAstronsText.fontSizeMax = 30f;
-            }
+            if (lobbyTopBar == null)
+                ConfigureSharedLobbyTopBar();
+            if (lobbyTopBar != null)
+                lobbyTopBar.Layout(rootWidth);
+
             lobbyTopBarRootObject.transform.SetAsLastSibling();
         }
 
@@ -1375,10 +1473,61 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (mapDetailsNameText != null)
             mapDetailsNameText.text = selectedMap.DisplayName;
         if (mapDetailsDescriptionText != null)
-            mapDetailsDescriptionText.text = selectedMap.Description;
+            mapDetailsDescriptionText.text = selectedMap.Description + BuildMapEffectsSummary();
 
         if (launchButton != null)
             launchButton.interactable = PhotonNetwork.IsMasterClient && PhotonNetwork.InRoom && RoomSettings.GetSessionState() == RoomSettings.SessionStateInLobby;
+    }
+
+    string BuildMapEffectsSummary()
+    {
+        List<string> activeEffects = new List<string>();
+        AddMapEffectSummary(
+            activeEffects,
+            "CRAZY ENEMIES",
+            RoomSettings.CrazyEnemiesModeKey,
+            RoomSettings.CrazyEnemiesStartUtcMsKey,
+            RoomSettings.CrazyEnemiesActiveKey,
+            "resources density +1");
+        AddMapEffectSummary(
+            activeEffects,
+            "FOG OF WAR",
+            RoomSettings.FogOfWarModeKey,
+            RoomSettings.FogOfWarStartUtcMsKey,
+            RoomSettings.FogOfWarActiveKey,
+            "resources richness +1");
+
+        if (activeEffects.Count == 0)
+            return string.Empty;
+
+        return "\n\nMAP EFFECTS: " + string.Join(" | ", activeEffects);
+    }
+
+    string BuildCompactMapEffectsSummary()
+    {
+        List<string> labels = new List<string>();
+        if (RoomSettings.GetMapEffectMode(RoomSettings.CrazyEnemiesModeKey) != RoomSettings.MapEffectModeOff ||
+            IsMapEffectActive(RoomSettings.CrazyEnemiesActiveKey))
+        {
+            labels.Add("CRAZY");
+        }
+
+        if (RoomSettings.GetMapEffectMode(RoomSettings.FogOfWarModeKey) != RoomSettings.MapEffectModeOff ||
+            IsMapEffectActive(RoomSettings.FogOfWarActiveKey))
+        {
+            labels.Add("FOG");
+        }
+
+        return labels.Count > 0 ? "\nEFFECTS: " + string.Join(" + ", labels) : string.Empty;
+    }
+
+    void AddMapEffectSummary(List<string> entries, string label, string modeKey, string startKey, string activeKey, string reward)
+    {
+        string mode = RoomSettings.GetMapEffectMode(modeKey);
+        if (mode == RoomSettings.MapEffectModeOff && !IsMapEffectActive(activeKey))
+            return;
+
+        entries.Add(label + " " + FormatMapEffectSetting(modeKey, startKey, activeKey) + " (" + reward + ")");
     }
 
     void RefreshDeveloperSettingsUi()
@@ -1387,6 +1536,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         EnsureWeaponSettingsPanel();
         LayoutDeveloperSettingsRoots();
         LayoutDeveloperWeaponButtons();
+        EnsureDeveloperCheatLayering();
     }
 
     void EnsureWeaponSettingsPanel()
@@ -1871,9 +2021,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         treasureSettingButton = EnsureSettingButton(ref treasureSettingText, treasureSettingButton, "TreasureSettingButton", "TreasureSettingText", Vector2.zero, CycleTreasureDensity);
         resourceRichnessSettingButton = EnsureSettingButton(ref resourceRichnessSettingText, resourceRichnessSettingButton, "ResourceRichnessSettingButton", "ResourceRichnessSettingText", Vector2.zero, CycleResourceRichness);
         spaceJunkSettingButton = EnsureSettingButton(ref spaceJunkSettingText, spaceJunkSettingButton, "SpaceJunkSettingButton", "SpaceJunkSettingText", Vector2.zero, CycleSpaceJunkDensity);
+        containersSettingButton = EnsureSettingButton(ref containersSettingText, containersSettingButton, "ContainersSettingButton", "ContainersSettingText", Vector2.zero, CycleContainersDensity);
+        randomLootWreckSettingButton = EnsureSettingButton(ref randomLootWreckSettingText, randomLootWreckSettingButton, "RandomLootWreckSettingButton", "RandomLootWreckSettingText", Vector2.zero, CycleRandomLootWreckCount);
         nebulaSettingButton = EnsureSettingButton(ref nebulaSettingText, nebulaSettingButton, "NebulaSettingButton", "NebulaSettingText", Vector2.zero, CycleNebulaDensity);
+        fireNebulaSettingButton = EnsureSettingButton(ref fireNebulaSettingText, fireNebulaSettingButton, "FireNebulaSettingButton", "FireNebulaSettingText", Vector2.zero, CycleFireNebulaDensity);
+        nebulaSizeSettingButton = EnsureSettingButton(ref nebulaSizeSettingText, nebulaSizeSettingButton, "NebulaSizeSettingButton", "NebulaSizeSettingText", Vector2.zero, CycleNebulaSize);
+        fireNebulaSizeSettingButton = EnsureSettingButton(ref fireNebulaSizeSettingText, fireNebulaSizeSettingButton, "FireNebulaSizeSettingButton", "FireNebulaSizeSettingText", Vector2.zero, CycleFireNebulaSize);
         extractionSettingButton = EnsureSettingButton(ref extractionSettingText, extractionSettingButton, "ExtractionSettingButton", "ExtractionSettingText", Vector2.zero, CycleExtractionCount);
         repairBaySettingButton = EnsureSettingButton(ref repairBaySettingText, repairBaySettingButton, "RepairBaySettingButton", "RepairBaySettingText", Vector2.zero, CycleRepairBayCount);
+        spaceFactorySettingButton = EnsureSettingButton(ref spaceFactorySettingText, spaceFactorySettingButton, "SpaceFactorySettingButton", "SpaceFactorySettingText", Vector2.zero, CycleSpaceFactoryCount);
         boosterSettingButton = EnsureSettingButton(ref boosterSettingText, boosterSettingButton, "BoosterSettingButton", "BoosterSettingText", Vector2.zero, CycleBoosterSlowdown);
         ammoSettingButton = EnsureSettingButton(ref ammoSettingText, ammoSettingButton, "AmmoSettingButton", "AmmoSettingText", Vector2.zero, CycleAmmoCount);
         boosterDelaySettingButton = EnsureSettingButton(ref boosterDelaySettingText, boosterDelaySettingButton, "BoosterDelaySettingButton", "BoosterDelaySettingText", Vector2.zero, CycleBoosterRecoveryDelay);
@@ -1882,6 +2038,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         deathTimerSettingButton = EnsureSettingButton(ref deathTimerSettingText, deathTimerSettingButton, "DeathTimerSettingButton", "DeathTimerSettingText", Vector2.zero, CycleLastShipTimerMultiplier);
         inventoryLossSettingButton = EnsureSettingButton(ref inventoryLossSettingText, inventoryLossSettingButton, "InventoryLossSettingButton", "InventoryLossSettingText", Vector2.zero, CycleInventoryLossEnabled);
         equipmentLossSettingButton = EnsureSettingButton(ref equipmentLossSettingText, equipmentLossSettingButton, "EquipmentLossSettingButton", "EquipmentLossSettingText", Vector2.zero, CycleEquipmentLossEnabled);
+        crazyEnemiesEffectSettingButton = EnsureSettingButton(ref crazyEnemiesEffectSettingText, crazyEnemiesEffectSettingButton, "CrazyEnemiesEffectSettingButton", "CrazyEnemiesEffectSettingText", Vector2.zero, CycleCrazyEnemiesEffect);
+        fogOfWarEffectSettingButton = EnsureSettingButton(ref fogOfWarEffectSettingText, fogOfWarEffectSettingButton, "FogOfWarEffectSettingButton", "FogOfWarEffectSettingText", Vector2.zero, CycleFogOfWarEffect);
         shootingModelSettingButton = EnsureSettingButton(ref shootingModelSettingText, shootingModelSettingButton, "ShootingModelSettingButton", "ShootingModelSettingText", Vector2.zero, CycleShootingModel);
         superAttackSettingButton = EnsureSettingButton(ref superAttackSettingText, superAttackSettingButton, "SuperAttackSettingButton", "SuperAttackSettingText", Vector2.zero, CycleSuperAttackEnabled);
         advancedShootingJoystickSettingButton = EnsureSettingButton(ref advancedShootingJoystickSettingText, advancedShootingJoystickSettingButton, "AdvancedShootingJoystickSettingButton", "AdvancedShootingJoystickSettingText", Vector2.zero, CycleAdvancedShootingJoystickEnabled);
@@ -1899,6 +2057,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(deathTimerSettingButton, "ROUND RULES");
         AttachLeftSectionButton(inventoryLossSettingButton, "ROUND RULES");
         AttachLeftSectionButton(equipmentLossSettingButton, "ROUND RULES");
+        AttachLeftSectionButton(crazyEnemiesEffectSettingButton, "ROUND RULES");
+        AttachLeftSectionButton(fogOfWarEffectSettingButton, "ROUND RULES");
 
         AttachLeftSectionButton(obstacleSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(obstacleDestroySettingButton, "ENVIRONMENT");
@@ -1908,9 +2068,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(treasureSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(resourceRichnessSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(spaceJunkSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(containersSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(randomLootWreckSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(nebulaSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(fireNebulaSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(nebulaSizeSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(fireNebulaSizeSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(extractionSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(repairBaySettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(spaceFactorySettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(movingObjectsSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(obstacleWeightSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(treasureWeightSettingButton, "ENVIRONMENT");
@@ -2259,8 +2425,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (mapSelectionText != null)
         {
-            mapSelectionText.text = "MAP\n" + selectedMap.DisplayName;
-            mapSelectionText.fontSize = 24f;
+            string effectsBadge = BuildCompactMapEffectsSummary();
+            mapSelectionText.text = "MAP\n" + selectedMap.DisplayName + effectsBadge;
+            mapSelectionText.fontSize = string.IsNullOrEmpty(effectsBadge) ? 24f : 21f;
             mapSelectionText.characterSpacing = 1.2f;
         }
 
@@ -2328,7 +2495,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     Sprite LoadLobbyBackgroundSprite(int backgroundIndex)
     {
-        int clampedIndex = Mathf.Clamp(backgroundIndex, 1, 15);
+        int clampedIndex = Mathf.Clamp(backgroundIndex, 1, RoomSettings.MaxMapBackground);
         if (mapBackgroundPreviewCache.TryGetValue(clampedIndex, out Sprite cachedSprite) && cachedSprite != null)
             return cachedSprite;
 
@@ -2894,7 +3061,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.TreasureDensityKey))
         {
-            props[RoomSettings.TreasureDensityKey] = "medium";
+            props[RoomSettings.TreasureDensityKey] = RoomSettings.DefaultTreasureDensity;
             changed = true;
         }
 
@@ -2904,15 +3071,81 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.CrazyEnemiesModeKey))
+        {
+            props[RoomSettings.CrazyEnemiesModeKey] = RoomSettings.DefaultMapEffectMode;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.CrazyEnemiesStartUtcMsKey))
+        {
+            props[RoomSettings.CrazyEnemiesStartUtcMsKey] = -1d;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.CrazyEnemiesActiveKey))
+        {
+            props[RoomSettings.CrazyEnemiesActiveKey] = false;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.FogOfWarModeKey))
+        {
+            props[RoomSettings.FogOfWarModeKey] = RoomSettings.DefaultMapEffectMode;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.FogOfWarStartUtcMsKey))
+        {
+            props[RoomSettings.FogOfWarStartUtcMsKey] = -1d;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.FogOfWarActiveKey))
+        {
+            props[RoomSettings.FogOfWarActiveKey] = false;
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.SpaceJunkDensityKey))
         {
             props[RoomSettings.SpaceJunkDensityKey] = RoomSettings.DefaultSpaceJunkDensity;
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ContainersDensityKey))
+        {
+            props[RoomSettings.ContainersDensityKey] = RoomSettings.DefaultContainersDensity;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.RandomLootWreckCountKey))
+        {
+            props[RoomSettings.RandomLootWreckCountKey] = RoomSettings.DefaultRandomLootWreckCount;
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.NebulaDensityKey))
         {
             props[RoomSettings.NebulaDensityKey] = "medium";
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.FireNebulaDensityKey))
+        {
+            props[RoomSettings.FireNebulaDensityKey] = RoomSettings.DefaultFireNebulaDensity;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.NebulaSizeKey))
+        {
+            props[RoomSettings.NebulaSizeKey] = RoomSettings.DefaultNebulaSize;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.FireNebulaSizeKey))
+        {
+            props[RoomSettings.FireNebulaSizeKey] = RoomSettings.DefaultFireNebulaSize;
             changed = true;
         }
 
@@ -2925,6 +3158,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.RepairBayCountKey))
         {
             props[RoomSettings.RepairBayCountKey] = RoomSettings.DefaultRepairBayCount;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.SpaceFactoryCountKey))
+        {
+            props[RoomSettings.SpaceFactoryCountKey] = RoomSettings.DefaultSpaceFactoryCount;
             changed = true;
         }
 
@@ -3326,7 +3565,72 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void CycleResourceRichness()
     {
-        CycleStringSetting(RoomSettings.ResourceRichnessKey, ResourceRichnessOptions, GetResourceRichness(), RoomSettings.DefaultResourceRichness);
+        CycleStringSetting(RoomSettings.ResourceRichnessKey, ResourceRichnessOptions, RoomSettings.GetBaseResourceRichness(), RoomSettings.DefaultResourceRichness);
+    }
+
+    void CycleCrazyEnemiesEffect()
+    {
+        CycleMapEffect(RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, RoomSettings.CrazyEnemiesActiveKey);
+    }
+
+    void CycleFogOfWarEffect()
+    {
+        CycleMapEffect(RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, RoomSettings.FogOfWarActiveKey);
+    }
+
+    void CycleMapEffect(string modeKey, string startKey, string activeKey)
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        string mode = RoomSettings.GetMapEffectMode(modeKey);
+        double nowUtcMs = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        Hashtable props = new Hashtable();
+        props[activeKey] = false;
+
+        if (mode == RoomSettings.MapEffectModeOff)
+        {
+            props[modeKey] = RoomSettings.MapEffectModeAlwaysOn;
+            props[startKey] = -1d;
+        }
+        else if (mode == RoomSettings.MapEffectModeAlwaysOn)
+        {
+            props[modeKey] = RoomSettings.MapEffectModeUtcStart;
+            props[startKey] = GetNextUtcHourStartMs();
+        }
+        else
+        {
+            double currentStart = RoomSettings.GetMapEffectStartUtcMs(startKey);
+            double nextStart = currentStart >= nowUtcMs ? currentStart + 60d * 60d * 1000d : GetNextUtcHourStartMs();
+            if (nextStart > nowUtcMs + 12d * 60d * 60d * 1000d)
+            {
+                props[modeKey] = RoomSettings.MapEffectModeOff;
+                props[startKey] = -1d;
+            }
+            else
+            {
+                props[modeKey] = RoomSettings.MapEffectModeUtcStart;
+                props[startKey] = nextStart;
+            }
+        }
+
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+        RefreshMapDetailsUi();
+    }
+
+    double GetNextUtcHourStartMs()
+    {
+        System.DateTimeOffset now = System.DateTimeOffset.UtcNow;
+        System.DateTimeOffset nextHour = new System.DateTimeOffset(
+            now.Year,
+            now.Month,
+            now.Day,
+            now.Hour,
+            0,
+            0,
+            System.TimeSpan.Zero).AddHours(1d);
+        return nextHour.ToUnixTimeMilliseconds();
     }
 
     void CycleSpaceJunkDensity()
@@ -3334,9 +3638,38 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         CycleStringSetting(RoomSettings.SpaceJunkDensityKey, SpaceJunkDensityOptions, GetSpaceJunkDensity(), RoomSettings.DefaultSpaceJunkDensity);
     }
 
+    void CycleContainersDensity()
+    {
+        CycleStringSetting(RoomSettings.ContainersDensityKey, ContainersDensityOptions, GetContainersDensity(), RoomSettings.DefaultContainersDensity);
+    }
+
+    void CycleRandomLootWreckCount()
+    {
+        CycleIntSetting(
+            RoomSettings.RandomLootWreckCountKey,
+            RandomLootWreckCountOptions,
+            GetRandomLootWreckCount(),
+            RoomSettings.DefaultRandomLootWreckCount);
+    }
+
     void CycleNebulaDensity()
     {
         CycleDensitySetting(RoomSettings.NebulaDensityKey, GetNebulaDensity());
+    }
+
+    void CycleFireNebulaDensity()
+    {
+        CycleDensitySetting(RoomSettings.FireNebulaDensityKey, GetFireNebulaDensity());
+    }
+
+    void CycleNebulaSize()
+    {
+        CycleStringSetting(RoomSettings.NebulaSizeKey, NebulaSizeOptions, GetNebulaSize(), RoomSettings.DefaultNebulaSize);
+    }
+
+    void CycleFireNebulaSize()
+    {
+        CycleStringSetting(RoomSettings.FireNebulaSizeKey, NebulaSizeOptions, GetFireNebulaSize(), RoomSettings.DefaultFireNebulaSize);
     }
 
     void CycleExtractionCount()
@@ -3364,6 +3697,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             RepairBayCountOptions,
             GetRepairBayCount(),
             RoomSettings.DefaultRepairBayCount);
+    }
+
+    void CycleSpaceFactoryCount()
+    {
+        CycleIntSetting(
+            RoomSettings.SpaceFactoryCountKey,
+            SpaceFactoryCountOptions,
+            GetSpaceFactoryCount(),
+            RoomSettings.DefaultSpaceFactoryCount);
     }
 
     void CycleBoosterSlowdown()
@@ -3513,13 +3855,23 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         CycleIntSetting(definition.CountRoomKey, options, RoomSettings.GetEnemyCount(kind), definition.DefaultCount);
     }
 
+    int[] GetEnemyHpOptions(EnemyBotKind kind)
+    {
+        return kind == EnemyBotKind.PirateBase ? HeavyEnemyHpOptions : EnemyHpOptions;
+    }
+
+    int[] GetEnemyShieldOptions(EnemyBotKind kind)
+    {
+        return kind == EnemyBotKind.PirateBase ? HeavyEnemyShieldOptions : EnemyShieldOptions;
+    }
+
     void CycleEnemyHp(EnemyBotKind kind)
     {
         EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
         if (definition == null)
             return;
 
-        int nextValue = GetNextOptionValue(EnemyHpOptions, RoomSettings.GetEnemyHp(kind), definition.DefaultHp);
+        int nextValue = GetNextOptionValue(GetEnemyHpOptions(kind), RoomSettings.GetEnemyHp(kind), definition.DefaultHp);
         Hashtable props = new Hashtable();
         props[definition.HpRoomKey] = nextValue;
         if (kind == EnemyBotKind.Corsair)
@@ -3535,7 +3887,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (definition == null)
             return;
 
-        CycleIntSetting(definition.ShieldRoomKey, EnemyShieldOptions, RoomSettings.GetEnemyShield(kind), definition.DefaultShield);
+        CycleIntSetting(definition.ShieldRoomKey, GetEnemyShieldOptions(kind), RoomSettings.GetEnemyShield(kind), definition.DefaultShield);
     }
 
     void CycleEnemyDamage(EnemyBotKind kind)
@@ -3877,14 +4229,32 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (spaceJunkSettingText != null)
             spaceJunkSettingText.text = "SPACE JUNK: " + FormatSpaceJunkDensity(GetSpaceJunkDensity());
 
+        if (containersSettingText != null)
+            containersSettingText.text = "CONTAINERS DENSITY: " + FormatContainersDensity(GetContainersDensity());
+
+        if (randomLootWreckSettingText != null)
+            randomLootWreckSettingText.text = "RANDOM WRECKS: " + FormatRandomLootWreckCount(GetRandomLootWreckCount());
+
         if (nebulaSettingText != null)
             nebulaSettingText.text = "NEBULA DENSITY: " + FormatDensity(GetNebulaDensity());
+
+        if (fireNebulaSettingText != null)
+            fireNebulaSettingText.text = "FIRE NEBULA DENSITY: " + FormatDensity(GetFireNebulaDensity());
+
+        if (nebulaSizeSettingText != null)
+            nebulaSizeSettingText.text = "NEBULA SIZE: " + FormatNebulaSize(GetNebulaSize());
+
+        if (fireNebulaSizeSettingText != null)
+            fireNebulaSizeSettingText.text = "FIRE NEBULA SIZE: " + FormatNebulaSize(GetFireNebulaSize());
 
         if (extractionSettingText != null)
             extractionSettingText.text = "EXTRACTION ZONES: " + GetExtractionCount();
 
         if (repairBaySettingText != null)
             repairBaySettingText.text = "REPAIR BAY: " + GetRepairBayCount();
+
+        if (spaceFactorySettingText != null)
+            spaceFactorySettingText.text = "SPACE FACTORY: " + GetSpaceFactoryCount();
 
         if (boosterSettingText != null)
             boosterSettingText.text = "EMPTY BOOSTER SLOWDOWN: " + GetBoosterSlowdownPercent() + "%";
@@ -3906,6 +4276,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (equipmentLossSettingText != null)
             equipmentLossSettingText.text = "EQUIPMENT LOSS: " + (RoomSettings.IsEquipmentLossEnabled() ? "YES" : "NO");
+
+        if (crazyEnemiesEffectSettingText != null)
+            crazyEnemiesEffectSettingText.text = "CRAZY ENEMIES: " + FormatMapEffectSetting(RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, RoomSettings.CrazyEnemiesActiveKey) + " (+DENSITY)";
+
+        if (fogOfWarEffectSettingText != null)
+            fogOfWarEffectSettingText.text = "FOG OF WAR: " + FormatMapEffectSetting(RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, RoomSettings.FogOfWarActiveKey) + " (+RICHNESS)";
 
         if (movingObjectsSettingText != null)
             movingObjectsSettingText.text = "MOVING OBJECTS: " + FormatMovingObjectsMode(GetMovingObjectsMode());
@@ -3955,9 +4331,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(treasureSettingButton, isHost);
         SetSettingButtonState(resourceRichnessSettingButton, isHost);
         SetSettingButtonState(spaceJunkSettingButton, isHost);
+        SetSettingButtonState(containersSettingButton, isHost);
+        SetSettingButtonState(randomLootWreckSettingButton, isHost);
         SetSettingButtonState(nebulaSettingButton, isHost);
+        SetSettingButtonState(fireNebulaSettingButton, isHost);
+        SetSettingButtonState(nebulaSizeSettingButton, isHost);
+        SetSettingButtonState(fireNebulaSizeSettingButton, isHost);
         SetSettingButtonState(extractionSettingButton, isHost);
         SetSettingButtonState(repairBaySettingButton, isHost);
+        SetSettingButtonState(spaceFactorySettingButton, isHost);
         SetSettingButtonState(boosterSettingButton, isHost);
         SetSettingButtonState(ammoSettingButton, isHost);
         SetSettingButtonState(boosterDelaySettingButton, isHost);
@@ -3965,6 +4347,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(deathTimerSettingButton, isHost);
         SetSettingButtonState(inventoryLossSettingButton, isHost);
         SetSettingButtonState(equipmentLossSettingButton, isHost);
+        SetSettingButtonState(crazyEnemiesEffectSettingButton, isHost);
+        SetSettingButtonState(fogOfWarEffectSettingButton, isHost);
         SetSettingButtonState(movingObjectsSettingButton, isHost);
         SetSettingButtonState(bulletPushSettingButton, isHost);
         SetSettingButtonState(batteringSettingButton, isHost);
@@ -4169,7 +4553,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         RefreshDeveloperCheatOverlay(string.Empty);
         developerCheatOverlayObject.SetActive(true);
-        developerCheatOverlayObject.transform.SetAsLastSibling();
+        EnsureDeveloperCheatLayering();
     }
 
     async void OnDeveloperCheatAddMoneyClicked()
@@ -4198,18 +4582,135 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         }
     }
 
+    async void OnDeveloperCheatAddXpClicked()
+    {
+        if (PlayerProfileService.Instance == null || developerCheatOverlayObject == null)
+            return;
+
+        try
+        {
+            RefreshDeveloperCheatOverlay("Adding 1000 XP...", true);
+            await PlayerProfileService.Instance.AddCheatXpAsync(1000);
+            RefreshLobbyTopBar();
+            RefreshDeveloperCheatOverlay("Added 1000 XP.");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Developer cheat add XP failed: " + ex);
+            RefreshDeveloperCheatOverlay("Could not add XP.");
+        }
+        finally
+        {
+            RefreshDeveloperCheatOverlay();
+        }
+    }
+
+    void OnDeveloperCheatResetAccountClicked()
+    {
+        if (developerCheatResetConfirmObject == null)
+            return;
+
+        developerCheatResetConfirmObject.SetActive(true);
+        EnsureDeveloperCheatLayering();
+    }
+
+    async void OnDeveloperCheatResetConfirmClicked()
+    {
+        if (PlayerProfileService.Instance == null || developerCheatOverlayObject == null)
+            return;
+
+        try
+        {
+            RefreshDeveloperCheatOverlay("Resetting account...", true);
+            await PlayerProfileService.Instance.ResetAccountAsync();
+            HideDeveloperCheatResetConfirm();
+            RefreshLobbyTopBar();
+            RefreshDeveloperCheatOverlay("Account reset.");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Developer cheat reset account failed: " + ex);
+            RefreshDeveloperCheatOverlay("Account reset failed.");
+        }
+        finally
+        {
+            RefreshDeveloperCheatOverlay();
+        }
+    }
+
     void OnLaunchClicked()
     {
-        if (!PhotonNetwork.InRoom || RoomSettings.GetSessionState() != RoomSettings.SessionStateInLobby)
+        if (!PhotonNetwork.InRoom)
+        {
+            Debug.LogWarning("LAUNCH clicked, but Photon is not in a room yet.");
             return;
+        }
+
+        bool alreadyStarted = IsCurrentRoomGameStarted();
+        string sessionState = RoomSettings.GetSessionState();
+        if (sessionState != RoomSettings.SessionStateInLobby && !alreadyStarted)
+        {
+            Debug.LogWarning("LAUNCH clicked, but room is not in lobby state: " + sessionState);
+            return;
+        }
 
         if (PhotonNetwork.IsMasterClient)
         {
             StartGame();
+            EnsureLaunchStartRecovery();
             return;
         }
 
         SetReady(true);
+    }
+
+    bool IsCurrentRoomGameStarted()
+    {
+        return PhotonNetwork.CurrentRoom != null &&
+               PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
+               value is bool started &&
+               started;
+    }
+
+    void EnsureLaunchStartRecovery()
+    {
+        if (launchStartRecoveryRoutine != null)
+            return;
+
+        launchStartRecoveryRoutine = StartCoroutine(RecoverLaunchStartRoutine());
+    }
+
+    System.Collections.IEnumerator RecoverLaunchStartRoutine()
+    {
+        const int maxAttempts = 20;
+        WaitForSecondsRealtime wait = new WaitForSecondsRealtime(0.1f);
+
+        for (int attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            if (!PhotonNetwork.InRoom)
+                break;
+
+            if (IsCurrentRoomGameStarted())
+            {
+                HideLobby();
+                NetworkManager manager = FindAnyObjectByType<NetworkManager>();
+                if (manager != null)
+                    manager.RestoreRoomStateAfterSceneLoad();
+
+                launchStartRecoveryRoutine = null;
+                yield break;
+            }
+
+            if (PhotonNetwork.IsMasterClient && attempt == 5 && RoomSettings.GetSessionState() == RoomSettings.SessionStateInLobby)
+            {
+                Debug.LogWarning("LAUNCH recovery: gameStarted was not visible after 0.5s, retrying StartGame.");
+                StartGame();
+            }
+
+            yield return wait;
+        }
+
+        launchStartRecoveryRoutine = null;
     }
 
     Button GetEnemySettingButton(EnemyBotKind kind, string suffix)
@@ -4256,10 +4757,22 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.ObstacleNoBordersKey) ||
                changedProps.ContainsKey(RoomSettings.TreasureDensityKey) ||
                changedProps.ContainsKey(RoomSettings.ResourceRichnessKey) ||
+               changedProps.ContainsKey(RoomSettings.CrazyEnemiesModeKey) ||
+               changedProps.ContainsKey(RoomSettings.CrazyEnemiesStartUtcMsKey) ||
+               changedProps.ContainsKey(RoomSettings.CrazyEnemiesActiveKey) ||
+               changedProps.ContainsKey(RoomSettings.FogOfWarModeKey) ||
+               changedProps.ContainsKey(RoomSettings.FogOfWarStartUtcMsKey) ||
+               changedProps.ContainsKey(RoomSettings.FogOfWarActiveKey) ||
                changedProps.ContainsKey(RoomSettings.SpaceJunkDensityKey) ||
+               changedProps.ContainsKey(RoomSettings.ContainersDensityKey) ||
+               changedProps.ContainsKey(RoomSettings.RandomLootWreckCountKey) ||
                changedProps.ContainsKey(RoomSettings.NebulaDensityKey) ||
+               changedProps.ContainsKey(RoomSettings.FireNebulaDensityKey) ||
+               changedProps.ContainsKey(RoomSettings.NebulaSizeKey) ||
+               changedProps.ContainsKey(RoomSettings.FireNebulaSizeKey) ||
                changedProps.ContainsKey(RoomSettings.ExtractionCountKey) ||
                changedProps.ContainsKey(RoomSettings.RepairBayCountKey) ||
+               changedProps.ContainsKey(RoomSettings.SpaceFactoryCountKey) ||
                changedProps.ContainsKey(RoomSettings.BoosterSlowdownKey) ||
                changedProps.ContainsKey(RoomSettings.AmmoCountKey) ||
                changedProps.ContainsKey(RoomSettings.BoosterRecoveryDelayKey) ||
@@ -4364,12 +4877,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     string GetTreasureDensity()
     {
-        return GetDensitySetting(RoomSettings.TreasureDensityKey);
+        return RoomSettings.GetBaseTreasureDensity();
     }
 
     string GetResourceRichness()
     {
-        return RoomSettings.GetResourceRichness();
+        return RoomSettings.GetBaseResourceRichness();
     }
 
     string GetSpaceJunkDensity()
@@ -4377,9 +4890,34 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return RoomSettings.GetSpaceJunkDensity();
     }
 
+    string GetContainersDensity()
+    {
+        return RoomSettings.GetContainersDensity();
+    }
+
+    int GetRandomLootWreckCount()
+    {
+        return RoomSettings.GetRandomLootWreckCount();
+    }
+
     string GetNebulaDensity()
     {
         return GetDensitySetting(RoomSettings.NebulaDensityKey);
+    }
+
+    string GetFireNebulaDensity()
+    {
+        return RoomSettings.GetFireNebulaDensity();
+    }
+
+    string GetNebulaSize()
+    {
+        return RoomSettings.GetNebulaSize();
+    }
+
+    string GetFireNebulaSize()
+    {
+        return RoomSettings.GetFireNebulaSize();
     }
 
     int GetExtractionCount()
@@ -4390,6 +4928,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     int GetRepairBayCount()
     {
         return RoomSettings.GetRepairBayCount();
+    }
+
+    int GetSpaceFactoryCount()
+    {
+        return RoomSettings.GetSpaceFactoryCount();
     }
 
     int GetBoosterSlowdownPercent()
@@ -4496,14 +5039,59 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return density.ToUpperInvariant();
     }
 
+    string FormatNebulaSize(string size)
+    {
+        return RoomSettings.NormalizeNebulaSize(size).Replace("_", " ").ToUpperInvariant();
+    }
+
     string FormatResourceRichness(string richness)
     {
         return RoomSettings.NormalizeResourceRichness(richness).Replace("_", " ").ToUpperInvariant();
     }
 
+    string FormatMapEffectSetting(string modeKey, string startKey, string activeKey)
+    {
+        if (IsMapEffectActive(activeKey))
+            return "ACTIVE";
+
+        string mode = RoomSettings.GetMapEffectMode(modeKey);
+        if (mode == RoomSettings.MapEffectModeAlwaysOn)
+            return "ALWAYS ON";
+
+        if (mode == RoomSettings.MapEffectModeUtcStart)
+        {
+            double startUtcMs = RoomSettings.GetMapEffectStartUtcMs(startKey);
+            if (startUtcMs >= 0d)
+            {
+                System.DateTimeOffset start = System.DateTimeOffset.FromUnixTimeMilliseconds((long)startUtcMs);
+                return "UTC " + start.ToString("MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+            }
+        }
+
+        return "OFF";
+    }
+
+    bool IsMapEffectActive(string activeKey)
+    {
+        return PhotonNetwork.CurrentRoom != null &&
+               PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(activeKey, out object value) &&
+               value is bool active &&
+               active;
+    }
+
     string FormatSpaceJunkDensity(string density)
     {
         return RoomSettings.NormalizeSpaceJunkDensity(density).ToUpperInvariant();
+    }
+
+    string FormatContainersDensity(string density)
+    {
+        return RoomSettings.NormalizeContainersDensity(density).Replace("_", " ").ToUpperInvariant();
+    }
+
+    string FormatRandomLootWreckCount(int count)
+    {
+        return count <= 0 ? "OFF" : Mathf.Clamp(count, 1, 5).ToString();
     }
 
     string FormatMapSize(string mapSize)
@@ -4521,7 +5109,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     string FormatMapBackground(int backgroundIndex)
     {
-        return "TLO " + Mathf.Clamp(backgroundIndex, 1, 15);
+        return "TLO " + Mathf.Clamp(backgroundIndex, 1, RoomSettings.MaxMapBackground);
     }
 
     string FormatShootingModel(string model)

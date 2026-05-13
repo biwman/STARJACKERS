@@ -3,13 +3,16 @@ using Photon.Pun;
 using Photon.Realtime;
 using UnityEngine.SceneManagement;
 using ExitGames.Client.Photon;
+using System;
 
 public class GameManager : MonoBehaviourPunCallbacks
 {
     const string ObstacleLayoutKey = "obstacleLayout";
     const string ExtractionLayoutKey = "extractionLayout";
     const string NebulaLayoutKey = "nebulaLayout";
+    const string FireNebulaLayoutKey = NebulaSpawner.FireNebulaLayoutKey;
     const string RepairBayLayoutKey = "repairBayLayout";
+    const string SpaceFactoryLayoutKey = SpaceFactorySpawner.LayoutKey;
     const string MapSeedKey = "mapSeed";
     const string LoneShipModeStartTimeKey = "loneShipModeStartTime";
     const float RestartCleanupTimeout = 2.5f;
@@ -21,20 +24,30 @@ public class GameManager : MonoBehaviourPunCallbacks
         if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient) return;
 
         EarlyRoundExitUI.HideAll();
+        RoundStartCurtainUI.ShowForRoundStart();
 
         Hashtable props = new Hashtable();
+        float roundDuration = RoomSettings.GetRoundDuration();
+        double roundStartUtcMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         props["gameStarted"] = true;
         props[RoomSettings.StartTimeKey] = PhotonNetwork.Time;
+        props[RoomSettings.RoundEndUtcMsKey] = roundStartUtcMs + (roundDuration * 1000d);
         props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateInPlay;
+        props[RoomSettings.CrazyEnemiesActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, roundStartUtcMs);
+        props[RoomSettings.FogOfWarActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, roundStartUtcMs);
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;
         props[RoomSettings.GadgetChargesStateKey] = string.Empty;
         props[RoomSettings.RepairBayOccupancyStateKey] = string.Empty;
+        props[RoomSettings.SpaceFactoryStateKey] = string.Empty;
+        props[RoomSettings.SpaceFactoryOccupancyStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.FinishedRoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
+        props[FireNebulaLayoutKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
+        props[SpaceFactoryLayoutKey] = string.Empty;
 
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RoundResultsTracker.ResetForCurrentRoom();
@@ -72,6 +85,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient) return;
 
         EarlyRoundExitUI.HideAll();
+        RoundPilotHudUI.DestroyAllRuntimeObjects();
 
         RoundResultsSnapshotData snapshot = RoundResultsTracker.BuildSnapshot(endReason);
 
@@ -80,14 +94,21 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[ObstacleLayoutKey] = string.Empty;
         props[ExtractionLayoutKey] = string.Empty;
         props[NebulaLayoutKey] = string.Empty;
+        props[FireNebulaLayoutKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
+        props[SpaceFactoryLayoutKey] = string.Empty;
         props[MapSeedKey] = -1;
         props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateSummary;
+        props[RoomSettings.RoundEndUtcMsKey] = -1d;
+        props[RoomSettings.CrazyEnemiesActiveKey] = false;
+        props[RoomSettings.FogOfWarActiveKey] = false;
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;
         props[RoomSettings.GadgetChargesStateKey] = string.Empty;
         props[RoomSettings.RepairBayOccupancyStateKey] = string.Empty;
+        props[RoomSettings.SpaceFactoryStateKey] = string.Empty;
+        props[RoomSettings.SpaceFactoryOccupancyStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = RoundResultsTracker.SerializeSnapshot(snapshot);
         props[RoomSettings.RoundEndReasonKey] = snapshot != null ? snapshot.endReason : endReason;
 
@@ -138,21 +159,29 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         restartInProgress = true;
         EarlyRoundExitUI.HideAll();
+        RoundPilotHudUI.DestroyAllRuntimeObjects();
 
         Hashtable props = new Hashtable();
         props["gameStarted"] = false;
         props[ObstacleLayoutKey] = string.Empty;
         props[ExtractionLayoutKey] = string.Empty;
         props[NebulaLayoutKey] = string.Empty;
+        props[FireNebulaLayoutKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
+        props[SpaceFactoryLayoutKey] = string.Empty;
         props[MapSeedKey] = -1;
         props[RoomSettings.StartTimeKey] = -1d;
+        props[RoomSettings.RoundEndUtcMsKey] = -1d;
         props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateInLobby;
+        props[RoomSettings.CrazyEnemiesActiveKey] = false;
+        props[RoomSettings.FogOfWarActiveKey] = false;
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;
         props[RoomSettings.GadgetChargesStateKey] = string.Empty;
         props[RoomSettings.RepairBayOccupancyStateKey] = string.Empty;
+        props[RoomSettings.SpaceFactoryStateKey] = string.Empty;
+        props[RoomSettings.SpaceFactoryOccupancyStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.FinishedRoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;

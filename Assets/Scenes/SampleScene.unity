@@ -742,9 +742,15 @@ MonoBehaviour:
   treasureSettingText: {fileID: 0}
   resourceRichnessSettingText: {fileID: 0}
   spaceJunkSettingText: {fileID: 0}
+  containersSettingText: {fileID: 0}
+  randomLootWreckSettingText: {fileID: 0}
   nebulaSettingText: {fileID: 0}
+  fireNebulaSettingText: {fileID: 0}
+  nebulaSizeSettingText: {fileID: 0}
+  fireNebulaSizeSettingText: {fileID: 0}
   extractionSettingText: {fileID: 0}
   repairBaySettingText: {fileID: 0}
+  spaceFactorySettingText: {fileID: 0}
   boosterSettingText: {fileID: 0}
   ammoSettingText: {fileID: 0}
   boosterDelaySettingText: {fileID: 0}
@@ -752,6 +758,8 @@ MonoBehaviour:
   deathTimerSettingText: {fileID: 0}
   inventoryLossSettingText: {fileID: 0}
   equipmentLossSettingText: {fileID: 0}
+  crazyEnemiesEffectSettingText: {fileID: 0}
+  fogOfWarEffectSettingText: {fileID: 0}
   movingObjectsSettingText: {fileID: 0}
   enemyBotsSettingText: {fileID: 0}
   corsairSettingText: {fileID: 0}
@@ -765,6 +773,7 @@ MonoBehaviour:
   superAttackSettingText: {fileID: 0}
   advancedShootingJoystickSettingText: {fileID: 0}
   hapticsSettingText: {fileID: 0}
+  fpsCounterSettingText: {fileID: 0}
   gunSetupSettingText: {fileID: 0}
   roundSettingButton: {fileID: 0}
   mapSizeSettingButton: {fileID: 0}
@@ -781,9 +790,15 @@ MonoBehaviour:
   treasureSettingButton: {fileID: 0}
   resourceRichnessSettingButton: {fileID: 0}
   spaceJunkSettingButton: {fileID: 0}
+  containersSettingButton: {fileID: 0}
+  randomLootWreckSettingButton: {fileID: 0}
   nebulaSettingButton: {fileID: 0}
+  fireNebulaSettingButton: {fileID: 0}
+  nebulaSizeSettingButton: {fileID: 0}
+  fireNebulaSizeSettingButton: {fileID: 0}
   extractionSettingButton: {fileID: 0}
   repairBaySettingButton: {fileID: 0}
+  spaceFactorySettingButton: {fileID: 0}
   boosterSettingButton: {fileID: 0}
   ammoSettingButton: {fileID: 0}
   boosterDelaySettingButton: {fileID: 0}
@@ -791,6 +806,8 @@ MonoBehaviour:
   deathTimerSettingButton: {fileID: 0}
   inventoryLossSettingButton: {fileID: 0}
   equipmentLossSettingButton: {fileID: 0}
+  crazyEnemiesEffectSettingButton: {fileID: 0}
+  fogOfWarEffectSettingButton: {fileID: 0}
   movingObjectsSettingButton: {fileID: 0}
   bulletPushSettingButton: {fileID: 0}
   obstacleWeightSettingButton: {fileID: 0}
@@ -800,6 +817,7 @@ MonoBehaviour:
   superAttackSettingButton: {fileID: 0}
   advancedShootingJoystickSettingButton: {fileID: 0}
   hapticsSettingButton: {fileID: 0}
+  fpsCounterSettingButton: {fileID: 0}
   gunSetupSettingButton: {fileID: 0}
   backToRoundsButton: {fileID: 0}
   backToRoundsText: {fileID: 0}
@@ -1010,18 +1028,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 760, y: 560}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!62 &399971021
-PhysicsMaterial2D:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: MovingSpaceObjectBouncy
-  serializedVersion: 2
-  friction: 0
-  bounciness: 1
-  m_FrictionCombine: 1
-  m_BounceCombine: 4
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -1175,6 +1181,18 @@ MonoBehaviour:
   target: {fileID: 0}
   mapSizeX: 25
   mapSizeY: 25
+--- !u!62 &539481660
+PhysicsMaterial2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: MovingSpaceObjectBouncy
+  serializedVersion: 2
+  friction: 0
+  bounciness: 1
+  m_FrictionCombine: 1
+  m_BounceCombine: 4
 --- !u!1 &561656650
 GameObject:
   m_ObjectHideFlags: 0
@@ -1702,6 +1720,216 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
+--- !u!213 &844285446
+Sprite:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Rect:
+    serializedVersion: 2
+    x: 0
+    y: 0
+    width: 1536
+    height: 1024
+  m_Offset: {x: 0, y: 0}
+  m_Border: {x: 0, y: 0, z: 0, w: 0}
+  m_PixelsToUnits: 192
+  m_Pivot: {x: 0.5, y: 0.5}
+  m_Extrude: 0
+  m_IsPolygon: 0
+  m_PackingTag: 
+  m_RenderDataKey:
+    00000000000000000000000000000000: 0
+  m_AtlasTags: []
+  m_SpriteAtlas: {fileID: 0}
+  m_RD:
+    serializedVersion: 3
+    texture: {fileID: 2800000, guid: d740e4af474d02a4792e6ef26e89387d, type: 3}
+    alphaTexture: {fileID: 0}
+    secondaryTextures: []
+    m_SubMeshes:
+    - serializedVersion: 2
+      firstByte: 0
+      indexCount: 6
+      topology: 0
+      baseVertex: 0
+      firstVertex: 0
+      vertexCount: 4
+      localAABB:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 0, y: 0, z: 0}
+    m_IndexBuffer: 030000000100020001000000
+    m_VertexData:
+      serializedVersion: 3
+      m_VertexCount: 4
+      m_Channels:
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 3
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 1
+        offset: 0
+        format: 0
+        dimension: 2
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      m_DataSize: 80
+      _typelessdata: 000080c0abaa2a400000000000008040abaa2ac00000000000008040abaa2a4000000000000080c0abaa2ac0000000000000000000000000000000000000000000000000000000000000000000000000
+    m_Bindpose: []
+    textureRect:
+      serializedVersion: 2
+      x: 0
+      y: 0
+      width: 1536
+      height: 1024
+    textureRectOffset: {x: 0, y: 0}
+    atlasRectOffset: {x: -1, y: -1}
+    settingsRaw: 64
+    uvTransform: {x: 192, y: 768, z: 192, w: 512}
+    downscaleMultiplier: 1
+  m_AtlasRD:
+    serializedVersion: 3
+    texture: {fileID: 2800000, guid: d740e4af474d02a4792e6ef26e89387d, type: 3}
+    alphaTexture: {fileID: 0}
+    secondaryTextures: []
+    m_SubMeshes:
+    - serializedVersion: 2
+      firstByte: 0
+      indexCount: 6
+      topology: 0
+      baseVertex: 0
+      firstVertex: 0
+      vertexCount: 4
+      localAABB:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 0, y: 0, z: 0}
+    m_IndexBuffer: 030000000100020001000000
+    m_VertexData:
+      serializedVersion: 3
+      m_VertexCount: 4
+      m_Channels:
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 3
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 1
+        offset: 0
+        format: 0
+        dimension: 2
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      m_DataSize: 80
+      _typelessdata: 000080c0abaa2a400000000000008040abaa2ac00000000000008040abaa2a4000000000000080c0abaa2ac0000000000000000000000000000000000000000000000000000000000000000000000000
+    m_Bindpose: []
+    textureRect:
+      serializedVersion: 2
+      x: 0
+      y: 0
+      width: 1536
+      height: 1024
+    textureRectOffset: {x: 0, y: 0}
+    atlasRectOffset: {x: -1, y: -1}
+    settingsRaw: 64
+    uvTransform: {x: 192, y: 768, z: 192, w: 512}
+    downscaleMultiplier: 1
+  m_PhysicsShape: []
+  m_Bones: []
+  m_ScriptableObjects: []
+  m_SpriteID: 
 --- !u!1 &852586369
 GameObject:
   m_ObjectHideFlags: 0
@@ -1805,7 +2033,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 399971021}
+  m_Material: {fileID: 539481660}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -2116,7 +2344,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 399971021}
+  m_Material: {fileID: 539481660}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -2889,6 +3117,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: '::'
   deadZone: 0.15
+  rescaleInputAfterDeadZone: 0
+  responseExponent: 1
   background: {fileID: 1130682799}
   handle: {fileID: 2091593306}
   inputVector: {x: 0, y: 0}
@@ -2973,7 +3203,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 399971021}
+  m_Material: {fileID: 539481660}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -3286,7 +3516,7 @@ SpriteRenderer:
   m_SortingLayer: 1
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 1876132139}
+  m_Sprite: {fileID: 844285446}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -3683,6 +3913,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: '::'
   deadZone: 0.15
+  rescaleInputAfterDeadZone: 0
+  responseExponent: 1
   background: {fileID: 1437756229}
   handle: {fileID: 1695922302}
   inputVector: {x: 0, y: 0}
@@ -4243,216 +4475,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1780500627}
   m_CullTransparentMesh: 1
---- !u!213 &1876132139
-Sprite:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: 
-  m_Rect:
-    serializedVersion: 2
-    x: 0
-    y: 0
-    width: 1536
-    height: 1024
-  m_Offset: {x: 0, y: 0}
-  m_Border: {x: 0, y: 0, z: 0, w: 0}
-  m_PixelsToUnits: 192
-  m_Pivot: {x: 0.5, y: 0.5}
-  m_Extrude: 0
-  m_IsPolygon: 0
-  m_PackingTag: 
-  m_RenderDataKey:
-    00000000000000000000000000000000: 0
-  m_AtlasTags: []
-  m_SpriteAtlas: {fileID: 0}
-  m_RD:
-    serializedVersion: 3
-    texture: {fileID: 2800000, guid: d740e4af474d02a4792e6ef26e89387d, type: 3}
-    alphaTexture: {fileID: 0}
-    secondaryTextures: []
-    m_SubMeshes:
-    - serializedVersion: 2
-      firstByte: 0
-      indexCount: 6
-      topology: 0
-      baseVertex: 0
-      firstVertex: 0
-      vertexCount: 4
-      localAABB:
-        m_Center: {x: 0, y: 0, z: 0}
-        m_Extent: {x: 0, y: 0, z: 0}
-    m_IndexBuffer: 030000000100020001000000
-    m_VertexData:
-      serializedVersion: 3
-      m_VertexCount: 4
-      m_Channels:
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 3
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 1
-        offset: 0
-        format: 0
-        dimension: 2
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      m_DataSize: 80
-      _typelessdata: 000080c0abaa2a400000000000008040abaa2ac00000000000008040abaa2a4000000000000080c0abaa2ac0000000000000000000000000000000000000000000000000000000000000000000000000
-    m_Bindpose: []
-    textureRect:
-      serializedVersion: 2
-      x: 0
-      y: 0
-      width: 1536
-      height: 1024
-    textureRectOffset: {x: 0, y: 0}
-    atlasRectOffset: {x: -1, y: -1}
-    settingsRaw: 64
-    uvTransform: {x: 192, y: 768, z: 192, w: 512}
-    downscaleMultiplier: 1
-  m_AtlasRD:
-    serializedVersion: 3
-    texture: {fileID: 2800000, guid: d740e4af474d02a4792e6ef26e89387d, type: 3}
-    alphaTexture: {fileID: 0}
-    secondaryTextures: []
-    m_SubMeshes:
-    - serializedVersion: 2
-      firstByte: 0
-      indexCount: 6
-      topology: 0
-      baseVertex: 0
-      firstVertex: 0
-      vertexCount: 4
-      localAABB:
-        m_Center: {x: 0, y: 0, z: 0}
-        m_Extent: {x: 0, y: 0, z: 0}
-    m_IndexBuffer: 030000000100020001000000
-    m_VertexData:
-      serializedVersion: 3
-      m_VertexCount: 4
-      m_Channels:
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 3
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 1
-        offset: 0
-        format: 0
-        dimension: 2
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      m_DataSize: 80
-      _typelessdata: 000080c0abaa2a400000000000008040abaa2ac00000000000008040abaa2a4000000000000080c0abaa2ac0000000000000000000000000000000000000000000000000000000000000000000000000
-    m_Bindpose: []
-    textureRect:
-      serializedVersion: 2
-      x: 0
-      y: 0
-      width: 1536
-      height: 1024
-    textureRectOffset: {x: 0, y: 0}
-    atlasRectOffset: {x: -1, y: -1}
-    settingsRaw: 64
-    uvTransform: {x: 192, y: 768, z: 192, w: 512}
-    downscaleMultiplier: 1
-  m_PhysicsShape: []
-  m_Bones: []
-  m_ScriptableObjects: []
-  m_SpriteID: 
 --- !u!1 &1904454186
 GameObject:
   m_ObjectHideFlags: 0
@@ -4618,7 +4640,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 399971021}
+  m_Material: {fileID: 539481660}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0

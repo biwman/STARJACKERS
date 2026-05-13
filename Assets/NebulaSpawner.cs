@@ -7,6 +7,8 @@ using UnityEngine;
 
 public class NebulaSpawner : MonoBehaviour
 {
+    public const string FireNebulaLayoutKey = "fireNebulaLayout";
+
     const string EmptyLayoutSentinel = "__empty__";
     const string GameStartedKey = "gameStarted";
     const string ExtractionLayoutKey = "extractionLayout";
@@ -39,35 +41,11 @@ public class NebulaSpawner : MonoBehaviour
         while (!HasExtractionLayout() || !HasObstacleLayout())
             yield return null;
 
-        if (layoutApplied)
-            yield break;
-
-        if (PhotonNetwork.IsMasterClient)
+        while (!layoutApplied)
         {
-            string layout = GetLayout();
-            if (string.IsNullOrWhiteSpace(layout))
-            {
-                layout = BuildNebulaLayout();
-                ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable();
-                props[NebulaLayoutKey] = layout;
-                PhotonNetwork.CurrentRoom.SetCustomProperties(props);
-            }
-
-            ApplyLayout(layout);
-        }
-        else
-        {
-            while (!layoutApplied)
-            {
-                string layout = GetLayout();
-                if (!string.IsNullOrWhiteSpace(layout))
-                {
-                    ApplyLayout(layout);
-                }
-
-                if (!layoutApplied)
-                    yield return null;
-            }
+            TryApplyOrBuildLayout();
+            if (!layoutApplied)
+                yield return null;
         }
     }
 
@@ -88,53 +66,69 @@ public class NebulaSpawner : MonoBehaviour
         if (!HasExtractionLayout() || !HasObstacleLayout())
             return;
 
-        string layout = GetLayout();
-        if (PhotonNetwork.IsMasterClient && string.IsNullOrWhiteSpace(layout))
+        string normalLayout = GetRoomLayout(NebulaLayoutKey);
+        string fireLayout = GetRoomLayout(FireNebulaLayoutKey);
+
+        if (PhotonNetwork.IsMasterClient && (string.IsNullOrWhiteSpace(normalLayout) || string.IsNullOrWhiteSpace(fireLayout)))
         {
-            layout = BuildNebulaLayout();
             ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable();
-            props[NebulaLayoutKey] = layout;
-            PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+
+            if (string.IsNullOrWhiteSpace(normalLayout))
+            {
+                normalLayout = BuildNebulaLayout(RoomSettings.NebulaDensityKey, null);
+                props[NebulaLayoutKey] = normalLayout;
+            }
+
+            List<Vector2> normalPositions = ParseLayout(normalLayout);
+            if (string.IsNullOrWhiteSpace(fireLayout))
+            {
+                fireLayout = BuildNebulaLayout(RoomSettings.FireNebulaDensityKey, normalPositions);
+                props[FireNebulaLayoutKey] = fireLayout;
+            }
+
+            if (props.Count > 0)
+                PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         }
 
-        if (!string.IsNullOrWhiteSpace(layout))
-        {
-            ApplyLayout(layout);
-        }
+        if (!string.IsNullOrWhiteSpace(normalLayout) && !string.IsNullOrWhiteSpace(fireLayout))
+            ApplyLayouts(normalLayout, fireLayout);
     }
 
-    void ApplyLayout(string layout)
+    void ApplyLayouts(string normalLayout, string fireLayout)
     {
-        if (layoutApplied || string.IsNullOrWhiteSpace(layout))
+        if (layoutApplied)
             return;
 
-        if (layout == EmptyLayoutSentinel)
-        {
-            layoutApplied = true;
+        ApplyLayerLayout(normalLayout, NebulaFieldKind.Normal);
+        ApplyLayerLayout(fireLayout, NebulaFieldKind.Fire);
+        layoutApplied = true;
+    }
+
+    void ApplyLayerLayout(string layout, NebulaFieldKind kind)
+    {
+        if (string.IsNullOrWhiteSpace(layout) || layout == EmptyLayoutSentinel)
             return;
-        }
 
         List<Vector2> positions = ParseLayout(layout);
         for (int i = 0; i < positions.Count; i++)
         {
-            GameObject nebula = new GameObject("Nebula");
+            GameObject nebula = new GameObject(kind == NebulaFieldKind.Fire ? "FireNebula" : "Nebula");
             nebula.transform.position = new Vector3(positions[i].x, positions[i].y, 0f);
             nebula.AddComponent<SpriteRenderer>();
             nebula.AddComponent<CircleCollider2D>();
-            nebula.AddComponent<NebulaField>();
+            NebulaField field = nebula.AddComponent<NebulaField>();
+            field.ConfigureKind(kind);
         }
-
-        layoutApplied = true;
     }
 
-    string BuildNebulaLayout()
+    string BuildNebulaLayout(string densityKey, List<Vector2> reservedPositions)
     {
         Vector2 mapSize = RoomSettings.GetMapDimensions();
         List<Vector2> positions = new List<Vector2>();
         List<Vector2> extractionPositions = ParseLayout(GetRoomLayout(ExtractionLayoutKey));
         List<Vector2> obstaclePositions = ParseLayout(GetRoomLayout(ObstacleLayoutKey));
         List<Vector2> playerPositions = GetCurrentPlayerPositions();
-        int targetCount = Mathf.Max(0, Mathf.RoundToInt(nebulaCount * GetDensityMultiplier() * RoomSettings.GetMapAreaMultiplier()));
+        int targetCount = Mathf.Max(0, Mathf.RoundToInt(nebulaCount * GetDensityMultiplier(densityKey) * RoomSettings.GetMapAreaMultiplier()));
         int attempts = 0;
 
         while (positions.Count < targetCount && attempts < 400)
@@ -146,6 +140,9 @@ public class NebulaSpawner : MonoBehaviour
             Vector2 candidate = new Vector2(x, y);
 
             if (!IsFarEnough(candidate, positions, MinNebulaDistance))
+                continue;
+
+            if (reservedPositions != null && !IsFarEnough(candidate, reservedPositions, MinNebulaDistance))
                 continue;
 
             if (!IsFarEnough(candidate, extractionPositions, MinDistanceFromExtraction))
@@ -196,7 +193,7 @@ public class NebulaSpawner : MonoBehaviour
     List<Vector2> ParseLayout(string layout)
     {
         List<Vector2> positions = new List<Vector2>();
-        if (string.IsNullOrWhiteSpace(layout))
+        if (string.IsNullOrWhiteSpace(layout) || layout == EmptyLayoutSentinel)
             return positions;
 
         string[] entries = layout.Split(';');
@@ -244,18 +241,17 @@ public class NebulaSpawner : MonoBehaviour
         return string.Empty;
     }
 
-    string GetLayout()
-    {
-        return GetRoomLayout(NebulaLayoutKey);
-    }
-
-    float GetDensityMultiplier()
+    float GetDensityMultiplier(string densityKey)
     {
         if (PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.NebulaDensityKey, out object value) &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(densityKey, out object value) &&
             value is string density)
         {
-            switch (density)
+            string normalized = densityKey == RoomSettings.FireNebulaDensityKey
+                ? RoomSettings.NormalizeFireNebulaDensity(density)
+                : density.Trim().ToLowerInvariant();
+
+            switch (normalized)
             {
                 case "none": return 0f;
                 case "low": return 0.4f;
@@ -264,7 +260,7 @@ public class NebulaSpawner : MonoBehaviour
             }
         }
 
-        return 0.5f;
+        return densityKey == RoomSettings.FireNebulaDensityKey ? 0f : 0.5f;
     }
 
     bool IsRoundStarted()

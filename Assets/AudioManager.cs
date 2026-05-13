@@ -41,7 +41,11 @@ public class AudioManager : MonoBehaviour
     AudioClip repairBayStartingClip;
     AudioClip radarShipShootClip;
     AudioClip radarShipIncomingClip;
+    AudioClip pirateFighterShotClip;
     AudioClip beaconSignalClip;
+    AudioClip astroCutterClip;
+    AudioClip guidanceSystemClip;
+    AudioClip spaceDrillDeliveryClip;
 
     AudioSource oneShotSource;
     AudioSource drillingLoopSource;
@@ -67,6 +71,9 @@ public class AudioManager : MonoBehaviour
     public AudioClip AlarmClip => alarmClip;
     public AudioClip CorsairLaserClip => corsairLaserClip;
     public AudioClip BeaconSignalClip => beaconSignalClip != null ? beaconSignalClip : alarmClip;
+    public AudioClip AstroCutterClip => astroCutterClip != null ? astroCutterClip : lazer2Clip != null ? lazer2Clip : laserClip;
+    public AudioClip GuidanceSystemClip => guidanceSystemClip != null ? guidanceSystemClip : beaconSignalClip != null ? beaconSignalClip : alarmClip;
+    public AudioClip SpaceDrillDeliveryClip => spaceDrillDeliveryClip != null ? spaceDrillDeliveryClip : shieldChargeClip != null ? shieldChargeClip : clickClip;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -150,7 +157,11 @@ public class AudioManager : MonoBehaviour
         repairBayStartingClip = Resources.Load<AudioClip>("Audio/stacja_naprawcza_starting_sound");
         radarShipShootClip = Resources.Load<AudioClip>("Audio/radar_ship_shoot_sound");
         radarShipIncomingClip = Resources.Load<AudioClip>("Audio/radar_shop_incoming");
+        pirateFighterShotClip = Resources.Load<AudioClip>("Audio/pirate_fighter_shot_sound");
         beaconSignalClip = Resources.Load<AudioClip>("Audio/beacon_signal");
+        astroCutterClip = Resources.Load<AudioClip>("Audio/astro_cutter_sound");
+        guidanceSystemClip = Resources.Load<AudioClip>("Audio/guidance_system_sound");
+        spaceDrillDeliveryClip = Resources.Load<AudioClip>("Audio/space_drill_delivery_sound");
     }
 
     void EnsureSources()
@@ -290,6 +301,11 @@ public class AudioManager : MonoBehaviour
         PlaySpatialOneShot(radarShipShootClip != null ? radarShipShootClip : artilleryGunClip != null ? artilleryGunClip : explosionClip, worldPosition, 0.86f);
     }
 
+    public void PlayPirateFighterShotAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(pirateFighterShotClip != null ? pirateFighterShotClip : shootSmallClip != null ? shootSmallClip : laserClip, worldPosition, 0.72f);
+    }
+
     public void PlayRadarShipIncomingAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(radarShipIncomingClip != null ? radarShipIncomingClip : alarmClip, worldPosition, 0.94f);
@@ -328,6 +344,21 @@ public class AudioManager : MonoBehaviour
     public void PlayBeaconSignalAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(beaconSignalClip != null ? beaconSignalClip : alarmClip, worldPosition, 0.82f);
+    }
+
+    public void PlayAstroCutterAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(AstroCutterClip, worldPosition, 0.72f);
+    }
+
+    public void PlayGuidanceSystemAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(GuidanceSystemClip, worldPosition, 0.82f);
+    }
+
+    public void PlaySpaceDrillDeliveryAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(SpaceDrillDeliveryClip, worldPosition, 0.68f);
     }
 
     public void PlayEvacBuzzerBurst()

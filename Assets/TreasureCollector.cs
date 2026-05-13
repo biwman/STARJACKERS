@@ -11,6 +11,7 @@ public class TreasureCollector : MonoBehaviourPun
 {
     static readonly System.Collections.Generic.Dictionary<int, int> ReservedWreckLoot = new System.Collections.Generic.Dictionary<int, int>();
     static readonly System.Collections.Generic.Dictionary<int, int> ReservedDroppedCargoLoot = new System.Collections.Generic.Dictionary<int, int>();
+    static readonly System.Collections.Generic.Dictionary<int, int> ReservedRandomLootWrecks = new System.Collections.Generic.Dictionary<int, int>();
 
     const float TreasureScanInterval = 0.08f;
     const float BeamWidth = 0.18f;
@@ -48,15 +49,26 @@ public class TreasureCollector : MonoBehaviourPun
     Coroutine collectibleUseRoutine;
     bool collectButtonHooked;
     RectTransform nudgedCollectButtonRect;
+    UseButtonVisualController useButtonVisual;
+
+    public bool IsCollectingAny => isCollecting;
 
     public static void ResetRoundReservations()
     {
         ReservedWreckLoot.Clear();
         ReservedDroppedCargoLoot.Clear();
+        ReservedRandomLootWrecks.Clear();
     }
 
     void Start()
     {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+        {
+            PlayerDeployableRuntime.EnsureAttached(gameObject);
+            enabled = false;
+            return;
+        }
+
         if (GetComponent<EnemyBot>() != null)
         {
             enabled = false;
@@ -76,6 +88,7 @@ public class TreasureCollector : MonoBehaviourPun
             scoreText.text = "XP: 0";
         }
 
+        UpdateUseButtonAvailability();
         SyncScoreProperty();
 
         SetupPickupToast();
@@ -98,6 +111,7 @@ public class TreasureCollector : MonoBehaviourPun
                 currentDroppedCargo = null;
             }
 
+            SetUseButtonAvailable(false);
             UpdateCollectionBeam();
             return;
         }
@@ -109,6 +123,7 @@ public class TreasureCollector : MonoBehaviourPun
                 RefreshClosestCollectible();
         }
 
+        UpdateUseButtonAvailability();
         UpdateCollectionBeam();
     }
 
@@ -136,6 +151,8 @@ public class TreasureCollector : MonoBehaviourPun
         if (collectButton == null || collectButtonHooked)
             return;
 
+        useButtonVisual = collectButton.GetComponent<UseButtonVisualController>();
+
         EventTrigger trigger = collectButton.GetComponent<EventTrigger>();
         if (trigger == null)
             trigger = collectButton.gameObject.AddComponent<EventTrigger>();
@@ -153,6 +170,7 @@ public class TreasureCollector : MonoBehaviourPun
         trigger.triggers.Add(up);
 
         collectButtonHooked = true;
+        UpdateUseButtonAvailability();
     }
 
     void OnTriggerEnter2D(Collider2D other)
@@ -190,9 +208,10 @@ public class TreasureCollector : MonoBehaviourPun
 
         PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
         RepairBay repairBay = RepairBay.FindClosestUsable(transform.position);
-        if (repairDocking != null && (repairDocking.IsBusy || repairBay != null))
+        SpaceFactory spaceFactory = SpaceFactory.FindClosestUsable(transform.position);
+        if (repairDocking != null && (repairDocking.IsBusy || repairBay != null || spaceFactory != null))
         {
-            if (repairDocking.TryStartUse(repairBay))
+            if (repairDocking.TryStartUse(repairBay, spaceFactory))
                 return;
         }
 
@@ -219,7 +238,7 @@ public class TreasureCollector : MonoBehaviourPun
 
             if (HasUsableCollectibleTarget())
             {
-                if (!PlayerProfileService.Instance.HasFreeShipInventorySlot())
+                if (!CanStoreCurrentCollectible())
                 {
                     return;
                 }
@@ -377,8 +396,9 @@ public class TreasureCollector : MonoBehaviourPun
         LockControls();
 
         float timer = 0f;
+        float requiredCollectTime = GetTreasureCollectTime();
 
-        while (timer < collectTime)
+        while (timer < requiredCollectTime)
         {
             if (!isCollecting || treasureToCollect == null || !IsTreasureInCollectRange(treasureToCollect))
             {
@@ -396,6 +416,16 @@ public class TreasureCollector : MonoBehaviourPun
         PhotonView treasureView = treasureToCollect.GetComponent<PhotonView>();
         int treasureViewId = treasureView != null ? treasureView.ViewID : 0;
 
+        if (InventoryItemCatalog.IsRandomLootWreckItem(collectedItemId))
+        {
+            if (treasureViewId > 0)
+                photonView.RPC(nameof(RequestRandomLootWreck), RpcTarget.MasterClient, treasureViewId);
+
+            treasureToCollect.isBeingCollected = false;
+            FinishCollection();
+            yield break;
+        }
+
         int collectXp = RoundXpTracker.RecordTreasureCollected(photonView.Owner, collectedItemId);
         AddScore(collectXp);
         StoreCollectedItem(collectedItemId);
@@ -409,13 +439,23 @@ public class TreasureCollector : MonoBehaviourPun
             {
                 PhotonView viewToDestroy = PhotonView.Find(treasureViewId);
                 if (viewToDestroy != null)
+                {
+                    SpaceTrapTarget.DetonateIfArmed(treasureViewId, photonView != null ? photonView.ViewID : 0);
+                    NotifyPirateBasesAboutCollectedTarget(treasureViewId);
                     PhotonNetwork.Destroy(viewToDestroy.gameObject);
+                }
             }
             else
             {
                 photonView.RPC(nameof(RequestDestroyTreasure), RpcTarget.MasterClient, treasureViewId);
             }
         }
+    }
+
+    float GetTreasureCollectTime()
+    {
+        float pilotBonus = PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.RobyId) ? 0.5f : 0f;
+        return Mathf.Max(0.1f, collectTime - pilotBonus);
     }
 
     IEnumerator LootWreckRoutine(ShipWreck wreckToLoot)
@@ -716,11 +756,71 @@ public class TreasureCollector : MonoBehaviourPun
         return currentTreasure != null || currentWreck != null || currentDroppedCargo != null;
     }
 
+    public bool HasUseActionAvailable()
+    {
+        if (!photonView.IsMine || IsAstronautMode())
+            return false;
+
+        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
+        RepairBay repairBay = RepairBay.FindClosestUsable(transform.position);
+        SpaceFactory spaceFactory = SpaceFactory.FindClosestUsable(transform.position);
+        if (repairDocking != null && (repairDocking.IsBusy || repairBay != null || spaceFactory != null))
+            return true;
+
+        if (currentExtraction != null && IsExtractionStillUsable(currentExtraction))
+            return true;
+
+        if (ResolveNearbyExtractionZone() != null)
+            return true;
+
+        if (!HasUsableCollectibleTarget())
+            return false;
+
+        return CanStoreCurrentCollectible();
+    }
+
+    bool CanStoreCurrentCollectible()
+    {
+        if (!PlayerProfileService.HasInstance)
+            return false;
+
+        if (currentTreasure != null && InventoryItemCatalog.IsRandomLootWreckItem(currentTreasure.itemId))
+        {
+            return PlayerProfileService.Instance.HasFreeShipInventorySlot() ||
+                   PlayerProfileService.PlayerHasFreeGadgetEquipmentSlot(PhotonNetwork.LocalPlayer);
+        }
+
+        if (currentTreasure != null)
+            return PlayerProfileService.Instance.HasFreeShipInventorySlot(currentTreasure.itemId);
+
+        if (currentDroppedCargo != null)
+            return PlayerProfileService.Instance.HasFreeShipInventorySlot(currentDroppedCargo.StoredItemId);
+
+        return PlayerProfileService.Instance.HasFreeShipInventorySlot();
+    }
+
     bool HasUsableCollectibleTarget()
     {
         return (currentTreasure != null && IsTreasureInCollectRange(currentTreasure)) ||
                (currentWreck != null && currentWreck.HasLoot && IsWreckInCollectRange(currentWreck)) ||
                (currentDroppedCargo != null && currentDroppedCargo.HasLoot && IsDroppedCargoInCollectRange(currentDroppedCargo));
+    }
+
+    void UpdateUseButtonAvailability()
+    {
+        SetUseButtonAvailable(HasUseActionAvailable());
+    }
+
+    void SetUseButtonAvailable(bool available)
+    {
+        if (collectButton == null)
+            return;
+
+        if (useButtonVisual == null)
+            useButtonVisual = collectButton.GetComponent<UseButtonVisualController>();
+
+        if (useButtonVisual != null)
+            useButtonVisual.SetAvailable(available);
     }
 
     void ForceResolveCollectibleAtUsePress()
@@ -1038,8 +1138,47 @@ public class TreasureCollector : MonoBehaviourPun
         PhotonView pv = PhotonView.Find(viewID);
         if (pv != null)
         {
+            SpaceTrapTarget.DetonateIfArmed(viewID, photonView != null ? photonView.ViewID : 0);
+            NotifyPirateBasesAboutCollectedTarget(viewID);
             PhotonNetwork.Destroy(pv.gameObject);
         }
+    }
+
+    void NotifyPirateBasesAboutCollectedTarget(int collectibleViewId)
+    {
+        int collectorViewId = photonView != null ? photonView.ViewID : 0;
+        EnemyPirateBaseBehavior.NotifyCollectibleCollected(collectibleViewId, collectorViewId);
+    }
+
+    [PunRPC]
+    void RequestRandomLootWreck(int viewID)
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView.Owner == null)
+            return;
+
+        PhotonView wreckView = PhotonView.Find(viewID);
+        if (wreckView == null)
+            return;
+
+        Treasure wreck = wreckView.GetComponent<Treasure>();
+        if (wreck == null || !InventoryItemCatalog.IsRandomLootWreckItem(wreck.itemId))
+            return;
+
+        if (ReservedRandomLootWrecks.TryGetValue(viewID, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
+            return;
+
+        string rewardItemId = RollRandomLootWreckReward();
+        if (string.IsNullOrWhiteSpace(rewardItemId))
+            return;
+
+        bool canStoreReward = PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, rewardItemId) ||
+                              (InventoryItemCatalog.GetCategory(rewardItemId) == InventoryItemCategory.Gadget &&
+                               PlayerProfileService.PlayerHasFreeGadgetEquipmentSlot(photonView.Owner));
+        if (!canStoreReward)
+            return;
+
+        ReservedRandomLootWrecks[viewID] = photonView.OwnerActorNr;
+        photonView.RPC(nameof(ReceivePendingRandomLootWreckRpc), photonView.Owner, viewID, rewardItemId);
     }
 
     [PunRPC]
@@ -1056,15 +1195,15 @@ public class TreasureCollector : MonoBehaviourPun
         if (wreck == null || !wreck.HasLoot)
             return;
 
-        if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner))
-            return;
-
         if (ReservedWreckLoot.TryGetValue(viewID, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
             return;
 
         int lootIndex = wreck.GetFirstLootIndex();
         string itemId = wreck.GetLootItemAt(lootIndex);
         if (lootIndex < 0 || string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, itemId))
             return;
 
         ReservedWreckLoot[viewID] = photonView.OwnerActorNr;
@@ -1085,9 +1224,6 @@ public class TreasureCollector : MonoBehaviourPun
         if (crate == null || !crate.HasLoot)
             return;
 
-        if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner))
-            return;
-
         if (ReservedDroppedCargoLoot.TryGetValue(viewID, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
             return;
 
@@ -1095,8 +1231,31 @@ public class TreasureCollector : MonoBehaviourPun
         if (string.IsNullOrWhiteSpace(itemId))
             return;
 
+        if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, itemId))
+            return;
+
         ReservedDroppedCargoLoot[viewID] = photonView.OwnerActorNr;
         photonView.RPC(nameof(ReceivePendingDroppedCargoLootRpc), photonView.Owner, viewID, itemId);
+    }
+
+    string RollRandomLootWreckReward()
+    {
+        float roll = Random.value;
+        InventoryItemCategory category;
+        if (roll < 0.7f)
+            category = InventoryItemCategory.Gadget;
+        else if (roll < 0.8f)
+            category = InventoryItemCategory.Shield;
+        else if (roll < 0.9f)
+            category = InventoryItemCategory.Weapon;
+        else
+            category = InventoryItemCategory.Engine;
+
+        string[] itemIds = InventoryItemCatalog.GetEquipmentItemIdsByCategory(category);
+        if (itemIds == null || itemIds.Length == 0)
+            return string.Empty;
+
+        return itemIds[Random.Range(0, itemIds.Length)];
     }
 
     public void AddScore(int amount)
@@ -1290,6 +1449,28 @@ public class TreasureCollector : MonoBehaviourPun
     }
 
     [PunRPC]
+    async void ReceivePendingRandomLootWreckRpc(int wreckViewId, string itemId)
+    {
+        bool stored = false;
+        try
+        {
+            stored = await PlayerProfileService.Instance.AddRandomLootEquipmentAsync(itemId);
+            if (stored)
+            {
+                AddScore(RoundXpTracker.RecordWreckLooted(photonView.Owner, false));
+                ShowPickupToast(itemId);
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to store random loot wreck item: " + ex);
+        }
+
+        if (photonView != null)
+            photonView.RPC(nameof(ResolveReservedRandomLootWreck), RpcTarget.MasterClient, wreckViewId, itemId, stored);
+    }
+
+    [PunRPC]
     void ResolveReservedWreckLoot(int wreckViewId, int lootIndex, string itemId, bool stored)
     {
         if (!PhotonNetwork.IsMasterClient)
@@ -1314,6 +1495,8 @@ public class TreasureCollector : MonoBehaviourPun
         if (!string.Equals(currentItemId, itemId, System.StringComparison.Ordinal))
             return;
 
+        SpaceTrapTarget.DetonateIfArmed(wreckViewId, photonView != null ? photonView.ViewID : 0);
+        NotifyPirateBasesAboutCollectedTarget(wreckViewId);
         wreckView.RPC(nameof(ShipWreck.RemoveLootAtIndexRpc), RpcTarget.All, lootIndex);
     }
 
@@ -1338,8 +1521,36 @@ public class TreasureCollector : MonoBehaviourPun
         if (crate == null || !crate.HasLoot || !string.Equals(crate.StoredItemId, itemId, System.StringComparison.Ordinal))
             return;
 
+        SpaceTrapTarget.DetonateIfArmed(crateViewId, photonView != null ? photonView.ViewID : 0);
+        NotifyPirateBasesAboutCollectedTarget(crateViewId);
         crateView.RPC(nameof(DroppedCargoCrate.ClearStoredItemRpc), RpcTarget.All);
         PhotonNetwork.Destroy(crateView.gameObject);
+    }
+
+    [PunRPC]
+    void ResolveReservedRandomLootWreck(int wreckViewId, string itemId, bool stored)
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        if (!ReservedRandomLootWrecks.TryGetValue(wreckViewId, out int reservedActor) || reservedActor != photonView.OwnerActorNr)
+            return;
+
+        ReservedRandomLootWrecks.Remove(wreckViewId);
+        if (!stored)
+            return;
+
+        PhotonView wreckView = PhotonView.Find(wreckViewId);
+        if (wreckView == null)
+            return;
+
+        Treasure wreck = wreckView.GetComponent<Treasure>();
+        if (wreck == null || !InventoryItemCatalog.IsRandomLootWreckItem(wreck.itemId))
+            return;
+
+        SpaceTrapTarget.DetonateIfArmed(wreckViewId, photonView != null ? photonView.ViewID : 0);
+        NotifyPirateBasesAboutCollectedTarget(wreckViewId);
+        PhotonNetwork.Destroy(wreckView.gameObject);
     }
 
     async void StoreCollectedItem(string itemId)
@@ -1350,12 +1561,25 @@ public class TreasureCollector : MonoBehaviourPun
             if (stored)
             {
                 ShowPickupToast(itemId);
+
+                if (IsNovaSpaceJunkBonusActive(itemId))
+                {
+                    bool bonusStored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+                    if (bonusStored)
+                        ShowPickupToast(itemId);
+                }
             }
         }
         catch (System.Exception ex)
         {
             Debug.LogError("Failed to store collected item: " + ex);
         }
+    }
+
+    bool IsNovaSpaceJunkBonusActive(string itemId)
+    {
+        return PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.NovaId) &&
+               PilotCatalog.IsSpaceJunkItem(itemId);
     }
 
     void SetupPickupToast()

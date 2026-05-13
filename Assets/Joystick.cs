@@ -4,6 +4,8 @@ using UnityEngine.EventSystems;
 public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPointerUpHandler
 {
     public float deadZone = 0.15f;
+    public bool rescaleInputAfterDeadZone;
+    public float responseExponent = 1f;
     public RectTransform background;
     public RectTransform handle;
 
@@ -21,7 +23,9 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
     }
 
     Vector2 defaultBackgroundAnchoredPosition;
-    Vector3 defaultBackgroundWorldPosition;
+    Vector2 defaultBackgroundAnchorMin;
+    Vector2 defaultBackgroundAnchorMax;
+    Vector2 defaultBackgroundPivot;
     bool defaultPositionCaptured;
 
     void Awake()
@@ -46,12 +50,21 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
 
     public void OnPointerUp(PointerEventData eventData)
     {
+        if (IsExternalControlActive)
+        {
+            EndExternalControl(true);
+            return;
+        }
+
         ResetJoystick();
     }
 
     void OnDisable()
     {
-        ResetJoystick();
+        if (IsExternalControlActive)
+            EndExternalControl(true);
+        else
+            ResetJoystick();
     }
 
     public void BeginExternalControl(Vector2 screenPoint, Camera eventCamera, bool relocateBackground)
@@ -77,10 +90,10 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
 
     public void EndExternalControl(bool restoreDefaultPosition)
     {
+        ResetJoystick();
+
         if (restoreDefaultPosition)
             RestoreDefaultBackgroundPosition();
-
-        ResetJoystick();
     }
 
     public void RestoreDefaultBackgroundPosition()
@@ -88,9 +101,22 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
         CaptureDefaultBackgroundPosition();
         if (background != null)
         {
+            background.anchorMin = defaultBackgroundAnchorMin;
+            background.anchorMax = defaultBackgroundAnchorMax;
+            background.pivot = defaultBackgroundPivot;
             background.anchoredPosition = defaultBackgroundAnchoredPosition;
-            background.position = defaultBackgroundWorldPosition;
         }
+    }
+
+    public bool IsAtDefaultBackgroundPosition(float tolerance = 0.5f)
+    {
+        CaptureDefaultBackgroundPosition();
+        if (background == null)
+            return true;
+
+        return Vector2.Distance(background.anchoredPosition, defaultBackgroundAnchoredPosition) <= tolerance &&
+               Vector2.Distance(background.anchorMin, defaultBackgroundAnchorMin) <= 0.001f &&
+               Vector2.Distance(background.anchorMax, defaultBackgroundAnchorMax) <= 0.001f;
     }
 
     void ResetJoystick()
@@ -126,8 +152,20 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
 
         rawInputVector = new Vector2(pos.x, pos.y);
         inputVector = rawInputVector.magnitude > 1.0f ? rawInputVector.normalized : rawInputVector;
-        if (inputVector.magnitude < deadZone)
+        float inputMagnitude = inputVector.magnitude;
+        if (inputMagnitude < deadZone)
+        {
             inputVector = Vector2.zero;
+        }
+        else if (rescaleInputAfterDeadZone)
+        {
+            float liveZone = Mathf.Max(0.001f, 1f - deadZone);
+            float remappedMagnitude = Mathf.Clamp01((inputMagnitude - deadZone) / liveZone);
+            if (!Mathf.Approximately(responseExponent, 1f))
+                remappedMagnitude = Mathf.Pow(remappedMagnitude, Mathf.Max(0.1f, responseExponent));
+
+            inputVector = inputVector.normalized * remappedMagnitude;
+        }
 
         if (handle == null)
             return;
@@ -142,7 +180,9 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
             return;
 
         defaultBackgroundAnchoredPosition = background.anchoredPosition;
-        defaultBackgroundWorldPosition = background.position;
+        defaultBackgroundAnchorMin = background.anchorMin;
+        defaultBackgroundAnchorMax = background.anchorMax;
+        defaultBackgroundPivot = background.pivot;
         defaultPositionCaptured = true;
     }
 
@@ -151,10 +191,20 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
         if (background == null)
             return;
 
-        Vector3 worldPoint;
-        if (!RectTransformUtility.ScreenPointToWorldPointInRectangle(background, screenPoint, eventCamera, out worldPoint))
+        RectTransform parentRect = background.parent as RectTransform;
+        if (parentRect == null)
             return;
 
-        background.position = worldPoint;
+        Vector2 localPoint;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, screenPoint, eventCamera, out localPoint))
+            return;
+
+        Vector2 parentSize = parentRect.rect.size;
+        Vector2 parentPivotOffset = new Vector2(parentSize.x * parentRect.pivot.x, parentSize.y * parentRect.pivot.y);
+        Vector2 anchorReference = new Vector2(
+            Mathf.Lerp(background.anchorMin.x, background.anchorMax.x, background.pivot.x) * parentSize.x,
+            Mathf.Lerp(background.anchorMin.y, background.anchorMax.y, background.pivot.y) * parentSize.y);
+
+        background.anchoredPosition = localPoint + parentPivotOffset - anchorReference;
     }
 }

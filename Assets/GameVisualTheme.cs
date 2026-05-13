@@ -1,4 +1,5 @@
 using Photon.Pun;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 #if UNITY_EDITOR
@@ -22,6 +23,8 @@ public class GameVisualTheme : MonoBehaviour
     const float PlayerTargetSize = 1.04f;
     const float AstronautTargetSize = 0.56f;
     const float TreasureTargetSize = 1.5f;
+    const float ContainerTargetSize = 1.05f;
+    const float RandomLootWreckTargetSize = 1.24f;
     const float TreasureColliderSizeMultiplier = 0.9f;
     const float PlayerBodyColliderWidthFactor = 0.46f;
     const float PlayerBodyColliderHeightFactor = 0.62f;
@@ -48,6 +51,8 @@ public class GameVisualTheme : MonoBehaviour
     Sprite spaceJunkTrashSprite;
     Sprite spaceJunkStandardSprite;
     Sprite spaceJunkAsteroidSprite;
+    Sprite[] containerSprites;
+    Sprite[] randomLootWreckSprites;
     Sprite[] obstacleSprites;
     Sprite extractionSprite;
     Sprite backgroundSprite;
@@ -289,12 +294,14 @@ public class GameVisualTheme : MonoBehaviour
         treasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_white_common_resource", "Assets/Resources/treasure_asteroid_white_common_resource.png", "Assets/treasure_asteroid_white_common.png");
         goldTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_green_uncommon_resource", "Assets/Resources/treasure_asteroid_green_uncommon_resource.png", "Assets/treasure_asteroid_green_uncommon.png");
         rareTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_blue_rare_resource", "Assets/Resources/treasure_asteroid_blue_rare_resource.png", "Assets/treasure_asteroid_blue_rare.png");
-        richTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_violet_rare_resource", "Assets/Resources/treasure_asteroid_violet_rare_resource.png", "Assets/treasure_asteroid_violet_rare.png");
+        richTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_violet_very_rare_resource", "Assets/Resources/treasure_asteroid_violet_very_rare_resource.png", "Assets/treasure_asteroid_violet_very_rare.png");
         epicTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_burgundy_epic_resource", "Assets/Resources/treasure_asteroid_burgundy_epic_resource.png", "Assets/treasure_asteroid_burgundy_epic.png");
         legendaryTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_gold_legendary_resource", "Assets/Resources/treasure_asteroid_gold_legendary_resource.png", "Assets/treasure_asteroid_gold_legendary.png");
         spaceJunkTrashSprite = LoadSpriteFromResourcesOrEditor("space_junk_trash", "Assets/Resources/space_junk_trash.png", "Assets/space_junk_trash.png");
         spaceJunkStandardSprite = LoadSpriteFromResourcesOrEditor("space_junk_standard", "Assets/Resources/space_junk_standard.png", "Assets/space_junk_standard.png");
         spaceJunkAsteroidSprite = LoadSpriteFromResourcesOrEditor("space_junk_asteroid", "Assets/Resources/space_junk_asteroid.png", "Assets/space_junk_asteroid.png");
+        containerSprites = LoadSpritesFromResourcesOrEditor("kontenery_9", "Assets/Resources/kontenery_9.png", "Assets/kontenery_9.png");
+        randomLootWreckSprites = LoadRandomLootWreckSprites();
         obstacleSprites = new[]
         {
             LoadObstacleSprite("asteroida_1_clean_resource", "Assets/Resources/asteroida_1_clean_resource.png", "Assets/asteroida_1_clean.png"),
@@ -401,6 +408,13 @@ public class GameVisualTheme : MonoBehaviour
                 continue;
 
             PhotonView view = player.GetComponent<PhotonView>();
+            if (PlayerDeployableRuntime.IsInstantiationData(view != null ? view.InstantiationData : null) ||
+                player.GetComponent<PlayerDeployableBase>() != null)
+            {
+                PlayerDeployableRuntime.EnsureAttached(player.gameObject);
+                continue;
+            }
+
             SpriteRenderer renderer = player.GetComponent<SpriteRenderer>();
 
             if (view == null || renderer == null || view.Owner == null)
@@ -516,7 +530,7 @@ public class GameVisualTheme : MonoBehaviour
             }
             renderer.sortingLayerName = WorldSortingLayerName;
             renderer.sortingOrder = TreasureSortingOrder;
-            FitSpriteToTargetSize(renderer, TreasureTargetSize);
+            FitSpriteToTargetSize(renderer, GetTreasureTargetSize(treasure));
 
             if (triggerCollider != null)
             {
@@ -532,6 +546,24 @@ public class GameVisualTheme : MonoBehaviour
     {
         if (treasure == null)
             return treasureSprite;
+
+        if (InventoryItemCatalog.IsContainerItem(treasure.itemId))
+        {
+            int variantIndex = InventoryItemCatalog.GetContainerVariantIndex(treasure.itemId);
+            if (containerSprites != null && variantIndex >= 0 && variantIndex < containerSprites.Length && containerSprites[variantIndex] != null)
+                return containerSprites[variantIndex];
+
+            return treasureSprite;
+        }
+
+        if (InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
+        {
+            int variantIndex = InventoryItemCatalog.GetRandomLootWreckVariantIndex(treasure.itemId);
+            if (randomLootWreckSprites != null && variantIndex >= 0 && variantIndex < randomLootWreckSprites.Length && randomLootWreckSprites[variantIndex] != null)
+                return randomLootWreckSprites[variantIndex];
+
+            return treasureSprite;
+        }
 
         switch (treasure.itemId)
         {
@@ -555,6 +587,32 @@ public class GameVisualTheme : MonoBehaviour
             default:
                 return treasureSprite;
         }
+    }
+
+    float GetTreasureTargetSize(Treasure treasure)
+    {
+        if (treasure != null && InventoryItemCatalog.IsContainerItem(treasure.itemId))
+            return ContainerTargetSize;
+
+        if (treasure != null && InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
+            return RandomLootWreckTargetSize;
+
+        return TreasureTargetSize;
+    }
+
+    Sprite[] LoadRandomLootWreckSprites()
+    {
+        Sprite[] sprites = new Sprite[InventoryItemCatalog.RandomLootWreckVariantCount];
+        for (int i = 0; i < sprites.Length; i++)
+        {
+            string suffix = (i + 1).ToString("00");
+            sprites[i] = LoadSpriteFromResourcesOrEditor(
+                "random_loot_wreck_" + suffix,
+                "Assets/Resources/random_loot_wreck_" + suffix + ".png",
+                "Assets/random_loot_wrecks.png");
+        }
+
+        return sprites;
     }
 
     void ApplyObstacleSprites()
@@ -793,7 +851,7 @@ public class GameVisualTheme : MonoBehaviour
 
     Sprite LoadBackgroundSprite(int backgroundIndex)
     {
-        int clampedIndex = Mathf.Clamp(backgroundIndex, 1, 15);
+        int clampedIndex = Mathf.Clamp(backgroundIndex, 1, RoomSettings.MaxMapBackground);
         string resourcesPath = "Visuals/Backgrounds/background" + clampedIndex + "_resource";
         Texture2D texture = Resources.Load<Texture2D>(resourcesPath);
         Sprite sprite = texture != null ? CreateSpriteFromTexture(texture) : null;
@@ -826,6 +884,33 @@ public class GameVisualTheme : MonoBehaviour
 #endif
 
         return null;
+    }
+
+    Sprite[] LoadSpritesFromResourcesOrEditor(string resourcesPath, string editorPreferredPath, string editorFallbackPath = null)
+    {
+        Sprite[] sprites = LoadSpritesFromResources(resourcesPath);
+        if (sprites != null && sprites.Length > 0)
+            return sprites;
+
+#if UNITY_EDITOR
+        sprites = LoadEditorSprites(editorPreferredPath);
+        if (sprites != null && sprites.Length > 0)
+            return sprites;
+
+        if (!string.IsNullOrWhiteSpace(editorFallbackPath))
+            return LoadEditorSprites(editorFallbackPath);
+#endif
+
+        return System.Array.Empty<Sprite>();
+    }
+
+    Sprite[] LoadSpritesFromResources(string resourcesPath)
+    {
+        if (string.IsNullOrWhiteSpace(resourcesPath))
+            return System.Array.Empty<Sprite>();
+
+        Sprite[] sprites = Resources.LoadAll<Sprite>(resourcesPath);
+        return SortSpritesByName(sprites);
     }
 
     Sprite LoadSpriteFromResources(string resourcesPath)
@@ -888,6 +973,22 @@ public class GameVisualTheme : MonoBehaviour
     }
 
 #if UNITY_EDITOR
+    Sprite[] LoadEditorSprites(string assetPath)
+    {
+        if (string.IsNullOrWhiteSpace(assetPath))
+            return System.Array.Empty<Sprite>();
+
+        UnityEngine.Object[] assets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+        List<Sprite> sprites = new List<Sprite>();
+        for (int i = 0; i < assets.Length; i++)
+        {
+            if (assets[i] is Sprite loadedSprite)
+                sprites.Add(loadedSprite);
+        }
+
+        return SortSpritesByName(sprites.ToArray());
+    }
+
     Sprite LoadEditorSprite(string assetPath)
     {
         if (string.IsNullOrWhiteSpace(assetPath))
@@ -907,5 +1008,14 @@ public class GameVisualTheme : MonoBehaviour
         return null;
     }
 #endif
+
+    Sprite[] SortSpritesByName(Sprite[] sprites)
+    {
+        if (sprites == null || sprites.Length == 0)
+            return System.Array.Empty<Sprite>();
+
+        System.Array.Sort(sprites, (a, b) => string.CompareOrdinal(a != null ? a.name : string.Empty, b != null ? b.name : string.Empty));
+        return sprites;
+    }
 }
 

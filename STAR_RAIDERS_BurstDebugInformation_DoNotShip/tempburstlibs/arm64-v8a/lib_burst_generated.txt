@@ -10,7 +10,6 @@ Library: D:\ROZNE NOWE\PROJEKTY ROZNE\BRAWL_RAIDERS\BRAWL_RAIDERS\Temp\BurstOutp
 --target-framework=NetFramework
 --generate-link-xml=Temp\burst.link.xml
 --temp-folder=D:\ROZNE NOWE\PROJEKTY ROZNE\BRAWL_RAIDERS\BRAWL_RAIDERS\Temp\Burst
---debug=Full
 --key-folder=C:/Program Files/Unity/Hub/Editor/6000.4.1f1/Editor/Data/PlaybackEngines/AndroidPlayer
 --decode-folder=D:\ROZNE NOWE\PROJEKTY ROZNE\BRAWL_RAIDERS\BRAWL_RAIDERS\Library\Burst
 --output=D:\ROZNE NOWE\PROJEKTY ROZNE\BRAWL_RAIDERS\BRAWL_RAIDERS\Temp\BurstOutput\tempburstlibs\arm64-v8a\lib_burst_generated
@@ -129,7 +128,6 @@ Library: D:\ROZNE NOWE\PROJEKTY ROZNE\BRAWL_RAIDERS\BRAWL_RAIDERS\Temp\BurstOutp
 --float-mode=Fast
 --generate-link-xml=Temp\burst.link.xml
 --temp-folder=D:\ROZNE NOWE\PROJEKTY ROZNE\BRAWL_RAIDERS\BRAWL_RAIDERS\Temp\Burst
---debug=Full
 --key-folder=C:/Program Files/Unity/Hub/Editor/6000.4.1f1/Editor/Data/PlaybackEngines/AndroidPlayer
 --decode-folder=D:\ROZNE NOWE\PROJEKTY ROZNE\BRAWL_RAIDERS\BRAWL_RAIDERS\Library\Burst
 --output=D:\ROZNE NOWE\PROJEKTY ROZNE\BRAWL_RAIDERS\BRAWL_RAIDERS\Temp\BurstOutput\tempburstlibs\arm64-v8a\lib_burst_generated
@@ -148,7 +146,6 @@ Library: D:\ROZNE NOWE\PROJEKTY ROZNE\BRAWL_RAIDERS\BRAWL_RAIDERS\Temp\BurstOutp
 --target-framework=NetFramework
 --generate-link-xml=Temp\burst.link.xml
 --temp-folder=D:\ROZNE NOWE\PROJEKTY ROZNE\BRAWL_RAIDERS\BRAWL_RAIDERS\Temp\Burst
---debug=Full
 --key-folder=C:/Program Files/Unity/Hub/Editor/6000.4.1f1/Editor/Data/PlaybackEngines/AndroidPlayer
 --decode-folder=D:\ROZNE NOWE\PROJEKTY ROZNE\BRAWL_RAIDERS\BRAWL_RAIDERS\Library\Burst
 --output=D:\ROZNE NOWE\PROJEKTY ROZNE\BRAWL_RAIDERS\BRAWL_RAIDERS\Temp\BurstOutput\tempburstlibs\arm64-v8a\lib_burst_generated

@@ -1,0 +1,1391 @@
+fileFormatVersion: 2
+guid: be05e5bc5be521740a47138370213f34
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -1490981966485044255
+    second: random_loot_wreck_01_0
+  - first:
+      213: -3956412735227158802
+    second: random_loot_wreck_01_1
+  - first:
+      213: 5995771859316021013
+    second: random_loot_wreck_01_2
+  - first:
+      213: 4600019428421917388
+    second: random_loot_wreck_01_3
+  - first:
+      213: 6657654544783737778
+    second: random_loot_wreck_01_4
+  - first:
+      213: 4298910743245403472
+    second: random_loot_wreck_01_5
+  - first:
+      213: 3194048043902390482
+    second: random_loot_wreck_01_6
+  - first:
+      213: 8614453144641350015
+    second: random_loot_wreck_01_7
+  - first:
+      213: -3970380236178022871
+    second: random_loot_wreck_01_8
+  - first:
+      213: 3839817408394079489
+    second: random_loot_wreck_01_9
+  - first:
+      213: 5406350717636124411
+    second: random_loot_wreck_01_10
+  - first:
+      213: -3942960307503549883
+    second: random_loot_wreck_01_11
+  - first:
+      213: -5871131824975685358
+    second: random_loot_wreck_01_12
+  - first:
+      213: 2226412332324941338
+    second: random_loot_wreck_01_13
+  - first:
+      213: -2951104879985069335
+    second: random_loot_wreck_01_14
+  - first:
+      213: -871830747286021976
+    second: random_loot_wreck_01_15
+  - first:
+      213: -4116650174053930953
+    second: random_loot_wreck_01_16
+  - first:
+      213: 812143766551308267
+    second: random_loot_wreck_01_17
+  - first:
+      213: 1497019432279498707
+    second: random_loot_wreck_01_18
+  - first:
+      213: 7598077870703528027
+    second: random_loot_wreck_01_19
+  - first:
+      213: 9116823130793825533
+    second: random_loot_wreck_01_20
+  - first:
+      213: 3509880120196349108
+    second: random_loot_wreck_01_21
+  - first:
+      213: 1671903271255389252
+    second: random_loot_wreck_01_22
+  - first:
+      213: -549960903790316500
+    second: random_loot_wreck_01_23
+  - first:
+      213: -7771996874016858698
+    second: random_loot_wreck_01_24
+  - first:
+      213: 5345717245879892059
+    second: random_loot_wreck_01_25
+  - first:
+      213: 4956277632688723117
+    second: random_loot_wreck_01_26
+  - first:
+      213: 1914252772896988104
+    second: random_loot_wreck_01_27
+  - first:
+      213: 7663844168095180268
+    second: random_loot_wreck_01_28
+  - first:
+      213: -4986215978225004513
+    second: random_loot_wreck_01_29
+  - first:
+      213: -1411397520859425925
+    second: random_loot_wreck_01_30
+  - first:
+      213: -4417741652145771907
+    second: random_loot_wreck_01_31
+  - first:
+      213: -1025191745450205480
+    second: random_loot_wreck_01_32
+  - first:
+      213: -5122701229238221573
+    second: random_loot_wreck_01_33
+  - first:
+      213: -3407646386766811307
+    second: random_loot_wreck_01_34
+  - first:
+      213: 5440892637556149717
+    second: random_loot_wreck_01_35
+  - first:
+      213: -2355227488580667986
+    second: random_loot_wreck_01_36
+  - first:
+      213: -2493398214114545114
+    second: random_loot_wreck_01_37
+  - first:
+      213: -5018185211024706485
+    second: random_loot_wreck_01_38
+  - first:
+      213: -8389160269128615325
+    second: random_loot_wreck_01_39
+  - first:
+      213: -742992816575076536
+    second: random_loot_wreck_01_40
+  - first:
+      213: -5209893626199485990
+    second: random_loot_wreck_01_41
+  - first:
+      213: -2260767748897236432
+    second: random_loot_wreck_01_42
+  - first:
+      213: -4952374048316093240
+    second: random_loot_wreck_01_43
+  - first:
+      213: 2595117495993459057
+    second: random_loot_wreck_01_44
+  - first:
+      213: 5058940010916981419
+    second: random_loot_wreck_01_45
+  - first:
+      213: 2422843704338004788
+    second: random_loot_wreck_01_46
+  - first:
+      213: -293714004469571231
+    second: random_loot_wreck_01_47
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: random_loot_wreck_01_0
+      rect:
+        serializedVersion: 2
+        x: 120
+        y: 213
+        width: 28
+        height: 32
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1e345211dc7fe4be0800000000000000
+      internalID: -1490981966485044255
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_1
+      rect:
+        serializedVersion: 2
+        x: 141
+        y: 231
+        width: 8
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: eee14fb449ff719c0800000000000000
+      internalID: -3956412735227158802
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_2
+      rect:
+        serializedVersion: 2
+        x: 143
+        y: 239
+        width: 15
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 51790d43db2453350800000000000000
+      internalID: 5995771859316021013
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_3
+      rect:
+        serializedVersion: 2
+        x: 148
+        y: 204
+        width: 104
+        height: 42
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ccadbf65c4d86df30800000000000000
+      internalID: 4600019428421917388
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_4
+      rect:
+        serializedVersion: 2
+        x: 197
+        y: 132
+        width: 315
+        height: 205
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2b38913e88db46c50800000000000000
+      internalID: 6657654544783737778
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_5
+      rect:
+        serializedVersion: 2
+        x: 124
+        y: 205
+        width: 13
+        height: 26
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 055b04c5b8cc8ab30800000000000000
+      internalID: 4298910743245403472
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_6
+      rect:
+        serializedVersion: 2
+        x: 137
+        y: 219
+        width: 6
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2d0555ce5c9835c20800000000000000
+      internalID: 3194048043902390482
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_7
+      rect:
+        serializedVersion: 2
+        x: 139
+        y: 194
+        width: 17
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f7928946e7fac8770800000000000000
+      internalID: 8614453144641350015
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_8
+      rect:
+        serializedVersion: 2
+        x: 155
+        y: 189
+        width: 12
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 92e906f063066e8c0800000000000000
+      internalID: -3970380236178022871
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_9
+      rect:
+        serializedVersion: 2
+        x: 155
+        y: 180
+        width: 14
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 10da0b5b695c94530800000000000000
+      internalID: 3839817408394079489
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_10
+      rect:
+        serializedVersion: 2
+        x: 171
+        y: 162
+        width: 168
+        height: 41
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bfe11e76557370b40800000000000000
+      internalID: 5406350717636124411
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_11
+      rect:
+        serializedVersion: 2
+        x: 112
+        y: 145
+        width: 17
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 54239c3bd7ac749c0800000000000000
+      internalID: -3942960307503549883
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_12
+      rect:
+        serializedVersion: 2
+        x: 113
+        y: 150
+        width: 72
+        height: 34
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 21955d636bc858ea0800000000000000
+      internalID: -5871131824975685358
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_13
+      rect:
+        serializedVersion: 2
+        x: 127
+        y: 106
+        width: 78
+        height: 68
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a1ee6cf583ec5ee10800000000000000
+      internalID: 2226412332324941338
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_14
+      rect:
+        serializedVersion: 2
+        x: 205
+        y: 143
+        width: 17
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9e2719d4fb19b07d0800000000000000
+      internalID: -2951104879985069335
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_15
+      rect:
+        serializedVersion: 2
+        x: 219
+        y: 152
+        width: 8
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8a8d0c3fd82a6e3f0800000000000000
+      internalID: -871830747286021976
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_16
+      rect:
+        serializedVersion: 2
+        x: 229
+        y: 152
+        width: 10
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 73827f64a78bed6c0800000000000000
+      internalID: -4116650174053930953
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_17
+      rect:
+        serializedVersion: 2
+        x: 234
+        y: 148
+        width: 17
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: be7a6d7e370554b00800000000000000
+      internalID: 812143766551308267
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_18
+      rect:
+        serializedVersion: 2
+        x: 282
+        y: 155
+        width: 7
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3df50eafd3b76c410800000000000000
+      internalID: 1497019432279498707
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_19
+      rect:
+        serializedVersion: 2
+        x: 284
+        y: 132
+        width: 16
+        height: 28
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b584a0b219bc17960800000000000000
+      internalID: 7598077870703528027
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_20
+      rect:
+        serializedVersion: 2
+        x: 308
+        y: 43
+        width: 157
+        height: 116
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: df4d70f9556758e70800000000000000
+      internalID: 9116823130793825533
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_21
+      rect:
+        serializedVersion: 2
+        x: 387
+        y: 155
+        width: 10
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4bc32888f5995b030800000000000000
+      internalID: 3509880120196349108
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_22
+      rect:
+        serializedVersion: 2
+        x: 404
+        y: 146
+        width: 9
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 444bdf5ca2bc33710800000000000000
+      internalID: 1671903271255389252
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_23
+      rect:
+        serializedVersion: 2
+        x: 468
+        y: 153
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c24b939c8752e58f0800000000000000
+      internalID: -549960903790316500
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_24
+      rect:
+        serializedVersion: 2
+        x: 480
+        y: 153
+        width: 11
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6bd57c85502542490800000000000000
+      internalID: -7771996874016858698
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_25
+      rect:
+        serializedVersion: 2
+        x: 244
+        y: 141
+        width: 21
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b58b956238dcf2a40800000000000000
+      internalID: 5345717245879892059
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_26
+      rect:
+        serializedVersion: 2
+        x: 299
+        y: 138
+        width: 16
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: da410a85f3c38c440800000000000000
+      internalID: 4956277632688723117
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_27
+      rect:
+        serializedVersion: 2
+        x: 447
+        y: 6
+        width: 65
+        height: 146
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8cbd4da31cac09a10800000000000000
+      internalID: 1914252772896988104
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_28
+      rect:
+        serializedVersion: 2
+        x: 487
+        y: 148
+        width: 12
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ce523458aa17b5a60800000000000000
+      internalID: 7663844168095180268
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_29
+      rect:
+        serializedVersion: 2
+        x: 117
+        y: 136
+        width: 13
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f1095846cf66dcab0800000000000000
+      internalID: -4986215978225004513
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_30
+      rect:
+        serializedVersion: 2
+        x: 126
+        y: 130
+        width: 11
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b739e44ce65b96ce0800000000000000
+      internalID: -1411397520859425925
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_31
+      rect:
+        serializedVersion: 2
+        x: 157
+        y: 137
+        width: 21
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d7a6762af5701b2c0800000000000000
+      internalID: -4417741652145771907
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_32
+      rect:
+        serializedVersion: 2
+        x: 176
+        y: 109
+        width: 97
+        height: 27
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8de17c90a89c5c1f0800000000000000
+      internalID: -1025191745450205480
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_33
+      rect:
+        serializedVersion: 2
+        x: 320
+        y: 116
+        width: 44
+        height: 23
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bf48ccc8f5288e8b0800000000000000
+      internalID: -5122701229238221573
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_34
+      rect:
+        serializedVersion: 2
+        x: 268
+        y: 115
+        width: 18
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 55fee9c6aab95b0d0800000000000000
+      internalID: -3407646386766811307
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_35
+      rect:
+        serializedVersion: 2
+        x: 297
+        y: 120
+        width: 25
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5dd829ad60fe18b40800000000000000
+      internalID: 5440892637556149717
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_36
+      rect:
+        serializedVersion: 2
+        x: 300
+        y: 106
+        width: 12
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ea5f9e1e31d805fd0800000000000000
+      internalID: -2355227488580667986
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_37
+      rect:
+        serializedVersion: 2
+        x: 310
+        y: 109
+        width: 20
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 622fb1ce88ba56dd0800000000000000
+      internalID: -2493398214114545114
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_38
+      rect:
+        serializedVersion: 2
+        x: 122
+        y: 63
+        width: 31
+        height: 43
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b44f0c75323db5ab0800000000000000
+      internalID: -5018185211024706485
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_39
+      rect:
+        serializedVersion: 2
+        x: 143
+        y: 102
+        width: 13
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 36ab4c2de27b39b80800000000000000
+      internalID: -8389160269128615325
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_40
+      rect:
+        serializedVersion: 2
+        x: 152
+        y: 40
+        width: 156
+        height: 71
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 847206948fb50b5f0800000000000000
+      internalID: -742992816575076536
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_41
+      rect:
+        serializedVersion: 2
+        x: 305
+        y: 97
+        width: 24
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ad1dec4a95db2b7b0800000000000000
+      internalID: -5209893626199485990
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_42
+      rect:
+        serializedVersion: 2
+        x: 119
+        y: 84
+        width: 6
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 03a125fd5b320a0e0800000000000000
+      internalID: -2260767748897236432
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_43
+      rect:
+        serializedVersion: 2
+        x: 307
+        y: 68
+        width: 19
+        height: 26
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8cc8147ba02a54bb0800000000000000
+      internalID: -4952374048316093240
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_44
+      rect:
+        serializedVersion: 2
+        x: 347
+        y: 93
+        width: 8
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1716713fc95b30420800000000000000
+      internalID: 2595117495993459057
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_45
+      rect:
+        serializedVersion: 2
+        x: 138
+        y: 76
+        width: 11
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: baaa7b2f227f43640800000000000000
+      internalID: 5058940010916981419
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_46
+      rect:
+        serializedVersion: 2
+        x: 226
+        y: 51
+        width: 13
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 43bbb57238baf9120800000000000000
+      internalID: 2422843704338004788
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: random_loot_wreck_01_47
+      rect:
+        serializedVersion: 2
+        x: 350
+        y: 52
+        width: 16
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 161a80a4ba48cebf0800000000000000
+      internalID: -293714004469571231
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      random_loot_wreck_01_0: -1490981966485044255
+      random_loot_wreck_01_1: -3956412735227158802
+      random_loot_wreck_01_10: 5406350717636124411
+      random_loot_wreck_01_11: -3942960307503549883
+      random_loot_wreck_01_12: -5871131824975685358
+      random_loot_wreck_01_13: 2226412332324941338
+      random_loot_wreck_01_14: -2951104879985069335
+      random_loot_wreck_01_15: -871830747286021976
+      random_loot_wreck_01_16: -4116650174053930953
+      random_loot_wreck_01_17: 812143766551308267
+      random_loot_wreck_01_18: 1497019432279498707
+      random_loot_wreck_01_19: 7598077870703528027
+      random_loot_wreck_01_2: 5995771859316021013
+      random_loot_wreck_01_20: 9116823130793825533
+      random_loot_wreck_01_21: 3509880120196349108
+      random_loot_wreck_01_22: 1671903271255389252
+      random_loot_wreck_01_23: -549960903790316500
+      random_loot_wreck_01_24: -7771996874016858698
+      random_loot_wreck_01_25: 5345717245879892059
+      random_loot_wreck_01_26: 4956277632688723117
+      random_loot_wreck_01_27: 1914252772896988104
+      random_loot_wreck_01_28: 7663844168095180268
+      random_loot_wreck_01_29: -4986215978225004513
+      random_loot_wreck_01_3: 4600019428421917388
+      random_loot_wreck_01_30: -1411397520859425925
+      random_loot_wreck_01_31: -4417741652145771907
+      random_loot_wreck_01_32: -1025191745450205480
+      random_loot_wreck_01_33: -5122701229238221573
+      random_loot_wreck_01_34: -3407646386766811307
+      random_loot_wreck_01_35: 5440892637556149717
+      random_loot_wreck_01_36: -2355227488580667986
+      random_loot_wreck_01_37: -2493398214114545114
+      random_loot_wreck_01_38: -5018185211024706485
+      random_loot_wreck_01_39: -8389160269128615325
+      random_loot_wreck_01_4: 6657654544783737778
+      random_loot_wreck_01_40: -742992816575076536
+      random_loot_wreck_01_41: -5209893626199485990
+      random_loot_wreck_01_42: -2260767748897236432
+      random_loot_wreck_01_43: -4952374048316093240
+      random_loot_wreck_01_44: 2595117495993459057
+      random_loot_wreck_01_45: 5058940010916981419
+      random_loot_wreck_01_46: 2422843704338004788
+      random_loot_wreck_01_47: -293714004469571231
+      random_loot_wreck_01_5: 4298910743245403472
+      random_loot_wreck_01_6: 3194048043902390482
+      random_loot_wreck_01_7: 8614453144641350015
+      random_loot_wreck_01_8: -3970380236178022871
+      random_loot_wreck_01_9: 3839817408394079489
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

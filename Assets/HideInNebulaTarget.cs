@@ -15,9 +15,13 @@ public class HideInNebulaTarget : MonoBehaviour
     PlayerHealth playerHealth;
     Coroutine damageRoutine;
     Dictionary<int, bool> hiddenNebulaStates = new Dictionary<int, bool>();
-    HashSet<int> damagingNebulas = new HashSet<int>();
+    Dictionary<int, int> damagingNebulas = new Dictionary<int, int>();
+    Dictionary<int, float> slowingNebulas = new Dictionary<int, float>();
+    HashSet<int> fireNebulas = new HashSet<int>();
     float nextNebulaStateValidationTime;
     public bool IsHiddenForOthers => HasHiddenNebula();
+    public float CurrentNebulaSpeedMultiplier => GetCurrentSpeedMultiplier();
+    public bool IsInsideFireNebula => fireNebulas.Count > 0;
 
     void Awake()
     {
@@ -37,13 +41,30 @@ public class HideInNebulaTarget : MonoBehaviour
 
     public void UpdateNebulaState(int nebulaId, bool shouldHide, bool shouldDamage)
     {
-        shouldDamage &= !IsNebulaImmuneMothership();
+        UpdateNebulaState(nebulaId, shouldHide, shouldDamage, 1, 1f, false);
+    }
+
+    public void UpdateNebulaState(int nebulaId, bool shouldHide, bool shouldDamage, int damagePerTick, float speedMultiplier, bool isFireNebula)
+    {
+        bool immuneToHarm = IsNebulaHarmImmuneBot();
+        shouldDamage &= !immuneToHarm;
+        speedMultiplier = immuneToHarm ? 1f : Mathf.Clamp(speedMultiplier, 0.05f, 1f);
         CacheRenderers();
         hiddenNebulaStates[nebulaId] = shouldHide;
+        if (isFireNebula && shouldDamage)
+            fireNebulas.Add(nebulaId);
+        else
+            fireNebulas.Remove(nebulaId);
+
         if (shouldDamage)
-            damagingNebulas.Add(nebulaId);
+            damagingNebulas[nebulaId] = Mathf.Max(1, damagePerTick);
         else
             damagingNebulas.Remove(nebulaId);
+
+        if (speedMultiplier < 0.999f)
+            slowingNebulas[nebulaId] = speedMultiplier;
+        else
+            slowingNebulas.Remove(nebulaId);
 
         RefreshLocalNebulaCache();
         ApplyVisibility();
@@ -58,6 +79,8 @@ public class HideInNebulaTarget : MonoBehaviour
     {
         hiddenNebulaStates.Remove(nebulaId);
         damagingNebulas.Remove(nebulaId);
+        slowingNebulas.Remove(nebulaId);
+        fireNebulas.Remove(nebulaId);
         RefreshLocalNebulaCache();
         ApplyVisibility();
 
@@ -148,14 +171,24 @@ public class HideInNebulaTarget : MonoBehaviour
 
     void ValidateNebulaContacts()
     {
-        if (hiddenNebulaStates.Count == 0 && damagingNebulas.Count == 0)
+        if (hiddenNebulaStates.Count == 0 && damagingNebulas.Count == 0 && slowingNebulas.Count == 0 && fireNebulas.Count == 0)
             return;
 
         List<int> nebulaIds = new List<int>(hiddenNebulaStates.Keys);
-        foreach (int damagingId in damagingNebulas)
+        foreach (int damagingId in damagingNebulas.Keys)
         {
             if (!nebulaIds.Contains(damagingId))
                 nebulaIds.Add(damagingId);
+        }
+        foreach (int slowingId in slowingNebulas.Keys)
+        {
+            if (!nebulaIds.Contains(slowingId))
+                nebulaIds.Add(slowingId);
+        }
+        foreach (int fireId in fireNebulas)
+        {
+            if (!nebulaIds.Contains(fireId))
+                nebulaIds.Add(fireId);
         }
 
         bool changed = false;
@@ -166,11 +199,16 @@ public class HideInNebulaTarget : MonoBehaviour
             {
                 changed |= hiddenNebulaStates.Remove(nebulaId);
                 changed |= damagingNebulas.Remove(nebulaId);
+                changed |= slowingNebulas.Remove(nebulaId);
+                changed |= fireNebulas.Remove(nebulaId);
                 continue;
             }
 
             bool shouldHide = field.ShouldHide(this);
-            bool shouldDamage = field.ShouldDamage(this) && !IsNebulaImmuneMothership();
+            bool immuneToHarm = IsNebulaHarmImmuneBot();
+            bool shouldDamage = field.ShouldDamage(this) && !immuneToHarm;
+            float speedMultiplier = immuneToHarm ? 1f : field.GetSpeedMultiplierForTarget(this);
+            bool isFireNebula = field.FieldKind == NebulaFieldKind.Fire;
 
             if (!hiddenNebulaStates.TryGetValue(nebulaId, out bool previousHide) || previousHide != shouldHide)
             {
@@ -178,15 +216,41 @@ public class HideInNebulaTarget : MonoBehaviour
                 changed = true;
             }
 
-            bool hadDamage = damagingNebulas.Contains(nebulaId);
-            if (shouldDamage && !hadDamage)
+            bool shouldShowFireNebulaEffect = isFireNebula && shouldDamage;
+            bool hadFire = fireNebulas.Contains(nebulaId);
+            if (shouldShowFireNebulaEffect && !hadFire)
             {
-                damagingNebulas.Add(nebulaId);
+                fireNebulas.Add(nebulaId);
+                changed = true;
+            }
+            else if (!shouldShowFireNebulaEffect && hadFire)
+            {
+                fireNebulas.Remove(nebulaId);
+                changed = true;
+            }
+
+            bool hadDamage = damagingNebulas.ContainsKey(nebulaId);
+            int damagePerTick = Mathf.Max(1, field.DamagePerTick);
+            if (shouldDamage && (!hadDamage || damagingNebulas[nebulaId] != damagePerTick))
+            {
+                damagingNebulas[nebulaId] = damagePerTick;
                 changed = true;
             }
             else if (!shouldDamage && hadDamage)
             {
                 damagingNebulas.Remove(nebulaId);
+                changed = true;
+            }
+
+            bool hadSlow = slowingNebulas.ContainsKey(nebulaId);
+            if (speedMultiplier < 0.999f && (!hadSlow || !Mathf.Approximately(slowingNebulas[nebulaId], speedMultiplier)))
+            {
+                slowingNebulas[nebulaId] = Mathf.Clamp(speedMultiplier, 0.05f, 1f);
+                changed = true;
+            }
+            else if (speedMultiplier >= 0.999f && hadSlow)
+            {
+                slowingNebulas.Remove(nebulaId);
                 changed = true;
             }
         }
@@ -269,15 +333,40 @@ public class HideInNebulaTarget : MonoBehaviour
                 continue;
             }
 
-            playerHealth.photonView.RPC("TakeEnvironmentalDamage", RpcTarget.MasterClient, 1);
+            int damage = GetCurrentDamagePerTick();
+            if (damage > 0)
+                playerHealth.photonView.RPC("TakeNebulaDamage", RpcTarget.MasterClient, damage);
         }
 
         damageRoutine = null;
     }
 
-    bool IsNebulaImmuneMothership()
+    int GetCurrentDamagePerTick()
+    {
+        int damage = 0;
+        foreach (int value in damagingNebulas.Values)
+        {
+            if (value > damage)
+                damage = value;
+        }
+
+        return damage;
+    }
+
+    float GetCurrentSpeedMultiplier()
+    {
+        float multiplier = 1f;
+        foreach (float value in slowingNebulas.Values)
+        {
+            multiplier = Mathf.Min(multiplier, Mathf.Clamp(value, 0.05f, 1f));
+        }
+
+        return multiplier;
+    }
+
+    bool IsNebulaHarmImmuneBot()
     {
         EnemyBot bot = GetComponent<EnemyBot>();
-        return bot != null && bot.Kind == EnemyBotKind.Mothership;
+        return bot != null && (bot.Kind == EnemyBotKind.Mothership || bot.Kind == EnemyBotKind.PirateBase);
     }
 }

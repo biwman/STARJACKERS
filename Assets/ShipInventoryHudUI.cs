@@ -10,6 +10,19 @@ public class ShipInventoryHudUI : MonoBehaviourPun
     const string InventoryButtonName = "ShipInventoryButton";
     const string InventoryPanelName = "ShipInventoryPanel";
     const string DragVisualName = "ShipInventoryDragVisual";
+    const float CargoButtonWidth = 54f;
+    const float CargoButtonHitboxWidth = 128f;
+    const float CargoButtonHeight = 244f;
+    const float CargoButtonPanelGap = 12f;
+    const float CargoButtonLeftInset = 4f;
+    const float CargoButtonTopInset = 270f;
+    const float CargoSlotSize = 99f;
+    const float CargoSlotSpacing = 10f;
+    const int CargoSlotColumns = 5;
+    const int CargoSlotRows = 2;
+    const float CargoPanelWidth = 5f * CargoSlotSize + 4f * CargoSlotSpacing;
+    const float CargoPanelHeight = 2f * CargoSlotSize + CargoSlotSpacing;
+    const float CargoSlotIconSize = 74f;
 
     GameObject buttonObject;
     Button inventoryButton;
@@ -82,55 +95,70 @@ public class ShipInventoryHudUI : MonoBehaviourPun
 
     void CreateButton(Transform parent)
     {
-        RectTransform collectRect = null;
-        GameObject collectButton = GameObject.Find("CollectButton");
-        if (collectButton != null)
-            collectRect = collectButton.GetComponent<RectTransform>();
-
         buttonObject = new GameObject(InventoryButtonName, typeof(RectTransform), typeof(Image), typeof(Button));
         buttonObject.transform.SetParent(parent, false);
 
         RectTransform rect = buttonObject.GetComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(164f, 62f);
-        if (collectRect != null)
-        {
-            rect.anchorMin = collectRect.anchorMin;
-            rect.anchorMax = collectRect.anchorMax;
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            float verticalOffset = collectRect.rect.height * 0.5f + rect.sizeDelta.y * 0.5f + 18f;
-            rect.anchoredPosition = collectRect.anchoredPosition + new Vector2(0f, verticalOffset);
-        }
-        else
-        {
-            rect.anchorMin = new Vector2(0f, 0f);
-            rect.anchorMax = new Vector2(0f, 0f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.anchoredPosition = new Vector2(180f, 210f);
-        }
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.sizeDelta = new Vector2(CargoButtonHitboxWidth, CargoButtonHeight);
+        rect.anchoredPosition = GetCargoButtonPosition();
 
         buttonImage = buttonObject.GetComponent<Image>();
-        buttonImage.color = new Color(0.18f, 0.38f, 0.62f, 0.95f);
-        buttonImage.type = Image.Type.Sliced;
+        buttonImage.color = new Color(0f, 0f, 0f, 0f);
+        buttonImage.type = Image.Type.Simple;
+        buttonImage.raycastTarget = true;
+
+        GameObject visualObject = new GameObject("CargoButtonVisual", typeof(RectTransform), typeof(Image));
+        visualObject.transform.SetParent(buttonObject.transform, false);
+
+        RectTransform visualRect = visualObject.GetComponent<RectTransform>();
+        visualRect.anchorMin = new Vector2(0f, 1f);
+        visualRect.anchorMax = new Vector2(0f, 1f);
+        visualRect.pivot = new Vector2(0f, 1f);
+        visualRect.anchoredPosition = Vector2.zero;
+        visualRect.sizeDelta = new Vector2(CargoButtonWidth, CargoButtonHeight);
+
+        Image visualImage = visualObject.GetComponent<Image>();
+        visualImage.color = new Color(0.035f, 0.07f, 0.1f, 0.82f);
+        visualImage.type = Image.Type.Simple;
+        visualImage.raycastTarget = false;
+
+        Outline buttonOutline = visualObject.AddComponent<Outline>();
+        buttonOutline.effectColor = new Color(0.36f, 0.48f, 0.56f, 0.78f);
+        buttonOutline.effectDistance = new Vector2(2f, 2f);
+        buttonOutline.useGraphicAlpha = false;
+
+        Shadow buttonShadow = visualObject.AddComponent<Shadow>();
+        buttonShadow.effectColor = new Color(0f, 0f, 0f, 0.5f);
+        buttonShadow.effectDistance = new Vector2(3f, -3f);
+        buttonShadow.useGraphicAlpha = false;
 
         inventoryButton = buttonObject.GetComponent<Button>();
         inventoryButton.onClick.AddListener(TogglePanel);
+        inventoryButton.transition = Selectable.Transition.None;
 
         GameObject textObject = new GameObject("ShipInventoryButtonText", typeof(RectTransform), typeof(TextMeshProUGUI));
-        textObject.transform.SetParent(buttonObject.transform, false);
+        textObject.transform.SetParent(visualObject.transform, false);
 
         RectTransform textRect = textObject.GetComponent<RectTransform>();
         textRect.anchorMin = Vector2.zero;
         textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = Vector2.zero;
-        textRect.offsetMax = Vector2.zero;
+        textRect.offsetMin = new Vector2(3f, 6f);
+        textRect.offsetMax = new Vector2(-3f, -6f);
 
         buttonText = textObject.GetComponent<TextMeshProUGUI>();
         buttonText.text = "CARGO";
-        buttonText.fontSize = 24f;
+        buttonText.fontSize = 14f;
         buttonText.fontStyle = FontStyles.Bold;
         buttonText.alignment = TextAlignmentOptions.Center;
         buttonText.textWrappingMode = TextWrappingModes.NoWrap;
-        buttonText.color = Color.white;
+        buttonText.richText = true;
+        buttonText.lineSpacing = -10f;
+        buttonText.characterSpacing = 1f;
+        buttonText.color = new Color(0.88f, 0.96f, 1f, 0.92f);
+        buttonText.raycastTarget = false;
 
         TMP_Text reference = FindAnyObjectByType<TMP_Text>();
         if (reference != null)
@@ -142,50 +170,33 @@ public class ShipInventoryHudUI : MonoBehaviourPun
 
     void CreatePanel(Transform parent)
     {
-        RectTransform buttonRect = buttonObject != null ? buttonObject.GetComponent<RectTransform>() : null;
-
         panelObject = new GameObject(InventoryPanelName, typeof(RectTransform), typeof(Image));
         panelObject.transform.SetParent(parent, false);
 
         RectTransform rect = panelObject.GetComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(330f, 170f);
-        if (buttonRect != null)
-        {
-            rect.anchorMin = buttonRect.anchorMin;
-            rect.anchorMax = buttonRect.anchorMax;
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            float verticalOffset = buttonRect.rect.height * 0.5f + rect.sizeDelta.y * 0.5f + 14f;
-            rect.anchoredPosition = buttonRect.anchoredPosition + new Vector2(0f, verticalOffset);
-        }
-        else
-        {
-            rect.anchorMin = new Vector2(0f, 0.5f);
-            rect.anchorMax = new Vector2(0f, 0.5f);
-            rect.pivot = new Vector2(0f, 0.5f);
-            rect.anchoredPosition = new Vector2(28f, 76f);
-        }
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.sizeDelta = new Vector2(CargoPanelWidth, CargoPanelHeight);
+        rect.anchoredPosition = GetCargoPanelPosition();
 
         Image bg = panelObject.GetComponent<Image>();
-        bg.color = new Color(0.06f, 0.1f, 0.15f, 0.9f);
-        bg.type = Image.Type.Sliced;
-
-        CreateLabel(panelObject.transform, "ShipInventoryPanelLabel", "SHIP INVENTORY", new Vector2(12f, -14f), new Vector2(240f, 24f), TextAlignmentOptions.Left, 20f);
+        bg.color = new Color(0f, 0f, 0f, 0f);
+        bg.raycastTarget = false;
 
         slotButtons = new Button[PlayerInventoryData.ShipSlotCount];
         slotIcons = new Image[PlayerInventoryData.ShipSlotCount];
         slotLabels = new TMP_Text[PlayerInventoryData.ShipSlotCount];
 
-        const float slotSize = 55f;
-        const float slotSpacing = 10f;
-        Vector2 start = new Vector2(20f, -52f);
+        Vector2 start = Vector2.zero;
 
-        for (int row = 0; row < 2; row++)
+        for (int row = 0; row < CargoSlotRows; row++)
         {
-            for (int col = 0; col < 5; col++)
+            for (int col = 0; col < CargoSlotColumns; col++)
             {
-                int index = row * 5 + col;
-                Vector2 pos = new Vector2(start.x + col * (slotSize + slotSpacing), start.y - row * (slotSize + slotSpacing));
-                CreateSlot(index, pos, new Vector2(slotSize, slotSize));
+                int index = row * CargoSlotColumns + col;
+                Vector2 pos = new Vector2(start.x + col * (CargoSlotSize + CargoSlotSpacing), start.y - row * (CargoSlotSize + CargoSlotSpacing));
+                CreateSlot(index, pos, new Vector2(CargoSlotSize, CargoSlotSize));
             }
         }
 
@@ -224,20 +235,20 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         iconRect.anchorMax = new Vector2(0.5f, 0.5f);
         iconRect.pivot = new Vector2(0.5f, 0.5f);
         iconRect.anchoredPosition = Vector2.zero;
-        iconRect.sizeDelta = new Vector2(40f, 40f);
+        iconRect.sizeDelta = new Vector2(CargoSlotIconSize, CargoSlotIconSize);
 
         Image icon = iconObject.GetComponent<Image>();
         icon.preserveAspect = true;
         icon.enabled = false;
         slotIcons[index] = icon;
 
-        slotLabels[index] = CreateLabel(slotObject.transform, "Label", string.Empty, Vector2.zero, Vector2.zero, TextAlignmentOptions.Center, 12f);
+        slotLabels[index] = CreateLabel(slotObject.transform, "Label", string.Empty, Vector2.zero, Vector2.zero, TextAlignmentOptions.Center, 16f);
         RectTransform labelRect = slotLabels[index].GetComponent<RectTransform>();
         labelRect.anchorMin = Vector2.zero;
         labelRect.anchorMax = Vector2.one;
         labelRect.offsetMin = Vector2.zero;
         labelRect.offsetMax = Vector2.zero;
-        slotLabels[index].margin = new Vector4(2f, 2f, 2f, 2f);
+        slotLabels[index].margin = new Vector4(4f, 4f, 4f, 4f);
     }
 
     TextMeshProUGUI CreateLabel(Transform parent, string name, string value, Vector2 anchoredPosition, Vector2 size, TextAlignmentOptions alignment, float fontSize)
@@ -283,7 +294,7 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         rect.anchorMin = new Vector2(0.5f, 0.5f);
         rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.sizeDelta = new Vector2(64f, 64f);
+        rect.sizeDelta = new Vector2(CargoSlotSize, CargoSlotSize);
 
         Image bg = dragVisualObject.GetComponent<Image>();
         bg.color = new Color(0.14f, 0.22f, 0.31f, 0.9f);
@@ -296,7 +307,7 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         iconRect.anchorMin = new Vector2(0.5f, 0.5f);
         iconRect.anchorMax = new Vector2(0.5f, 0.5f);
         iconRect.pivot = new Vector2(0.5f, 0.5f);
-        iconRect.sizeDelta = new Vector2(46f, 46f);
+        iconRect.sizeDelta = new Vector2(CargoSlotIconSize, CargoSlotIconSize);
         iconRect.anchoredPosition = Vector2.zero;
 
         dragVisualIcon = iconObject.GetComponent<Image>();
@@ -333,14 +344,13 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         normalized.Normalize();
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
         int shipCapacity = ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
-        int safePocketStart = PlayerProfileService.GetSafePocketStartIndex(shipSkinIndex);
 
         int filledSlots = 0;
 
         for (int i = 0; i < normalized.ShipSlots.Length && i < slotButtons.Length; i++)
         {
             bool slotEnabled = i < shipCapacity;
-            bool isSafePocket = slotEnabled && i >= safePocketStart;
+            bool isSafePocket = slotEnabled && PlayerProfileService.IsSafePocketIndex(shipSkinIndex, i);
             string itemId = normalized.ShipSlots[i];
             bool occupied = slotEnabled && !string.IsNullOrWhiteSpace(itemId);
             Sprite icon = occupied ? InventoryItemCatalog.GetIcon(itemId) : null;
@@ -415,9 +425,14 @@ public class ShipInventoryHudUI : MonoBehaviourPun
 
         if (buttonText != null)
         {
-            buttonText.text = "CARGO " + filledSlots + "/" + shipCapacity;
-            buttonText.fontSize = 20f;
+            buttonText.text = "C\nA\nR\nG\nO\n<size=24>" + FormatVerticalCount(filledSlots, shipCapacity) + "</size>";
+            buttonText.fontSize = 14f;
         }
+    }
+
+    string FormatVerticalCount(int filledSlots, int shipCapacity)
+    {
+        return filledSlots + "\n-\n" + shipCapacity;
     }
 
     public void BeginSlotDrag(int index, PointerEventData eventData)
@@ -597,33 +612,32 @@ public class ShipInventoryHudUI : MonoBehaviourPun
             dragVisualObject.SetActive(false);
     }
 
+    Vector2 GetCargoButtonPosition()
+    {
+        return new Vector2(CargoButtonLeftInset, -CargoButtonTopInset);
+    }
+
+    Vector2 GetCargoPanelPosition()
+    {
+        return GetCargoButtonPosition() + new Vector2(CargoButtonHitboxWidth + CargoButtonPanelGap, 0f);
+    }
+
     void RefreshRuntimeLayout()
     {
         if (buttonObject == null)
             return;
 
-        GameObject collectButton = GameObject.Find("CollectButton");
-        GameObject joystickObject = GameObject.Find("JoystickBG");
-        RectTransform collectRect = collectButton != null ? collectButton.GetComponent<RectTransform>() : null;
-        RectTransform joystickRect = joystickObject != null ? joystickObject.GetComponent<RectTransform>() : null;
         RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
 
-        if (collectRect == null || buttonRect == null)
+        if (buttonRect == null)
             return;
 
-        buttonRect.anchorMin = collectRect.anchorMin;
-        buttonRect.anchorMax = collectRect.anchorMax;
-        buttonRect.pivot = new Vector2(0.5f, 0.5f);
-        float buttonVerticalOffset = collectRect.rect.height * 0.5f + buttonRect.rect.height * 0.5f + 30f;
-        Vector2 targetButtonPosition = collectRect.anchoredPosition + new Vector2(0f, buttonVerticalOffset);
-        if (joystickRect != null)
-        {
-            float joystickTop = joystickRect.anchoredPosition.y + joystickRect.rect.height * 0.5f;
-            float minimumButtonCenterY = joystickTop + buttonRect.rect.height * 0.5f + 26f;
-            targetButtonPosition.y = Mathf.Max(targetButtonPosition.y, minimumButtonCenterY);
-        }
-
-        buttonRect.anchoredPosition = targetButtonPosition;
+        buttonRect.anchorMin = new Vector2(0f, 1f);
+        buttonRect.anchorMax = new Vector2(0f, 1f);
+        buttonRect.pivot = new Vector2(0f, 1f);
+        buttonRect.sizeDelta = new Vector2(CargoButtonHitboxWidth, CargoButtonHeight);
+        buttonRect.anchoredPosition = GetCargoButtonPosition();
+        buttonObject.transform.SetAsLastSibling();
 
         if (panelObject == null)
             return;
@@ -632,11 +646,16 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         if (panelRect == null)
             return;
 
-        panelRect.anchorMin = buttonRect.anchorMin;
-        panelRect.anchorMax = buttonRect.anchorMax;
-        panelRect.pivot = new Vector2(0.5f, 0.5f);
-        float panelVerticalOffset = buttonRect.rect.height * 0.5f + panelRect.rect.height * 0.5f + 20f;
-        panelRect.anchoredPosition = buttonRect.anchoredPosition + new Vector2(0f, panelVerticalOffset);
+        panelRect.anchorMin = new Vector2(0f, 1f);
+        panelRect.anchorMax = new Vector2(0f, 1f);
+        panelRect.pivot = new Vector2(0f, 1f);
+        panelRect.sizeDelta = new Vector2(CargoPanelWidth, CargoPanelHeight);
+        panelRect.anchoredPosition = GetCargoPanelPosition();
+        if (panelObject.activeSelf)
+        {
+            panelObject.transform.SetAsLastSibling();
+            buttonObject.transform.SetAsLastSibling();
+        }
     }
 
     void UpdateVisibility()

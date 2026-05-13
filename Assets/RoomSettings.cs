@@ -9,6 +9,7 @@ public static class RoomSettings
     public const string SessionHostNameKey = "sessionHostName";
     public const string SessionCreatedAtKey = "sessionCreatedAt";
     public const string StartTimeKey = "startTime";
+    public const string RoundEndUtcMsKey = "roundEndUtcMs";
     public const string RoundDurationKey = "roundDuration";
     public const string ObstacleDensityKey = "obstacleDensity";
     public const string ObstacleDestroyEnabledKey = "obstacleDestroyEnabled";
@@ -17,10 +18,22 @@ public static class RoomSettings
     public const string ObstacleNoBordersKey = "obstacleNoBorders";
     public const string TreasureDensityKey = "treasureDensity";
     public const string ResourceRichnessKey = "resourceRichness";
+    public const string RandomLootWreckCountKey = "randomLootWreckCount";
+    public const string CrazyEnemiesModeKey = "mapEffect.crazyEnemies.mode";
+    public const string CrazyEnemiesStartUtcMsKey = "mapEffect.crazyEnemies.startUtcMs";
+    public const string CrazyEnemiesActiveKey = "mapEffect.crazyEnemies.active";
+    public const string FogOfWarModeKey = "mapEffect.fogOfWar.mode";
+    public const string FogOfWarStartUtcMsKey = "mapEffect.fogOfWar.startUtcMs";
+    public const string FogOfWarActiveKey = "mapEffect.fogOfWar.active";
     public const string SpaceJunkDensityKey = "spaceJunkDensity";
+    public const string ContainersDensityKey = "containersDensity";
     public const string NebulaDensityKey = "nebulaDensity";
+    public const string FireNebulaDensityKey = "fireNebulaDensity";
+    public const string NebulaSizeKey = "nebulaSize";
+    public const string FireNebulaSizeKey = "fireNebulaSize";
     public const string ExtractionCountKey = "extractionCount";
     public const string RepairBayCountKey = "repairBayCount";
+    public const string SpaceFactoryCountKey = "spaceFactoryCount";
     public const string BoosterSlowdownKey = "boosterSlowdownPercent";
     public const string AmmoCountKey = "ammoCount";
     public const string BoosterRecoveryDelayKey = "boosterRecoveryDelay";
@@ -57,20 +70,26 @@ public static class RoomSettings
     public const string FinishedRoundResultsKey = "finishedRoundResults";
     public const string RoundEndReasonKey = "roundEndReason";
     public const string ShipSkinKey = "shipSkinIndex";
+    public const string PilotIdKey = "pilotId";
     public const string ShipInventoryStateKey = "shipInventoryState";
     public const string EquipmentStateKey = "equipmentState";
     public const string GadgetChargesStateKey = "gadgetChargesState";
     public const string RepairBayOccupancyStateKey = "repairBayOccupancyState";
+    public const string SpaceFactoryStateKey = "spaceFactoryState";
+    public const string SpaceFactoryOccupancyStateKey = "spaceFactoryOccupancyState";
     public const string ScoreKey = "score";
 
     public const float DefaultRoundDuration = 240f;
     public const string DefaultObstacleDensity = "high";
+    public const string DefaultTreasureDensity = "medium";
     public const bool DefaultObstacleDestroyEnabled = true;
     public const int DefaultObstacleHp = 400;
     public const int DefaultObstacleSizePercent = 100;
     public const bool DefaultObstacleNoBorders = false;
     public const int DefaultExtractionCount = 3;
     public const int DefaultRepairBayCount = 1;
+    public const int DefaultSpaceFactoryCount = 0;
+    public const int DefaultRandomLootWreckCount = 0;
     public const int DefaultBoosterSlowdownPercent = 40;
     public const int DefaultAmmoCount = 15;
     public const int DefaultBoosterRecoveryDelay = 5;
@@ -83,6 +102,7 @@ public static class RoomSettings
     public const bool DefaultEquipmentLossEnabled = false;
     public const string DefaultMapSize = "medium";
     public const int DefaultMapBackground = 5;
+    public const int MaxMapBackground = 21;
     public const string DefaultLobbyMapId = "just_space";
     public const bool DefaultVisualEffectsEnabled = true;
     public const bool DefaultStartingVfxEnabled = true;
@@ -128,11 +148,31 @@ public static class RoomSettings
     public const string ResourceRichnessVeryHigh = "very_high";
     public const string ResourceRichnessExtreme = "extreme";
     public const string DefaultResourceRichness = ResourceRichnessMedium;
+    public const string MapEffectModeOff = "off";
+    public const string MapEffectModeAlwaysOn = "always_on";
+    public const string MapEffectModeUtcStart = "utc_start";
+    public const string DefaultMapEffectMode = MapEffectModeOff;
+    public const double MapEffectActivationWindowMs = 2d * 60d * 60d * 1000d;
     public const string SpaceJunkDensityNone = "none";
     public const string SpaceJunkDensityLow = "low";
     public const string SpaceJunkDensityMedium = "medium";
     public const string SpaceJunkDensityHigh = "high";
     public const string DefaultSpaceJunkDensity = SpaceJunkDensityLow;
+    public const string ContainersDensityNone = "none";
+    public const string ContainersDensityVeryLow = "very_low";
+    public const string ContainersDensityLow = "low";
+    public const string ContainersDensityMedium = "medium";
+    public const string ContainersDensityHigh = "high";
+    public const string ContainersDensityVeryHigh = "very_high";
+    public const string DefaultContainersDensity = ContainersDensityNone;
+    public const string DefaultFireNebulaDensity = SpaceJunkDensityNone;
+    public const string NebulaSizeVerySmall = "very_small";
+    public const string NebulaSizeSmall = "small";
+    public const string NebulaSizeNormal = "normal";
+    public const string NebulaSizeBig = "big";
+    public const string NebulaSizeVeryBig = "very_big";
+    public const string DefaultNebulaSize = NebulaSizeNormal;
+    public const string DefaultFireNebulaSize = NebulaSizeNormal;
 
     public static float GetRoundDuration()
     {
@@ -222,6 +262,16 @@ public static class RoomSettings
     public static int GetRepairBayCount()
     {
         return GetInt(RepairBayCountKey, DefaultRepairBayCount, 0, 2);
+    }
+
+    public static int GetSpaceFactoryCount()
+    {
+        return GetInt(SpaceFactoryCountKey, DefaultSpaceFactoryCount, 0, 2);
+    }
+
+    public static int GetRandomLootWreckCount()
+    {
+        return GetInt(RandomLootWreckCountKey, DefaultRandomLootWreckCount, 0, 5);
     }
 
     public static int GetBoosterSlowdownPercent()
@@ -332,7 +382,7 @@ public static class RoomSettings
 
     public static int GetMapBackgroundIndex()
     {
-        return GetInt(MapBackgroundKey, DefaultMapBackground, 1, 15);
+        return GetInt(MapBackgroundKey, DefaultMapBackground, 1, MaxMapBackground);
     }
 
     public static string GetSelectedLobbyMapId()
@@ -437,7 +487,58 @@ public static class RoomSettings
         }
     }
 
-    public static string GetResourceRichness()
+    public static string GetBaseTreasureDensity()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(TreasureDensityKey, out object value) &&
+            value is string density)
+        {
+            return NormalizeTreasureDensity(density);
+        }
+
+        return DefaultTreasureDensity;
+    }
+
+    public static string GetTreasureDensity()
+    {
+        string density = GetBaseTreasureDensity();
+        return IsCrazyEnemiesActive() ? IncreaseTreasureDensity(density) : density;
+    }
+
+    public static string NormalizeTreasureDensity(string density)
+    {
+        string normalized = string.IsNullOrWhiteSpace(density)
+            ? DefaultTreasureDensity
+            : density.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case "none":
+            case "low":
+            case "medium":
+            case "high":
+                return normalized;
+            default:
+                return DefaultTreasureDensity;
+        }
+    }
+
+    public static string IncreaseTreasureDensity(string density)
+    {
+        switch (NormalizeTreasureDensity(density))
+        {
+            case "none":
+                return "low";
+            case "low":
+                return "medium";
+            case "medium":
+                return "high";
+            default:
+                return "high";
+        }
+    }
+
+    public static string GetBaseResourceRichness()
     {
         if (PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ResourceRichnessKey, out object value) &&
@@ -447,6 +548,12 @@ public static class RoomSettings
         }
 
         return DefaultResourceRichness;
+    }
+
+    public static string GetResourceRichness()
+    {
+        string richness = GetBaseResourceRichness();
+        return IsFogOfWarActive() ? IncreaseResourceRichness(richness) : richness;
     }
 
     public static string NormalizeResourceRichness(string richness)
@@ -466,6 +573,25 @@ public static class RoomSettings
                 return normalized;
             default:
                 return DefaultResourceRichness;
+        }
+    }
+
+    public static string IncreaseResourceRichness(string richness)
+    {
+        switch (NormalizeResourceRichness(richness))
+        {
+            case ResourceRichnessVeryLow:
+                return ResourceRichnessLow;
+            case ResourceRichnessLow:
+                return ResourceRichnessMedium;
+            case ResourceRichnessMedium:
+                return ResourceRichnessHigh;
+            case ResourceRichnessHigh:
+                return ResourceRichnessVeryHigh;
+            case ResourceRichnessVeryHigh:
+                return ResourceRichnessExtreme;
+            default:
+                return ResourceRichnessExtreme;
         }
     }
 
@@ -496,6 +622,138 @@ public static class RoomSettings
                 return normalized;
             default:
                 return DefaultSpaceJunkDensity;
+        }
+    }
+
+    public static string GetFireNebulaDensity()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(FireNebulaDensityKey, out object value) &&
+            value is string density)
+        {
+            return NormalizeFireNebulaDensity(density);
+        }
+
+        return DefaultFireNebulaDensity;
+    }
+
+    public static string NormalizeFireNebulaDensity(string density)
+    {
+        string normalized = string.IsNullOrWhiteSpace(density)
+            ? DefaultFireNebulaDensity
+            : density.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case SpaceJunkDensityNone:
+            case SpaceJunkDensityLow:
+            case SpaceJunkDensityMedium:
+            case SpaceJunkDensityHigh:
+                return normalized;
+            default:
+                return DefaultFireNebulaDensity;
+        }
+    }
+
+    public static string GetNebulaSize()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(NebulaSizeKey, out object value) &&
+            value is string size)
+        {
+            return NormalizeNebulaSize(size);
+        }
+
+        return DefaultNebulaSize;
+    }
+
+    public static string GetFireNebulaSize()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(FireNebulaSizeKey, out object value) &&
+            value is string size)
+        {
+            return NormalizeNebulaSize(size);
+        }
+
+        return DefaultFireNebulaSize;
+    }
+
+    public static string NormalizeNebulaSize(string size)
+    {
+        string normalized = string.IsNullOrWhiteSpace(size)
+            ? NebulaSizeNormal
+            : size.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case NebulaSizeVerySmall:
+            case NebulaSizeSmall:
+            case NebulaSizeNormal:
+            case NebulaSizeBig:
+            case NebulaSizeVeryBig:
+                return normalized;
+            default:
+                return NebulaSizeNormal;
+        }
+    }
+
+    public static float GetNebulaSizeMultiplier()
+    {
+        return GetNebulaSizeMultiplierForValue(GetNebulaSize());
+    }
+
+    public static float GetFireNebulaSizeMultiplier()
+    {
+        return GetNebulaSizeMultiplierForValue(GetFireNebulaSize());
+    }
+
+    public static float GetNebulaSizeMultiplierForValue(string size)
+    {
+        switch (NormalizeNebulaSize(size))
+        {
+            case NebulaSizeVerySmall:
+                return 0.33f;
+            case NebulaSizeSmall:
+                return 0.66f;
+            case NebulaSizeBig:
+                return 1.5f;
+            case NebulaSizeVeryBig:
+                return 2f;
+            default:
+                return 1f;
+        }
+    }
+
+    public static string GetContainersDensity()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ContainersDensityKey, out object value) &&
+            value is string density)
+        {
+            return NormalizeContainersDensity(density);
+        }
+
+        return DefaultContainersDensity;
+    }
+
+    public static string NormalizeContainersDensity(string density)
+    {
+        string normalized = string.IsNullOrWhiteSpace(density)
+            ? DefaultContainersDensity
+            : density.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case ContainersDensityNone:
+            case ContainersDensityVeryLow:
+            case ContainersDensityLow:
+            case ContainersDensityMedium:
+            case ContainersDensityHigh:
+            case ContainersDensityVeryHigh:
+                return normalized;
+            default:
+                return DefaultContainersDensity;
         }
     }
 
@@ -617,20 +875,25 @@ public static class RoomSettings
         if (definition == null)
             return 100;
 
+        int maxHp = Mathf.Max(200, definition.MaxHp > 0 ? definition.MaxHp : 200);
+        int hp;
         if (PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.HpRoomKey))
         {
-            return GetInt(definition.HpRoomKey, definition.DefaultHp, 20, 200);
+            hp = GetInt(definition.HpRoomKey, definition.DefaultHp, 20, maxHp);
         }
-
-        if (kind == EnemyBotKind.Corsair &&
+        else if (kind == EnemyBotKind.Corsair &&
             PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(CorsairHpKey, out object legacyValue))
         {
-            return Mathf.Clamp(ConvertToInt(legacyValue, definition.DefaultHp), 20, 200);
+            hp = Mathf.Clamp(ConvertToInt(legacyValue, definition.DefaultHp), 20, 200);
+        }
+        else
+        {
+            hp = Mathf.Clamp(definition.DefaultHp, 20, maxHp);
         }
 
-        return Mathf.Clamp(definition.DefaultHp, 20, 200);
+        return IsCrazyEnemiesActive() ? Mathf.Max(1, Mathf.CeilToInt(hp * 0.5f)) : hp;
     }
 
     public static int GetEnemyShield(EnemyBotKind kind)
@@ -639,13 +902,14 @@ public static class RoomSettings
         if (definition == null)
             return DefaultEnemyShield;
 
+        int maxShield = Mathf.Max(200, definition.MaxShield > 0 ? definition.MaxShield : 200);
         if (PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.ShieldRoomKey))
         {
-            return GetInt(definition.ShieldRoomKey, definition.DefaultShield, 0, 200);
+            return GetInt(definition.ShieldRoomKey, definition.DefaultShield, 0, maxShield);
         }
 
-        return Mathf.Clamp(definition.DefaultShield, 0, 200);
+        return Mathf.Clamp(definition.DefaultShield, 0, maxShield);
     }
 
     public static int GetEnemyDamage(EnemyBotKind kind)
@@ -654,13 +918,18 @@ public static class RoomSettings
         if (definition == null)
             return 0;
 
+        int damage;
         if (PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.DamageRoomKey))
         {
-            return GetInt(definition.DamageRoomKey, definition.DefaultDamage, 0, 200);
+            damage = GetInt(definition.DamageRoomKey, definition.DefaultDamage, 0, 200);
+        }
+        else
+        {
+            damage = Mathf.Clamp(definition.DefaultDamage, 0, 200);
         }
 
-        return Mathf.Clamp(definition.DefaultDamage, 0, 200);
+        return IsCrazyEnemiesActive() ? Mathf.Max(0, damage * 2) : damage;
     }
 
     public static float GetEnemySpeedMultiplier(EnemyBotKind kind)
@@ -833,6 +1102,87 @@ public static class RoomSettings
         return DefaultAdvancedShootingJoystickEnabled;
     }
 
+    public static string GetMapEffectMode(string modeKey)
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(modeKey, out object value) &&
+            value is string mode)
+        {
+            return NormalizeMapEffectMode(mode);
+        }
+
+        return DefaultMapEffectMode;
+    }
+
+    public static string NormalizeMapEffectMode(string mode)
+    {
+        string normalized = string.IsNullOrWhiteSpace(mode)
+            ? DefaultMapEffectMode
+            : mode.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case MapEffectModeAlwaysOn:
+            case MapEffectModeUtcStart:
+                return normalized;
+            default:
+                return MapEffectModeOff;
+        }
+    }
+
+    public static double GetMapEffectStartUtcMs(string startKey)
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(startKey, out object value))
+        {
+            return ConvertToDouble(value, -1d);
+        }
+
+        return -1d;
+    }
+
+    public static bool ShouldMapEffectActivate(string modeKey, string startKey, double roundStartUtcMs)
+    {
+        string mode = GetMapEffectMode(modeKey);
+        if (mode == MapEffectModeAlwaysOn)
+            return true;
+
+        if (mode != MapEffectModeUtcStart)
+            return false;
+
+        double startUtcMs = GetMapEffectStartUtcMs(startKey);
+        if (startUtcMs < 0d)
+            return false;
+
+        return roundStartUtcMs >= startUtcMs &&
+               roundStartUtcMs <= startUtcMs + MapEffectActivationWindowMs;
+    }
+
+    public static bool IsCrazyEnemiesActive()
+    {
+        return IsMapEffectActive(CrazyEnemiesActiveKey);
+    }
+
+    public static bool IsFogOfWarActive()
+    {
+        return IsMapEffectActive(FogOfWarActiveKey);
+    }
+
+    static bool IsMapEffectActive(string activeKey)
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(activeKey, out object value))
+        {
+            if (value is bool boolValue)
+                return boolValue;
+
+            if (value is int intValue)
+                return intValue != 0;
+        }
+
+        return false;
+    }
+
     public static string GetGunSetupRoomKey(string weaponId)
     {
         if (string.IsNullOrWhiteSpace(weaponId))
@@ -925,6 +1275,18 @@ public static class RoomSettings
         return Mathf.Clamp(fallback, 0, ShipCatalog.MaxShipSkinIndex);
     }
 
+    public static string GetPlayerPilotId(Photon.Realtime.Player player, string fallback)
+    {
+        if (player != null &&
+            player.CustomProperties.TryGetValue(PilotIdKey, out object value) &&
+            value is string pilotId)
+        {
+            return PilotCatalog.NormalizePilotId(pilotId);
+        }
+
+        return PilotCatalog.NormalizePilotId(fallback);
+    }
+
     static int GetInt(string key, int defaultValue, int min, int max)
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -965,6 +1327,26 @@ public static class RoomSettings
         }
 
         return false;
+    }
+
+    static double ConvertToDouble(object value, double fallback)
+    {
+        if (value is double doubleValue)
+            return doubleValue;
+
+        if (value is float floatValue)
+            return floatValue;
+
+        if (value is int intValue)
+            return intValue;
+
+        if (value is long longValue)
+            return longValue;
+
+        if (value is byte byteValue)
+            return byteValue;
+
+        return fallback;
     }
 
     static int ConvertToInt(object value, int fallback)
@@ -1080,7 +1462,7 @@ public static class ShipCatalog
         1,
         1,
         75,
-        75,
+        40,
         5f,
         1f,
         5f,
@@ -1098,7 +1480,7 @@ public static class ShipCatalog
         2,
         0,
         60,
-        53,
+        30,
         6f,
         1.2f,
         4f,
@@ -1120,7 +1502,7 @@ public static class ShipCatalog
         0,
         2,
         98,
-        105,
+        55,
         4.2f,
         0.82f,
         6f,
@@ -1138,7 +1520,7 @@ public static class ShipCatalog
         2,
         1,
         63,
-        42,
+        25,
         6.8f,
         1.45f,
         3.6f,
@@ -1161,7 +1543,7 @@ public static class ShipCatalog
         0,
         2,
         72,
-        62,
+        35,
         5.4f,
         1.08f,
         5.4f,

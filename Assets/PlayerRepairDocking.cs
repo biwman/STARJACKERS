@@ -22,8 +22,17 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
         Launching
     }
 
+    enum DockMode
+    {
+        None,
+        RepairBay,
+        SpaceFactory
+    }
+
     DockState state;
+    DockMode dockMode;
     Coroutine routine;
+    Coroutine factoryExchangeRoutine;
     PlayerMovement movement;
     PlayerShooting shooting;
     Rigidbody2D body;
@@ -35,6 +44,7 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
     bool dockingPhysicsLocked;
     float repairAccumulator;
     string activeBayId;
+    string activeFactoryId;
 
     public bool IsBusy => state != DockState.None;
     public bool IsDamageImmune => state == DockState.Landing || state == DockState.Repairing || state == DockState.Launching;
@@ -52,10 +62,14 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
     {
         if (routine != null)
             StopCoroutine(routine);
-        ReleaseActiveBayOccupancy();
+        if (factoryExchangeRoutine != null)
+            StopCoroutine(factoryExchangeRoutine);
+        factoryExchangeRoutine = null;
+        ReleaseActiveDockOccupancy();
         RestoreDockingPhysicsLock();
         RestoreControls();
         state = DockState.None;
+        dockMode = DockMode.None;
     }
 
     void Update()
@@ -63,7 +77,7 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
         if (state == DockState.Repairing)
             MaintainDockedPosition();
 
-        if (!PhotonNetwork.IsMasterClient || state != DockState.Repairing)
+        if (!PhotonNetwork.IsMasterClient || state != DockState.Repairing || dockMode != DockMode.RepairBay)
             return;
 
         repairAccumulator += Time.deltaTime;
@@ -86,25 +100,34 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
         }
     }
 
-    public bool TryStartUse(RepairBay bay)
+    public bool TryStartUse(RepairBay bay, SpaceFactory factory = null)
     {
         if (!photonView.IsMine)
             return false;
 
         if (state == DockState.Repairing)
         {
-            photonView.RPC(nameof(RequestRepairLaunch), RpcTarget.MasterClient);
+            if (dockMode == DockMode.RepairBay)
+                photonView.RPC(nameof(RequestRepairLaunch), RpcTarget.MasterClient);
             return true;
         }
-
-        if (bay == null)
-            return false;
 
         if (state != DockState.None)
             return true;
 
-        routine = StartCoroutine(HoldToLandRoutine(bay));
-        return true;
+        if (bay != null)
+        {
+            routine = StartCoroutine(HoldToLandRoutine(bay));
+            return true;
+        }
+
+        if (factory != null)
+        {
+            routine = StartCoroutine(HoldToLandFactoryRoutine(factory));
+            return true;
+        }
+
+        return false;
     }
 
     public void StopUseHold()
@@ -140,6 +163,28 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
         photonView.RPC(nameof(RequestRepairDock), RpcTarget.MasterClient, bay.StableId);
     }
 
+    IEnumerator HoldToLandFactoryRoutine(SpaceFactory factory)
+    {
+        state = DockState.Holding;
+        float elapsed = 0f;
+        while (elapsed < HoldToLandSeconds)
+        {
+            if (factory == null || Vector2.Distance(transform.position, factory.LandingPoint) > SpaceFactory.InteractionRadius + 0.45f)
+            {
+                state = DockState.None;
+                routine = null;
+                yield break;
+            }
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        state = DockState.None;
+        routine = null;
+        photonView.RPC(nameof(RequestFactoryDock), RpcTarget.MasterClient, factory.StableId);
+    }
+
     [PunRPC]
     void RequestRepairDock(string bayId, PhotonMessageInfo info)
     {
@@ -159,7 +204,33 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
 
         Vector3 landingPoint = bay.LandingPoint;
         activeBayId = bay.StableId;
+        activeFactoryId = null;
+        dockMode = DockMode.RepairBay;
         photonView.RPC(nameof(BeginRepairLanding), RpcTarget.All, bayId, landingPoint.x, landingPoint.y);
+    }
+
+    [PunRPC]
+    void RequestFactoryDock(string factoryId, PhotonMessageInfo info)
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView.Owner == null || info.Sender == null || info.Sender.ActorNumber != photonView.Owner.ActorNumber)
+            return;
+
+        PlayerHealth health = GetComponent<PlayerHealth>();
+        SpaceFactory factory = SpaceFactory.Find(factoryId);
+        if (health == null || factory == null || health.IsWreck || health.IsEvacuationAnimating || health.IsAstronautControlled)
+            return;
+
+        if (Vector2.Distance(transform.position, factory.LandingPoint) > SpaceFactory.InteractionRadius + 0.85f)
+            return;
+
+        if (!TryReserveSpaceFactoryOccupancy(factory.StableId, photonView.Owner.ActorNumber))
+            return;
+
+        Vector3 landingPoint = factory.LandingPoint;
+        activeFactoryId = factory.StableId;
+        activeBayId = null;
+        dockMode = DockMode.SpaceFactory;
+        photonView.RPC(nameof(BeginFactoryLanding), RpcTarget.All, factoryId, landingPoint.x, landingPoint.y);
     }
 
     [PunRPC]
@@ -177,6 +248,18 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
     {
         StopActiveRoutine();
         activeBayId = bayId;
+        activeFactoryId = null;
+        dockMode = DockMode.RepairBay;
+        routine = StartCoroutine(LandingRoutine(new Vector3(landingX, landingY, transform.position.z)));
+    }
+
+    [PunRPC]
+    void BeginFactoryLanding(string factoryId, float landingX, float landingY)
+    {
+        StopActiveRoutine();
+        activeFactoryId = factoryId;
+        activeBayId = null;
+        dockMode = DockMode.SpaceFactory;
         routine = StartCoroutine(LandingRoutine(new Vector3(landingX, landingY, transform.position.z)));
     }
 
@@ -204,7 +287,7 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
         ZeroVelocity();
 
         PlayerHealth health = GetComponent<PlayerHealth>();
-        if (PhotonNetwork.IsMasterClient && health != null && health.HasFullVitals)
+        if (dockMode == DockMode.RepairBay && PhotonNetwork.IsMasterClient && health != null && health.HasFullVitals)
         {
             photonView.RPC(nameof(BeginRepairLaunch), RpcTarget.All);
             yield break;
@@ -213,12 +296,16 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
         state = DockState.Repairing;
         repairAccumulator = 0f;
         routine = null;
+
+        if (dockMode == DockMode.SpaceFactory && photonView.IsMine)
+            factoryExchangeRoutine = StartCoroutine(FactoryExchangeRoutine(activeFactoryId));
     }
 
     [PunRPC]
     void BeginRepairLaunch()
     {
         StopActiveRoutine();
+        StopFactoryExchangeRoutine();
         routine = StartCoroutine(LaunchRoutine());
     }
 
@@ -245,9 +332,11 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
 
         transform.localScale = originalScale;
         RestoreDockingPhysicsLock();
-        ReleaseActiveBayOccupancy();
+        ReleaseActiveDockOccupancy();
         state = DockState.None;
         activeBayId = null;
+        activeFactoryId = null;
+        dockMode = DockMode.None;
         routine = null;
         RestoreControls();
     }
@@ -256,9 +345,12 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
     void ForceEndRepairDocking()
     {
         StopActiveRoutine();
-        ReleaseActiveBayOccupancy();
+        StopFactoryExchangeRoutine();
+        ReleaseActiveDockOccupancy();
         state = DockState.None;
         activeBayId = null;
+        activeFactoryId = null;
+        dockMode = DockMode.None;
         transform.localScale = originalScale;
         RestoreDockingPhysicsLock();
         RestoreControls();
@@ -338,7 +430,14 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
     {
         RepairBay bay = RepairBay.Find(activeBayId);
         if (bay == null)
-            return fallback;
+        {
+            SpaceFactory factory = SpaceFactory.Find(activeFactoryId);
+            if (factory == null)
+                return fallback;
+
+            Vector3 factoryLandingPoint = factory.LandingPoint;
+            return new Vector3(factoryLandingPoint.x, factoryLandingPoint.y, fallback.z);
+        }
 
         Vector3 landingPoint = bay.LandingPoint;
         return new Vector3(landingPoint.x, landingPoint.y, fallback.z);
@@ -351,13 +450,153 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
         routine = null;
     }
 
-    void ReleaseActiveBayOccupancy()
+    void StopFactoryExchangeRoutine()
     {
-        if (!PhotonNetwork.IsMasterClient || string.IsNullOrWhiteSpace(activeBayId))
+        if (factoryExchangeRoutine != null)
+            StopCoroutine(factoryExchangeRoutine);
+        factoryExchangeRoutine = null;
+    }
+
+    void ReleaseActiveDockOccupancy()
+    {
+        if (!PhotonNetwork.IsMasterClient)
             return;
 
         int actorNumber = photonView != null && photonView.Owner != null ? photonView.Owner.ActorNumber : -1;
-        ReleaseRepairBayOccupancy(activeBayId, actorNumber);
+        if (!string.IsNullOrWhiteSpace(activeBayId))
+            ReleaseRepairBayOccupancy(activeBayId, actorNumber);
+
+        if (!string.IsNullOrWhiteSpace(activeFactoryId))
+            ReleaseSpaceFactoryOccupancy(activeFactoryId, actorNumber);
+    }
+
+    IEnumerator FactoryExchangeRoutine(string factoryId)
+    {
+        yield return new WaitForSeconds(0.2f);
+
+        if (string.IsNullOrWhiteSpace(factoryId) || SpaceFactory.IsCompleted(factoryId))
+        {
+            RequestFactoryLaunchFromOwner();
+            factoryExchangeRoutine = null;
+            yield break;
+        }
+
+        while (state == DockState.Repairing && dockMode == DockMode.SpaceFactory && SpaceFactory.CanAcceptContainer(factoryId))
+        {
+            yield return new WaitForSeconds(1f);
+
+            if (state != DockState.Repairing || dockMode != DockMode.SpaceFactory || !SpaceFactory.CanAcceptContainer(factoryId))
+                break;
+
+            if (!PlayerProfileService.HasInstance)
+                break;
+
+            System.Threading.Tasks.Task<string> removeTask = PlayerProfileService.Instance.RemoveFirstShipContainerAsync();
+            while (!removeTask.IsCompleted)
+                yield return null;
+
+            if (removeTask.IsFaulted)
+            {
+                Debug.LogError("Space Factory container removal failed: " + removeTask.Exception);
+                break;
+            }
+
+            string removedContainerId = removeTask.Result;
+            if (string.IsNullOrWhiteSpace(removedContainerId))
+                break;
+
+            photonView.RPC(nameof(RequestFactoryContainerDeposit), RpcTarget.MasterClient, factoryId, removedContainerId);
+        }
+
+        if (state == DockState.Repairing && dockMode == DockMode.SpaceFactory)
+            RequestFactoryLaunchFromOwner();
+
+        factoryExchangeRoutine = null;
+    }
+
+    void RequestFactoryLaunchFromOwner()
+    {
+        if (!photonView.IsMine)
+            return;
+
+        photonView.RPC(nameof(RequestFactoryLaunch), RpcTarget.MasterClient);
+    }
+
+    [PunRPC]
+    void RequestFactoryContainerDeposit(string factoryId, string itemId, PhotonMessageInfo info)
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView.Owner == null || info.Sender == null || info.Sender.ActorNumber != photonView.Owner.ActorNumber)
+            return;
+
+        if (!IsFactoryOccupiedByActor(factoryId, photonView.Owner.ActorNumber))
+        {
+            photonView.RPC(nameof(RestoreRejectedFactoryContainerRpc), photonView.Owner, itemId);
+            photonView.RPC(nameof(BeginRepairLaunch), RpcTarget.All);
+            return;
+        }
+
+        bool accepted = SpaceFactory.TryDepositContainerAuthority(factoryId, itemId, out bool completedNow);
+        if (!accepted)
+        {
+            photonView.RPC(nameof(RestoreRejectedFactoryContainerRpc), photonView.Owner, itemId);
+            photonView.RPC(nameof(BeginRepairLaunch), RpcTarget.All);
+            return;
+        }
+
+        if (completedNow)
+        {
+            photonView.RPC(nameof(ReceiveFactoryRewardRpc), photonView.Owner, InventoryItemCatalog.CashSuitcaseId);
+            photonView.RPC(nameof(ShowFactoryRichMessageRpc), RpcTarget.All);
+            photonView.RPC(nameof(BeginRepairLaunch), RpcTarget.All);
+        }
+    }
+
+    [PunRPC]
+    void RequestFactoryLaunch(PhotonMessageInfo info)
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView.Owner == null || info.Sender == null || info.Sender.ActorNumber != photonView.Owner.ActorNumber)
+            return;
+
+        if ((state == DockState.Repairing || state == DockState.Landing) && dockMode == DockMode.SpaceFactory)
+            photonView.RPC(nameof(BeginRepairLaunch), RpcTarget.All);
+    }
+
+    [PunRPC]
+    async void ReceiveFactoryRewardRpc(string itemId)
+    {
+        if (!photonView.IsMine || string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        try
+        {
+            await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to add Space Factory reward: " + ex);
+        }
+    }
+
+    [PunRPC]
+    async void RestoreRejectedFactoryContainerRpc(string itemId)
+    {
+        if (!photonView.IsMine || string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        try
+        {
+            await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to restore rejected Space Factory container: " + ex);
+        }
+    }
+
+    [PunRPC]
+    void ShowFactoryRichMessageRpc()
+    {
+        RoundAnnouncementUI.Show("SOMEONE BECAME RICH!");
     }
 
     bool TryReserveRepairBayOccupancy(string bayId, int actorNumber)
@@ -408,10 +647,80 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
         }
     }
 
+    bool TryReserveSpaceFactoryOccupancy(string factoryId, int actorNumber)
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null || string.IsNullOrWhiteSpace(factoryId) || actorNumber <= 0)
+            return false;
+
+        Dictionary<string, int> occupancy = DeserializeRepairBayOccupancy(GetSpaceFactoryOccupancyStateRaw());
+        RemoveStaleOccupants(occupancy);
+
+        if (IsActorOccupyingAnotherBay(occupancy, factoryId, actorNumber))
+        {
+            PublishSpaceFactoryOccupancy(occupancy);
+            return false;
+        }
+
+        if (occupancy.TryGetValue(factoryId, out int occupiedByActor) &&
+            occupiedByActor > 0 &&
+            occupiedByActor != actorNumber &&
+            IsActorInRoom(occupiedByActor))
+        {
+            PublishSpaceFactoryOccupancy(occupancy);
+            return false;
+        }
+
+        occupancy[factoryId] = actorNumber;
+        PublishSpaceFactoryOccupancy(occupancy);
+        return true;
+    }
+
+    void ReleaseSpaceFactoryOccupancy(string factoryId, int actorNumber)
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null || string.IsNullOrWhiteSpace(factoryId))
+            return;
+
+        Dictionary<string, int> occupancy = DeserializeRepairBayOccupancy(GetSpaceFactoryOccupancyStateRaw());
+        RemoveStaleOccupants(occupancy);
+
+        if (occupancy.TryGetValue(factoryId, out int occupiedByActor) &&
+            (actorNumber <= 0 || occupiedByActor == actorNumber || !IsActorInRoom(occupiedByActor)))
+        {
+            occupancy.Remove(factoryId);
+            PublishSpaceFactoryOccupancy(occupancy);
+        }
+        else
+        {
+            PublishSpaceFactoryOccupancy(occupancy);
+        }
+    }
+
+    bool IsFactoryOccupiedByActor(string factoryId, int actorNumber)
+    {
+        if (string.IsNullOrWhiteSpace(factoryId) || actorNumber <= 0)
+            return false;
+
+        Dictionary<string, int> occupancy = DeserializeRepairBayOccupancy(GetSpaceFactoryOccupancyStateRaw());
+        RemoveStaleOccupants(occupancy);
+        return occupancy.TryGetValue(factoryId, out int occupiedByActor) && occupiedByActor == actorNumber;
+    }
+
     static string GetRepairBayOccupancyStateRaw()
     {
         if (PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.RepairBayOccupancyStateKey, out object value) &&
+            value is string raw)
+        {
+            return raw;
+        }
+
+        return string.Empty;
+    }
+
+    static string GetSpaceFactoryOccupancyStateRaw()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.SpaceFactoryOccupancyStateKey, out object value) &&
             value is string raw)
         {
             return raw;
@@ -456,6 +765,18 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
         ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable
         {
             [RoomSettings.RepairBayOccupancyStateKey] = SerializeRepairBayOccupancy(occupancy)
+        };
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+    }
+
+    static void PublishSpaceFactoryOccupancy(Dictionary<string, int> occupancy)
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable
+        {
+            [RoomSettings.SpaceFactoryOccupancyStateKey] = SerializeRepairBayOccupancy(occupancy)
         };
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
     }

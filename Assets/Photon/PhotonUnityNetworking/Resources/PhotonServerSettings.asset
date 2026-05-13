@@ -87,6 +87,7 @@ MonoBehaviour:
   - PlayHpHitAudio
   - PlayShieldHitAudio
   - TakeEnvironmentalDamage
+  - TakeNebulaDamage
   - BeginTransitionStage
   - BeginEvacuationSequence
   - PlayMineDetonationEffects
@@ -109,6 +110,7 @@ MonoBehaviour:
   - StopTractorBeamEffects
   - RequestBatteringImpact
   - RequestObstacleBatteringImpact
+  - TakePilotDamageAt
   - PlayBatteringImpactVisual
   - BeginRepairLanding
   - BeginRepairLaunch
@@ -120,6 +122,10 @@ MonoBehaviour:
   - TakeDamageProfileAt
   - PlayImpactVfx
   - NotifyFinalEvacuation
+  - AwardCharlieLastSecondExtractionBonus
+  - UnlockRoburPilotAfterHumanKill
+  - RecordPilotDroneKillProgress
+  - ApplyNovaKillSpeedBoost
   - PlayRadarShipIncomingRpc
   - PlayRadarShipShootRpc
   - SpawnRadarStrikeImpactRpc
@@ -133,6 +139,40 @@ MonoBehaviour:
   - StopRescueShipBeamRpc
   - PlayRescueShipIncomingRpc
   - ApplyLocalShipLossForWreck
+  - BeginFactoryLanding
+  - ReceiveFactoryRewardRpc
+  - RequestFactoryContainerDeposit
+  - RequestFactoryDock
+  - RequestFactoryLaunch
+  - RestoreRejectedFactoryContainerRpc
+  - ShowFactoryRichMessageRpc
+  - PlayPirateBaseLaunchVfxRpc
+  - ReceivePendingRandomLootWreckRpc
+  - RequestRandomLootWreck
+  - ResolveReservedRandomLootWreck
+  - ActivateGuidanceSystemRpc
+  - ActivateSuperBoosterRpc
+  - ArmSpaceTrapTargetRpc
+  - ArmTrapRpc
+  - PlayDeployableDestroyedRpc
+  - PlayDeployableHitRpc
+  - PlayTrapExplosionRpc
+  - PlayTurretShotRpc
+  - ReceiveLootingFriendCrateItemRpc
+  - ReceiveLootingFriendItemRpc
+  - ReceiveSpaceDrillLootRpc
+  - RequestLootingFriendCrateRpc
+  - RequestLootingFriendTreasureRpc
+  - RequestLootingFriendWreckRpc
+  - ResolveLootingFriendCrateLootRpc
+  - ResolveLootingFriendLootRpc
+  - ResolveSpaceDrillDeliveryRpc
+  - SetDrillBeamRpc
+  - StartAstroCutterBeamRpc
+  - TakeDeployableDamageAt
+  - SetLootingFriendCollectFxRpc
+  - ClearSpaceTrapTargetRpc
+  - PlaySpaceDrillDeliverySoundRpc
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

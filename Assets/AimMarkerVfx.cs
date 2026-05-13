@@ -11,6 +11,8 @@ public sealed class AimMarkerVfx : MonoBehaviour
     const float ArcGlowLineWidth = 0.22f;
     const float ArcTargetRingWidth = 0.06f;
     const float ArcTargetCrossWidth = 0.05f;
+    const float LineRangeRingWidth = 0.05f;
+    const float LineRangeCrossWidth = 0.044f;
     const float EffectZOffset = -0.09f;
     const int SortingOrderOffset = 520;
     static readonly Color MarkerCoreColor = new Color(0.78f, 0.96f, 1f, 0.9f);
@@ -117,6 +119,7 @@ public sealed class AimMarkerVfx : MonoBehaviour
         float segmentLength = step * SegmentFill;
         Vector3 startOffset = dir * ResolveStartOffset();
         origin.z += EffectZOffset;
+        Vector3 rangeEndPoint = origin + startOffset + (dir * usableRange);
 
         for (int i = 0; i < segments.Count; i++)
         {
@@ -137,6 +140,8 @@ public sealed class AimMarkerVfx : MonoBehaviour
             UpdateLine(segment.Glow, start, end, glowStart, glowEnd, GlowLineWidth, sortingOrder);
             UpdateLine(segment.Core, start, end, coreStart, coreEnd, CoreLineWidth, sortingOrder + 1);
         }
+
+        UpdateLineRangeMarker(rangeEndPoint, direction, markerColor);
     }
 
     public void ShowArc(Vector3 origin, Vector3 target, Color markerColor, float arcHeight)
@@ -347,6 +352,28 @@ public sealed class AimMarkerVfx : MonoBehaviour
         Vector3 diagB = new Vector3(-0.22f, 0.22f, 0f);
         UpdateLine(targetCrossA, endPoint - diagA, endPoint + diagA, coreColor, new Color(coreColor.r, coreColor.g, coreColor.b, 0.58f), ArcTargetCrossWidth, sortingOrder + 2);
         UpdateLine(targetCrossB, endPoint - diagB, endPoint + diagB, coreColor, new Color(coreColor.r, coreColor.g, coreColor.b, 0.58f), ArcTargetCrossWidth, sortingOrder + 2);
+    }
+
+    void UpdateLineRangeMarker(Vector3 endPoint, Vector2 direction, Color markerColor)
+    {
+        EnsureArcTargetMarker();
+
+        Vector2 safeDirection = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector2.up;
+        float pulse = Mathf.Sin(Time.time * 9f) * 0.5f + 0.5f;
+        float ringRadius = 0.24f + pulse * 0.045f;
+        Color glowColor = new Color(markerColor.r, markerColor.g, markerColor.b, 0.28f);
+        Color coreColor = new Color(Mathf.Lerp(markerColor.r, 1f, 0.3f), Mathf.Lerp(markerColor.g, 1f, 0.3f), Mathf.Lerp(markerColor.b, 1f, 0.3f), 0.92f);
+
+        Vector3 ringCenter = new Vector3(endPoint.x, endPoint.y, 0f);
+        UpdateRing(targetRingGlow, ringCenter, ringRadius * 1.2f, glowColor, LineRangeRingWidth * 1.9f, sortingOrder);
+        UpdateRing(targetRingCore, ringCenter, ringRadius, coreColor, LineRangeRingWidth, sortingOrder + 1);
+
+        Vector3 visualCenter = new Vector3(endPoint.x, endPoint.y, EffectZOffset);
+        Vector3 perpendicular = new Vector3(-safeDirection.y, safeDirection.x, 0f) * 0.32f;
+        Vector3 forward = new Vector3(safeDirection.x, safeDirection.y, 0f) * 0.16f;
+        Color softCore = new Color(coreColor.r, coreColor.g, coreColor.b, 0.58f);
+        UpdateLine(targetCrossA, visualCenter - perpendicular, visualCenter + perpendicular, coreColor, softCore, LineRangeCrossWidth, sortingOrder + 2);
+        UpdateLine(targetCrossB, visualCenter - forward, visualCenter + forward, softCore, coreColor, LineRangeCrossWidth * 0.82f, sortingOrder + 2);
     }
 
     void UpdateRing(LineRenderer line, Vector3 center, float radius, Color color, float width, int order)

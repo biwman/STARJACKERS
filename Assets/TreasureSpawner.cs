@@ -7,10 +7,10 @@ using System.Globalization;
 public class TreasureSpawner : MonoBehaviourPun
 {
     const string GameStartedKey = "gameStarted";
-    const string TreasureDensityKey = "treasureDensity";
     const string ObstacleLayoutKey = "obstacleLayout";
     const string ExtractionLayoutKey = "extractionLayout";
     const string NebulaLayoutKey = "nebulaLayout";
+    const string FireNebulaLayoutKey = NebulaSpawner.FireNebulaLayoutKey;
     const float MinDistanceFromExtraction = 3f;
     const float MinDistanceFromObstacle = 2.6f;
     const float MinDistanceFromNebula = 2.8f;
@@ -42,7 +42,7 @@ public class TreasureSpawner : MonoBehaviourPun
         while (!IsRoundStarted())
             yield return null;
 
-        while (!HasExtractionLayout() || !HasObstacleLayout() || !HasNebulaLayout())
+        while (!HasExtractionLayout() || !HasObstacleLayout() || !HasNebulaLayout() || !HasFireNebulaLayout())
             yield return null;
 
         if (!PhotonNetwork.IsMasterClient)
@@ -60,6 +60,7 @@ public class TreasureSpawner : MonoBehaviourPun
         List<Vector2> obstaclePositions = ParseLayout(ObstacleLayoutKey);
         List<Vector2> extractionPositions = ParseLayout(ExtractionLayoutKey);
         List<Vector2> nebulaPositions = ParseLayout(NebulaLayoutKey);
+        nebulaPositions.AddRange(ParseLayout(FireNebulaLayoutKey));
         int spawned = 0;
         int attempts = 0;
         int targetCount = Mathf.Max(0, Mathf.RoundToInt(treasureCount * GetDensityMultiplier() * RoomSettings.GetMapAreaMultiplier()));
@@ -140,20 +141,13 @@ public class TreasureSpawner : MonoBehaviourPun
 
     float GetDensityMultiplier()
     {
-        if (PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(TreasureDensityKey, out object value) &&
-            value is string density)
+        switch (RoomSettings.GetTreasureDensity())
         {
-            switch (density)
-            {
-                case "none": return 0f;
-                case "low": return 0.5f;
-                case "high": return 2f;
-                default: return 1f;
-            }
+            case "none": return 0f;
+            case "low": return 0.5f;
+            case "high": return 2f;
+            default: return 1f;
         }
-
-        return 1f;
     }
 
     string RollTreasureItemId()
@@ -250,6 +244,14 @@ public class TreasureSpawner : MonoBehaviourPun
     {
         return PhotonNetwork.CurrentRoom != null &&
                PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(NebulaLayoutKey, out object value) &&
+               value is string layout &&
+               !string.IsNullOrWhiteSpace(layout);
+    }
+
+    bool HasFireNebulaLayout()
+    {
+        return PhotonNetwork.CurrentRoom != null &&
+               PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(FireNebulaLayoutKey, out object value) &&
                value is string layout &&
                !string.IsNullOrWhiteSpace(layout);
     }

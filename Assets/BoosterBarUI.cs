@@ -8,9 +8,13 @@ public class BoosterBarUI : MonoBehaviourPun
 {
     const string BoosterBarName = "Booster_Bar";
     const string PercentName = "BoosterPercent";
+    const float BarWidth = 440f;
+    const float BarHeight = 36f;
+    const float VerticalSpacing = 18f;
 
     PlayerMovement movement;
     Slider boosterBar;
+    RectTransform boosterRect;
     Image fillImage;
     Image handleImage;
     TextMeshProUGUI percentText;
@@ -68,8 +72,8 @@ public class BoosterBarUI : MonoBehaviourPun
         clone.name = BoosterBarName;
 
         RectTransform hpRect = hpBarObject.GetComponent<RectTransform>();
-        RectTransform boosterRect = clone.GetComponent<RectTransform>();
-        boosterRect.anchoredPosition = hpRect.anchoredPosition + new Vector2(0f, -110f);
+        boosterRect = clone.GetComponent<RectTransform>();
+        ApplyLayout(hpRect);
 
         boosterBar = clone.GetComponent<Slider>();
         boosterBar.minValue = 0f;
@@ -78,6 +82,7 @@ public class BoosterBarUI : MonoBehaviourPun
 
         fillImage = FindFillImage(clone.transform);
         handleImage = FindImage(clone.transform, "Handle");
+        HideHandle();
         Image backgroundImage = clone.GetComponentInChildren<Image>();
         DestroyIfExists(clone.transform, "HealthLabel");
         DestroyIfExists(clone.transform, "HealthValue");
@@ -104,6 +109,8 @@ public class BoosterBarUI : MonoBehaviourPun
             return;
         }
 
+        ApplyLayout();
+
         float normalized = movement.BoosterNormalized;
         boosterBar.value = normalized;
 
@@ -127,12 +134,7 @@ public class BoosterBarUI : MonoBehaviourPun
             fillImage.color = new Color(0.9f, 0.18f, 0.18f, 1f);
         }
 
-        if (handleImage != null)
-        {
-            handleImage.color = normalized >= 0.999f
-                ? new Color(0.96f, 0.38f, 0.4f, 1f)
-                : new Color(0.6f, 0.64f, 0.7f, 1f);
-        }
+        HideHandle();
 
         if (percentText != null)
         {
@@ -166,6 +168,25 @@ public class BoosterBarUI : MonoBehaviourPun
         }
 
         return false;
+    }
+
+    void ApplyLayout()
+    {
+        if (boosterRect == null)
+            return;
+
+        GameObject hpBarObject = GameObject.Find("HP_Bar");
+        RectTransform hpRect = hpBarObject != null ? hpBarObject.GetComponent<RectTransform>() : null;
+        ApplyLayout(hpRect);
+    }
+
+    void ApplyLayout(RectTransform hpRect)
+    {
+        if (boosterRect == null || hpRect == null)
+            return;
+
+        boosterRect.sizeDelta = new Vector2(BarWidth, BarHeight);
+        boosterRect.anchoredPosition = hpRect.anchoredPosition + new Vector2(0f, -VerticalSpacing * 2f);
     }
 
     Image FindFillImage(Transform root)
@@ -215,7 +236,7 @@ public class BoosterBarUI : MonoBehaviourPun
 
         TextMeshProUGUI text = labelObject.GetComponent<TextMeshProUGUI>();
         text.text = "BOOSTER";
-        text.fontSize = 22f;
+        text.fontSize = 14f;
         text.color = Color.white;
         text.alignment = TextAlignmentOptions.Left;
 
@@ -238,7 +259,7 @@ public class BoosterBarUI : MonoBehaviourPun
 
         percentText = percentObject.GetComponent<TextMeshProUGUI>();
         percentText.text = "100%";
-        percentText.fontSize = 20f;
+        percentText.fontSize = 14f;
         percentText.color = Color.white;
         percentText.alignment = TextAlignmentOptions.Right;
 
@@ -247,5 +268,14 @@ public class BoosterBarUI : MonoBehaviourPun
             percentText.font = referenceText.font;
             percentText.fontSharedMaterial = referenceText.fontSharedMaterial;
         }
+    }
+
+    void HideHandle()
+    {
+        if (handleImage == null)
+            return;
+
+        handleImage.enabled = false;
+        handleImage.raycastTarget = false;
     }
 }

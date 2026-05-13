@@ -36,6 +36,14 @@ public sealed class RepairBaySpawner : MonoBehaviourPunCallbacks
         instance = spawner.AddComponent<RepairBaySpawner>();
     }
 
+    public static void ResetForSessionTransition()
+    {
+        if (instance == null)
+            return;
+
+        instance.ResetLocalRuntimeState();
+    }
+
     void Awake()
     {
         instance = this;
@@ -49,6 +57,14 @@ public sealed class RepairBaySpawner : MonoBehaviourPunCallbacks
 
     void Start()
     {
+        StartCoroutine(InitializeWhenRoundStarts());
+    }
+
+    void ResetLocalRuntimeState()
+    {
+        StopAllCoroutines();
+        layoutApplied = false;
+        RepairBay.ClearAllRuntimeBays();
         StartCoroutine(InitializeWhenRoundStarts());
     }
 

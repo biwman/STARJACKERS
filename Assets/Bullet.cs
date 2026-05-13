@@ -35,6 +35,8 @@ public class Bullet : MonoBehaviourPun
     readonly HashSet<int> damagedViewIds = new HashSet<int>();
     LineRenderer[] railSegments;
     LineRenderer[] ionBoltLines;
+    LineRenderer[] pirateFighterStreakLines;
+    LineRenderer[] autoTurretBoltLines;
     SpriteRenderer projectileGlowRenderer;
 
     void Start()
@@ -136,8 +138,15 @@ public class Bullet : MonoBehaviourPun
         if (collision.gameObject.GetComponentInParent<Bullet>() != null)
             return;
 
+        PlayerDeployableBase deployable = collision.gameObject.GetComponentInParent<PlayerDeployableBase>();
+        if (deployable != null && deployable.photonView != null)
+        {
+            Vector2 impactPoint = collision.contactCount > 0 ? collision.GetContact(0).point : (Vector2)transform.position;
+            ApplyDamageToDeployable(deployable, impactPoint, true);
+        }
+
         PlayerHealth hp = collision.gameObject.GetComponentInParent<PlayerHealth>();
-        if (hp != null && hp.GetComponent<LureBeaconDecoy>() == null && hp.photonView.ViewID != ownerViewID)
+        if (deployable == null && hp != null && hp.GetComponent<LureBeaconDecoy>() == null && hp.photonView.ViewID != ownerViewID)
         {
             Vector2 impactPoint = collision.contactCount > 0 ? collision.GetContact(0).point : (Vector2)transform.position;
             ApplyDamageToHealth(hp, impactPoint, true);
@@ -162,7 +171,7 @@ public class Bullet : MonoBehaviourPun
         ObstacleChunk obstacleChunk = collision.gameObject.GetComponentInParent<ObstacleChunk>();
         if (obstacleChunk != null && !string.IsNullOrWhiteSpace(obstacleChunk.StableId) && RoomSettings.AreObstaclesDestructible())
         {
-            SpaceObjectMotionSync.RequestObstacleDamage(obstacleChunk.StableId, damage);
+            SpaceObjectMotionSync.RequestObstacleDamage(obstacleChunk.StableId, GetPilotObstacleDamage(damage));
         }
 
         Vector2 vfxPoint = collision.contactCount > 0 ? collision.GetContact(0).point : (Vector2)transform.position;
@@ -214,6 +223,13 @@ public class Bullet : MonoBehaviourPun
             if (hit == null)
                 continue;
 
+            PlayerDeployableBase deployable = hit.GetComponentInParent<PlayerDeployableBase>();
+            if (deployable != null)
+            {
+                ApplyDamageToDeployable(deployable, arcTargetPosition, false);
+                continue;
+            }
+
             PlayerHealth hp = hit.GetComponentInParent<PlayerHealth>();
             if (hp != null && hp.GetComponent<LureBeaconDecoy>() == null)
             {
@@ -231,7 +247,7 @@ public class Bullet : MonoBehaviourPun
             ObstacleChunk obstacleChunk = hit.GetComponentInParent<ObstacleChunk>();
             if (obstacleChunk != null && !string.IsNullOrWhiteSpace(obstacleChunk.StableId) && RoomSettings.AreObstaclesDestructible())
             {
-                SpaceObjectMotionSync.RequestObstacleDamage(obstacleChunk.StableId, damage);
+                SpaceObjectMotionSync.RequestObstacleDamage(obstacleChunk.StableId, GetPilotObstacleDamage(damage));
             }
         }
 
@@ -272,14 +288,24 @@ public class Bullet : MonoBehaviourPun
         Collider2D[] hits = Physics2D.OverlapCircleAll(center, areaDamageRadius);
         for (int i = 0; i < hits.Length; i++)
         {
+            PlayerDeployableBase deployable = hits[i] != null ? hits[i].GetComponentInParent<PlayerDeployableBase>() : null;
+            if (deployable != null)
+            {
+                ApplyDamageToDeployable(deployable, deployable.transform.position, false);
+
+                continue;
+            }
+
             PlayerHealth hp = hits[i] != null ? hits[i].GetComponentInParent<PlayerHealth>() : null;
             if (hp == null || hp.GetComponent<LureBeaconDecoy>() != null || hp == directHit || hp.photonView == null || hp.photonView.ViewID == ownerViewID)
             {
                 LureBeaconDecoy beacon = hits[i] != null ? hits[i].GetComponentInParent<LureBeaconDecoy>() : null;
-                if (beacon == null || !CanDamageBeacon(beacon))
+                if (beacon != null && CanDamageBeacon(beacon))
+                {
+                    ApplyDamageToBeacon(beacon, beacon.transform.position, false);
                     continue;
+                }
 
-                ApplyDamageToBeacon(beacon, beacon.transform.position, false);
                 continue;
             }
 
@@ -309,6 +335,29 @@ public class Bullet : MonoBehaviourPun
             ApplyAreaDamage(impactPoint, null);
     }
 
+    void ApplyDamageToDeployable(PlayerDeployableBase deployable, Vector2 impactPoint, bool includeArea)
+    {
+        if (deployable == null || deployable.photonView == null)
+            return;
+
+        if (damagedViewIds.Contains(deployable.photonView.ViewID))
+            return;
+
+        damagedViewIds.Add(deployable.photonView.ViewID);
+        if (useDamageProfile)
+        {
+            deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, shieldDamage, hpDamage, ownerViewID, impactPoint.x, impactPoint.y);
+        }
+        else
+        {
+            deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, damage, damage, ownerViewID, impactPoint.x, impactPoint.y);
+        }
+
+        NotifyOwnerComplexHit();
+        if (includeArea)
+            ApplyAreaDamage(impactPoint, null);
+    }
+
     bool CanDamageBeacon(LureBeaconDecoy beacon)
     {
         if (beacon == null || beacon.photonView == null || beacon.photonView.ViewID == ownerViewID)
@@ -319,6 +368,15 @@ public class Bullet : MonoBehaviourPun
             return false;
 
         return attackerView.GetComponent<EnemyBot>() != null;
+    }
+
+    int GetPilotObstacleDamage(int baseDamage)
+    {
+        PhotonView ownerView = ownerViewID > 0 ? PhotonView.Find(ownerViewID) : null;
+        if (ownerView != null && PilotCatalog.IsSelectedPilot(ownerView.Owner, PilotCatalog.SirNowitzkyId))
+            return Mathf.CeilToInt(baseDamage * 1.5f);
+
+        return baseDamage;
     }
 
     void NotifyOwnerComplexHit()
@@ -476,6 +534,14 @@ public class Bullet : MonoBehaviourPun
             {
                 EnsureIonProjectileVisual(spriteRenderer);
             }
+            else if (IsPirateFighterProjectile())
+            {
+                EnsurePirateFighterProjectileVisual(spriteRenderer);
+            }
+            else if (IsAutoTurretProjectile())
+            {
+                EnsureAutoTurretProjectileVisual(spriteRenderer);
+            }
             else if (IsSmallRedPlasma())
             {
                 EnsurePlasmaGlow(spriteRenderer);
@@ -491,6 +557,22 @@ public class Bullet : MonoBehaviourPun
     bool IsIonProjectile()
     {
         return string.Equals(hitEffectId, "ion", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    bool IsPirateFighterProjectile()
+    {
+        return string.Equals(hitEffectId, "pirate_fighter", System.StringComparison.OrdinalIgnoreCase) ||
+               IsPirateFighterRedProjectile();
+    }
+
+    bool IsPirateFighterRedProjectile()
+    {
+        return string.Equals(hitEffectId, "pirate_fighter_red", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    bool IsAutoTurretProjectile()
+    {
+        return string.Equals(hitEffectId, "auto_turret", System.StringComparison.OrdinalIgnoreCase);
     }
 
     bool IsSmallRedPlasma()
@@ -581,6 +663,12 @@ public class Bullet : MonoBehaviourPun
 
         if (IsIonProjectile())
             UpdateIonProjectileVisual();
+
+        if (IsPirateFighterProjectile())
+            UpdatePirateFighterProjectileVisual();
+
+        if (IsAutoTurretProjectile())
+            UpdateAutoTurretProjectileVisual();
     }
 
     void UpdateRailProjectileVisual()
@@ -662,6 +750,153 @@ public class Bullet : MonoBehaviourPun
             float sideOffset = i == 2 ? Mathf.Sin(Time.time * 34f + photonView.ViewID * 0.17f) * 0.028f : 0f;
             Vector3 start = center - (Vector3)(direction * (length * 0.52f)) + (Vector3)(tangent * sideOffset);
             Vector3 end = center + (Vector3)(direction * (length * 0.52f)) - (Vector3)(tangent * sideOffset);
+            line.SetPosition(0, start);
+            line.SetPosition(1, end);
+        }
+    }
+
+    void EnsurePirateFighterProjectileVisual(SpriteRenderer coreRenderer)
+    {
+        if (pirateFighterStreakLines != null && pirateFighterStreakLines.Length > 0)
+            return;
+
+        bool redProjectile = IsPirateFighterRedProjectile();
+        pirateFighterStreakLines = new LineRenderer[2];
+        for (int i = 0; i < pirateFighterStreakLines.Length; i++)
+        {
+            GameObject lineObject = new GameObject("PirateFighterBolt_" + i);
+            lineObject.transform.SetParent(transform, false);
+
+            LineRenderer line = lineObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 2;
+            line.textureMode = LineTextureMode.Stretch;
+            line.alignment = LineAlignment.View;
+            line.numCapVertices = 2;
+            line.numCornerVertices = 1;
+            line.material = new Material(Shader.Find("Sprites/Default"));
+            line.startColor = ResolvePirateFighterBoltStartColor(i, redProjectile);
+            line.endColor = ResolvePirateFighterBoltEndColor(i, redProjectile);
+            line.widthMultiplier = (i == 0 ? 0.052f : 0.12f) * Mathf.Max(0.8f, visualScaleMultiplier);
+            if (coreRenderer != null)
+            {
+                line.sortingLayerID = coreRenderer.sortingLayerID;
+                line.sortingOrder = coreRenderer.sortingOrder + (i == 0 ? 3 : 2);
+            }
+
+            pirateFighterStreakLines[i] = line;
+        }
+
+        if (coreRenderer != null)
+            coreRenderer.color = redProjectile
+                ? new Color(1f, 0.08f, 0.02f, 0.06f)
+                : new Color(0.08f, 0.58f, 1f, 0.05f);
+
+        UpdatePirateFighterProjectileVisual();
+    }
+
+    Color ResolvePirateFighterBoltStartColor(int index, bool redProjectile)
+    {
+        if (redProjectile)
+            return index == 0 ? new Color(1f, 0.86f, 0.62f, 0.98f) : new Color(1f, 0.18f, 0.08f, 0.45f);
+
+        return index == 0 ? new Color(0.78f, 0.96f, 1f, 0.98f) : new Color(0.1f, 0.54f, 1f, 0.45f);
+    }
+
+    Color ResolvePirateFighterBoltEndColor(int index, bool redProjectile)
+    {
+        if (redProjectile)
+            return index == 0 ? new Color(1f, 0.18f, 0.04f, 0.82f) : new Color(0.72f, 0.03f, 0.01f, 0.08f);
+
+        return index == 0 ? new Color(0.12f, 0.72f, 1f, 0.8f) : new Color(0.03f, 0.18f, 1f, 0.06f);
+    }
+
+    void UpdatePirateFighterProjectileVisual()
+    {
+        if (pirateFighterStreakLines == null || pirateFighterStreakLines.Length == 0)
+            return;
+
+        Vector2 direction = GetTravelDirection();
+        Vector3 center = transform.position;
+        float length = 0.34f * Mathf.Max(0.75f, visualScaleMultiplier);
+        for (int i = 0; i < pirateFighterStreakLines.Length; i++)
+        {
+            LineRenderer line = pirateFighterStreakLines[i];
+            if (line == null)
+                continue;
+
+            float lead = i == 0 ? 0.2f : 0.12f;
+            float tail = i == 0 ? 0.42f : 0.62f;
+            Vector3 start = center + (Vector3)(direction * (lead * length));
+            Vector3 end = center - (Vector3)(direction * (tail * length));
+            line.SetPosition(0, start);
+            line.SetPosition(1, end);
+        }
+    }
+
+    void EnsureAutoTurretProjectileVisual(SpriteRenderer coreRenderer)
+    {
+        if (autoTurretBoltLines != null && autoTurretBoltLines.Length > 0)
+            return;
+
+        if (coreRenderer != null)
+        {
+            coreRenderer.color = new Color(1f, 0.92f, 0.42f, 0.98f);
+            EnsureProjectileGlow(coreRenderer, "AutoTurretBoltGlow", new Color(1f, 0.34f, 0.04f, 0.48f), 2.25f);
+        }
+
+        autoTurretBoltLines = new LineRenderer[3];
+        for (int i = 0; i < autoTurretBoltLines.Length; i++)
+        {
+            GameObject lineObject = new GameObject("AutoTurretBolt_" + i);
+            lineObject.transform.SetParent(transform, false);
+
+            LineRenderer line = lineObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 2;
+            line.textureMode = LineTextureMode.Stretch;
+            line.alignment = LineAlignment.View;
+            line.numCapVertices = 3;
+            line.numCornerVertices = 2;
+            line.material = new Material(Shader.Find("Sprites/Default"));
+            line.startColor = i == 0
+                ? new Color(1f, 0.98f, 0.62f, 0.95f)
+                : new Color(1f, 0.32f, 0.04f, 0.42f);
+            line.endColor = i == 0
+                ? new Color(1f, 0.42f, 0.06f, 0.78f)
+                : new Color(0.72f, 0.05f, 0.01f, 0.03f);
+            line.widthMultiplier = (i == 0 ? 0.064f : 0.035f) * Mathf.Max(0.85f, visualScaleMultiplier);
+            if (coreRenderer != null)
+            {
+                line.sortingLayerID = coreRenderer.sortingLayerID;
+                line.sortingOrder = coreRenderer.sortingOrder + (i == 0 ? 3 : 2);
+            }
+
+            autoTurretBoltLines[i] = line;
+        }
+
+        UpdateAutoTurretProjectileVisual();
+    }
+
+    void UpdateAutoTurretProjectileVisual()
+    {
+        if (autoTurretBoltLines == null || autoTurretBoltLines.Length == 0)
+            return;
+
+        Vector2 direction = GetTravelDirection();
+        Vector2 tangent = new Vector2(-direction.y, direction.x);
+        Vector3 center = transform.position;
+        float length = 0.48f * Mathf.Max(0.85f, visualScaleMultiplier);
+        for (int i = 0; i < autoTurretBoltLines.Length; i++)
+        {
+            LineRenderer line = autoTurretBoltLines[i];
+            if (line == null)
+                continue;
+
+            float side = i == 1 ? 1f : i == 2 ? -1f : 0f;
+            float sideOffset = side * 0.035f * Mathf.Max(0.8f, visualScaleMultiplier);
+            Vector3 start = center + (Vector3)(direction * (length * 0.24f)) + (Vector3)(tangent * sideOffset);
+            Vector3 end = center - (Vector3)(direction * (length * (i == 0 ? 0.62f : 0.45f))) - (Vector3)(tangent * sideOffset * 0.35f);
             line.SetPosition(0, start);
             line.SetPosition(1, end);
         }

@@ -38,7 +38,12 @@ public class PlayerMovement : MonoBehaviourPun
     bool baseSpeedCaptured;
     bool fusionEngineEquipped;
     int equippedFusionEngineCount;
+    int equippedFuelTankCount;
     string lastAppliedEngineSignature = string.Empty;
+    float pilotSpeedBoostMultiplier = 1f;
+    float pilotSpeedBoostUntil = -1f;
+    float superBoosterUntil = -1f;
+    Vector2 superBoosterDirection = Vector2.up;
     const float BaseTurnDegreesPerSecond = 1080f;
     const float AccelerationResponsiveness = 18f;
     const float LowSpeedBrakeResponsiveness = 7.4f;
@@ -75,6 +80,13 @@ public class PlayerMovement : MonoBehaviourPun
 
     void Start()
     {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+        {
+            PlayerDeployableRuntime.EnsureAttached(gameObject);
+            enabled = false;
+            return;
+        }
+
         if (LureBeaconDecoy.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
         {
             LureBeaconDecoy.EnsureAttached(gameObject);
@@ -120,6 +132,11 @@ public class PlayerMovement : MonoBehaviourPun
             gameObject.AddComponent<EngineThrusterVFX>();
         }
 
+        if (!isAstronaut && GetComponent<EnemyBot>() == null && GetComponent<FireNebulaShipSparksVfx>() == null)
+        {
+            gameObject.AddComponent<FireNebulaShipSparksVfx>();
+        }
+
         if (!isAstronaut && GetComponent<EnemyBot>() == null && GetComponent<StartingShipEntryVfx>() == null)
         {
             gameObject.AddComponent<StartingShipEntryVfx>();
@@ -141,7 +158,7 @@ public class PlayerMovement : MonoBehaviourPun
         CameraFollow cam = FindAnyObjectByType<CameraFollow>();
         if (cam != null)
         {
-            cam.target = transform;
+            cam.SetTargetAndSnap(transform);
         }
 
         ResolveJoysticks();
@@ -168,6 +185,7 @@ public class PlayerMovement : MonoBehaviourPun
             return;
         }
 
+        RefreshPilotSpeedBoost();
         SyncEquippedEngineProfile();
 
         if (photonView.IsMine)
@@ -201,7 +219,7 @@ public class PlayerMovement : MonoBehaviourPun
                 moveInput = GetKeyboardMoveInput();
             shootInput = shootJoystick != null && shootJoystick.IsPressed ? shootJoystick.inputVector : Vector2.zero;
 
-            if (moveInput.magnitude < 0.2f)
+            if (moveInput.sqrMagnitude < 0.0004f)
                 moveInput = Vector2.zero;
 
             if (shootInput.magnitude < 0.3f)
@@ -209,7 +227,16 @@ public class PlayerMovement : MonoBehaviourPun
 
             effectiveMoveInput = GetEffectiveMoveInput(moveInput);
 
-            UpdateBooster(Time.deltaTime);
+            if (IsSuperBoosterActive())
+            {
+                boosterRecoveryDelayTimer = 0f;
+                continuousBoosterTime = 0f;
+            }
+            else
+            {
+                UpdateBooster(Time.deltaTime);
+            }
+
             UpdateFacingDirection();
         }
 
@@ -237,9 +264,18 @@ public class PlayerMovement : MonoBehaviourPun
         if (IsStartingEntryActive())
             return;
 
-        float currentSpeed = IsBoosterDepleted ? speed * CurrentDepletedSpeedMultiplier : speed;
+        float currentSpeed = GetCurrentMovementSpeed();
         if (rb != null)
         {
+            if (IsSuperBoosterActive())
+            {
+                ApplySuperBoosterVelocity(currentSpeed);
+                rb.angularVelocity = 0f;
+                float superAngle = Mathf.Atan2(superBoosterDirection.y, superBoosterDirection.x) * Mathf.Rad2Deg - 90f;
+                rb.MoveRotation(Mathf.MoveTowardsAngle(rb.rotation, superAngle, BaseTurnDegreesPerSecond * Time.fixedDeltaTime));
+                return;
+            }
+
             ApplyVelocity(currentSpeed);
             ClampExcessCollisionBoost(currentSpeed);
             UpdateBatteringSpeedEligibility();
@@ -268,7 +304,7 @@ public class PlayerMovement : MonoBehaviourPun
         if (!photonView.IsMine || rb == null)
             return;
 
-        float currentSpeed = IsBoosterDepleted ? speed * CurrentDepletedSpeedMultiplier : speed;
+        float currentSpeed = GetCurrentMovementSpeed();
         ClampExcessCollisionBoost(currentSpeed);
         TryRequestBatteringImpact(collision);
         TryRequestMovingObjectImpulse(collision);
@@ -453,8 +489,8 @@ public class PlayerMovement : MonoBehaviourPun
         int targetDamage = batteringDamage * 2;
         Vector2 impactNormal = ResolveBatteringImpactNormal(new Vector2(impactX, impactY));
         photonView.RPC(nameof(PlayBatteringImpactVisual), RpcTarget.All, impactX, impactY, impactNormal.x, impactNormal.y);
-        targetHealth.photonView.RPC(nameof(PlayerHealth.TakeDamageAt), RpcTarget.MasterClient, targetDamage, photonView.ViewID, impactX, impactY);
-        photonView.RPC(nameof(PlayerHealth.TakeDamageAt), RpcTarget.MasterClient, batteringDamage, -1, impactX, impactY);
+        targetHealth.photonView.RPC(nameof(PlayerHealth.TakePilotDamageAt), RpcTarget.MasterClient, targetDamage, photonView.ViewID, impactX, impactY, PlayerHealth.PilotDamageSourceRamming);
+        photonView.RPC(nameof(PlayerHealth.TakePilotDamageAt), RpcTarget.MasterClient, batteringDamage, -1, impactX, impactY, PlayerHealth.PilotDamageSourceRamming);
     }
 
     [PunRPC]
@@ -488,8 +524,19 @@ public class PlayerMovement : MonoBehaviourPun
         nextAuthoritativeBatteringTimeByObstacle[obstacleStableId] = Time.time + BatteringPairCooldown;
         Vector2 impactNormal = ResolveBatteringImpactNormal(new Vector2(impactX, impactY));
         photonView.RPC(nameof(PlayBatteringImpactVisual), RpcTarget.All, impactX, impactY, impactNormal.x, impactNormal.y);
-        SpaceObjectMotionSync.RequestObstacleDamage(obstacleStableId, batteringDamage * 2);
-        photonView.RPC(nameof(PlayerHealth.TakeDamageAt), RpcTarget.MasterClient, batteringDamage, -1, impactX, impactY);
+        SpaceObjectMotionSync.RequestObstacleDamage(obstacleStableId, GetPilotObstacleDamage(batteringDamage * 2));
+        photonView.RPC(nameof(PlayerHealth.TakePilotDamageAt), RpcTarget.MasterClient, batteringDamage, -1, impactX, impactY, PlayerHealth.PilotDamageSourceRamming);
+    }
+
+    int GetPilotObstacleDamage(int baseDamage)
+    {
+        if (baseDamage <= 0)
+            return 0;
+
+        if (PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.SirNowitzkyId))
+            return Mathf.Max(1, Mathf.RoundToInt(baseDamage * 1.5f));
+
+        return baseDamage;
     }
 
     [PunRPC]
@@ -514,6 +561,10 @@ public class PlayerMovement : MonoBehaviourPun
             return false;
 
         if (targetHealth.IsWreck || targetHealth.IsEvacuationAnimating || targetHealth.CurrentHP <= 0)
+            return false;
+
+        EnemyBot targetBot = targetHealth.GetComponent<EnemyBot>();
+        if (targetBot != null && targetBot.IsPirateBaseLaunchProtected)
             return false;
 
         return targetHealth.CurrentShield > 0 || targetHealth.CurrentHP > 0;
@@ -961,6 +1012,16 @@ public class PlayerMovement : MonoBehaviourPun
         return 1f + (Mathf.Max(0, maxBoostPercent) / 100f);
     }
 
+    float GetCurrentMovementSpeed()
+    {
+        float currentSpeed = IsBoosterDepleted ? speed * CurrentDepletedSpeedMultiplier : speed;
+        HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>();
+        if (nebulaTarget != null)
+            currentSpeed *= nebulaTarget.CurrentNebulaSpeedMultiplier;
+
+        return Mathf.Max(0.1f, currentSpeed);
+    }
+
     void ApplyVelocity(float currentSpeed)
     {
         Vector2 targetVelocity = effectiveMoveInput * currentSpeed;
@@ -987,12 +1048,12 @@ public class PlayerMovement : MonoBehaviourPun
                                         BrakeDriftResponsivenessMultiplier *
                                         driftSlowdown;
             float releaseDriftMultiplier = effectiveMoveInput == Vector2.zero ? 0.86f : 1f;
-            float maxDelta = brakeResponsiveness * speed * releaseDriftMultiplier * Time.fixedDeltaTime;
+            float maxDelta = brakeResponsiveness * currentSpeed * releaseDriftMultiplier * Time.fixedDeltaTime;
             rb.linearVelocity = Vector2.MoveTowards(currentVelocity, targetVelocity, maxDelta);
             return;
         }
 
-        float accelerationDelta = AccelerationResponsiveness * speed * GetDriftSlowdownMultiplier(driftLevel) * Time.fixedDeltaTime;
+        float accelerationDelta = AccelerationResponsiveness * currentSpeed * GetDriftSlowdownMultiplier(driftLevel) * Time.fixedDeltaTime;
         rb.linearVelocity = Vector2.MoveTowards(currentVelocity, targetVelocity, accelerationDelta);
     }
 
@@ -1045,6 +1106,7 @@ public class PlayerMovement : MonoBehaviourPun
             if (movementJoystick != null)
             {
                 joystick = movementJoystick.GetComponent<Joystick>();
+                ConfigureMovementJoystickFeel(joystick);
             }
         }
 
@@ -1056,6 +1118,18 @@ public class PlayerMovement : MonoBehaviourPun
                 shootJoystick = shootingJoystick.GetComponent<Joystick>();
             }
         }
+
+        ConfigureMovementJoystickFeel(joystick);
+    }
+
+    void ConfigureMovementJoystickFeel(Joystick movementJoystick)
+    {
+        if (movementJoystick == null)
+            return;
+
+        movementJoystick.deadZone = 0.12f;
+        movementJoystick.rescaleInputAfterDeadZone = true;
+        movementJoystick.responseExponent = 1.08f;
     }
 
     void SetupEngineAudio()
@@ -1158,6 +1232,44 @@ public class PlayerMovement : MonoBehaviourPun
         baseSpeedCaptured = true;
     }
 
+    public void ActivatePilotSpeedBoost(float multiplier, float duration)
+    {
+        if (GetComponent<EnemyBot>() != null || GetComponent<AstronautSurvivor>() != null)
+            return;
+
+        pilotSpeedBoostMultiplier = Mathf.Max(pilotSpeedBoostMultiplier, Mathf.Max(1f, multiplier));
+        pilotSpeedBoostUntil = Mathf.Max(pilotSpeedBoostUntil, Time.time + Mathf.Max(0f, duration));
+        SyncEquippedEngineProfile(forceRefresh: true);
+    }
+
+    public void ActivateSuperBooster(float duration)
+    {
+        if (!photonView.IsMine || GetComponent<EnemyBot>() != null || GetComponent<AstronautSurvivor>() != null)
+            return;
+
+        Vector2 forward = transform.up;
+        if (forward.sqrMagnitude < 0.001f)
+            forward = lastFacingDirection.sqrMagnitude > 0.001f ? lastFacingDirection : Vector2.up;
+
+        superBoosterDirection = forward.normalized;
+        superBoosterUntil = Mathf.Max(superBoosterUntil, Time.time + Mathf.Max(0.05f, duration));
+    }
+
+    void RefreshPilotSpeedBoost()
+    {
+        if (pilotSpeedBoostMultiplier <= 1f || Time.time < pilotSpeedBoostUntil)
+            return;
+
+        pilotSpeedBoostMultiplier = 1f;
+        pilotSpeedBoostUntil = -1f;
+        SyncEquippedEngineProfile(forceRefresh: true);
+    }
+
+    float GetPilotSpeedMultiplier()
+    {
+        return Time.time < pilotSpeedBoostUntil ? Mathf.Max(1f, pilotSpeedBoostMultiplier) : 1f;
+    }
+
     void SyncEquippedEngineProfile(bool forceRefresh = false)
     {
         if (GetComponent<EnemyBot>() != null || GetComponent<AstronautSurvivor>() != null)
@@ -1169,8 +1281,9 @@ public class PlayerMovement : MonoBehaviourPun
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
         string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
         int fusionCount = CountEquippedFusionEngines(equipmentSlots, shipSkinIndex);
+        int fuelTankCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.FuelTankId);
         bool hasFusion = fusionCount > 0;
-        string signature = shipSkinIndex + ":" + fusionCount;
+        string signature = shipSkinIndex + ":" + fusionCount + ":" + fuelTankCount;
         if (!forceRefresh && signature == lastAppliedEngineSignature)
             return;
 
@@ -1180,13 +1293,14 @@ public class PlayerMovement : MonoBehaviourPun
         int baseShipMaxBoostPercent = ShipCatalog.GetMaxBoostPercent(shipSkinIndex);
 
         equippedFusionEngineCount = fusionCount;
+        equippedFuelTankCount = fuelTankCount;
         fusionEngineEquipped = hasFusion;
         baseSpeed = Mathf.Max(0.1f, baseShipSpeed);
         baseBoosterDuration = Mathf.Max(0.1f, baseShipBoosterDuration);
         turnRateMultiplier = Mathf.Max(0.1f, baseShipTurnRate);
         maxBoostPercent = Mathf.Max(0, baseShipMaxBoostPercent);
-        speed = baseSpeed * (1f + (0.15f * equippedFusionEngineCount));
-        boosterDuration = baseBoosterDuration;
+        speed = baseSpeed * (1f + (0.15f * equippedFusionEngineCount)) * GetPilotSpeedMultiplier();
+        boosterDuration = baseBoosterDuration * (1f + (0.5f * equippedFuelTankCount));
         lastAppliedEngineSignature = signature;
         SyncEngineAudioClip();
 
@@ -1197,23 +1311,45 @@ public class PlayerMovement : MonoBehaviourPun
 
     int CountEquippedFusionEngines(string[] equipmentSlots, int shipSkinIndex)
     {
+        return CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.FusionEngineId);
+    }
+
+    int CountEquippedEngineItem(string[] equipmentSlots, int shipSkinIndex, string itemId)
+    {
         if (equipmentSlots == null)
             return 0;
 
         int count = 0;
         if (ShipCatalog.IsEquipmentSlotEnabled(4, shipSkinIndex) &&
-            string.Equals(GetEquipmentItem(equipmentSlots, 4), InventoryItemCatalog.FusionEngineId, StringComparison.Ordinal))
+            string.Equals(GetEquipmentItem(equipmentSlots, 4), itemId, StringComparison.Ordinal))
         {
             count++;
         }
 
         if (ShipCatalog.IsEquipmentSlotEnabled(5, shipSkinIndex) &&
-            string.Equals(GetEquipmentItem(equipmentSlots, 5), InventoryItemCatalog.FusionEngineId, StringComparison.Ordinal))
+            string.Equals(GetEquipmentItem(equipmentSlots, 5), itemId, StringComparison.Ordinal))
         {
             count++;
         }
 
         return count;
+    }
+
+    bool IsSuperBoosterActive()
+    {
+        return Time.time < superBoosterUntil;
+    }
+
+    void ApplySuperBoosterVelocity(float currentSpeed)
+    {
+        if (rb == null)
+            return;
+
+        Vector2 direction = superBoosterDirection.sqrMagnitude > 0.001f ? superBoosterDirection.normalized : Vector2.up;
+        float boostedSpeed = Mathf.Max(0.1f, currentSpeed) * 3f;
+        rb.linearVelocity = direction * boostedSpeed;
+        targetRotationAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
+        lastFacingDirection = direction;
     }
 
     static string GetEquipmentItem(string[] equipmentSlots, int index)
@@ -1226,7 +1362,8 @@ public class PlayerMovement : MonoBehaviourPun
     float GetCurrentBoosterRecoveryDelay()
     {
         float baseDelay = RoomSettings.GetBoosterRecoveryDelay();
-        return Mathf.Max(0f, baseDelay - equippedFusionEngineCount);
+        float pilotBonus = PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.RobyId) ? 1f : 0f;
+        return Mathf.Max(0f, baseDelay - equippedFusionEngineCount - pilotBonus);
     }
 
     AudioClip ResolveEngineAudioClip()
@@ -1288,6 +1425,16 @@ public class PlayerMovement : MonoBehaviourPun
             return;
 
         bool hasAuthority = photonView.IsMine;
+        EnemyBot launchProtectedBot = GetComponent<EnemyBot>();
+        if (launchProtectedBot != null && launchProtectedBot.IsPirateBaseLaunchProtected)
+        {
+            rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+            rb.constraints = RigidbodyConstraints2D.FreezeRotation;
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+            return;
+        }
+
         if (networkBodyAuthorityApplied && lastNetworkBodyAuthority == hasAuthority)
             return;
 
@@ -1516,6 +1663,42 @@ public class EngineThrusterVFX : MonoBehaviour
                     new GradientAlphaKey(0.96f, 0f),
                     new GradientAlphaKey(0.74f, 0.24f),
                     new GradientAlphaKey(0.28f, 0.7f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+        }
+        else if (enemyTrailProfile != null && enemyTrailProfile.VisualStyle == EnemyTrailVisualStyle.PurpleLarge)
+        {
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(0.94f, 0.82f, 1f), 0f),
+                    new GradientColorKey(new Color(0.62f, 0.18f, 1f), 0.18f),
+                    new GradientColorKey(new Color(0.28f, 0.02f, 0.72f), 0.58f),
+                    new GradientColorKey(new Color(0.07f, 0f, 0.2f), 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0.98f, 0f),
+                    new GradientAlphaKey(0.76f, 0.22f),
+                    new GradientAlphaKey(0.32f, 0.68f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+        }
+        else if (enemyTrailProfile != null && enemyTrailProfile.VisualStyle == EnemyTrailVisualStyle.OrangeRedTwin)
+        {
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(1f, 0.96f, 0.76f), 0f),
+                    new GradientColorKey(new Color(1f, 0.48f, 0.12f), 0.2f),
+                    new GradientColorKey(new Color(0.96f, 0.12f, 0.04f), 0.58f),
+                    new GradientColorKey(new Color(0.32f, 0.02f, 0.01f), 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0.98f, 0f),
+                    new GradientAlphaKey(0.74f, 0.22f),
+                    new GradientAlphaKey(0.3f, 0.68f),
                     new GradientAlphaKey(0f, 1f)
                 });
         }

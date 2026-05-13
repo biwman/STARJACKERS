@@ -14,7 +14,7 @@ public class PlayerShooting : MonoBehaviourPun
     const float AutoAimRange = 13f;
     const float ManualAimThreshold = 0.35f;
     const float DefaultBulletRangeMultiplier = 15f;
-    const float ComplexTapMaxDuration = 0.22f;
+    const float ComplexTapMaxDuration = 0.44f;
     const float ComplexTapMaxDragMagnitude = 0.24f;
     const float AdvancedShootMarkerRawThreshold = 0.05f;
     const float SuperChargeTimeSeconds = 24f;
@@ -25,6 +25,11 @@ public class PlayerShooting : MonoBehaviourPun
     const int MagneticBeamDefaultCharges = 3;
     const int TractorBeamDefaultCharges = 4;
     const int LureBeaconDefaultCharges = 2;
+    const int AutoTurretDefaultCharges = 1;
+    const int GuidanceSystemDefaultCharges = 2;
+    const int SpaceDrillDefaultCharges = 2;
+    const int SpaceTrapDefaultCharges = 1;
+    const int SuperBoosterDefaultCharges = 2;
     const float MagneticBeamRadius = 8f;
     const float MagneticBeamDuration = 3f;
     const float MagneticBeamPullStrength = 24f;
@@ -33,6 +38,13 @@ public class PlayerShooting : MonoBehaviourPun
     const float TractorBeamPullStrength = 36f;
     const float LureBeaconDeployDistance = 1.15f;
     const float LureBeaconSpawnClearanceRadius = 0.42f;
+    const float GuidanceSystemDuration = 9f;
+    const float SuperBoosterDuration = 2f;
+    const float AstroCutterTickInterval = 0.2f;
+    const float AstroCutterBeamRadius = 0.14f;
+    const float AstroCutterSuperBeamRadius = 0.28f;
+    const int AstroCutterObstacleDamageMultiplier = 4;
+    const int AstroCutterSuperObstacleDamageMultiplier = 6;
     static readonly Color PlasmaBulletColor = new Color(0.15f, 1f, 0.28f, 1f);
 
     sealed class GadgetRuntimeState
@@ -119,6 +131,7 @@ public class PlayerShooting : MonoBehaviourPun
     float complexAmmoReloadStartedAt;
     float complexNextAmmoAt;
     float superCharge;
+    Coroutine astroCutterBeamRoutine;
     Joystick superJoystick;
     AdvancedShootInputZone advancedShootInputZone;
     bool simpleUsesDamageProfile;
@@ -182,6 +195,13 @@ public class PlayerShooting : MonoBehaviourPun
 
     void Start()
     {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+        {
+            PlayerDeployableRuntime.EnsureAttached(gameObject);
+            enabled = false;
+            return;
+        }
+
         if (LureBeaconDecoy.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
         {
             LureBeaconDecoy.EnsureAttached(gameObject);
@@ -199,6 +219,12 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (GetComponent<EnemyBot>() != null)
             return;
+
+        if (!AstronautSurvivor.IsAstronautInstantiationData(photonView.InstantiationData) && GetComponent<LootingFriendController>() == null)
+            gameObject.AddComponent<LootingFriendController>();
+
+        if (GetComponent<GuidanceSystemOverlay>() == null)
+            gameObject.AddComponent<GuidanceSystemOverlay>();
 
         if (!photonView.IsMine)
             return;
@@ -369,7 +395,7 @@ public class PlayerShooting : MonoBehaviourPun
             }
 
             Vector2 raw = GetCurrentShootRawInput();
-            float markerThreshold = GetManualShootMarkerThreshold();
+            float markerThreshold = GetManualShootMarkerThreshold(profile);
             complexShootMaxDragMagnitude = Mathf.Max(complexShootMaxDragMagnitude, raw.magnitude);
             if (raw.magnitude >= markerThreshold)
             {
@@ -443,12 +469,15 @@ public class PlayerShooting : MonoBehaviourPun
             : superJoystick.inputVector;
     }
 
-    float GetManualShootMarkerThreshold()
+    float GetManualShootMarkerThreshold(WeaponAttackProfile profile)
     {
-        if (IsAdvancedShootJoystickEnabled())
+        if (!IsAdvancedShootJoystickEnabled())
+            return ManualAimThreshold;
+
+        if (IsArcWeaponProfile(profile))
             return AdvancedShootMarkerRawThreshold;
 
-        return ManualAimThreshold;
+        return ComplexTapMaxDragMagnitude;
     }
 
     bool HandleComplexSuperInput()
@@ -597,7 +626,7 @@ public class PlayerShooting : MonoBehaviourPun
             string weaponId = GetWeaponIdForEquipmentSlot(equipmentSlots, slot);
             WeaponAttackProfile profile = WeaponAttackCatalog.GetNormalAttackByWeaponId(weaponId);
             ComplexWeaponRuntimeState previous = FindPreviousComplexWeaponState(previousStates, slot, weaponId);
-            int max = Mathf.Max(1, profile.MaxAmmo);
+            int max = GetPilotAdjustedWeaponMaxAmmo(profile);
             ComplexWeaponRuntimeState state = new ComplexWeaponRuntimeState
             {
                 SlotIndex = slot,
@@ -614,13 +643,14 @@ public class PlayerShooting : MonoBehaviourPun
         if (complexWeaponStates.Count == 0)
         {
             WeaponAttackProfile profile = WeaponAttackCatalog.GetNormalAttackByWeaponId(WeaponAttackCatalog.SimpleGunId);
+            int max = GetPilotAdjustedWeaponMaxAmmo(profile);
             complexWeaponStates.Add(new ComplexWeaponRuntimeState
             {
                 SlotIndex = 0,
                 WeaponId = WeaponAttackCatalog.SimpleGunId,
                 Profile = profile,
-                MaxAmmo = Mathf.Max(1, profile.MaxAmmo),
-                CurrentAmmo = Mathf.Max(1, profile.MaxAmmo)
+                MaxAmmo = max,
+                CurrentAmmo = max
             });
         }
     }
@@ -745,7 +775,7 @@ public class PlayerShooting : MonoBehaviourPun
             return;
         }
 
-        superCharge = Mathf.Clamp01(superCharge + Time.deltaTime / SuperChargeTimeSeconds);
+        superCharge = Mathf.Clamp01(superCharge + (Time.deltaTime / SuperChargeTimeSeconds) * GetSuperChargeGainMultiplier());
     }
 
     bool TryFireComplexAttack(WeaponAttackProfile profile, Vector2 direction, Vector2 targetPoint, bool consumeAmmo, bool isSuper)
@@ -771,6 +801,23 @@ public class PlayerShooting : MonoBehaviourPun
             }
 
             SyncActiveComplexAmmoMirror();
+        }
+
+        if (IsAstroCutterProfile(profile))
+        {
+            if (complexBurstRoutine != null)
+            {
+                StopCoroutine(complexBurstRoutine);
+                complexBurstRoutine = null;
+            }
+
+            if (TryStartAstroCutterBeam(profile, direction, photonView != null ? photonView.ViewID : 0))
+            {
+                nextComplexAttackTime = Time.time + Mathf.Max(0.05f, profile.AttackCooldown);
+                return true;
+            }
+
+            return false;
         }
 
         if (complexBurstRoutine != null)
@@ -1089,12 +1136,134 @@ public class PlayerShooting : MonoBehaviourPun
         return true;
     }
 
+    bool TryStartAstroCutterBeam(WeaponAttackProfile profile, Vector2 direction, int ownerId)
+    {
+        if (profile == null || ownerId <= 0 || photonView == null)
+            return false;
+
+        direction = ResolveSafeAimDirection(direction);
+        float range = GetComplexRangeWorld(profile);
+        float duration = Mathf.Clamp(profile.FlightTime, 0.2f, 6f);
+        bool isSuperBeam = IsAstroCutterSuperProfile(profile);
+
+        if (astroCutterBeamRoutine != null)
+            StopCoroutine(astroCutterBeamRoutine);
+
+        photonView.RPC(nameof(StartAstroCutterBeamRpc), RpcTarget.All, ownerId, direction.x, direction.y, range, duration, isSuperBeam);
+        astroCutterBeamRoutine = StartCoroutine(AstroCutterDamageRoutine(profile, direction, range, duration, ownerId, isSuperBeam));
+        return true;
+    }
+
+    IEnumerator AstroCutterDamageRoutine(WeaponAttackProfile profile, Vector2 direction, float range, float duration, int ownerId, bool isSuperBeam)
+    {
+        if (profile == null)
+            yield break;
+
+        float endTime = Time.time + Mathf.Max(0.1f, duration);
+        WaitForSeconds wait = new WaitForSeconds(AstroCutterTickInterval);
+        while (Time.time < endTime)
+        {
+            ApplyAstroCutterDamageTick(profile, direction, range, ownerId, isSuperBeam);
+            yield return wait;
+        }
+
+        astroCutterBeamRoutine = null;
+    }
+
+    void ApplyAstroCutterDamageTick(WeaponAttackProfile profile, Vector2 direction, float range, int ownerId, bool isSuperBeam)
+    {
+        Vector2 safeDirection = ResolveSafeAimDirection(direction);
+        Vector2 start = (Vector2)transform.position + (Vector2)transform.up * Mathf.Max(0.05f, muzzleOffsetDistance);
+        float beamRadius = isSuperBeam ? AstroCutterSuperBeamRadius : AstroCutterBeamRadius;
+        RaycastHit2D[] hits = Physics2D.CircleCastAll(start, beamRadius, safeDirection, Mathf.Max(0.2f, range));
+        float clippedRange = AstroCutterBeamBlocker.ResolveClippedRange(hits, transform, ownerId, range);
+        HashSet<int> damagedViews = new HashSet<int>();
+        HashSet<string> damagedObstacles = new HashSet<string>(StringComparer.Ordinal);
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i].collider;
+            if (hit == null)
+                continue;
+
+            if (hit.transform == transform || hit.transform.IsChildOf(transform))
+                continue;
+
+            if (hits[i].distance > clippedRange + 0.035f)
+                continue;
+
+            PlayerDeployableBase deployable = hit.GetComponentInParent<PlayerDeployableBase>();
+            if (deployable != null && deployable.photonView != null)
+            {
+                if (damagedViews.Add(deployable.photonView.ViewID))
+                {
+                    Vector2 point = hits[i].point.sqrMagnitude > 0.001f ? hits[i].point : (Vector2)deployable.transform.position;
+                    deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, profile.ShieldDamage, profile.HpDamage, ownerId, point.x, point.y);
+                    AddSuperChargeForDamage();
+                }
+
+                continue;
+            }
+
+            PlayerHealth hp = hit.GetComponentInParent<PlayerHealth>();
+            if (hp != null && hp.photonView != null && hp.GetComponent<LureBeaconDecoy>() == null && !hp.IsWreck && hp.photonView.ViewID != ownerId)
+            {
+                if (damagedViews.Add(hp.photonView.ViewID))
+                {
+                    Vector2 point = hits[i].point.sqrMagnitude > 0.001f ? hits[i].point : (Vector2)hp.transform.position;
+                    hp.photonView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, profile.ShieldDamage, profile.HpDamage, ownerId, point.x, point.y);
+                    AddSuperChargeForDamage();
+                }
+
+                continue;
+            }
+
+            ObstacleChunk obstacleChunk = hit.GetComponentInParent<ObstacleChunk>();
+            if (obstacleChunk != null &&
+                !string.IsNullOrWhiteSpace(obstacleChunk.StableId) &&
+                RoomSettings.AreObstaclesDestructible() &&
+                damagedObstacles.Add(obstacleChunk.StableId))
+            {
+                int obstacleMultiplier = isSuperBeam ? AstroCutterSuperObstacleDamageMultiplier : AstroCutterObstacleDamageMultiplier;
+                int obstacleDamage = Mathf.Max(1, profile.HpDamage * obstacleMultiplier);
+                SpaceObjectMotionSync.RequestObstacleDamage(obstacleChunk.StableId, GetPilotAdjustedObstacleDamage(obstacleDamage));
+            }
+        }
+    }
+
+    int GetPilotAdjustedObstacleDamage(int baseDamage)
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        if (PilotCatalog.IsSelectedPilot(owner, PilotCatalog.SirNowitzkyId))
+            return Mathf.CeilToInt(baseDamage * 1.5f);
+
+        return baseDamage;
+    }
+
+    [PunRPC]
+    void StartAstroCutterBeamRpc(int sourceViewId, float directionX, float directionY, float range, float duration, bool useFullWidth)
+    {
+        AstroCutterBeamVfx.StartBeam(sourceViewId, new Vector2(directionX, directionY), range, duration, useFullWidth);
+    }
+
     public void AddSuperChargeForDamage()
     {
         if (!IsComplexShootingActive || !RoomSettings.IsSuperAttackEnabled())
             return;
 
-        superCharge = Mathf.Clamp01(superCharge + SuperChargeOnComplexHit);
+        superCharge = Mathf.Clamp01(superCharge + (SuperChargeOnComplexHit * GetSuperChargeDamageGainMultiplier()));
+    }
+
+    float GetSuperChargeGainMultiplier()
+    {
+        WeaponAttackProfile profile = activeComplexWeaponProfile ?? GetActiveComplexWeaponState()?.Profile;
+        return IsAstroCutterProfile(profile) ? 0.5f : 1f;
+    }
+
+    float GetSuperChargeDamageGainMultiplier()
+    {
+        WeaponAttackProfile profile = activeComplexWeaponProfile ?? GetActiveComplexWeaponState()?.Profile;
+        return IsAstroCutterProfile(profile) ? 0.25f : 1f;
     }
 
     Vector2 ResolveManualAimDirection()
@@ -1156,6 +1325,12 @@ public class PlayerShooting : MonoBehaviourPun
         bool spawned = false;
         WeaponAttackProfile profile = activeSimpleWeaponProfile;
 
+        if (IsAstroCutterProfile(profile))
+        {
+            TryStartAstroCutterBeam(profile, direction.normalized, ownerId);
+            return;
+        }
+
         if (ShouldUseArcSimpleShot(profile))
         {
             Vector3 spawnPos = transform.position + (transform.up * muzzleOffsetDistance);
@@ -1209,6 +1384,19 @@ public class PlayerShooting : MonoBehaviourPun
     {
         return profile != null &&
                string.Equals(profile.Id, WeaponAttackCatalog.ArtilleryGunId + "_super", StringComparison.Ordinal);
+    }
+
+    bool IsAstroCutterProfile(WeaponAttackProfile profile)
+    {
+        return profile != null &&
+               !string.IsNullOrWhiteSpace(profile.Id) &&
+               profile.Id.StartsWith(WeaponAttackCatalog.AstroCutterId, StringComparison.Ordinal);
+    }
+
+    bool IsAstroCutterSuperProfile(WeaponAttackProfile profile)
+    {
+        return profile != null &&
+               string.Equals(profile.Id, WeaponAttackCatalog.AstroCutterId + "_super", StringComparison.Ordinal);
     }
 
     Vector2 ResolveArcTargetPointFromInput(WeaponAttackProfile profile, Vector2 rawInput)
@@ -1267,6 +1455,38 @@ public class PlayerShooting : MonoBehaviourPun
 
         int ownerId = photonView != null ? photonView.ViewID : 0;
         bool spawned = SpawnBullet(direction.normalized, spawnPosition, ownerId);
+        if (!spawned)
+            return false;
+
+        photonView.RPC(nameof(PlayLaserSfx), RpcTarget.All);
+        if (!infiniteAmmo)
+            ConsumeAmmo();
+        nextFireTime = Time.time + fireRate + Mathf.Max(0f, cooldownOffset);
+        return true;
+    }
+
+    public bool TryFireBotVolleyFromWorld(Vector2 direction, Vector3[] spawnPositions, float cooldownOffset = 0f)
+    {
+        if (GetComponent<EnemyBot>() == null)
+            return false;
+
+        if (!photonView.IsMine || !IsGameStarted())
+            return false;
+
+        UpdateReload();
+
+        if (Time.time < nextFireTime || direction.sqrMagnitude < 0.04f || spawnPositions == null || spawnPositions.Length == 0)
+            return false;
+
+        if (!infiniteAmmo && (isReloading || currentAmmo <= 0))
+            return false;
+
+        int ownerId = photonView != null ? photonView.ViewID : 0;
+        bool spawned = false;
+        Vector2 normalizedDirection = direction.normalized;
+        for (int i = 0; i < spawnPositions.Length; i++)
+            spawned |= SpawnBullet(normalizedDirection, spawnPositions[i], ownerId);
+
         if (!spawned)
             return false;
 
@@ -1605,6 +1825,24 @@ public class PlayerShooting : MonoBehaviourPun
             counts[itemId]++;
         }
 
+        for (int i = 4; i <= 5; i++)
+        {
+            if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
+                continue;
+
+            string itemId = GetEquipmentItem(equipmentSlots, i);
+            if (!string.Equals(itemId, InventoryItemCatalog.SuperBoosterId, StringComparison.Ordinal))
+                continue;
+
+            if (!counts.ContainsKey(itemId))
+            {
+                counts[itemId] = 0;
+                orderedItems?.Add(itemId);
+            }
+
+            counts[itemId]++;
+        }
+
         return counts;
     }
 
@@ -1774,12 +2012,64 @@ public class PlayerShooting : MonoBehaviourPun
         return TryFireComplexAttack(profile, ResolveComplexAutoAimDirection(profile), ResolveComplexAutoAimTargetPoint(profile), true, false);
     }
 
+    public bool ReleaseAdvancedFloatingAim()
+    {
+        if (!CanUseAdvancedShootJoystick())
+            return false;
+
+        if (!complexShootWasPressed)
+            return false;
+
+        WeaponAttackProfile profile = activeComplexWeaponProfile ?? SyncComplexWeaponProfile();
+        if (profile == null)
+            return false;
+
+        ReleaseComplexNormalInput(profile);
+        return true;
+    }
+
     int GetConfiguredMaxAmmo()
     {
         if (customAmmoProfileActive && GetComponent<EnemyBot>() != null)
             return maxAmmo;
 
-        return RoomSettings.GetAmmoCount();
+        int configuredAmmo = RoomSettings.GetAmmoCount();
+        if (ShouldApplyNovaNoEquipmentAmmoBonus())
+            configuredAmmo *= 2;
+
+        return configuredAmmo;
+    }
+
+    bool ShouldApplyNovaNoEquipmentAmmoBonus()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        if (!PilotCatalog.IsSelectedPilot(owner, PilotCatalog.NovaId))
+            return false;
+
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        if (equipmentSlots == null)
+            return true;
+
+        for (int i = 0; i < equipmentSlots.Length; i++)
+        {
+            if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
+                continue;
+
+            if (!string.IsNullOrWhiteSpace(equipmentSlots[i]))
+                return false;
+        }
+
+        return true;
+    }
+
+    int GetPilotAdjustedWeaponMaxAmmo(WeaponAttackProfile profile)
+    {
+        int configuredAmmo = Mathf.Max(1, profile != null ? profile.MaxAmmo : RoomSettings.GetAmmoCount());
+        if (ShouldApplyNovaNoEquipmentAmmoBonus())
+            configuredAmmo *= 2;
+
+        return configuredAmmo;
     }
 
     public void TriggerManualReload()
@@ -1855,7 +2145,7 @@ public class PlayerShooting : MonoBehaviourPun
         return string.Equals(itemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal);
     }
 
-    public void ConfigureWeaponProfile(float configuredFireRate, int configuredMaxAmmo, float configuredReloadDuration, int configuredBulletDamage, float configuredBulletScaleMultiplier, Color configuredBulletColor, float configuredMuzzleOffsetDistance, bool configuredInfiniteAmmo, float configuredBulletSpeed = -1f, string configuredShotSoundId = "", float configuredRangeMultiplier = -1f)
+    public void ConfigureWeaponProfile(float configuredFireRate, int configuredMaxAmmo, float configuredReloadDuration, int configuredBulletDamage, float configuredBulletScaleMultiplier, Color configuredBulletColor, float configuredMuzzleOffsetDistance, bool configuredInfiniteAmmo, float configuredBulletSpeed = -1f, string configuredShotSoundId = "", float configuredRangeMultiplier = -1f, string configuredHitEffectId = "", float configuredFlightTime = 10f)
     {
         customAmmoProfileActive = true;
         fireRate = Mathf.Max(0.05f, configuredFireRate);
@@ -1873,6 +2163,14 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (configuredRangeMultiplier > 0f)
             bulletRangeMultiplier = configuredRangeMultiplier;
+
+        simpleUsesDamageProfile = !string.IsNullOrWhiteSpace(configuredHitEffectId);
+        simpleShieldDamage = bulletDamage;
+        simpleHpDamage = bulletDamage;
+        simplePierces = false;
+        simpleAreaDamageRadius = 0f;
+        simpleHitEffectId = configuredHitEffectId ?? string.Empty;
+        simpleFlightTime = Mathf.Clamp(configuredFlightTime, 0.2f, 30f);
 
         isReloading = false;
         reloadFinishTime = 0f;
@@ -1915,6 +2213,18 @@ public class PlayerShooting : MonoBehaviourPun
         if (soundId == "lazer2")
         {
             AudioManager.Instance.PlayLazer2At(transform.position);
+            return;
+        }
+
+        if (soundId == "pirate_fighter")
+        {
+            AudioManager.Instance.PlayPirateFighterShotAt(transform.position);
+            return;
+        }
+
+        if (soundId == "astro_cutter")
+        {
+            AudioManager.Instance.PlayAstroCutterAt(transform.position);
             return;
         }
 
@@ -2110,6 +2420,24 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.LureBeaconId, StringComparison.Ordinal))
             return new Color(0.68f, 0.2f, 0.72f, 0.96f);
 
+        if (string.Equals(itemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal))
+            return new Color(0.72f, 0.22f, 0.18f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.GuidanceSystemId, StringComparison.Ordinal))
+            return new Color(0.18f, 0.62f, 0.58f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.LootingFriendId, StringComparison.Ordinal))
+            return new Color(0.74f, 0.58f, 0.12f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceDrillId, StringComparison.Ordinal))
+            return new Color(0.86f, 0.54f, 0.12f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceTrapId, StringComparison.Ordinal))
+            return new Color(0.62f, 0.18f, 0.18f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.SuperBoosterId, StringComparison.Ordinal))
+            return new Color(0.18f, 0.48f, 0.86f, 0.96f);
+
         return new Color(0.22f, 0.3f, 0.4f, 0.94f);
     }
 
@@ -2131,7 +2459,13 @@ public class PlayerShooting : MonoBehaviourPun
             return GadgetMineDefaultCharges * equippedCount;
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
-            return BatteryDefaultCharges * equippedCount;
+        {
+            int charges = BatteryDefaultCharges * equippedCount;
+            if (ShouldApplyRobyBatteryBonus())
+                charges += equippedCount;
+
+            return charges;
+        }
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.MagneticBeamId, StringComparison.Ordinal))
             return MagneticBeamDefaultCharges * equippedCount;
@@ -2140,9 +2474,42 @@ public class PlayerShooting : MonoBehaviourPun
             return TractorBeamDefaultCharges * equippedCount;
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.LureBeaconId, StringComparison.Ordinal))
-            return LureBeaconDefaultCharges * equippedCount;
+        {
+            int charges = LureBeaconDefaultCharges * equippedCount;
+            if (ShouldApplyRoburLureBeaconBonus())
+                charges *= 2;
+
+            return charges;
+        }
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal))
+            return AutoTurretDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.GuidanceSystemId, StringComparison.Ordinal))
+            return GuidanceSystemDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.SpaceDrillId, StringComparison.Ordinal))
+            return SpaceDrillDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.SpaceTrapId, StringComparison.Ordinal))
+            return SpaceTrapDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.SuperBoosterId, StringComparison.Ordinal))
+            return SuperBoosterDefaultCharges * equippedCount;
 
         return 0;
+    }
+
+    bool ShouldApplyRoburLureBeaconBonus()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        return PilotCatalog.IsSelectedPilot(owner, PilotCatalog.RoburId);
+    }
+
+    bool ShouldApplyRobyBatteryBonus()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        return PilotCatalog.IsSelectedPilot(owner, PilotCatalog.RobyId);
     }
 
     [PunRPC]
@@ -2262,7 +2629,86 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.LureBeaconId, StringComparison.Ordinal))
             return TryDeployLureBeacon();
 
+        if (string.Equals(itemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal))
+        {
+            bool deployed = NewItemsRuntime.TryDeployAutoTurret(this);
+            if (deployed)
+                RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+
+            return deployed;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.GuidanceSystemId, StringComparison.Ordinal))
+        {
+            photonView.RPC(nameof(ActivateGuidanceSystemRpc), photonView.Owner, GuidanceSystemDuration);
+            RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+            return true;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceDrillId, StringComparison.Ordinal))
+        {
+            bool launched = NewItemsRuntime.TryLaunchSpaceDrill(this);
+            if (launched)
+                RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+
+            return launched;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceTrapId, StringComparison.Ordinal))
+        {
+            bool armed = NewItemsRuntime.TryArmSpaceTrap(this);
+            if (armed)
+                RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+
+            return armed;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.SuperBoosterId, StringComparison.Ordinal))
+        {
+            photonView.RPC(nameof(ActivateSuperBoosterRpc), photonView.Owner, SuperBoosterDuration);
+            RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+            return true;
+        }
+
         return false;
+    }
+
+    [PunRPC]
+    void ActivateGuidanceSystemRpc(float duration)
+    {
+        GuidanceSystemOverlay.EnsureFor(gameObject)?.ActivateGuidance(duration);
+    }
+
+    [PunRPC]
+    void ActivateSuperBoosterRpc(float duration)
+    {
+        PlayerMovement movement = GetComponent<PlayerMovement>();
+        if (movement != null)
+            movement.ActivateSuperBooster(duration);
+    }
+
+    [PunRPC]
+    void PlaySpaceDrillDeliverySoundRpc(float x, float y, float z)
+    {
+        AudioManager.Instance.PlaySpaceDrillDeliveryAt(new Vector3(x, y, z));
+    }
+
+    [PunRPC]
+    void ArmSpaceTrapTargetRpc(int targetViewId, int ownerViewId)
+    {
+        PhotonView target = PhotonView.Find(targetViewId);
+        SpaceTrapTarget trap = target != null ? SpaceTrapTarget.Attach(target.gameObject) : null;
+        if (trap != null)
+        {
+            SpaceTrapLaunchVfx.Spawn(transform.position, target.transform.position);
+            trap.Arm(ownerViewId);
+        }
+    }
+
+    [PunRPC]
+    void ClearSpaceTrapTargetRpc(int targetViewId)
+    {
+        SpaceTrapTarget.ClearLocalMarker(targetViewId);
     }
 
     bool TryDeployLureBeacon()
@@ -2694,8 +3140,9 @@ public class PlayerShooting : MonoBehaviourPun
 public sealed class AdvancedShootInputZone : MonoBehaviourPun
 {
     const string ZoneObjectName = "AdvancedShootInputZone";
-    const float HoldToFloatDelay = 0.12f;
+    const float HoldToFloatDelay = 0.24f;
     const float DragToFloatPixels = 16f;
+    static readonly List<RaycastResult> UiRaycastResults = new List<RaycastResult>(16);
 
     PlayerShooting shooting;
     Joystick shootJoystick;
@@ -2705,9 +3152,12 @@ public sealed class AdvancedShootInputZone : MonoBehaviourPun
     AdvancedShootInputZoneSurface surface;
     bool pointerHeld;
     bool floatingJoystickActive;
+    bool waitForFreshPointerRelease = true;
     int pointerId = int.MinValue;
+    int pointerDownFrame;
     float pointerDownAt;
     Vector2 pointerDownScreenPosition;
+    Vector2 latestPointerScreenPosition;
     Camera pointerCamera;
 
     void Start()
@@ -2730,12 +3180,23 @@ public sealed class AdvancedShootInputZone : MonoBehaviourPun
 
         EnsureZone();
         RefreshState();
+        RestoreShootJoystickHomeIfIdle();
+        UpdatePolledPointerInput();
+
+        if (pointerHeld && Time.frameCount > pointerDownFrame && !IsTrackedPointerStillDown())
+        {
+            HandleLostPointerRelease();
+            return;
+        }
 
         if (!pointerHeld || floatingJoystickActive || shooting == null || !shooting.CanUseAdvancedShootJoystick())
             return;
 
         if (Time.time - pointerDownAt >= HoldToFloatDelay)
-            ActivateFloatingJoystick(pointerDownScreenPosition, pointerCamera);
+            ActivateFloatingJoystick(pointerDownScreenPosition, latestPointerScreenPosition, pointerCamera);
+
+        if (floatingJoystickActive && shootJoystick != null)
+            shootJoystick.UpdateExternalControl(latestPointerScreenPosition, pointerCamera);
     }
 
     void OnDisable()
@@ -2755,12 +3216,7 @@ public sealed class AdvancedShootInputZone : MonoBehaviourPun
         if (eventData == null || shooting == null || !shooting.CanUseAdvancedShootJoystick())
             return;
 
-        pointerHeld = true;
-        floatingJoystickActive = false;
-        pointerId = eventData.pointerId;
-        pointerDownAt = Time.time;
-        pointerDownScreenPosition = eventData.position;
-        pointerCamera = eventData.pressEventCamera;
+        BeginPointerPress(eventData.pointerId, eventData.position, eventData.pressEventCamera);
     }
 
     public void HandleDrag(PointerEventData eventData)
@@ -2768,10 +3224,12 @@ public sealed class AdvancedShootInputZone : MonoBehaviourPun
         if (!IsMatchingPointer(eventData) || shooting == null || !shooting.CanUseAdvancedShootJoystick())
             return;
 
+        latestPointerScreenPosition = eventData.position;
+
         if (!floatingJoystickActive)
         {
             if (Vector2.Distance(pointerDownScreenPosition, eventData.position) >= DragToFloatPixels)
-                ActivateFloatingJoystick(pointerDownScreenPosition, pointerCamera);
+                ActivateFloatingJoystick(pointerDownScreenPosition, latestPointerScreenPosition, pointerCamera);
             else
                 return;
         }
@@ -2785,11 +3243,108 @@ public sealed class AdvancedShootInputZone : MonoBehaviourPun
         if (!IsMatchingPointer(eventData))
             return;
 
+        ReleaseCurrentPress();
+    }
+
+    void ReleaseCurrentPress()
+    {
+        if (!pointerHeld)
+            return;
+
         bool triggerTapShot = pointerHeld && !floatingJoystickActive;
+        bool triggerFloatingShot = pointerHeld && floatingJoystickActive;
+        bool floatingShotReleased = triggerFloatingShot && shooting != null && shooting.ReleaseAdvancedFloatingAim();
         CancelCurrentPress(true);
 
         if (triggerTapShot && shooting != null)
             shooting.TriggerAdvancedAutoAimShot();
+        else if (triggerFloatingShot && !floatingShotReleased && shooting != null)
+            shooting.TriggerAdvancedAutoAimShot();
+    }
+
+    void UpdatePolledPointerInput()
+    {
+        if (shooting == null || !shooting.CanUseAdvancedShootJoystick())
+            return;
+
+        if (waitForFreshPointerRelease)
+        {
+            if (IsAnyPointerCurrentlyDown())
+                return;
+
+            waitForFreshPointerRelease = false;
+        }
+
+        if (!pointerHeld)
+        {
+            TryBeginPolledPointerPress();
+            return;
+        }
+
+        if (pointerId == -1)
+        {
+            if (TryGetMousePointer(out Vector2 mousePosition, out bool mousePressed, out _, out bool mouseReleased))
+            {
+                if (mousePressed)
+                {
+                    latestPointerScreenPosition = mousePosition;
+                    if (floatingJoystickActive && shootJoystick != null)
+                        shootJoystick.UpdateExternalControl(latestPointerScreenPosition, pointerCamera);
+                }
+
+                if (mouseReleased)
+                    ReleaseCurrentPress();
+            }
+
+            return;
+        }
+
+        if (pointerId < 0)
+            return;
+
+        if (TryGetTrackedTouch(pointerId, out Vector2 touchPosition, out bool touchActive, out bool touchReleased))
+        {
+            if (touchActive)
+            {
+                latestPointerScreenPosition = touchPosition;
+                if (floatingJoystickActive && shootJoystick != null)
+                    shootJoystick.UpdateExternalControl(latestPointerScreenPosition, pointerCamera);
+            }
+
+            if (touchReleased)
+                ReleaseCurrentPress();
+        }
+    }
+
+    void TryBeginPolledPointerPress()
+    {
+        if (TryGetNewTouchPress(out int touchPointerId, out Vector2 touchPosition))
+        {
+            if (ShouldBeginPolledShootPress(touchPosition))
+                BeginPointerPress(touchPointerId, touchPosition, null);
+
+            return;
+        }
+
+        if (!TryGetMousePointer(out Vector2 mousePosition, out _, out bool mousePressedThisFrame, out _) || !mousePressedThisFrame)
+            return;
+
+        if (!ShouldBeginPolledShootPress(mousePosition))
+            return;
+
+        BeginPointerPress(-1, mousePosition, null);
+    }
+
+    void BeginPointerPress(int newPointerId, Vector2 screenPosition, Camera eventCamera)
+    {
+        pointerHeld = true;
+        floatingJoystickActive = false;
+        pointerId = newPointerId;
+        pointerDownFrame = Time.frameCount;
+        pointerDownAt = Time.time;
+        pointerDownScreenPosition = screenPosition;
+        latestPointerScreenPosition = screenPosition;
+        pointerCamera = eventCamera;
     }
 
     void EnsureZone()
@@ -2798,6 +3353,8 @@ public sealed class AdvancedShootInputZone : MonoBehaviourPun
         {
             if (shootJoystick == null)
                 shootJoystick = FindShootJoystick();
+            zoneImage.raycastTarget = false;
+            PlaceZoneBehindShootJoystick();
             return;
         }
 
@@ -2822,12 +3379,12 @@ public sealed class AdvancedShootInputZone : MonoBehaviourPun
 
         zoneImage = zoneObject.GetComponent<Image>();
         zoneImage.color = new Color(1f, 1f, 1f, 0.001f);
-        zoneImage.raycastTarget = true;
+        zoneImage.raycastTarget = false;
 
         surface = zoneObject.GetComponent<AdvancedShootInputZoneSurface>();
         surface.Owner = this;
-        zoneObject.transform.SetAsFirstSibling();
         shootJoystick = FindShootJoystick();
+        PlaceZoneBehindShootJoystick();
     }
 
     void RefreshState()
@@ -2837,13 +3394,20 @@ public sealed class AdvancedShootInputZone : MonoBehaviourPun
 
         bool active = shooting.CanUseAdvancedShootJoystick();
         if (zoneObject.activeSelf != active)
+        {
             zoneObject.SetActive(active);
+            if (active)
+                waitForFreshPointerRelease = true;
+        }
 
         if (!active)
+        {
             CancelCurrentPress(true);
+            waitForFreshPointerRelease = true;
+        }
     }
 
-    void ActivateFloatingJoystick(Vector2 screenPosition, Camera eventCamera)
+    void ActivateFloatingJoystick(Vector2 baseScreenPosition, Vector2 controlScreenPosition, Camera eventCamera)
     {
         if (floatingJoystickActive)
             return;
@@ -2853,7 +3417,8 @@ public sealed class AdvancedShootInputZone : MonoBehaviourPun
             return;
 
         floatingJoystickActive = true;
-        shootJoystick.BeginExternalControl(screenPosition, eventCamera, true);
+        shootJoystick.BeginExternalControl(baseScreenPosition, eventCamera, true);
+        shootJoystick.UpdateExternalControl(controlScreenPosition, eventCamera);
     }
 
     void CancelCurrentPress(bool restoreJoystick)
@@ -2864,6 +3429,179 @@ public sealed class AdvancedShootInputZone : MonoBehaviourPun
         pointerHeld = false;
         floatingJoystickActive = false;
         pointerId = int.MinValue;
+        latestPointerScreenPosition = Vector2.zero;
+    }
+
+    static bool IsAnyPointerCurrentlyDown()
+    {
+        if (TryGetMousePointer(out _, out bool mousePressed, out _, out _) && mousePressed)
+            return true;
+
+        if (IsAnyTouchCurrentlyDown())
+            return true;
+
+        return false;
+    }
+
+    static bool TryGetMousePointer(out Vector2 position, out bool pressed, out bool pressedThisFrame, out bool releasedThisFrame)
+    {
+        position = Vector2.zero;
+        pressed = false;
+        pressedThisFrame = false;
+        releasedThisFrame = false;
+
+#if ENABLE_INPUT_SYSTEM
+        UnityEngine.InputSystem.Mouse mouse = UnityEngine.InputSystem.Mouse.current;
+        if (mouse != null)
+        {
+            position = mouse.position.ReadValue();
+            pressed = mouse.leftButton.isPressed;
+            pressedThisFrame = mouse.leftButton.wasPressedThisFrame;
+            releasedThisFrame = mouse.leftButton.wasReleasedThisFrame;
+            return true;
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        position = Input.mousePosition;
+        pressed = Input.GetMouseButton(0);
+        pressedThisFrame = Input.GetMouseButtonDown(0);
+        releasedThisFrame = Input.GetMouseButtonUp(0);
+        return true;
+#else
+        return false;
+#endif
+    }
+
+    static bool TryGetNewTouchPress(out int pointerId, out Vector2 position)
+    {
+        pointerId = int.MinValue;
+        position = Vector2.zero;
+
+#if ENABLE_INPUT_SYSTEM
+        UnityEngine.InputSystem.Touchscreen touchscreen = UnityEngine.InputSystem.Touchscreen.current;
+        if (touchscreen != null)
+        {
+            foreach (UnityEngine.InputSystem.Controls.TouchControl touch in touchscreen.touches)
+            {
+                if (!touch.press.wasPressedThisFrame)
+                    continue;
+
+                pointerId = touch.touchId.ReadValue();
+                position = touch.position.ReadValue();
+                return true;
+            }
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        for (int i = 0; i < Input.touchCount; i++)
+        {
+            Touch touch = Input.GetTouch(i);
+            if (touch.phase != TouchPhase.Began)
+                continue;
+
+            pointerId = touch.fingerId;
+            position = touch.position;
+            return true;
+        }
+#endif
+
+        return false;
+    }
+
+    static bool TryGetTrackedTouch(int pointerId, out Vector2 position, out bool active, out bool released)
+    {
+        position = Vector2.zero;
+        active = false;
+        released = false;
+
+#if ENABLE_INPUT_SYSTEM
+        UnityEngine.InputSystem.Touchscreen touchscreen = UnityEngine.InputSystem.Touchscreen.current;
+        if (touchscreen != null)
+        {
+            foreach (UnityEngine.InputSystem.Controls.TouchControl touch in touchscreen.touches)
+            {
+                if (touch.touchId.ReadValue() != pointerId)
+                    continue;
+
+                UnityEngine.InputSystem.TouchPhase phase = touch.phase.ReadValue();
+                position = touch.position.ReadValue();
+                active = touch.press.isPressed || phase == UnityEngine.InputSystem.TouchPhase.Began || phase == UnityEngine.InputSystem.TouchPhase.Moved || phase == UnityEngine.InputSystem.TouchPhase.Stationary;
+                released = touch.press.wasReleasedThisFrame || phase == UnityEngine.InputSystem.TouchPhase.Ended || phase == UnityEngine.InputSystem.TouchPhase.Canceled;
+                return true;
+            }
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        for (int i = 0; i < Input.touchCount; i++)
+        {
+            Touch touch = Input.GetTouch(i);
+            if (touch.fingerId != pointerId)
+                continue;
+
+            position = touch.position;
+            active = touch.phase != TouchPhase.Ended && touch.phase != TouchPhase.Canceled;
+            released = touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled;
+            return true;
+        }
+#endif
+
+        return false;
+    }
+
+    static bool IsAnyTouchCurrentlyDown()
+    {
+#if ENABLE_INPUT_SYSTEM
+        UnityEngine.InputSystem.Touchscreen touchscreen = UnityEngine.InputSystem.Touchscreen.current;
+        if (touchscreen != null)
+        {
+            foreach (UnityEngine.InputSystem.Controls.TouchControl touch in touchscreen.touches)
+            {
+                UnityEngine.InputSystem.TouchPhase phase = touch.phase.ReadValue();
+                if (touch.press.isPressed || phase == UnityEngine.InputSystem.TouchPhase.Began || phase == UnityEngine.InputSystem.TouchPhase.Moved || phase == UnityEngine.InputSystem.TouchPhase.Stationary)
+                    return true;
+            }
+        }
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        for (int i = 0; i < Input.touchCount; i++)
+        {
+            TouchPhase phase = Input.GetTouch(i).phase;
+            if (phase != TouchPhase.Ended && phase != TouchPhase.Canceled)
+                return true;
+        }
+#endif
+
+        return false;
+    }
+
+    void HandleLostPointerRelease()
+    {
+        ReleaseCurrentPress();
+        RestoreShootJoystickHomeIfIdle();
+    }
+
+    void RestoreShootJoystickHomeIfIdle()
+    {
+        shootJoystick = shootJoystick != null ? shootJoystick : FindShootJoystick();
+        if (shootJoystick == null || pointerHeld || floatingJoystickActive || shootJoystick.IsPressed || shootJoystick.IsExternalControlActive)
+            return;
+
+        if (!shootJoystick.IsAtDefaultBackgroundPosition())
+            shootJoystick.RestoreDefaultBackgroundPosition();
+    }
+
+    bool IsTrackedPointerStillDown()
+    {
+        if (pointerId == -1)
+            return TryGetMousePointer(out _, out bool mousePressed, out _, out _) && mousePressed;
+        if (pointerId < 0)
+            return IsAnyPointerCurrentlyDown();
+
+        return TryGetTrackedTouch(pointerId, out _, out bool touchActive, out bool touchReleased) && touchActive && !touchReleased;
     }
 
     bool IsMatchingPointer(PointerEventData eventData)
@@ -2871,10 +3609,131 @@ public sealed class AdvancedShootInputZone : MonoBehaviourPun
         return pointerHeld && eventData != null && eventData.pointerId == pointerId;
     }
 
+    bool ShouldBeginPolledShootPress(Vector2 screenPosition)
+    {
+        if (screenPosition.x < Screen.width * 0.5f)
+            return false;
+
+        return !IsPointerOverBlockedUi(screenPosition);
+    }
+
+    bool IsPointerOverBlockedUi(Vector2 screenPosition)
+    {
+        if (EventSystem.current == null)
+            return false;
+
+        PointerEventData eventData = new PointerEventData(EventSystem.current)
+        {
+            position = screenPosition
+        };
+
+        UiRaycastResults.Clear();
+        EventSystem.current.RaycastAll(eventData, UiRaycastResults);
+
+        for (int i = 0; i < UiRaycastResults.Count; i++)
+        {
+            GameObject target = UiRaycastResults[i].gameObject;
+            if (target == null)
+                continue;
+
+            if (target.GetComponentInParent<AdvancedShootInputZoneSurface>() != null)
+                continue;
+
+            Joystick joystick = target.GetComponentInParent<Joystick>();
+            if (joystick != null)
+            {
+                if (IsShootJoystick(joystick))
+                    return IsInsideJoystickCircle(joystick, screenPosition);
+
+                return true;
+            }
+
+            if (target.GetComponentInParent<Selectable>() != null)
+                return true;
+        }
+
+        return false;
+    }
+
+    bool IsShootJoystick(Joystick joystick)
+    {
+        if (joystick == null)
+            return false;
+
+        shootJoystick = shootJoystick != null ? shootJoystick : FindShootJoystick();
+        if (joystick == shootJoystick)
+            return true;
+
+        if (joystick.name == "ShootJoystickBG")
+            return true;
+
+        return joystick.background != null && joystick.background.name == "ShootJoystickBG";
+    }
+
+    static bool IsInsideJoystickCircle(Joystick joystick, Vector2 screenPosition)
+    {
+        RectTransform rect = joystick != null ? joystick.background : null;
+        if (rect == null)
+            return false;
+
+        Camera eventCamera = null;
+        Canvas canvas = rect.GetComponentInParent<Canvas>();
+        if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            eventCamera = canvas.worldCamera;
+
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(rect, screenPosition, eventCamera, out Vector2 localPoint))
+            return false;
+
+        float radius = Mathf.Min(rect.rect.width, rect.rect.height) * 0.5f;
+        return localPoint.sqrMagnitude <= radius * radius;
+    }
+
+    void PlaceZoneBehindShootJoystick()
+    {
+        if (zoneObject == null || zoneObject.transform.parent == null)
+            return;
+
+        RectTransform joystickRect = FindShootJoystickRectTransform();
+        if (joystickRect == null || joystickRect.parent != zoneObject.transform.parent)
+            return;
+
+        int joystickIndex = joystickRect.GetSiblingIndex();
+        zoneObject.transform.SetSiblingIndex(Mathf.Max(0, joystickIndex));
+    }
+
+    static RectTransform FindShootJoystickRectTransform()
+    {
+        Joystick joystick = FindShootJoystick();
+        if (joystick == null)
+            return null;
+
+        if (joystick.background != null)
+            return joystick.background;
+
+        return joystick.GetComponent<RectTransform>();
+    }
+
     static Joystick FindShootJoystick()
     {
         GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
-        return shootJoystickObject != null ? shootJoystickObject.GetComponent<Joystick>() : null;
+        Joystick joystick = shootJoystickObject != null ? shootJoystickObject.GetComponent<Joystick>() : null;
+        if (joystick != null)
+            return joystick;
+
+        Joystick[] candidates = FindObjectsByType<Joystick>(FindObjectsInactive.Exclude);
+        foreach (Joystick candidate in candidates)
+        {
+            if (candidate == null)
+                continue;
+
+            if (candidate.name == "ShootJoystickBG")
+                return candidate;
+
+            if (candidate.background != null && candidate.background.name == "ShootJoystickBG")
+                return candidate;
+        }
+
+        return null;
     }
 }
 

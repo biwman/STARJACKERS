@@ -62,6 +62,7 @@ public static class WeaponAttackCatalog
     public const string ArtilleryGunId = InventoryItemCatalog.ArtilleryGunId;
     public const string RailGunId = InventoryItemCatalog.RailGunId;
     public const string DoubleIonizerId = InventoryItemCatalog.DoubleIonizerId;
+    public const string AstroCutterId = InventoryItemCatalog.AstroCutterId;
 
     public const string ParameterTypeInt = "int";
     public const string ParameterTypeFloat = "float";
@@ -77,7 +78,8 @@ public static class WeaponAttackCatalog
         TripleGunId,
         ArtilleryGunId,
         RailGunId,
-        DoubleIonizerId
+        DoubleIonizerId,
+        AstroCutterId
     };
 
     static readonly WeaponAttackParameterDefinition[] EditableParameters =
@@ -108,12 +110,14 @@ public static class WeaponAttackCatalog
     static readonly Color ArtilleryColor = new Color(1f, 0.54f, 0.12f, 1f);
     static readonly Color RailColor = new Color(1f, 0.22f, 0.04f, 1f);
     static readonly Color IonColor = new Color(0.18f, 0.72f, 1f, 1f);
+    static readonly Color AstroCutterColor = new Color(0.86f, 0.62f, 1f, 1f);
     static readonly Color SimpleMarkerColor = new Color(0.58f, 0.9f, 1f, 1f);
     static readonly Color PlasmaMarkerColor = new Color(0.28f, 1f, 0.52f, 1f);
     static readonly Color TripleMarkerColor = new Color(0.88f, 0.96f, 1f, 1f);
     static readonly Color ArtilleryMarkerColor = new Color(1f, 0.66f, 0.2f, 1f);
     static readonly Color RailMarkerColor = new Color(1f, 0.42f, 0.12f, 1f);
     static readonly Color IonMarkerColor = new Color(0.2f, 0.86f, 1f, 1f);
+    static readonly Color AstroCutterMarkerColor = new Color(1f, 0.84f, 0.28f, 1f);
 
     public static IReadOnlyList<string> GetEditableWeaponIds()
     {
@@ -209,6 +213,16 @@ public static class WeaponAttackCatalog
             profile.HpDamage = Mathf.Max(profile.HpDamage, 24);
             profile.ShieldDamage = Mathf.Max(profile.ShieldDamage, 24);
         }
+        else if (string.Equals(profile.Id, AstroCutterId, StringComparison.Ordinal))
+        {
+            profile.Id = AstroCutterId + "_super";
+            profile.DisplayName = "ASTRO CUTTER SUPER";
+            profile.RangeMultiplier = Mathf.Max(profile.RangeMultiplier, 6.25f);
+            profile.FlightTime = Mathf.Max(profile.FlightTime, 2.6f);
+            profile.HpDamage = Mathf.Max(profile.HpDamage, 5);
+            profile.ShieldDamage = Mathf.Max(profile.ShieldDamage, 5);
+            profile.AttackCooldown = Mathf.Max(profile.AttackCooldown, 2.4f);
+        }
         else
         {
             profile.Id = SimpleGunId + "_super";
@@ -243,7 +257,8 @@ public static class WeaponAttackCatalog
                string.Equals(weaponId, TripleGunId, StringComparison.Ordinal) ||
                string.Equals(weaponId, ArtilleryGunId, StringComparison.Ordinal) ||
                string.Equals(weaponId, RailGunId, StringComparison.Ordinal) ||
-               string.Equals(weaponId, DoubleIonizerId, StringComparison.Ordinal);
+               string.Equals(weaponId, DoubleIonizerId, StringComparison.Ordinal) ||
+               string.Equals(weaponId, AstroCutterId, StringComparison.Ordinal);
     }
 
     public static string SerializeProfile(WeaponAttackProfile profile)
@@ -442,6 +457,9 @@ public static class WeaponAttackCatalog
         if (string.Equals(itemId, DoubleIonizerId, StringComparison.Ordinal))
             return DoubleIonizerId;
 
+        if (string.Equals(itemId, AstroCutterId, StringComparison.Ordinal))
+            return AstroCutterId;
+
         return SimpleGunId;
     }
 
@@ -466,6 +484,9 @@ public static class WeaponAttackCatalog
 
         if (string.Equals(weaponId, DoubleIonizerId, StringComparison.Ordinal))
             return CreateDoubleIonizerNormal();
+
+        if (string.Equals(weaponId, AstroCutterId, StringComparison.Ordinal))
+            return CreateAstroCutterNormal();
 
         return CreateSimpleGunNormal();
     }
@@ -641,6 +662,35 @@ public static class WeaponAttackCatalog
             ProjectileColor = IonColor,
             MarkerType = ComplexAttackMarkerType.Line,
             MarkerColor = IonMarkerColor
+        };
+    }
+
+    static WeaponAttackProfile CreateAstroCutterNormal()
+    {
+        return new WeaponAttackProfile
+        {
+            Id = AstroCutterId,
+            DisplayName = "ASTRO CUTTER",
+            MaxAmmo = 3,
+            RangeMultiplier = 5.25f,
+            ProjectileSize = 0.92f,
+            ProjectileSpeed = 0f,
+            HpDamage = 3,
+            ShieldDamage = 3,
+            ProjectileCount = 1,
+            SpreadAngle = 0f,
+            FlightTime = 2f,
+            ProjectileInterval = 0f,
+            AttackCooldown = 2.15f,
+            AmmoReloadTime = 9.6f,
+            StartDelay = 0f,
+            HitEffectId = "astro_cutter",
+            ShotSoundId = "astro_cutter",
+            Pierces = true,
+            AreaDamageRadius = 0f,
+            ProjectileColor = AstroCutterColor,
+            MarkerType = ComplexAttackMarkerType.Line,
+            MarkerColor = AstroCutterMarkerColor
         };
     }
 

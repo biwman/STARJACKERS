@@ -8,9 +8,12 @@ public class GameTimer : MonoBehaviourPun
     const string ObstacleLayoutKey = "obstacleLayout";
     const string ExtractionLayoutKey = "extractionLayout";
     const string NebulaLayoutKey = "nebulaLayout";
+    const string FireNebulaLayoutKey = NebulaSpawner.FireNebulaLayoutKey;
     const string RepairBayLayoutKey = "repairBayLayout";
+    const string SpaceFactoryLayoutKey = SpaceFactorySpawner.LayoutKey;
     const string MapSeedKey = "mapSeed";
     const string LoneShipModeStartTimeKey = "loneShipModeStartTime";
+    const float TimeUpEvacuationGraceSeconds = 4.4f;
     public const string EvacuationPauseUntilKey = "evacPauseUntil";
     public const string EvacuationPauseRemainingKey = "evacPauseRemaining";
 
@@ -27,6 +30,10 @@ public class GameTimer : MonoBehaviourPun
         EndDisasterMeteorVfx.EnsureExists();
         RepairBaySpawner.EnsureExists();
         SpaceJunkSpawner.EnsureExists();
+        ContainerSpawner.EnsureExists();
+        RandomLootWreckSpawner.EnsureExists();
+        SpaceFactorySpawner.EnsureExists();
+        FogOfWarOverlay.EnsureExists();
 
         GameObject obj = GameObject.Find("TimerText");
 
@@ -125,10 +132,17 @@ public class GameTimer : MonoBehaviourPun
     System.Collections.IEnumerator EndGameAfterTimeUpSync()
     {
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        bool evacuationInProgress = false;
         foreach (PlayerHealth p in players)
         {
-            if (p == null || p.IsWreck || p.IsEvacuationAnimating)
+            if (p == null || p.IsWreck)
                 continue;
+
+            if (p.IsEvacuationAnimating)
+            {
+                evacuationInProgress = true;
+                continue;
+            }
 
             PhotonView pv = p.photonView;
             if (pv != null)
@@ -153,7 +167,7 @@ public class GameTimer : MonoBehaviourPun
             }
         }
 
-        yield return new WaitForSeconds(1.8f);
+        yield return new WaitForSeconds(evacuationInProgress ? TimeUpEvacuationGraceSeconds : 1.8f);
 
         GameManager manager = FindAnyObjectByType<GameManager>();
         if (manager != null)
@@ -171,19 +185,27 @@ public class GameTimer : MonoBehaviourPun
 
         EarlyRoundExitUI.HideAll();
 
+        double roundStartUtcMs = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         Hashtable props = new Hashtable();
         props["gameStarted"] = true;
         props[RoomSettings.StartTimeKey] = PhotonNetwork.Time;
+        props[RoomSettings.RoundEndUtcMsKey] = roundStartUtcMs + (RoomSettings.GetRoundDuration() * 1000d);
         props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateInPlay;
+        props[RoomSettings.CrazyEnemiesActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, roundStartUtcMs);
+        props[RoomSettings.FogOfWarActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, roundStartUtcMs);
         props[LoneShipModeStartTimeKey] = -1d;
         props[EvacuationPauseUntilKey] = -1d;
         props[EvacuationPauseRemainingKey] = -1f;
         props[RoomSettings.GadgetChargesStateKey] = string.Empty;
         props[RoomSettings.RepairBayOccupancyStateKey] = string.Empty;
+        props[RoomSettings.SpaceFactoryStateKey] = string.Empty;
+        props[RoomSettings.SpaceFactoryOccupancyStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.FinishedRoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
+        props[FireNebulaLayoutKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
+        props[SpaceFactoryLayoutKey] = string.Empty;
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RoundResultsTracker.ResetForCurrentRoom();
     }

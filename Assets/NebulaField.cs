@@ -4,24 +4,43 @@ using System.Collections.Generic;
 using UnityEditor;
 #endif
 
+public enum NebulaFieldKind
+{
+    Normal,
+    Fire
+}
+
 [RequireComponent(typeof(SpriteRenderer))]
 [RequireComponent(typeof(CircleCollider2D))]
 public class NebulaField : MonoBehaviour
 {
+    const int NebulaVariantCount = 9;
+    const int FireNebulaVariantCount = 4;
     const float TargetVisualSize = 3.36f;
     const float ColliderRadiusFactor = 0.4f;
     const float PlayerDeepHideFactor = 1.25f;
     const float PlayerDamageFactor = 1f;
     const float MinSizeMultiplier = 1f;
     const float MaxSizeMultiplier = 4f;
+    const int NormalDamagePerTick = 1;
+    const int FireDamagePerTick = 3;
+    const float NormalSpeedMultiplier = 1f;
+    const float FireSpeedMultiplier = 0.5f;
 
     static readonly Dictionary<int, NebulaField> FieldsByKey = new Dictionary<int, NebulaField>();
-    static Sprite cachedNebulaSprite;
+    static Sprite[] cachedNebulaSprites;
+    static Sprite[] cachedFireNebulaSprites;
 
     SpriteRenderer spriteRenderer;
     CircleCollider2D triggerCollider;
+    Sprite activeNebulaSprite;
     int nebulaKey;
     float nebulaScaleMultiplier = 1f;
+    NebulaFieldKind fieldKind = NebulaFieldKind.Normal;
+
+    public NebulaFieldKind FieldKind => fieldKind;
+    public int DamagePerTick => fieldKind == NebulaFieldKind.Fire ? FireDamagePerTick : NormalDamagePerTick;
+    public float SpeedMultiplier => fieldKind == NebulaFieldKind.Fire ? FireSpeedMultiplier : NormalSpeedMultiplier;
 
     void Awake()
     {
@@ -57,27 +76,40 @@ public class NebulaField : MonoBehaviour
         return false;
     }
 
+    public void ConfigureKind(NebulaFieldKind kind)
+    {
+        if (fieldKind == kind && activeNebulaSprite != null)
+            return;
+
+        fieldKind = kind;
+        ConfigureVisual();
+        ConfigureCollider();
+    }
+
     void ConfigureVisual()
     {
         if (spriteRenderer == null)
             return;
 
-        if (cachedNebulaSprite == null)
-        {
-            cachedNebulaSprite = LoadSprite();
-        }
+        Sprite[] sprites = GetSpritesForKind(fieldKind);
 
-        if (cachedNebulaSprite == null)
+        activeNebulaSprite = ResolveVariantSprite((Vector2)transform.position, sprites);
+        if (activeNebulaSprite == null)
             return;
 
-        spriteRenderer.sprite = cachedNebulaSprite;
-        spriteRenderer.color = new Color(0.72f, 0.9f, 1f, 0.72f);
+        spriteRenderer.sprite = activeNebulaSprite;
+        spriteRenderer.color = fieldKind == NebulaFieldKind.Fire
+            ? new Color(1f, 0.82f, 0.56f, 0.9f)
+            : new Color(0.9f, 0.97f, 1f, 0.82f);
         ApplySortingLayer();
 
-        float maxDimension = Mathf.Max(cachedNebulaSprite.bounds.size.x, cachedNebulaSprite.bounds.size.y);
+        float maxDimension = Mathf.Max(activeNebulaSprite.bounds.size.x, activeNebulaSprite.bounds.size.y);
         if (maxDimension > 0f)
         {
-            float scale = (TargetVisualSize * nebulaScaleMultiplier) / maxDimension;
+            float roomSizeMultiplier = fieldKind == NebulaFieldKind.Fire
+                ? RoomSettings.GetFireNebulaSizeMultiplier()
+                : RoomSettings.GetNebulaSizeMultiplier();
+            float scale = (TargetVisualSize * nebulaScaleMultiplier * roomSizeMultiplier) / maxDimension;
             transform.localScale = new Vector3(scale, scale, 1f);
         }
     }
@@ -130,7 +162,7 @@ public class NebulaField : MonoBehaviour
         HideInNebulaTarget target = other.GetComponentInParent<HideInNebulaTarget>();
         if (target != null)
         {
-            target.UpdateNebulaState(nebulaKey, ShouldHideTarget(target), ShouldDamageTarget(target));
+            target.UpdateNebulaState(nebulaKey, ShouldHideTarget(target), ShouldDamageTarget(target), DamagePerTick, GetSpeedMultiplierForTarget(target), fieldKind == NebulaFieldKind.Fire);
         }
     }
 
@@ -139,7 +171,7 @@ public class NebulaField : MonoBehaviour
         HideInNebulaTarget target = other.GetComponentInParent<HideInNebulaTarget>();
         if (target != null)
         {
-            target.UpdateNebulaState(nebulaKey, ShouldHideTarget(target), ShouldDamageTarget(target));
+            target.UpdateNebulaState(nebulaKey, ShouldHideTarget(target), ShouldDamageTarget(target), DamagePerTick, GetSpeedMultiplierForTarget(target), fieldKind == NebulaFieldKind.Fire);
         }
     }
 
@@ -189,6 +221,14 @@ public class NebulaField : MonoBehaviour
     public bool ShouldDamage(HideInNebulaTarget target)
     {
         return ShouldDamageTarget(target);
+    }
+
+    public float GetSpeedMultiplierForTarget(HideInNebulaTarget target)
+    {
+        if (fieldKind != NebulaFieldKind.Fire)
+            return NormalSpeedMultiplier;
+
+        return ShouldDamageTarget(target) ? FireSpeedMultiplier : NormalSpeedMultiplier;
     }
 
     bool ShouldDamageTarget(HideInNebulaTarget target)
@@ -296,50 +336,113 @@ public class NebulaField : MonoBehaviour
         }
     }
 
-    static Sprite LoadSprite()
+    static Sprite[] GetSpritesForKind(NebulaFieldKind kind)
     {
-        Sprite sprite = Resources.Load<Sprite>("koszmiczna_anomalia_resource");
+        if (kind == NebulaFieldKind.Fire)
+        {
+            if (cachedFireNebulaSprites == null || cachedFireNebulaSprites.Length == 0)
+                cachedFireNebulaSprites = LoadSprites(NebulaFieldKind.Fire);
+
+            return cachedFireNebulaSprites;
+        }
+
+        if (cachedNebulaSprites == null || cachedNebulaSprites.Length == 0)
+            cachedNebulaSprites = LoadSprites(NebulaFieldKind.Normal);
+
+        return cachedNebulaSprites;
+    }
+
+    static int GetDeterministicVariantIndex(Vector2 position, int variantCount)
+    {
+        if (variantCount <= 0)
+            return 0;
+
+        unchecked
+        {
+            int hash = 31;
+            hash = hash * 41 + Mathf.RoundToInt(position.x * 100f);
+            hash = hash * 41 + Mathf.RoundToInt(position.y * 100f);
+            return Mathf.Abs(hash) % variantCount;
+        }
+    }
+
+    static Sprite ResolveVariantSprite(Vector2 position, Sprite[] sprites)
+    {
+        if (sprites == null || sprites.Length == 0)
+            return null;
+
+        int startIndex = GetDeterministicVariantIndex(position, sprites.Length);
+        for (int offset = 0; offset < sprites.Length; offset++)
+        {
+            int index = (startIndex + offset) % sprites.Length;
+            if (sprites[index] != null)
+                return sprites[index];
+        }
+
+        return null;
+    }
+
+    static Sprite[] LoadSprites(NebulaFieldKind kind)
+    {
+        int variantCount = kind == NebulaFieldKind.Fire ? FireNebulaVariantCount : NebulaVariantCount;
+        string prefix = kind == NebulaFieldKind.Fire ? "fire_nebula_variant_" : "nebula_variant_";
+        Sprite[] sprites = new Sprite[variantCount];
+        for (int i = 0; i < sprites.Length; i++)
+        {
+            string suffix = (i + 1).ToString("00");
+            sprites[i] = LoadSingleSprite(
+                prefix + suffix,
+                "Assets/Resources/" + prefix + suffix + ".png",
+                null);
+        }
+
+        for (int i = 0; i < sprites.Length; i++)
+        {
+            if (sprites[i] != null)
+                return sprites;
+        }
+
+        if (kind == NebulaFieldKind.Fire)
+            return sprites;
+
+        Sprite fallback = LoadLegacySprite();
+        if (fallback != null)
+            sprites[0] = fallback;
+
+        return sprites;
+    }
+
+    static Sprite LoadLegacySprite()
+    {
+        Sprite sprite = LoadSingleSprite("koszmiczna_anomalia_resource", "Assets/Resources/koszmiczna_anomalia_resource.png", "Assets/koszmiczna_anomalia.png");
         if (sprite != null)
             return sprite;
 
-        Sprite[] sprites = Resources.LoadAll<Sprite>("koszmiczna_anomalia_resource");
+        return LoadSingleSprite("nebula_frayed_resource", "Assets/Resources/nebula_frayed_resource.png", "Assets/nebula_frayed.png");
+    }
+
+    static Sprite LoadSingleSprite(string resourcesPath, string editorPreferredPath, string editorFallbackPath)
+    {
+        Sprite sprite = Resources.Load<Sprite>(resourcesPath);
+        if (sprite != null)
+            return sprite;
+
+        Sprite[] sprites = Resources.LoadAll<Sprite>(resourcesPath);
         sprite = GetLargestSprite(sprites);
         if (sprite != null)
             return sprite;
 
-        Texture2D texture = Resources.Load<Texture2D>("koszmiczna_anomalia_resource");
-        if (texture != null)
-            return CreateSpriteFromTexture(texture);
-
-        sprite = Resources.Load<Sprite>("nebula_frayed_resource");
-        if (sprite != null)
-            return sprite;
-
-        sprites = Resources.LoadAll<Sprite>("nebula_frayed_resource");
-        sprite = GetLargestSprite(sprites);
-        if (sprite != null)
-            return sprite;
-
-        texture = Resources.Load<Texture2D>("nebula_frayed_resource");
+        Texture2D texture = Resources.Load<Texture2D>(resourcesPath);
         if (texture != null)
             return CreateSpriteFromTexture(texture);
 
 #if UNITY_EDITOR
-        sprite = LoadEditorSprite("Assets/Resources/koszmiczna_anomalia_resource.png");
+        sprite = LoadEditorSprite(editorPreferredPath);
         if (sprite != null)
             return sprite;
 
-        sprite = LoadEditorSprite("Assets/koszmiczna_anomalia.png");
-        if (sprite != null)
-            return sprite;
-
-        sprite = LoadEditorSprite("Assets/Resources/nebula_frayed_resource.png");
-        if (sprite != null)
-            return sprite;
-
-        sprite = LoadEditorSprite("Assets/nebula_frayed.png");
-        if (sprite != null)
-            return sprite;
+        if (!string.IsNullOrWhiteSpace(editorFallbackPath))
+            return LoadEditorSprite(editorFallbackPath);
 #endif
 
         return null;

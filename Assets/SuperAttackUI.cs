@@ -6,6 +6,10 @@ using UnityEngine.UI;
 public sealed class SuperAttackUI : MonoBehaviourPun
 {
     public const string RootName = "SuperAttackJoystickBG";
+    const float OffsetFromShootJoystickX = -292f;
+    const float RootSize = 130f;
+    const float FillSize = 98f;
+    const float HandleSize = 43f;
 
     PlayerShooting shooting;
     GameObject rootObject;
@@ -64,8 +68,8 @@ public sealed class SuperAttackUI : MonoBehaviourPun
         rootRect.anchorMin = shootRect.anchorMin;
         rootRect.anchorMax = shootRect.anchorMax;
         rootRect.pivot = new Vector2(0.5f, 0.5f);
-        rootRect.anchoredPosition = shootRect.anchoredPosition + new Vector2(-250f, 0f);
-        rootRect.sizeDelta = new Vector2(108f, 108f);
+        rootRect.anchoredPosition = shootRect.anchoredPosition + new Vector2(OffsetFromShootJoystickX, 0f);
+        rootRect.sizeDelta = new Vector2(RootSize, RootSize);
 
         backgroundImage = rootObject.GetComponent<Image>();
         backgroundImage.sprite = circleSprite;
@@ -78,7 +82,7 @@ public sealed class SuperAttackUI : MonoBehaviourPun
         fillRect.anchorMax = new Vector2(0.5f, 0.5f);
         fillRect.pivot = new Vector2(0.5f, 0.5f);
         fillRect.anchoredPosition = Vector2.zero;
-        fillRect.sizeDelta = new Vector2(82f, 82f);
+        fillRect.sizeDelta = new Vector2(FillSize, FillSize);
 
         fillImage = fillObject.GetComponent<Image>();
         fillImage.sprite = circleSprite;
@@ -93,7 +97,7 @@ public sealed class SuperAttackUI : MonoBehaviourPun
         handleRect.anchorMin = new Vector2(0.5f, 0.5f);
         handleRect.anchorMax = new Vector2(0.5f, 0.5f);
         handleRect.pivot = new Vector2(0.5f, 0.5f);
-        handleRect.sizeDelta = new Vector2(36f, 36f);
+        handleRect.sizeDelta = new Vector2(HandleSize, HandleSize);
         handleRect.anchoredPosition = Vector2.zero;
 
         Image handleImage = handleObject.GetComponent<Image>();
@@ -127,7 +131,8 @@ public sealed class SuperAttackUI : MonoBehaviourPun
                 rootRect.anchorMin = shootRect.anchorMin;
                 rootRect.anchorMax = shootRect.anchorMax;
                 Vector2 basePosition = shootJoystick != null ? shootJoystick.DefaultAnchoredPosition : shootRect.anchoredPosition;
-                rootRect.anchoredPosition = basePosition + new Vector2(-250f, 0f);
+                rootRect.anchoredPosition = basePosition + new Vector2(OffsetFromShootJoystickX, 0f);
+                rootRect.sizeDelta = new Vector2(RootSize, RootSize);
             }
         }
 

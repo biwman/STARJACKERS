@@ -15,6 +15,7 @@ public static class RoundXpTracker
         public bool Collector15Awarded;
         public bool ShipDestroyed;
         public bool Finalized;
+        public float DoubleXpUntil;
         public readonly Dictionary<int, int> ShieldXpByTarget = new Dictionary<int, int>();
     }
 
@@ -132,14 +133,21 @@ public static class RoundXpTracker
         if (attackerView == null || attackerView.Owner == null)
             return;
 
-        if (victim.photonView.Owner != null && attackerView.Owner.ActorNumber == victim.photonView.Owner.ActorNumber)
+        bool killedHumanPlayer = !victim.IsBotControlled;
+        if (killedHumanPlayer &&
+            victim.photonView.Owner != null &&
+            attackerView.Owner.ActorNumber == victim.photonView.Owner.ActorNumber)
+        {
             return;
+        }
 
         int xp = 0;
+        EnemyBotKind killedBotKind = EnemyBotKind.Drone;
         if (victim.IsBotControlled)
         {
             EnemyBot bot = victim.GetComponent<EnemyBot>();
-            xp += RoundXpBalance.GetEnemyKillXp(bot != null ? bot.Kind : EnemyBotKind.Drone);
+            killedBotKind = bot != null ? bot.Kind : EnemyBotKind.Drone;
+            xp += RoundXpBalance.GetEnemyKillXp(killedBotKind);
         }
         else
         {
@@ -152,6 +160,8 @@ public static class RoundXpTracker
         }
 
         AddXp(attackerView.Owner, xp);
+
+        NotifyPilotKillEffects(attackerView, killedHumanPlayer, killedBotKind);
     }
 
     public static void RecordPlayerShipDestroyed(Player player)
@@ -228,10 +238,34 @@ public static class RoundXpTracker
             return;
 
         PlayerRoundXpState state = GetOrCreate(player);
-        int score = Mathf.Max(state.Score, GetBestKnownScore(player)) + amount;
+        int effectiveAmount = Time.time < state.DoubleXpUntil ? amount * 2 : amount;
+        int score = Mathf.Max(state.Score, GetBestKnownScore(player)) + effectiveAmount;
         state.Score = score;
         SetLocalScorePropertyIfMine(player, score);
         RoundResultsTracker.RecordScore(player, score);
+    }
+
+    static void NotifyPilotKillEffects(PhotonView attackerView, bool killedHumanPlayer, EnemyBotKind killedBotKind)
+    {
+        if (attackerView == null || attackerView.Owner == null)
+            return;
+
+        PlayerHealth attackerHealth = attackerView.GetComponent<PlayerHealth>();
+        if (attackerHealth == null)
+            return;
+
+        if (PilotCatalog.IsSelectedPilot(attackerView.Owner, PilotCatalog.NovaId))
+            attackerView.RPC(nameof(PlayerHealth.ApplyNovaKillSpeedBoost), attackerView.Owner);
+
+        if (!killedHumanPlayer && killedBotKind == EnemyBotKind.Drone)
+            attackerView.RPC(nameof(PlayerHealth.RecordPilotDroneKillProgress), attackerView.Owner);
+
+        if (!killedHumanPlayer)
+            return;
+
+        attackerView.RPC(nameof(PlayerHealth.UnlockRoburPilotAfterHumanKill), attackerView.Owner);
+        if (PilotCatalog.IsSelectedPilot(attackerView.Owner, PilotCatalog.RoburId))
+            GetOrCreate(attackerView.Owner).DoubleXpUntil = Mathf.Max(GetOrCreate(attackerView.Owner).DoubleXpUntil, Time.time + 60f);
     }
 
     static PlayerRoundXpState GetOrCreate(Player player)

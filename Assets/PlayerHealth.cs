@@ -8,6 +8,10 @@ using UnityEngine.UI;
 public class PlayerHealth : MonoBehaviourPun
 {
     const float DeathMessageDuration = 10f;
+    const string BoosterBarObjectName = "Booster_Bar";
+    const float DeathMessageBoosterGap = 8f;
+    const float DeathMessageHeight = 44f;
+    const float DeathMessageExtraWidth = 180f;
     const int DefaultPlayerHp = 50;
     const int DefaultPlayerShield = 50;
     const int ShieldReactorShieldBonus = 30;
@@ -18,6 +22,7 @@ public class PlayerHealth : MonoBehaviourPun
     const float MinimumEvacuationScale = 0.01f;
     const float AstronautSpawnClearanceRadius = 0.34f;
     const float SpawnInvulnerabilityDuration = 5f;
+    public const string PilotDamageSourceRamming = "ramming";
 
     public int maxHP = 50;
     public int maxShield = 50;
@@ -29,6 +34,8 @@ public class PlayerHealth : MonoBehaviourPun
     bool destroyRequested;
     bool spawnInvulnerabilityScheduled;
     bool hasPendingEvacuationSummary;
+    bool jakeEmergencyRegenerationUsed;
+    Coroutine jakeEmergencyRegenerationRoutine;
     int pendingEvacuationFinalScore;
     string pendingEvacuationOutcome = "extracted";
     float spawnInvulnerableUntil = -1f;
@@ -70,6 +77,13 @@ public class PlayerHealth : MonoBehaviourPun
 
     void Start()
     {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+        {
+            PlayerDeployableRuntime.EnsureAttached(gameObject);
+            enabled = false;
+            return;
+        }
+
         if (LureBeaconDecoy.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
         {
             LureBeaconDecoy.EnsureAttached(gameObject);
@@ -95,7 +109,10 @@ public class PlayerHealth : MonoBehaviourPun
         }
 
         if (!IsAstronautControlled && !IsBotControlled)
+        {
+            BeginSpawnInvulnerability(SpawnInvulnerabilityDuration);
             StartCoroutine(InitialSpawnInvulnerabilityRoutine());
+        }
 
         if (photonView.IsMine && !IsBotControlled)
         {
@@ -109,6 +126,11 @@ public class PlayerHealth : MonoBehaviourPun
             if (GetComponent<ShieldBarUI>() == null)
             {
                 gameObject.AddComponent<ShieldBarUI>();
+            }
+
+            if (GetComponent<RoundPilotHudUI>() == null)
+            {
+                gameObject.AddComponent<RoundPilotHudUI>();
             }
 
             GameObject barObj = GameObject.Find("HP_Bar");
@@ -170,20 +192,38 @@ public class PlayerHealth : MonoBehaviourPun
     [PunRPC]
     public void TakeDamage(int dmg, int attackerViewID)
     {
+        if (TryForwardDamageToDeployable(dmg, dmg, attackerViewID, transform.position.x, transform.position.y))
+            return;
+
         ApplyDamageInternal(dmg, attackerViewID, true, false, 0f, 0f);
     }
 
     [PunRPC]
     public void TakeDamageAt(int dmg, int attackerViewID, float impactX, float impactY)
     {
+        if (TryForwardDamageToDeployable(dmg, dmg, attackerViewID, impactX, impactY))
+            return;
+
         ApplyDamageInternal(dmg, attackerViewID, true, true, impactX, impactY);
     }
 
     [PunRPC]
     public void TakeDamageProfileAt(int shieldDmg, int hpDmg, int attackerViewID, float impactX, float impactY)
     {
+        if (TryForwardDamageToDeployable(shieldDmg, hpDmg, attackerViewID, impactX, impactY))
+            return;
+
         int effectiveDamage = currentShield > 0 ? Mathf.Max(0, shieldDmg) : Mathf.Max(0, hpDmg);
         ApplyDamageInternal(effectiveDamage, attackerViewID, true, true, impactX, impactY);
+    }
+
+    [PunRPC]
+    public void TakePilotDamageAt(int dmg, int attackerViewID, float impactX, float impactY, string damageSource)
+    {
+        if (TryForwardDamageToDeployable(dmg, dmg, attackerViewID, impactX, impactY))
+            return;
+
+        ApplyDamageInternal(dmg, attackerViewID, true, true, impactX, impactY, damageSource);
     }
 
     void EnsureBotBootstrap()
@@ -204,12 +244,36 @@ public class PlayerHealth : MonoBehaviourPun
         ApplyDamageInternal(dmg, -1, false, false, 0f, 0f);
     }
 
+    [PunRPC]
+    public void TakeNebulaDamage(int dmg)
+    {
+        if (PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.SirNowitzkyId))
+        {
+            ApplyShieldOnlyEnvironmentalDamage(dmg);
+            return;
+        }
+
+        ApplyDamageInternal(dmg, -1, false, false, 0f, 0f, "nebula");
+    }
+
     void ApplyDamageInternal(int dmg, int attackerViewID, bool playImpactAudio, bool hasImpactPosition, float impactX, float impactY)
     {
+        ApplyDamageInternal(dmg, attackerViewID, playImpactAudio, hasImpactPosition, impactX, impactY, string.Empty);
+    }
+
+    void ApplyDamageInternal(int dmg, int attackerViewID, bool playImpactAudio, bool hasImpactPosition, float impactX, float impactY, string damageSource)
+    {
+        if (IsDeployableDamageProxy())
+            return;
+
         if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating)
             return;
 
         if (IsSpawnInvulnerable)
+            return;
+
+        EnemyBot launchProtectedBot = GetComponent<EnemyBot>();
+        if (launchProtectedBot != null && launchProtectedBot.IsPirateBaseLaunchProtected)
             return;
 
         PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
@@ -218,7 +282,7 @@ public class PlayerHealth : MonoBehaviourPun
 
         int previousHp = currentHP;
         int previousShield = currentShield;
-        int remainingDamage = Mathf.Max(0, dmg);
+        int remainingDamage = ApplyPilotDamageModifiers(Mathf.Max(0, dmg), attackerViewID, damageSource);
         int absorbed = 0;
         if (currentShield > 0)
         {
@@ -244,6 +308,8 @@ public class PlayerHealth : MonoBehaviourPun
         }
 
         photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
+
+        TryStartJakeEmergencyRegeneration(previousHp);
 
         if (playImpactAudio && absorbed > 0)
         {
@@ -275,6 +341,134 @@ public class PlayerHealth : MonoBehaviourPun
         {
             HandleDeath(attackerViewID);
         }
+    }
+
+    bool TryForwardDamageToDeployable(int shieldDmg, int hpDmg, int attackerViewID, float impactX, float impactY)
+    {
+        if (!IsDeployableDamageProxy())
+            return false;
+
+        PlayerDeployableBase deployable = GetComponent<PlayerDeployableBase>();
+        if (deployable == null)
+            deployable = PlayerDeployableRuntime.EnsureAttached(gameObject);
+
+        if (deployable != null)
+            deployable.TakeDeployableDamageAt(shieldDmg, hpDmg, attackerViewID, impactX, impactY);
+
+        return true;
+    }
+
+    bool IsDeployableDamageProxy()
+    {
+        return PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null) ||
+               GetComponent<PlayerDeployableBase>() != null;
+    }
+
+    int ApplyPilotDamageModifiers(int damage, int attackerViewID, string damageSource)
+    {
+        int result = Mathf.Max(0, damage);
+        if (result <= 0)
+            return 0;
+
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        if (string.Equals(damageSource, PilotDamageSourceRamming, System.StringComparison.Ordinal) &&
+            PilotCatalog.IsSelectedPilot(owner, PilotCatalog.JakeId))
+        {
+            result = Mathf.Max(1, Mathf.RoundToInt(result * 0.5f));
+        }
+
+        if (IsDamageFromSpaceMine(attackerViewID) &&
+            PilotCatalog.IsSelectedPilot(owner, PilotCatalog.RoburId))
+        {
+            result = Mathf.Max(1, Mathf.RoundToInt(result * 0.5f));
+        }
+
+        EnemyBot targetBot = IsBotControlled ? GetComponent<EnemyBot>() : null;
+        if (targetBot != null && targetBot.Kind == EnemyBotKind.Mothership && IsAttackerPilot(attackerViewID, PilotCatalog.SirNowitzkyId))
+            result = Mathf.Max(1, Mathf.RoundToInt(result * 1.15f));
+
+        return result;
+    }
+
+    bool IsDamageFromSpaceMine(int attackerViewID)
+    {
+        if (attackerViewID <= 0)
+            return false;
+
+        PhotonView attackerView = PhotonView.Find(attackerViewID);
+        if (attackerView == null)
+            return false;
+
+        EnemyBot bot = attackerView.GetComponent<EnemyBot>();
+        return bot != null && bot.Kind == EnemyBotKind.SpaceMine;
+    }
+
+    bool IsAttackerPilot(int attackerViewID, string pilotId)
+    {
+        if (attackerViewID <= 0)
+            return false;
+
+        PhotonView attackerView = PhotonView.Find(attackerViewID);
+        return attackerView != null && PilotCatalog.IsSelectedPilot(attackerView.Owner, pilotId);
+    }
+
+    void ApplyShieldOnlyEnvironmentalDamage(int dmg)
+    {
+        if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || IsSpawnInvulnerable)
+            return;
+
+        EnemyBot launchProtectedBot = GetComponent<EnemyBot>();
+        if (launchProtectedBot != null && launchProtectedBot.IsPirateBaseLaunchProtected)
+            return;
+
+        int damage = Mathf.Max(0, dmg);
+        if (damage <= 0 || currentShield <= 0)
+            return;
+
+        int previousShield = currentShield;
+        currentShield = Mathf.Max(0, currentShield - damage);
+        if (currentShield != previousShield)
+            photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
+    }
+
+    void TryStartJakeEmergencyRegeneration(int previousHp)
+    {
+        if (jakeEmergencyRegenerationUsed || currentHP <= 0 || currentHP >= maxHP)
+            return;
+
+        if (IsBotControlled || IsAstronautControlled || IsWreck)
+            return;
+
+        if (!PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.JakeId))
+            return;
+
+        float threshold = maxHP * 0.5f;
+        if (previousHp > threshold && currentHP <= threshold)
+        {
+            jakeEmergencyRegenerationUsed = true;
+            if (jakeEmergencyRegenerationRoutine == null)
+                jakeEmergencyRegenerationRoutine = StartCoroutine(JakeEmergencyRegenerationRoutine());
+        }
+    }
+
+    IEnumerator JakeEmergencyRegenerationRoutine()
+    {
+        const int ticks = 30;
+        WaitForSeconds wait = new WaitForSeconds(1f);
+        for (int i = 0; i < ticks; i++)
+        {
+            yield return wait;
+            if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || currentHP <= 0)
+                break;
+
+            if (currentHP < maxHP)
+            {
+                currentHP = Mathf.Min(maxHP, currentHP + 1);
+                photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
+            }
+        }
+
+        jakeEmergencyRegenerationRoutine = null;
     }
 
     IEnumerator InitialSpawnInvulnerabilityRoutine()
@@ -594,6 +788,60 @@ public class PlayerHealth : MonoBehaviourPun
         pendingEvacuationOutcome = string.IsNullOrWhiteSpace(outcome) ? "extracted" : outcome;
         hasPendingEvacuationSummary = true;
         NetworkManager.MarkCurrentRoundEndedForLocalPlayer(pendingEvacuationOutcome);
+        TryRecordExtractionPilotProgress(pendingEvacuationOutcome);
+    }
+
+    async void TryRecordExtractionPilotProgress(string outcome)
+    {
+        if (!string.Equals(outcome, "extracted", System.StringComparison.OrdinalIgnoreCase))
+            return;
+
+        PlayerProfileData profile = PlayerProfileService.Instance.CurrentProfile;
+        string[] shipSlots = profile != null && profile.Inventory != null ? profile.Inventory.ShipSlots : null;
+        int cargoValue = PilotCatalog.GetCargoValueAstrons(shipSlots);
+        if (cargoValue >= RoundXpBalance.RaiderCargoValueThreshold)
+            await PlayerProfileService.Instance.UnlockPilotAsync(PilotCatalog.NovaId);
+
+        if (string.Equals(RoomSettings.GetSelectedLobbyMapId(), "pirate_bay", System.StringComparison.OrdinalIgnoreCase))
+            await PlayerProfileService.Instance.RecordPilotPirateBayReturnAsync();
+    }
+
+    [PunRPC]
+    public async void AwardCharlieLastSecondExtractionBonus()
+    {
+        if (!photonView.IsMine)
+            return;
+
+        await PlayerProfileService.Instance.AddAstronsAsync(1000);
+    }
+
+    [PunRPC]
+    public async void UnlockRoburPilotAfterHumanKill()
+    {
+        if (!photonView.IsMine)
+            return;
+
+        await PlayerProfileService.Instance.UnlockPilotAsync(PilotCatalog.RoburId);
+    }
+
+    [PunRPC]
+    public async void RecordPilotDroneKillProgress()
+    {
+        if (!photonView.IsMine)
+            return;
+
+        await PlayerProfileService.Instance.RecordPilotDroneKillAsync();
+    }
+
+    [PunRPC]
+    public void ApplyNovaKillSpeedBoost()
+    {
+        if (!photonView.IsMine)
+            return;
+
+        PlayerMovement movement = GetComponent<PlayerMovement>();
+        if (movement != null)
+            movement.ActivatePilotSpeedBoost(1.2f, 5f);
     }
 
     [PunRPC]
@@ -930,6 +1178,7 @@ public class PlayerHealth : MonoBehaviourPun
         if (obj != null)
         {
             SetDeathMessageText(obj);
+            PositionDeathMessageBelowBooster(obj);
             obj.SetActive(true);
             DeathMessageAutoHide hider = obj.GetComponent<DeathMessageAutoHide>();
             if (hider == null)
@@ -946,7 +1195,53 @@ public class PlayerHealth : MonoBehaviourPun
             text = obj.GetComponentInChildren<TMP_Text>(true);
 
         if (text != null)
+        {
             text.text = "Someone is dead...";
+            text.alignment = TextAlignmentOptions.Center;
+        }
+    }
+
+    void PositionDeathMessageBelowBooster(GameObject obj)
+    {
+        if (obj == null)
+            return;
+
+        RectTransform messageRect = obj.GetComponent<RectTransform>();
+        TMP_Text text = obj.GetComponent<TMP_Text>() ?? obj.GetComponentInChildren<TMP_Text>(true);
+        if (messageRect == null && text != null)
+            messageRect = text.rectTransform;
+
+        GameObject boosterObject = GameObject.Find(BoosterBarObjectName);
+        RectTransform boosterRect = boosterObject != null ? boosterObject.GetComponent<RectTransform>() : null;
+        if (messageRect == null || boosterRect == null)
+            return;
+
+        if (boosterRect.parent != null && messageRect.parent != boosterRect.parent)
+            messageRect.SetParent(boosterRect.parent, false);
+
+        float boosterWidth = boosterRect.rect.width > 0f ? boosterRect.rect.width : Mathf.Abs(boosterRect.sizeDelta.x);
+        float boosterHeight = boosterRect.rect.height > 0f ? boosterRect.rect.height : Mathf.Abs(boosterRect.sizeDelta.y);
+        float boosterBottomY = boosterRect.anchoredPosition.y - (boosterHeight * boosterRect.pivot.y);
+
+        messageRect.anchorMin = boosterRect.anchorMin;
+        messageRect.anchorMax = boosterRect.anchorMax;
+        messageRect.pivot = new Vector2(0.5f, 1f);
+        messageRect.anchoredPosition = new Vector2(boosterRect.anchoredPosition.x, boosterBottomY - DeathMessageBoosterGap);
+        messageRect.sizeDelta = new Vector2(Mathf.Max(560f, boosterWidth + DeathMessageExtraWidth), DeathMessageHeight);
+        messageRect.SetAsLastSibling();
+
+        if (text != null)
+        {
+            if (text.rectTransform != messageRect)
+            {
+                text.rectTransform.anchorMin = Vector2.zero;
+                text.rectTransform.anchorMax = Vector2.one;
+                text.rectTransform.offsetMin = Vector2.zero;
+                text.rectTransform.offsetMax = Vector2.zero;
+            }
+
+            text.alignment = TextAlignmentOptions.Center;
+        }
     }
 
     [PunRPC]
@@ -1589,6 +1884,9 @@ public class ShieldBarUI : MonoBehaviourPun
     const string ShieldBarName = "Shield_Bar";
     const string ShieldLabelName = "ShieldLabel";
     const string ShieldValueName = "ShieldValue";
+    const float BarWidth = 440f;
+    const float BarHeight = 36f;
+    const float VerticalSpacing = 18f;
 
     PlayerHealth health;
     Slider shieldBar;
@@ -1647,8 +1945,7 @@ public class ShieldBarUI : MonoBehaviourPun
 
         RectTransform hpRect = hpBarObject.GetComponent<RectTransform>();
         shieldRect = clone.GetComponent<RectTransform>();
-        shieldRect.sizeDelta = new Vector2(560f, 44f);
-        shieldRect.anchoredPosition = hpRect.anchoredPosition + new Vector2(0f, -55f);
+        ApplyLayout(hpRect);
 
         shieldBar = clone.GetComponent<Slider>();
         shieldBar.minValue = 0f;
@@ -1658,6 +1955,7 @@ public class ShieldBarUI : MonoBehaviourPun
         backgroundImage = FindImage(clone.transform, "Background");
         fillImage = FindImage(clone.transform, "Fill");
         handleImage = FindImage(clone.transform, "Handle");
+        HideHandle();
         DestroyIfExists(clone.transform, "HealthLabel");
         DestroyIfExists(clone.transform, "HealthValue");
         DestroyIfExists(clone.transform, ShieldLabelName);
@@ -1670,13 +1968,15 @@ public class ShieldBarUI : MonoBehaviourPun
             fillImage.color = new Color(0.24f, 0.62f, 1f, 1f);
 
         labelText = CreateText(clone.transform, ShieldLabelName, new Vector2(12f, 0f), TMPro.TextAlignmentOptions.Left, "SHIELD");
-        valueText = CreateText(clone.transform, ShieldValueName, new Vector2(-14f, 0f), TMPro.TextAlignmentOptions.Right, string.Empty);
+        valueText = CreateText(clone.transform, ShieldValueName, new Vector2(-12f, 0f), TMPro.TextAlignmentOptions.Right, string.Empty);
     }
 
     void RefreshBar()
     {
         if (health == null || shieldBar == null)
             return;
+
+        ApplyLayout();
 
         shieldBar.maxValue = health.MaxShield;
         shieldBar.value = health.CurrentShield;
@@ -1688,12 +1988,7 @@ public class ShieldBarUI : MonoBehaviourPun
         if (fillImage != null)
             fillImage.color = Color.Lerp(new Color(0.08f, 0.18f, 0.55f, 1f), new Color(0.36f, 0.78f, 1f, 1f), normalized);
 
-        if (handleImage != null)
-        {
-            handleImage.color = normalized >= 0.999f
-                ? new Color(0.84f, 0.94f, 1f, 1f)
-                : new Color(0.56f, 0.66f, 0.84f, 1f);
-        }
+        HideHandle();
     }
 
     void UpdateVisibility()
@@ -1714,6 +2009,25 @@ public class ShieldBarUI : MonoBehaviourPun
         shieldBar.gameObject.SetActive(shouldBeVisible);
     }
 
+    void ApplyLayout()
+    {
+        if (shieldRect == null)
+            return;
+
+        GameObject hpBarObject = GameObject.Find("HP_Bar");
+        RectTransform hpRect = hpBarObject != null ? hpBarObject.GetComponent<RectTransform>() : null;
+        ApplyLayout(hpRect);
+    }
+
+    void ApplyLayout(RectTransform hpRect)
+    {
+        if (shieldRect == null || hpRect == null)
+            return;
+
+        shieldRect.sizeDelta = new Vector2(BarWidth, BarHeight);
+        shieldRect.anchoredPosition = hpRect.anchoredPosition + new Vector2(0f, -VerticalSpacing);
+    }
+
     TMPro.TextMeshProUGUI CreateText(Transform parent, string objectName, Vector2 anchoredPosition, TMPro.TextAlignmentOptions alignment, string initialText)
     {
         GameObject labelObject = new GameObject(objectName, typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
@@ -1729,7 +2043,7 @@ public class ShieldBarUI : MonoBehaviourPun
 
         TMPro.TextMeshProUGUI text = labelObject.GetComponent<TMPro.TextMeshProUGUI>();
         text.text = initialText;
-        text.fontSize = 20f;
+        text.fontSize = 14f;
         text.color = Color.white;
         text.alignment = alignment;
         text.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
@@ -1760,6 +2074,15 @@ public class ShieldBarUI : MonoBehaviourPun
         }
 
         return null;
+    }
+
+    void HideHandle()
+    {
+        if (handleImage == null)
+            return;
+
+        handleImage.enabled = false;
+        handleImage.raycastTarget = false;
     }
 }
 
@@ -1834,7 +2157,10 @@ public class AstronautSurvivor : MonoBehaviourPun
 
         PlayerHealth health = GetComponent<PlayerHealth>();
         if (health != null)
-            health.ConfigureBaseStats(20, 0);
+        {
+            int astronautHp = PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.JakeId) ? 60 : 20;
+            health.ConfigureBaseStats(astronautHp, 0);
+        }
 
         Rigidbody2D body = GetComponent<Rigidbody2D>();
         if (body != null)

@@ -4,11 +4,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
 
-[ExecuteAlways]
 public class UIRuntimeStyler : MonoBehaviour
 {
     static UIRuntimeStyler instance;
@@ -18,9 +14,6 @@ public class UIRuntimeStyler : MonoBehaviour
     static Sprite cachedCraftingIconSprite;
     static Sprite cachedTraderIconSprite;
     static Sprite cachedInventoryIconSprite;
-#if UNITY_EDITOR
-    double nextEditorRefreshTime;
-#endif
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -28,27 +21,18 @@ public class UIRuntimeStyler : MonoBehaviour
         EnsureInstance();
     }
 
-#if UNITY_EDITOR
-    [InitializeOnLoadMethod]
-    static void BootstrapInEditor()
-    {
-        EditorApplication.delayCall += EnsureEditorInstance;
-    }
-#endif
-
     static void EnsureInstance()
     {
         if (instance != null)
+            return;
+
+        if (!Application.isPlaying)
             return;
 
         GameObject root = GameObject.Find("UIRuntimeStyler");
         if (root == null)
         {
             root = new GameObject("UIRuntimeStyler");
-#if UNITY_EDITOR
-            if (!Application.isPlaying)
-                root.hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSaveInEditor;
-#endif
         }
 
         instance = root.GetComponent<UIRuntimeStyler>();
@@ -61,27 +45,15 @@ public class UIRuntimeStyler : MonoBehaviour
 
     public static void RefreshStyles()
     {
+        if (!Application.isPlaying)
+            return;
+
         EnsureInstance();
         if (instance == null)
             return;
 
-        if (Application.isPlaying)
-            instance.StartCoroutine(instance.ApplyStylesDeferred());
-        else
-            instance.ApplyStylesImmediate();
+        instance.StartCoroutine(instance.ApplyStylesDeferred());
     }
-
-#if UNITY_EDITOR
-    static void EnsureEditorInstance()
-    {
-        if (Application.isPlaying)
-            return;
-
-        EnsureInstance();
-        if (instance != null)
-            instance.ApplyStylesImmediate();
-    }
-#endif
 
     void Awake()
     {
@@ -90,24 +62,13 @@ public class UIRuntimeStyler : MonoBehaviour
 
     void OnEnable()
     {
-#if UNITY_EDITOR
-        if (!Application.isPlaying)
-            EditorApplication.hierarchyChanged += OnEditorHierarchyChanged;
-#endif
-
         if (Application.isPlaying)
             StartCoroutine(ApplyStylesDeferred());
-        else
-            ApplyStylesImmediate();
     }
 
     void OnDestroy()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
-#if UNITY_EDITOR
-        if (!Application.isPlaying)
-            EditorApplication.hierarchyChanged -= OnEditorHierarchyChanged;
-#endif
         if (instance == this)
             instance = null;
     }
@@ -122,8 +83,6 @@ public class UIRuntimeStyler : MonoBehaviour
     {
         if (Application.isPlaying)
             StartCoroutine(ApplyStylesDeferred());
-        else
-            ApplyStylesImmediate();
     }
 
     IEnumerator ApplyStylesDeferred()
@@ -143,30 +102,6 @@ public class UIRuntimeStyler : MonoBehaviour
         StyleEndScreen();
         StyleExtractionMessage();
     }
-
-    void Update()
-    {
-#if UNITY_EDITOR
-        if (!Application.isPlaying)
-        {
-            if (EditorApplication.timeSinceStartup < nextEditorRefreshTime)
-                return;
-
-            nextEditorRefreshTime = EditorApplication.timeSinceStartup + 0.75f;
-            ApplyStylesImmediate();
-        }
-#endif
-    }
-
-#if UNITY_EDITOR
-    void OnEditorHierarchyChanged()
-    {
-        if (Application.isPlaying)
-            return;
-
-        ApplyStylesImmediate();
-    }
-#endif
 
     void StyleButtons()
     {
@@ -249,11 +184,11 @@ public class UIRuntimeStyler : MonoBehaviour
                 targetSize = new Vector2(176f, 62f);
                 break;
             case "use":
-                baseColor = new Color(0.97f, 0.8f, 0.24f, 0.97f);
-                highlighted = new Color(1f, 0.87f, 0.34f, 1f);
-                pressed = new Color(0.82f, 0.61f, 0.1f, 1f);
-                textColor = new Color(0.14f, 0.1f, 0.04f, 1f);
-                targetSize = new Vector2(188f, 112f);
+                baseColor = new Color(0.035f, 0.07f, 0.1f, 0.98f);
+                highlighted = new Color(0.06f, 0.12f, 0.16f, 1f);
+                pressed = new Color(0.02f, 0.04f, 0.06f, 1f);
+                textColor = new Color(0.94f, 0.98f, 1f, 1f);
+                targetSize = new Vector2(196f, 104f);
                 break;
         }
 
@@ -291,7 +226,16 @@ public class UIRuntimeStyler : MonoBehaviour
             textRect.anchorMin = Vector2.zero;
             textRect.anchorMax = Vector2.one;
             textRect.pivot = new Vector2(0.5f, 0.5f);
-            if (role == "save_run")
+            if (role == "use")
+            {
+                text.fontSize = 28f;
+                text.characterSpacing = 3f;
+                text.alignment = TextAlignmentOptions.Center;
+                textRect.offsetMin = new Vector2(22f, 12f);
+                textRect.offsetMax = new Vector2(-22f, -12f);
+                ApplyOutline(text.gameObject, new Color(0f, 0f, 0f, 0.48f), new Vector2(2f, -2f));
+            }
+            else if (role == "save_run")
             {
                 text.fontSize = 40f;
                 text.characterSpacing = 4.5f;
@@ -419,6 +363,7 @@ public class UIRuntimeStyler : MonoBehaviour
                name.StartsWith("Shield", System.StringComparison.Ordinal) ||
                name.StartsWith("Engine", System.StringComparison.Ordinal) ||
                name.StartsWith("Gadget", System.StringComparison.Ordinal) ||
+               name.StartsWith("ShipInventoryButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShipInventoryHudSlot", System.StringComparison.Ordinal) ||
                name.StartsWith("RoomRow_", System.StringComparison.Ordinal) ||
                name.StartsWith("BrowserBackButton", System.StringComparison.Ordinal) ||
@@ -439,7 +384,7 @@ public class UIRuntimeStyler : MonoBehaviour
 
     void StyleJoysticks()
     {
-        StyleJoystick("JoystickBG", new Color(0.08f, 0.11f, 0.16f, 0.38f), new Color(0.95f, 0.77f, 0.26f, 0.95f));
+        StyleMovementJoystick("JoystickBG");
         StyleJoystick("ShootJoystickBG", new Color(0.12f, 0.09f, 0.14f, 0.4f), new Color(0.92f, 0.36f, 0.28f, 0.95f));
     }
 
@@ -458,21 +403,21 @@ public class UIRuntimeStyler : MonoBehaviour
             if (text.text.StartsWith("Score"))
                 text.text = "XP: 0";
 
-            text.fontSize = 30f;
+            text.fontSize = 24f;
             text.fontStyle = FontStyles.Bold;
             text.color = new Color(1f, 0.96f, 0.82f, 1f);
-            text.characterSpacing = 0.5f;
-            text.alignment = TextAlignmentOptions.TopRight;
-            text.margin = new Vector4(18f, 8f, 18f, 8f);
+            text.characterSpacing = 0f;
+            text.alignment = TextAlignmentOptions.Left;
+            text.margin = new Vector4(10f, 4f, 10f, 4f);
         }
 
         if (rect != null)
         {
-            rect.anchorMin = new Vector2(1f, 1f);
-            rect.anchorMax = new Vector2(1f, 1f);
-            rect.pivot = new Vector2(1f, 1f);
-            rect.anchoredPosition = new Vector2(-28f, -22f);
-            rect.sizeDelta = new Vector2(240f, 56f);
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(264f, -28f);
+            rect.sizeDelta = new Vector2(210f, 42f);
         }
 
         if (badge != null)
@@ -734,6 +679,91 @@ public class UIRuntimeStyler : MonoBehaviour
         ApplyOutline(messageObject, new Color(0f, 0f, 0f, 0.4f), new Vector2(3f, -3f));
     }
 
+    void StyleMovementJoystick(string objectName)
+    {
+        GameObject root = GameObject.Find(objectName);
+        if (root == null)
+            return;
+
+        RectTransform rootRect = root.GetComponent<RectTransform>();
+        if (rootRect != null)
+            rootRect.sizeDelta = new Vector2(430f, 430f);
+
+        Image rootImage = root.GetComponent<Image>();
+        Sprite joystickSprite = rootImage != null ? rootImage.sprite : null;
+        if (rootImage != null)
+        {
+            rootImage.color = new Color(0.035f, 0.07f, 0.1f, 0.42f);
+            rootImage.raycastTarget = true;
+            ApplyOutline(rootImage.gameObject, new Color(0f, 0f, 0f, 0.28f), new Vector2(2f, -2f));
+        }
+
+        Joystick joystick = root.GetComponent<Joystick>();
+        if (joystick != null)
+        {
+            joystick.deadZone = 0.12f;
+            joystick.rescaleInputAfterDeadZone = true;
+            joystick.responseExponent = 1.08f;
+        }
+
+        Image glow = GetOrCreateChildImage(root.transform, "MovementJoystickGlow");
+        ConfigureJoystickDisc(glow, joystickSprite, 392f, new Color(0.35f, 0.82f, 1f, 0.05f));
+        glow.transform.SetAsFirstSibling();
+
+        Image ring = GetOrCreateChildImage(root.transform, "MovementJoystickRing");
+        ConfigureJoystickDisc(ring, joystickSprite, 344f, new Color(0.32f, 0.62f, 0.78f, 0.22f));
+        ring.transform.SetSiblingIndex(Mathf.Min(1, ring.transform.parent.childCount - 1));
+
+        Image inner = GetOrCreateChildImage(root.transform, "MovementJoystickInner");
+        ConfigureJoystickDisc(inner, joystickSprite, 276f, new Color(0.02f, 0.04f, 0.065f, 0.3f));
+        inner.transform.SetSiblingIndex(Mathf.Min(2, inner.transform.parent.childCount - 1));
+
+        Image handleImage = joystick != null && joystick.handle != null ? joystick.handle.GetComponent<Image>() : null;
+        if (handleImage == null)
+        {
+            Transform handleTransform = root.transform.Find("Handle");
+            handleImage = handleTransform != null ? handleTransform.GetComponent<Image>() : null;
+        }
+
+        if (handleImage != null)
+        {
+            RectTransform handleRect = handleImage.rectTransform;
+            handleRect.sizeDelta = new Vector2(128f, 128f);
+            handleRect.localScale = Vector3.one;
+            if (joystickSprite != null && handleImage.sprite == null)
+                handleImage.sprite = joystickSprite;
+            handleImage.color = new Color(0.11f, 0.38f, 0.21f, 0.9f);
+            handleImage.raycastTarget = false;
+            handleImage.transform.SetAsLastSibling();
+            ApplyOutline(handleImage.gameObject, new Color(0f, 0f, 0f, 0.34f), new Vector2(2f, -2f));
+        }
+
+        MovementJoystickVisualController controller = root.GetComponent<MovementJoystickVisualController>();
+        if (controller == null)
+            controller = root.AddComponent<MovementJoystickVisualController>();
+        controller.Configure(joystick, rootImage, handleImage, glow, ring, inner);
+    }
+
+    void ConfigureJoystickDisc(Image image, Sprite sprite, float size, Color color)
+    {
+        if (image == null)
+            return;
+
+        RectTransform rect = image.rectTransform;
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = new Vector2(size, size);
+        rect.localScale = Vector3.one;
+
+        image.sprite = sprite != null ? sprite : GetWhitePixelSprite();
+        image.type = Image.Type.Simple;
+        image.preserveAspect = false;
+        image.raycastTarget = false;
+        image.color = color;
+    }
+
     void StyleJoystick(string objectName, Color backgroundColor, Color handleColor)
     {
         GameObject root = GameObject.Find(objectName);
@@ -782,28 +812,127 @@ public class UIRuntimeStyler : MonoBehaviour
         shadow.useGraphicAlpha = true;
     }
 
+    static void SetChildActive(Transform parent, string childName, bool active)
+    {
+        Transform child = parent != null ? parent.Find(childName) : null;
+        if (child != null)
+            child.gameObject.SetActive(active);
+    }
+
     void ConfigureUseButtonVisual(Button button, Image visual, Color baseColor, Color highlighted, Color pressed)
     {
         if (visual == null)
             return;
 
-        RectTransform rect = visual.rectTransform;
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
-        rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.offsetMin = Vector2.zero;
-        rect.offsetMax = Vector2.zero;
+        RectTransform rootRect = visual.rectTransform;
+        rootRect.anchorMin = Vector2.zero;
+        rootRect.anchorMax = Vector2.one;
+        rootRect.pivot = new Vector2(0.5f, 0.5f);
+        rootRect.offsetMin = Vector2.zero;
+        rootRect.offsetMax = Vector2.zero;
 
-        visual.sprite = null;
-        visual.type = Image.Type.Sliced;
+        visual.sprite = GetPlayButtonShapeSprite();
+        visual.type = Image.Type.Simple;
         visual.preserveAspect = false;
         visual.raycastTarget = false;
-
         visual.gameObject.SetActive(true);
-        visual.color = baseColor;
-        button.targetGraphic = visual;
+        visual.color = button.interactable
+            ? new Color(0.36f, 0.42f, 0.5f, 0.98f)
+            : new Color(0.2f, 0.22f, 0.25f, 0.72f);
+        visual.transform.SetAsFirstSibling();
 
-        ApplyOutline(visual.gameObject, new Color(0f, 0f, 0f, 0.22f), new Vector2(2f, -2f));
+        SetChildActive(visual.transform, "UseButtonGlow", false);
+        SetChildActive(visual.transform, "UseButtonAmberCore", false);
+        SetChildActive(visual.transform, "UseButtonIconRoot", false);
+
+        UseButtonPulseUI pulse = visual.GetComponent<UseButtonPulseUI>();
+        if (pulse != null)
+            pulse.enabled = false;
+
+        Image panel = GetOrCreateChildImage(visual.transform, "UseButtonInnerPanel");
+        panel.gameObject.SetActive(true);
+        panel.rectTransform.anchorMin = Vector2.zero;
+        panel.rectTransform.anchorMax = Vector2.one;
+        panel.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        panel.rectTransform.offsetMin = new Vector2(8f, 8f);
+        panel.rectTransform.offsetMax = new Vector2(-8f, -8f);
+        panel.rectTransform.anchoredPosition = Vector2.zero;
+        panel.sprite = GetPlayButtonShapeSprite();
+        panel.type = Image.Type.Simple;
+        panel.preserveAspect = false;
+        panel.raycastTarget = false;
+        panel.color = baseColor;
+
+        Image innerShade = GetOrCreateChildImage(panel.transform, "UseButtonInnerShade");
+        innerShade.gameObject.SetActive(true);
+        innerShade.rectTransform.anchorMin = Vector2.zero;
+        innerShade.rectTransform.anchorMax = Vector2.one;
+        innerShade.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        innerShade.rectTransform.offsetMin = new Vector2(9f, 8f);
+        innerShade.rectTransform.offsetMax = new Vector2(-9f, -8f);
+        innerShade.sprite = GetPlayButtonShapeSprite();
+        innerShade.type = Image.Type.Simple;
+        innerShade.raycastTarget = false;
+        innerShade.color = new Color(0.02f, 0.04f, 0.065f, 0.58f);
+
+        Color accentColor = button.interactable
+            ? new Color(0.35f, 0.82f, 1f, 0.95f)
+            : new Color(0.38f, 0.42f, 0.46f, 0.4f);
+        Color accentSoftColor = button.interactable
+            ? new Color(0.35f, 0.82f, 1f, 0.28f)
+            : new Color(0.38f, 0.42f, 0.46f, 0.14f);
+
+        RectTransform leftAccent = GetOrCreateChildImage(visual.transform, "UseButtonLeftAccent").rectTransform;
+        RectTransform rightAccent = GetOrCreateChildImage(visual.transform, "UseButtonRightAccent").rectTransform;
+        RectTransform topAccent = GetOrCreateChildImage(visual.transform, "UseButtonTopAccent").rectTransform;
+        RectTransform bottomAccent = GetOrCreateChildImage(visual.transform, "UseButtonBottomAccent").rectTransform;
+        ConfigureAccentBar(leftAccent.GetComponent<Image>(), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(12f, 0f), new Vector2(6f, 28f), accentColor);
+        ConfigureAccentBar(rightAccent.GetComponent<Image>(), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-12f, 0f), new Vector2(6f, 28f), accentColor);
+        ConfigureAccentBar(topAccent.GetComponent<Image>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -7f), new Vector2(58f, 4f), accentSoftColor);
+        ConfigureAccentBar(bottomAccent.GetComponent<Image>(), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 7f), new Vector2(46f, 3f), accentSoftColor);
+
+        TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+        UseButtonVisualController controller = button.GetComponent<UseButtonVisualController>();
+        if (controller == null)
+            controller = button.gameObject.AddComponent<UseButtonVisualController>();
+
+        controller.Configure(button, rootRect, panel.rectTransform, innerShade.rectTransform,
+            leftAccent, rightAccent, topAccent, bottomAccent, label != null ? label.rectTransform : null,
+            visual, panel, innerShade, label, baseColor, highlighted, pressed,
+            new Color(0.11f, 0.38f, 0.21f, 0.98f),
+            new Color(0.15f, 0.5f, 0.28f, 1f),
+            new Color(0.08f, 0.24f, 0.15f, 1f));
+
+        ApplyOutline(visual.gameObject, new Color(0f, 0f, 0f, 0.38f), new Vector2(4f, -4f));
+        button.targetGraphic = panel;
+    }
+
+    void ConfigureUseButtonIcon(Transform parent, Color color)
+    {
+        ConfigureIconBar(parent, "UseIconTop", new Vector2(0.5f, 1f), new Vector2(0f, -2f), new Vector2(24f, 4f), 0f, color);
+        ConfigureIconBar(parent, "UseIconBottom", new Vector2(0.5f, 0f), new Vector2(0f, 2f), new Vector2(24f, 4f), 0f, color);
+        ConfigureIconBar(parent, "UseIconLeft", new Vector2(0f, 0.5f), new Vector2(3f, 0f), new Vector2(4f, 22f), 0f, color);
+        ConfigureIconBar(parent, "UseIconRight", new Vector2(1f, 0.5f), new Vector2(-3f, 0f), new Vector2(4f, 22f), 0f, color);
+        ConfigureIconBar(parent, "UseIconCrossH", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(28f, 3f), 0f, new Color(1f, 0.9f, 0.42f, color.a));
+        ConfigureIconBar(parent, "UseIconCrossV", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(3f, 24f), 0f, new Color(1f, 0.9f, 0.42f, color.a));
+        ConfigureIconBar(parent, "UseIconSlash", new Vector2(0.5f, 0.5f), new Vector2(12f, -6f), new Vector2(4f, 24f), -42f, new Color(1f, 1f, 1f, color.a * 0.72f));
+    }
+
+    void ConfigureIconBar(Transform parent, string name, Vector2 anchor, Vector2 anchoredPosition, Vector2 size, float zRotation, Color color)
+    {
+        Image image = GetOrCreateChildImage(parent, name);
+        image.sprite = GetWhitePixelSprite();
+        image.type = Image.Type.Simple;
+        image.preserveAspect = false;
+        image.color = color;
+
+        RectTransform rect = image.rectTransform;
+        rect.anchorMin = anchor;
+        rect.anchorMax = anchor;
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = anchoredPosition;
+        rect.sizeDelta = size;
+        rect.localRotation = Quaternion.Euler(0f, 0f, zRotation);
     }
 
     void ConfigureSaveRunButtonVisual(Button button, Image visual, Color baseColor, Color highlighted, Color pressed)

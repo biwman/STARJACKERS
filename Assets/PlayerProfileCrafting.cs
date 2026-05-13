@@ -152,6 +152,19 @@ public static class PlayerProfileCraftingCatalog
         },
         new PlayerProfileCraftingRecipe
         {
+            Id = "astro_cutter_from_radar_salvage",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.RadarShipSalvageId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.SpaceJunkStandardId
+            },
+            OutputItemId = InventoryItemCatalog.AstroCutterId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
             Id = "fusion_engine_from_droid_wreck",
             Inputs = new[]
             {
@@ -161,6 +174,32 @@ public static class PlayerProfileCraftingCatalog
                 InventoryItemCatalog.AsteroidResourceId
             },
             OutputItemId = InventoryItemCatalog.FusionEngineId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "fuel_tank_from_truck_wreck",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceTruckWreckId,
+                InventoryItemCatalog.SpaceJunkStandardId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidResourceId
+            },
+            OutputItemId = InventoryItemCatalog.FuelTankId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "super_booster_from_fusion_engine",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.FusionEngineId,
+                InventoryItemCatalog.SpaceTruckWreckId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.AsteroidGoldId
+            },
+            OutputItemId = InventoryItemCatalog.SuperBoosterId,
             OutputCount = 1
         },
         new PlayerProfileCraftingRecipe
@@ -226,6 +265,71 @@ public static class PlayerProfileCraftingCatalog
                 InventoryItemCatalog.AsteroidGoldId
             },
             OutputItemId = InventoryItemCatalog.LureBeaconId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "auto_turret_from_fighter_salvage",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.NeutralFighterSalvageId,
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.AsteroidGoldId
+            },
+            OutputItemId = InventoryItemCatalog.AutoTurretId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "guidance_system_from_radar_salvage",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.RadarShipSalvageId,
+                InventoryItemCatalog.SpaceJunkStandardId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.DroidScrapId
+            },
+            OutputItemId = InventoryItemCatalog.GuidanceSystemId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "looting_friend_from_tractor_beam",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.TractorBeamId,
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.SpaceJunkStandardId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.LootingFriendId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "space_drill_from_magnetic_beam",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.MagneticBeamId,
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.SpaceDrillId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "space_trap_from_mine_wreck",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.SpaceJunkStandardId,
+                InventoryItemCatalog.AsteroidGoldId
+            },
+            OutputItemId = InventoryItemCatalog.SpaceTrapId,
             OutputCount = 1
         },
         new PlayerProfileCraftingRecipe

@@ -10,6 +10,7 @@ public sealed class SpaceJunkSpawner : MonoBehaviourPun
     const string ObstacleLayoutKey = "obstacleLayout";
     const string ExtractionLayoutKey = "extractionLayout";
     const string NebulaLayoutKey = "nebulaLayout";
+    const string FireNebulaLayoutKey = NebulaSpawner.FireNebulaLayoutKey;
     const string RepairBayLayoutKey = "repairBayLayout";
     const string EmptyLayoutSentinel = "__empty__";
     const float MapMargin = 2.4f;
@@ -28,15 +29,22 @@ public sealed class SpaceJunkSpawner : MonoBehaviourPun
 
     static SpaceJunkSpawner instance;
 
+    Coroutine spawnRoutine;
+    string lastSpawnRoundToken = string.Empty;
+
     public static void EnsureExists()
     {
         if (instance != null)
+        {
+            instance.EnsureSpawnRoutineRunning();
             return;
+        }
 
         GameObject existing = GameObject.Find("SpaceJunkSpawner");
         if (existing != null && existing.TryGetComponent(out SpaceJunkSpawner existingSpawner))
         {
             instance = existingSpawner;
+            instance.EnsureSpawnRoutineRunning();
             return;
         }
 
@@ -44,14 +52,47 @@ public sealed class SpaceJunkSpawner : MonoBehaviourPun
         instance = spawner.AddComponent<SpaceJunkSpawner>();
     }
 
+    public static void ResetForSessionTransition()
+    {
+        if (instance == null)
+            return;
+
+        instance.ResetLocalRuntimeState();
+    }
+
     void Awake()
     {
         instance = this;
     }
 
+    void OnDestroy()
+    {
+        if (instance == this)
+            instance = null;
+    }
+
     void Start()
     {
-        StartCoroutine(SpawnWhenRoundStarts());
+        EnsureSpawnRoutineRunning();
+    }
+
+    void EnsureSpawnRoutineRunning()
+    {
+        if (spawnRoutine != null)
+            return;
+
+        if (IsRoundStarted() && HasSpawnedForCurrentRound())
+            return;
+
+        spawnRoutine = StartCoroutine(SpawnWhenRoundStarts());
+    }
+
+    void ResetLocalRuntimeState()
+    {
+        StopAllCoroutines();
+        spawnRoutine = null;
+        lastSpawnRoundToken = string.Empty;
+        EnsureSpawnRoutineRunning();
     }
 
     IEnumerator SpawnWhenRoundStarts()
@@ -65,15 +106,27 @@ public sealed class SpaceJunkSpawner : MonoBehaviourPun
         while (!HasLayout(ExtractionLayoutKey) ||
                !HasLayout(ObstacleLayoutKey) ||
                !HasLayout(NebulaLayoutKey) ||
+               !HasLayout(FireNebulaLayoutKey) ||
                !HasLayout(RepairBayLayoutKey))
         {
             yield return null;
         }
 
-        if (!PhotonNetwork.IsMasterClient)
+        if (HasSpawnedForCurrentRound())
+        {
+            spawnRoutine = null;
             yield break;
+        }
 
+        if (!PhotonNetwork.IsMasterClient)
+        {
+            spawnRoutine = null;
+            yield break;
+        }
+
+        lastSpawnRoundToken = BuildCurrentRoundToken();
         SpawnSpaceJunk();
+        spawnRoutine = null;
     }
 
     void SpawnSpaceJunk()
@@ -93,6 +146,7 @@ public sealed class SpaceJunkSpawner : MonoBehaviourPun
         List<Vector2> obstaclePositions = ParsePositionLayout(GetRoomLayout(ObstacleLayoutKey), 0, 1);
         List<Vector2> extractionPositions = ParsePositionLayout(GetRoomLayout(ExtractionLayoutKey), 0, 1);
         List<Vector2> nebulaPositions = ParsePositionLayout(GetRoomLayout(NebulaLayoutKey), 0, 1);
+        nebulaPositions.AddRange(ParsePositionLayout(GetRoomLayout(FireNebulaLayoutKey), 0, 1));
         List<Vector2> repairBayPositions = ParsePositionLayout(GetRoomLayout(RepairBayLayoutKey), 1, 2);
         List<Vector2> spawnedPositions = new List<Vector2>();
 
@@ -140,12 +194,20 @@ public sealed class SpaceJunkSpawner : MonoBehaviourPun
             case RoomSettings.SpaceJunkDensityNone:
                 return 0;
             case RoomSettings.SpaceJunkDensityMedium:
-                return Random.Range(2, 4);
+                return ScaleTargetCount(Random.Range(2, 4));
             case RoomSettings.SpaceJunkDensityHigh:
-                return Random.Range(3, 6);
+                return ScaleTargetCount(Random.Range(3, 6));
             default:
-                return Random.Range(1, 3);
+                return ScaleTargetCount(Random.Range(1, 3));
         }
+    }
+
+    int ScaleTargetCount(int baseCount)
+    {
+        if (baseCount <= 0)
+            return 0;
+
+        return Mathf.Max(1, Mathf.RoundToInt(baseCount * RoomSettings.GetMapAreaMultiplier()));
     }
 
     float GetMinDistanceFromObstacle()
@@ -216,6 +278,23 @@ public sealed class SpaceJunkSpawner : MonoBehaviourPun
                PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(GameStartedKey, out object value) &&
                value is bool started &&
                started;
+    }
+
+    bool HasSpawnedForCurrentRound()
+    {
+        return string.Equals(lastSpawnRoundToken, BuildCurrentRoundToken(), System.StringComparison.Ordinal);
+    }
+
+    string BuildCurrentRoundToken()
+    {
+        if (PhotonNetwork.CurrentRoom == null)
+            return string.Empty;
+
+        string startValue = "nostart";
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.StartTimeKey, out object value) && value != null)
+            startValue = value.ToString();
+
+        return PhotonNetwork.CurrentRoom.Name + "_" + startValue;
     }
 
     int ResolveSeed()

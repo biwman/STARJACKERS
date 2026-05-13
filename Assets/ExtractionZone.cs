@@ -11,6 +11,7 @@ public class ExtractionZone : MonoBehaviourPun
     public float activeDuration = 15f;
     public float evacuationAnimationDuration = 4f;
     const float RequestedPlayerEvacuationGraceDistance = 1.65f;
+    const float CharlieSmartExtractionBonusWindow = 30f;
 
     bool isActive;
     bool isBeingUsed;
@@ -237,10 +238,29 @@ public class ExtractionZone : MonoBehaviourPun
         int finalScore = RoundResultsTracker.GetKnownScore(playerView.Owner, playerView.gameObject);
         string outcome = playerHealth.IsAstronautControlled ? "evacuated" : "extracted";
         finalScore = RoundResultsTracker.RecordOutcome(playerView.Owner, finalScore, outcome);
+        if (ShouldAwardCharlieLastSecondExtractionBonus(playerHealth, outcome))
+            playerView.RPC(nameof(PlayerHealth.AwardCharlieLastSecondExtractionBonus), playerView.Owner);
+
         playerView.RPC(nameof(PlayerHealth.OnEvacuated), playerView.Owner, 0);
         playerView.RPC(nameof(PlayerHealth.NotifyFinalEvacuation), playerView.Owner, finalScore, outcome);
         playerView.RPC(nameof(PlayerHealth.BeginEvacuationSequence), RpcTarget.All);
         return true;
+    }
+
+    bool ShouldAwardCharlieLastSecondExtractionBonus(PlayerHealth playerHealth, string outcome)
+    {
+        if (!string.Equals(outcome, "extracted", System.StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        PhotonView playerView = playerHealth != null ? playerHealth.photonView : null;
+        if (playerView == null || !PilotCatalog.IsSelectedPilot(playerView.Owner, PilotCatalog.CharlieSmartId))
+            return false;
+
+        GameTimer timer = FindAnyObjectByType<GameTimer>();
+        if (timer == null)
+            return false;
+
+        return timer.GetCurrentRemainingTime() <= CharlieSmartExtractionBonusWindow;
     }
 
     bool IsPlayerCloseEnoughForRequestedEvacuation(PlayerHealth playerHealth)

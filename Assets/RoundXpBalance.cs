@@ -4,6 +4,7 @@ using UnityEngine;
 public static class RoundXpBalance
 {
     public const int AsteroidCollectXp = 15;
+    public const int ContainerCollectXp = 5;
     public const int OtherCollectibleCollectXp = 15;
     public const int FirstLootXp = 25;
     public const int Collector15Xp = 100;
@@ -20,6 +21,9 @@ public static class RoundXpBalance
     public const int KillSpaceMineXp = 20;
     public const int KillCorsairXp = 120;
     public const int KillSpaceTruckXp = 180;
+    public const int KillPirateFighterXp = 70;
+    public const int KillPirateFighterEliteXp = 105;
+    public const int KillPirateFighterAceXp = 140;
     public const int KillRadarShipXp = 220;
     public const int KillMothershipXp = 400;
     public const int KillPlayerShipXp = 150;
@@ -46,6 +50,9 @@ public static class RoundXpBalance
 
     public static int GetTreasureCollectXp(string itemId)
     {
+        if (InventoryItemCatalog.IsContainerItem(itemId))
+            return ContainerCollectXp;
+
         return IsAsteroidResource(itemId) ? AsteroidCollectXp : OtherCollectibleCollectXp;
     }
 
@@ -66,6 +73,9 @@ public static class RoundXpBalance
             case EnemyBotKind.SpaceMine: return KillSpaceMineXp;
             case EnemyBotKind.Corsair: return KillCorsairXp;
             case EnemyBotKind.SpaceTruck: return KillSpaceTruckXp;
+            case EnemyBotKind.PirateFighter: return KillPirateFighterXp;
+            case EnemyBotKind.PirateFighterElite: return KillPirateFighterEliteXp;
+            case EnemyBotKind.PirateFighterAce: return KillPirateFighterAceXp;
             case EnemyBotKind.RadarShip: return KillRadarShipXp;
             case EnemyBotKind.Mothership: return KillMothershipXp;
             default: return KillDroneXp;

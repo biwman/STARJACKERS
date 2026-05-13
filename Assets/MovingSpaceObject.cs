@@ -8,11 +8,13 @@ public class MovingSpaceObject : MonoBehaviour
     public enum SpaceObjectType
     {
         Obstacle,
-        Treasure
+        Treasure,
+        Container
     }
 
     const float ObstacleBaseSpeed = 0.22f;
     const float TreasureBaseSpeed = 0.3f;
+    const float ContainerBaseSpeed = 0.14f;
     const float VelocityDamping = 0.12f;
     const float CruiseAcceleration = 2.1f;
     const float MaxSpeedMultiplier = 3.1f;
@@ -28,6 +30,7 @@ public class MovingSpaceObject : MonoBehaviour
     const float RemotePredictionMaxOffset = 1.1f;
     const float PushBoostDuration = 0.55f;
     const float TreasurePushMaxSpeed = 6.2f;
+    const float ContainerPushMaxSpeed = 4.2f;
     const float ObstaclePushMaxSpeed = 4.2f;
 
     static readonly Dictionary<string, MovingSpaceObject> ObjectsById = new Dictionary<string, MovingSpaceObject>();
@@ -222,7 +225,7 @@ public class MovingSpaceObject : MonoBehaviour
             correctedImpulse = awayFromPlayer.normalized * correctedImpulse.magnitude;
         }
 
-        float pushMultiplier = objectType == SpaceObjectType.Treasure ? 1.45f : 1.1f;
+        float pushMultiplier = GetPlayerPushMultiplier();
         MarkPushBoost(correctedImpulse.magnitude * pushMultiplier);
         rb.linearVelocity += correctedImpulse * pushMultiplier;
 
@@ -261,7 +264,7 @@ public class MovingSpaceObject : MonoBehaviour
         float pullAcceleration = strength * Mathf.Lerp(0.45f, 1f, falloff) / effectiveMass;
         rb.linearVelocity += toSource.normalized * pullAcceleration * deltaTime;
 
-        float maxMagneticSpeed = objectType == SpaceObjectType.Treasure ? 5.8f : 4.4f;
+        float maxMagneticSpeed = GetMagneticMaxSpeed();
         if (rb.linearVelocity.sqrMagnitude > maxMagneticSpeed * maxMagneticSpeed)
             rb.linearVelocity = rb.linearVelocity.normalized * maxMagneticSpeed;
 
@@ -303,9 +306,9 @@ public class MovingSpaceObject : MonoBehaviour
         if (isAuthority || rb == null || impulse.sqrMagnitude < 0.0001f)
             return;
 
-        float predictionScale = objectType == SpaceObjectType.Treasure ? 0.18f : 0.105f;
+        float predictionScale = GetRemotePredictionScale();
         Vector2 offset = impulse * predictionScale;
-        float maxOffset = objectType == SpaceObjectType.Treasure ? RemotePredictionMaxOffset * 1.45f : RemotePredictionMaxOffset;
+        float maxOffset = GetRemotePredictionMaxOffset();
         predictedLocalOffset = Vector2.ClampMagnitude(predictedLocalOffset + offset, maxOffset);
     }
 
@@ -373,9 +376,13 @@ public class MovingSpaceObject : MonoBehaviour
         float seedB = Mathf.Abs(hash * 0.00031f) + 9.9f;
         float angle = Mathf.PerlinNoise(seedA, seedB) * Mathf.PI * 2f;
         cruiseDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
-        speedMultiplier = Mathf.Lerp(0.45f, 1.85f, Mathf.PerlinNoise(seedB, seedA + 3.2f));
+        float minSpeedMultiplier = objectType == SpaceObjectType.Container ? 0.7f : 0.45f;
+        float maxSpeedMultiplier = objectType == SpaceObjectType.Container ? 1.25f : 1.85f;
+        speedMultiplier = Mathf.Lerp(minSpeedMultiplier, maxSpeedMultiplier, Mathf.PerlinNoise(seedB, seedA + 3.2f));
         float angularSeed = Mathf.PerlinNoise(seedA + 7.1f, seedB + 4.6f);
-        baseAngularSpeed = Mathf.Lerp(MinAngularSpeed, MaxAngularSpeed, angularSeed);
+        float minAngularSpeed = objectType == SpaceObjectType.Container ? 6f : MinAngularSpeed;
+        float maxAngularSpeed = objectType == SpaceObjectType.Container ? 18f : MaxAngularSpeed;
+        baseAngularSpeed = Mathf.Lerp(minAngularSpeed, maxAngularSpeed, angularSeed);
         if (Mathf.PerlinNoise(seedB + 1.8f, seedA + 5.5f) < 0.5f)
             baseAngularSpeed *= -1f;
         if (cruiseDirection.sqrMagnitude < 0.0001f)
@@ -594,13 +601,18 @@ public class MovingSpaceObject : MonoBehaviour
 
     float GetBaseSpeed()
     {
-        float baseSpeed = objectType == SpaceObjectType.Obstacle ? ObstacleBaseSpeed : TreasureBaseSpeed;
+        float baseSpeed = objectType switch
+        {
+            SpaceObjectType.Obstacle => ObstacleBaseSpeed,
+            SpaceObjectType.Container => ContainerBaseSpeed,
+            _ => TreasureBaseSpeed
+        };
         return baseSpeed * speedMultiplier;
     }
 
     void MarkPushBoost(float impulseMagnitude)
     {
-        float targetMaxSpeed = objectType == SpaceObjectType.Treasure ? TreasurePushMaxSpeed : ObstaclePushMaxSpeed;
+        float targetMaxSpeed = GetPushMaxSpeed();
         pushBoostMaxSpeed = Mathf.Max(
             pushBoostMaxSpeed,
             Mathf.Lerp(targetMaxSpeed * 0.62f, targetMaxSpeed, Mathf.Clamp01(impulseMagnitude / 8f)));
@@ -614,6 +626,56 @@ public class MovingSpaceObject : MonoBehaviour
 
         pushBoostMaxSpeed = 0f;
         return 0f;
+    }
+
+    float GetPushMaxSpeed()
+    {
+        return objectType switch
+        {
+            SpaceObjectType.Treasure => TreasurePushMaxSpeed,
+            SpaceObjectType.Container => ContainerPushMaxSpeed,
+            _ => ObstaclePushMaxSpeed
+        };
+    }
+
+    float GetPlayerPushMultiplier()
+    {
+        return objectType switch
+        {
+            SpaceObjectType.Treasure => 1.45f,
+            SpaceObjectType.Container => 1.18f,
+            _ => 1.1f
+        };
+    }
+
+    float GetMagneticMaxSpeed()
+    {
+        return objectType switch
+        {
+            SpaceObjectType.Treasure => 5.8f,
+            SpaceObjectType.Container => 4.2f,
+            _ => 4.4f
+        };
+    }
+
+    float GetRemotePredictionScale()
+    {
+        return objectType switch
+        {
+            SpaceObjectType.Treasure => 0.18f,
+            SpaceObjectType.Container => 0.14f,
+            _ => 0.105f
+        };
+    }
+
+    float GetRemotePredictionMaxOffset()
+    {
+        return objectType switch
+        {
+            SpaceObjectType.Treasure => RemotePredictionMaxOffset * 1.45f,
+            SpaceObjectType.Container => RemotePredictionMaxOffset * 1.15f,
+            _ => RemotePredictionMaxOffset
+        };
     }
 
     float GetMassFactor()

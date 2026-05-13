@@ -373,7 +373,7 @@ public class EnemyBotManager : MonoBehaviour
         for (int i = 0; i < bots.Length; i++)
         {
             EnemyBot bot = bots[i];
-            if (bot == null || bot.Kind != kind || bot.IsPlayerPlacedMine || bot.IsSummonedDrone)
+            if (bot == null || bot.Kind != kind || bot.IsPlayerPlacedMine || bot.IsSummonedDrone || bot.IsPirateBaseLaunchedFighter)
                 continue;
 
             PlayerHealth health = bot.GetComponent<PlayerHealth>();
@@ -392,7 +392,7 @@ public class EnemyBotManager : MonoBehaviour
         for (int i = 0; i < bots.Length; i++)
         {
             EnemyBot bot = bots[i];
-            if (bot == null || bot.Kind != kind || bot.IsPlayerPlacedMine || bot.IsSummonedDrone)
+            if (bot == null || bot.Kind != kind || bot.IsPlayerPlacedMine || bot.IsSummonedDrone || bot.IsPirateBaseLaunchedFighter)
                 continue;
 
             PhotonView view = bot.GetComponent<PhotonView>();
