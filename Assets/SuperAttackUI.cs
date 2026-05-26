@@ -6,7 +6,7 @@ using UnityEngine.UI;
 public sealed class SuperAttackUI : MonoBehaviourPun
 {
     public const string RootName = "SuperAttackJoystickBG";
-    const float OffsetFromShootJoystickX = -292f;
+    const float OffsetFromShootJoystickX = -340f;
     const float RootSize = 130f;
     const float FillSize = 98f;
     const float HandleSize = 43f;
@@ -18,6 +18,8 @@ public sealed class SuperAttackUI : MonoBehaviourPun
     Image fillImage;
     RectTransform handleRect;
     Joystick joystick;
+    RectTransform shootJoystickRect;
+    Joystick shootJoystick;
     Sprite circleSprite;
 
     void Start()
@@ -57,18 +59,19 @@ public sealed class SuperAttackUI : MonoBehaviourPun
         if (canvas == null || shootJoystickObject == null)
             return;
 
-        RectTransform shootRect = shootJoystickObject.GetComponent<RectTransform>();
-        if (shootRect == null)
+        shootJoystickRect = shootJoystickObject.GetComponent<RectTransform>();
+        shootJoystick = shootJoystickObject.GetComponent<Joystick>();
+        if (shootJoystickRect == null)
             return;
 
         circleSprite = CreateCircleSprite();
         rootObject = new GameObject(RootName, typeof(RectTransform), typeof(Image), typeof(Joystick));
         rootObject.transform.SetParent(canvas.transform, false);
         rootRect = rootObject.GetComponent<RectTransform>();
-        rootRect.anchorMin = shootRect.anchorMin;
-        rootRect.anchorMax = shootRect.anchorMax;
+        rootRect.anchorMin = shootJoystickRect.anchorMin;
+        rootRect.anchorMax = shootJoystickRect.anchorMax;
         rootRect.pivot = new Vector2(0.5f, 0.5f);
-        rootRect.anchoredPosition = shootRect.anchoredPosition + new Vector2(OffsetFromShootJoystickX, 0f);
+        rootRect.anchoredPosition = shootJoystickRect.anchoredPosition + new Vector2(OffsetFromShootJoystickX, 0f);
         rootRect.sizeDelta = new Vector2(RootSize, RootSize);
 
         backgroundImage = rootObject.GetComponent<Image>();
@@ -123,14 +126,12 @@ public sealed class SuperAttackUI : MonoBehaviourPun
 
         if (rootRect != null)
         {
-            GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
-            Joystick shootJoystick = shootJoystickObject != null ? shootJoystickObject.GetComponent<Joystick>() : null;
-            RectTransform shootRect = shootJoystickObject != null ? shootJoystickObject.GetComponent<RectTransform>() : null;
-            if (shootRect != null)
+            ResolveShootJoystickReference();
+            if (shootJoystickRect != null)
             {
-                rootRect.anchorMin = shootRect.anchorMin;
-                rootRect.anchorMax = shootRect.anchorMax;
-                Vector2 basePosition = shootJoystick != null ? shootJoystick.DefaultAnchoredPosition : shootRect.anchoredPosition;
+                rootRect.anchorMin = shootJoystickRect.anchorMin;
+                rootRect.anchorMax = shootJoystickRect.anchorMax;
+                Vector2 basePosition = shootJoystick != null ? shootJoystick.DefaultAnchoredPosition : shootJoystickRect.anchoredPosition;
                 rootRect.anchoredPosition = basePosition + new Vector2(OffsetFromShootJoystickX, 0f);
                 rootRect.sizeDelta = new Vector2(RootSize, RootSize);
             }
@@ -159,6 +160,16 @@ public sealed class SuperAttackUI : MonoBehaviourPun
             joystick.enabled = ready;
     }
 
+    void ResolveShootJoystickReference()
+    {
+        if (shootJoystickRect != null)
+            return;
+
+        GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
+        shootJoystickRect = shootJoystickObject != null ? shootJoystickObject.GetComponent<RectTransform>() : null;
+        shootJoystick = shootJoystickObject != null ? shootJoystickObject.GetComponent<Joystick>() : null;
+    }
+
     bool IsGameplayHudVisible()
     {
         if (PhotonNetwork.CurrentRoom == null)
@@ -166,7 +177,7 @@ public sealed class SuperAttackUI : MonoBehaviourPun
 
         return PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
                value is bool started &&
-               started;
+               GameplayHudVisibility.IsGameplayHudVisible(started);
     }
 
     Sprite CreateCircleSprite()

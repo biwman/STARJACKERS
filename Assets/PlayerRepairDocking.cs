@@ -12,6 +12,8 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
     const float DockedScaleMultiplier = 0.7f;
     const float RepairPerSecond = 10f;
     const float RepairTickSeconds = 0.2f;
+    const float FactoryExchangeStartDelay = 0.2f;
+    const float FactoryBatchVisualSecondsPerContainer = 0.28f;
 
     enum DockState
     {
@@ -117,13 +119,13 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
 
         if (bay != null)
         {
-            routine = StartCoroutine(HoldToLandRoutine(bay));
+            photonView.RPC(nameof(RequestRepairDock), RpcTarget.MasterClient, bay.StableId);
             return true;
         }
 
         if (factory != null)
         {
-            routine = StartCoroutine(HoldToLandFactoryRoutine(factory));
+            photonView.RPC(nameof(RequestFactoryDock), RpcTarget.MasterClient, factory.StableId);
             return true;
         }
 
@@ -472,7 +474,7 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
 
     IEnumerator FactoryExchangeRoutine(string factoryId)
     {
-        yield return new WaitForSeconds(0.2f);
+        yield return new WaitForSeconds(FactoryExchangeStartDelay);
 
         if (string.IsNullOrWhiteSpace(factoryId) || SpaceFactory.IsCompleted(factoryId))
         {
@@ -481,32 +483,50 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
             yield break;
         }
 
-        while (state == DockState.Repairing && dockMode == DockMode.SpaceFactory && SpaceFactory.CanAcceptContainer(factoryId))
+        int openSlots = Mathf.Clamp(
+            SpaceFactory.RequiredContainerCount - SpaceFactory.GetFilledCount(factoryId),
+            0,
+            SpaceFactory.RequiredContainerCount);
+        if (openSlots <= 0 || !SpaceFactory.CanAcceptContainer(factoryId))
         {
-            yield return new WaitForSeconds(1f);
-
-            if (state != DockState.Repairing || dockMode != DockMode.SpaceFactory || !SpaceFactory.CanAcceptContainer(factoryId))
-                break;
-
-            if (!PlayerProfileService.HasInstance)
-                break;
-
-            System.Threading.Tasks.Task<string> removeTask = PlayerProfileService.Instance.RemoveFirstShipContainerAsync();
-            while (!removeTask.IsCompleted)
-                yield return null;
-
-            if (removeTask.IsFaulted)
-            {
-                Debug.LogError("Space Factory container removal failed: " + removeTask.Exception);
-                break;
-            }
-
-            string removedContainerId = removeTask.Result;
-            if (string.IsNullOrWhiteSpace(removedContainerId))
-                break;
-
-            photonView.RPC(nameof(RequestFactoryContainerDeposit), RpcTarget.MasterClient, factoryId, removedContainerId);
+            RequestFactoryLaunchFromOwner();
+            factoryExchangeRoutine = null;
+            yield break;
         }
+
+        if (!PlayerProfileService.HasInstance)
+        {
+            factoryExchangeRoutine = null;
+            yield break;
+        }
+
+        System.Threading.Tasks.Task<string[]> removeTask = PlayerProfileService.Instance.RemoveShipContainersDeferredSaveAsync(openSlots);
+        while (!removeTask.IsCompleted)
+            yield return null;
+
+        if (removeTask.IsFaulted)
+        {
+            Debug.LogError("Space Factory container batch removal failed: " + removeTask.Exception);
+            RequestFactoryLaunchFromOwner();
+            factoryExchangeRoutine = null;
+            yield break;
+        }
+
+        string[] removedContainerIds = removeTask.Result;
+        if (removedContainerIds == null || removedContainerIds.Length == 0)
+        {
+            RequestFactoryLaunchFromOwner();
+            factoryExchangeRoutine = null;
+            yield break;
+        }
+
+        photonView.RPC(nameof(RequestFactoryContainerBatchDeposit), RpcTarget.MasterClient, new object[] { factoryId, removedContainerIds });
+
+        float displayDelay = Mathf.Clamp(
+            removedContainerIds.Length * FactoryBatchVisualSecondsPerContainer,
+            0.35f,
+            1.8f);
+        yield return new WaitForSeconds(displayDelay);
 
         if (state == DockState.Repairing && dockMode == DockMode.SpaceFactory)
             RequestFactoryLaunchFromOwner();
@@ -552,6 +572,50 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
     }
 
     [PunRPC]
+    void RequestFactoryContainerBatchDeposit(string factoryId, string[] itemIds, PhotonMessageInfo info)
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView.Owner == null || info.Sender == null || info.Sender.ActorNumber != photonView.Owner.ActorNumber)
+            return;
+
+        if (!IsFactoryOccupiedByActor(factoryId, photonView.Owner.ActorNumber))
+        {
+            photonView.RPC(nameof(RestoreRejectedFactoryContainersRpc), photonView.Owner, new object[] { itemIds });
+            photonView.RPC(nameof(BeginRepairLaunch), RpcTarget.All);
+            return;
+        }
+
+        bool accepted = SpaceFactory.TryDepositContainersAuthority(factoryId, itemIds, out int acceptedCount, out bool completedNow);
+        if (!accepted)
+        {
+            photonView.RPC(nameof(RestoreRejectedFactoryContainersRpc), photonView.Owner, new object[] { itemIds });
+            photonView.RPC(nameof(BeginRepairLaunch), RpcTarget.All);
+            return;
+        }
+
+        if (itemIds != null && acceptedCount < itemIds.Length)
+            photonView.RPC(nameof(RestoreRejectedFactoryContainersRpc), photonView.Owner, new object[] { BuildRejectedFactoryContainers(itemIds, acceptedCount) });
+
+        if (completedNow)
+        {
+            photonView.RPC(nameof(ReceiveFactoryRewardRpc), photonView.Owner, InventoryItemCatalog.CashSuitcaseId);
+            photonView.RPC(nameof(ShowFactoryRichMessageRpc), RpcTarget.All);
+        }
+    }
+
+    static string[] BuildRejectedFactoryContainers(string[] itemIds, int acceptedCount)
+    {
+        if (itemIds == null || acceptedCount >= itemIds.Length)
+            return new string[0];
+
+        int startIndex = Mathf.Clamp(acceptedCount, 0, itemIds.Length);
+        string[] rejected = new string[itemIds.Length - startIndex];
+        for (int i = startIndex; i < itemIds.Length; i++)
+            rejected[i - startIndex] = itemIds[i];
+
+        return rejected;
+    }
+
+    [PunRPC]
     void RequestFactoryLaunch(PhotonMessageInfo info)
     {
         if (!PhotonNetwork.IsMasterClient || photonView.Owner == null || info.Sender == null || info.Sender.ActorNumber != photonView.Owner.ActorNumber)
@@ -569,7 +633,7 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
 
         try
         {
-            await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+            await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
         }
         catch (System.Exception ex)
         {
@@ -585,11 +649,27 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
 
         try
         {
-            await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+            await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
         }
         catch (System.Exception ex)
         {
             Debug.LogError("Failed to restore rejected Space Factory container: " + ex);
+        }
+    }
+
+    [PunRPC]
+    async void RestoreRejectedFactoryContainersRpc(string[] itemIds)
+    {
+        if (!photonView.IsMine || itemIds == null || itemIds.Length == 0)
+            return;
+
+        try
+        {
+            await PlayerProfileService.Instance.AddItemsToShipDeferredSaveAsync(itemIds);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to restore rejected Space Factory containers: " + ex);
         }
     }
 

@@ -17,6 +17,7 @@ public sealed class UseButtonVisualController : MonoBehaviour, IPointerDownHandl
     Image frameImage;
     Image panelImage;
     Image innerShadeImage;
+    Image progressFillImage;
     TMP_Text labelText;
     Color inactiveBaseColor;
     Color inactiveHighlightedColor;
@@ -27,10 +28,14 @@ public sealed class UseButtonVisualController : MonoBehaviour, IPointerDownHandl
     bool pointerDown;
     bool pointerInside;
     bool available;
+    string overrideLabel;
+    bool hasOverrideLabel;
+    float progressValue;
+    bool progressVisible;
 
     public void Configure(Button targetButton, RectTransform visualRoot, RectTransform panel, RectTransform innerShade,
         RectTransform leftAccent, RectTransform rightAccent, RectTransform topAccent, RectTransform bottomAccent,
-        RectTransform label, Image frameImageRef, Image panelImageRef, Image innerShadeImageRef, TMP_Text labelTextRef,
+        RectTransform label, Image frameImageRef, Image panelImageRef, Image innerShadeImageRef, Image progressFillImageRef, TMP_Text labelTextRef,
         Color inactiveBaseTint, Color inactiveHighlightedTint, Color inactivePressedTint,
         Color activeBaseTint, Color activeHighlightedTint, Color activePressedTint)
     {
@@ -46,6 +51,7 @@ public sealed class UseButtonVisualController : MonoBehaviour, IPointerDownHandl
         frameImage = frameImageRef;
         panelImage = panelImageRef;
         innerShadeImage = innerShadeImageRef;
+        progressFillImage = progressFillImageRef;
         labelText = labelTextRef;
         inactiveBaseColor = inactiveBaseTint;
         inactiveHighlightedColor = inactiveHighlightedTint;
@@ -53,7 +59,16 @@ public sealed class UseButtonVisualController : MonoBehaviour, IPointerDownHandl
         activeBaseColor = activeBaseTint;
         activeHighlightedColor = activeHighlightedTint;
         activePressedColor = activePressedTint;
+        ApplyLabel();
+        ApplyProgressState();
         ApplyStateImmediate();
+    }
+
+    public void SetLabel(string value)
+    {
+        overrideLabel = value ?? string.Empty;
+        hasOverrideLabel = true;
+        ApplyLabel();
     }
 
     public void SetAvailable(bool value)
@@ -63,6 +78,17 @@ public sealed class UseButtonVisualController : MonoBehaviour, IPointerDownHandl
 
         available = value;
         ApplyStateImmediate();
+    }
+
+    public void SetProgress(float progress, bool visible)
+    {
+        float clampedProgress = Mathf.Clamp01(progress);
+        if (Mathf.Approximately(progressValue, clampedProgress) && progressVisible == visible)
+            return;
+
+        progressValue = clampedProgress;
+        progressVisible = visible;
+        ApplyProgressState();
     }
 
     public void OnPointerDown(PointerEventData eventData)
@@ -94,11 +120,21 @@ public sealed class UseButtonVisualController : MonoBehaviour, IPointerDownHandl
     {
         pointerDown = false;
         pointerInside = false;
+        SetProgress(0f, false);
     }
 
     void LateUpdate()
     {
         ApplyStateImmediate();
+    }
+
+    void ApplyLabel()
+    {
+        if (!hasOverrideLabel || labelText == null)
+            return;
+
+        if (labelText.text != overrideLabel)
+            labelText.text = overrideLabel;
     }
 
     void ApplyStateImmediate()
@@ -152,8 +188,10 @@ public sealed class UseButtonVisualController : MonoBehaviour, IPointerDownHandl
                         ? new Color(0.015f, 0.03f, 0.045f, 0.78f)
                         : hovered
                             ? new Color(0.035f, 0.075f, 0.1f, 0.66f)
-                            : new Color(0.02f, 0.04f, 0.065f, 0.58f);
+                    : new Color(0.02f, 0.04f, 0.065f, 0.58f);
         }
+
+        ApplyProgressState();
 
         Color hardAccent = disabled
             ? new Color(0.34f, 0.37f, 0.4f, 0.32f)
@@ -196,6 +234,17 @@ public sealed class UseButtonVisualController : MonoBehaviour, IPointerDownHandl
                     ? Color.white
                     : new Color(0.82f, 0.88f, 0.92f, 0.88f);
         }
+    }
+
+    void ApplyProgressState()
+    {
+        if (progressFillImage == null)
+            return;
+
+        bool visible = progressVisible && progressValue > 0.001f;
+        progressFillImage.gameObject.SetActive(visible);
+        progressFillImage.fillAmount = visible ? progressValue : 0f;
+        progressFillImage.color = new Color(0.16f, 0.95f, 0.34f, 0.76f);
     }
 
     static void ApplyAccentState(RectTransform rect, Vector2 size, Color color)

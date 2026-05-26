@@ -6,6 +6,7 @@ using UnityEngine.UI;
 public sealed class WeaponSwitchButtonUI : MonoBehaviourPun
 {
     public const string RootName = "WeaponSwitchButton";
+    static readonly Vector2 OffsetFromShootJoystick = new Vector2(-126f, -154f);
 
     static Sprite circularSprite;
 
@@ -16,6 +17,8 @@ public sealed class WeaponSwitchButtonUI : MonoBehaviourPun
     Image innerBackgroundImage;
     Image nextWeaponIconImage;
     Button button;
+    RectTransform shootJoystickRect;
+    Joystick shootJoystick;
 
     void Start()
     {
@@ -51,8 +54,9 @@ public sealed class WeaponSwitchButtonUI : MonoBehaviourPun
         if (canvas == null || shootJoystickObject == null)
             return;
 
-        RectTransform shootRect = shootJoystickObject.GetComponent<RectTransform>();
-        if (shootRect == null)
+        shootJoystickRect = shootJoystickObject.GetComponent<RectTransform>();
+        shootJoystick = shootJoystickObject.GetComponent<Joystick>();
+        if (shootJoystickRect == null)
             return;
 
         GameObject existing = GameObject.Find(RootName);
@@ -62,10 +66,10 @@ public sealed class WeaponSwitchButtonUI : MonoBehaviourPun
         buttonObject = new GameObject(RootName, typeof(RectTransform), typeof(Image), typeof(Button));
         buttonObject.transform.SetParent(canvas.transform, false);
         buttonRect = buttonObject.GetComponent<RectTransform>();
-        buttonRect.anchorMin = shootRect.anchorMin;
-        buttonRect.anchorMax = shootRect.anchorMax;
+        buttonRect.anchorMin = shootJoystickRect.anchorMin;
+        buttonRect.anchorMax = shootJoystickRect.anchorMax;
         buttonRect.pivot = new Vector2(0.5f, 0.5f);
-        buttonRect.anchoredPosition = shootRect.anchoredPosition + new Vector2(-126f, 154f);
+        buttonRect.anchoredPosition = shootJoystickRect.anchoredPosition + OffsetFromShootJoystick;
         buttonRect.sizeDelta = new Vector2(96f, 96f);
 
         backgroundImage = buttonObject.GetComponent<Image>();
@@ -121,18 +125,26 @@ public sealed class WeaponSwitchButtonUI : MonoBehaviourPun
         if (!visible)
             return;
 
-        GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
-        Joystick shootJoystick = shootJoystickObject != null ? shootJoystickObject.GetComponent<Joystick>() : null;
-        RectTransform shootRect = shootJoystickObject != null ? shootJoystickObject.GetComponent<RectTransform>() : null;
-        if (shootRect != null && buttonRect != null)
+        ResolveShootJoystickReference();
+        if (shootJoystickRect != null && buttonRect != null)
         {
-            buttonRect.anchorMin = shootRect.anchorMin;
-            buttonRect.anchorMax = shootRect.anchorMax;
-            Vector2 basePosition = shootJoystick != null ? shootJoystick.DefaultAnchoredPosition : shootRect.anchoredPosition;
-            buttonRect.anchoredPosition = basePosition + new Vector2(-126f, 154f);
+            buttonRect.anchorMin = shootJoystickRect.anchorMin;
+            buttonRect.anchorMax = shootJoystickRect.anchorMax;
+            Vector2 basePosition = shootJoystick != null ? shootJoystick.DefaultAnchoredPosition : shootJoystickRect.anchoredPosition;
+            buttonRect.anchoredPosition = basePosition + OffsetFromShootJoystick;
         }
 
         RefreshNextWeaponIcon();
+    }
+
+    void ResolveShootJoystickReference()
+    {
+        if (shootJoystickRect != null)
+            return;
+
+        GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
+        shootJoystickRect = shootJoystickObject != null ? shootJoystickObject.GetComponent<RectTransform>() : null;
+        shootJoystick = shootJoystickObject != null ? shootJoystickObject.GetComponent<Joystick>() : null;
     }
 
     void RefreshNextWeaponIcon()
@@ -160,7 +172,7 @@ public sealed class WeaponSwitchButtonUI : MonoBehaviourPun
 
         return PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
                value is bool started &&
-               started;
+               GameplayHudVisibility.IsGameplayHudVisible(started);
     }
 
     static Sprite GetCircularSprite()

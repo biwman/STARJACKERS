@@ -204,6 +204,6 @@ public sealed class ComplexAmmoBarUI : MonoBehaviourPun
 
         return PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
                value is bool started &&
-               started;
+               GameplayHudVisibility.IsGameplayHudVisible(started);
     }
 }

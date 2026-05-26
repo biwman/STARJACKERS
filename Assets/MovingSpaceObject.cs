@@ -25,7 +25,7 @@ public class MovingSpaceObject : MonoBehaviour
     const float MaxBoundaryAngularSpeed = 48f;
     const float CollisionSpinFlipThreshold = 0.85f;
     const float CollisionSpinFlipChance = 0.45f;
-    const float SnapshotInterval = 0.045f;
+    const float SnapshotInterval = 0.09f;
     const float RemoteSmoothing = 16f;
     const float RemotePredictionMaxOffset = 1.1f;
     const float PushBoostDuration = 0.55f;
@@ -35,6 +35,7 @@ public class MovingSpaceObject : MonoBehaviour
 
     static readonly Dictionary<string, MovingSpaceObject> ObjectsById = new Dictionary<string, MovingSpaceObject>();
     static PhysicsMaterial2D sharedBouncyMaterial;
+    static PhysicsMaterial2D sharedSoftBoundaryMaterial;
     static Collider2D[] cachedWallColliders;
 
     string stableId;
@@ -71,11 +72,25 @@ public class MovingSpaceObject : MonoBehaviour
             sharedBouncyMaterial = new PhysicsMaterial2D("MovingSpaceObjectBouncy")
             {
                 friction = 0f,
-                bounciness = 1f
+                bounciness = 0.12f
             };
         }
 
         return sharedBouncyMaterial;
+    }
+
+    public static PhysicsMaterial2D GetSharedSoftBoundaryMaterial()
+    {
+        if (sharedSoftBoundaryMaterial == null)
+        {
+            sharedSoftBoundaryMaterial = new PhysicsMaterial2D("MapBoundarySoft")
+            {
+                friction = 0f,
+                bounciness = 0f
+            };
+        }
+
+        return sharedSoftBoundaryMaterial;
     }
 
     public static MovingSpaceObject Find(string id)
@@ -267,6 +282,38 @@ public class MovingSpaceObject : MonoBehaviour
         float maxMagneticSpeed = GetMagneticMaxSpeed();
         if (rb.linearVelocity.sqrMagnitude > maxMagneticSpeed * maxMagneticSpeed)
             rb.linearVelocity = rb.linearVelocity.normalized * maxMagneticSpeed;
+
+        if (rb.linearVelocity.sqrMagnitude > 0.001f)
+            cruiseDirection = rb.linearVelocity.normalized;
+    }
+
+    public void ApplyTractorTetherPull(Vector2 sourcePosition, float strength, float slackDistance, float deltaTime)
+    {
+        if (rb == null || strength <= 0f || deltaTime <= 0f)
+            return;
+
+        ApplySimulationMode();
+        if (!isAuthority || !movingEnabled || !translateEnabled)
+            return;
+
+        Vector2 toSource = sourcePosition - rb.position;
+        float distance = toSource.magnitude;
+        if (distance <= 0.05f)
+            return;
+
+        float stretch = Mathf.Max(0f, distance - Mathf.Max(0.25f, slackDistance));
+        float tetherRamp = Mathf.Clamp01(stretch / 4.25f);
+        float effectiveMass = Mathf.Clamp(GetMassFactor(), 1f, 8f);
+        float softenedMass = Mathf.Lerp(effectiveMass, 1.35f, tetherRamp * 0.72f);
+        float pullAcceleration = strength * Mathf.Lerp(0.75f, 3.6f, tetherRamp) / Mathf.Max(1f, softenedMass);
+        rb.linearVelocity += toSource.normalized * pullAcceleration * deltaTime;
+
+        float maxTetherSpeed = Mathf.Lerp(
+            Mathf.Max(GetMagneticMaxSpeed(), 6.2f),
+            12.5f,
+            tetherRamp);
+        if (rb.linearVelocity.sqrMagnitude > maxTetherSpeed * maxTetherSpeed)
+            rb.linearVelocity = rb.linearVelocity.normalized * maxTetherSpeed;
 
         if (rb.linearVelocity.sqrMagnitude > 0.001f)
             cruiseDirection = rb.linearVelocity.normalized;

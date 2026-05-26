@@ -10,8 +10,8 @@ public class ShipInventoryHudUI : MonoBehaviourPun
     const string InventoryButtonName = "ShipInventoryButton";
     const string InventoryPanelName = "ShipInventoryPanel";
     const string DragVisualName = "ShipInventoryDragVisual";
-    const float CargoButtonWidth = 54f;
-    const float CargoButtonHitboxWidth = 128f;
+    const float CargoButtonWidth = 96f;
+    const float CargoButtonHitboxWidth = CargoButtonWidth;
     const float CargoButtonHeight = 244f;
     const float CargoButtonPanelGap = 12f;
     const float CargoButtonLeftInset = 4f;
@@ -29,6 +29,9 @@ public class ShipInventoryHudUI : MonoBehaviourPun
     Image buttonImage;
     TextMeshProUGUI buttonText;
     GameObject panelObject;
+    RectTransform buttonRect;
+    RectTransform cargoVisualRect;
+    RectTransform panelRect;
     RectTransform canvasRect;
     Button[] slotButtons;
     Image[] slotIcons;
@@ -41,6 +44,9 @@ public class ShipInventoryHudUI : MonoBehaviourPun
     bool previousHudVisible = true;
     bool dragInProgress;
     int draggedSlotIndex = -1;
+    int observedInventoryRevision = -1;
+    bool forceUiRefresh = true;
+    float nextLayoutRefresh;
 
     void Start()
     {
@@ -56,9 +62,14 @@ public class ShipInventoryHudUI : MonoBehaviourPun
 
     void Update()
     {
-        RefreshRuntimeLayout();
-        UpdateVisibility();
-        RefreshUi();
+        if (Time.unscaledTime >= nextLayoutRefresh)
+        {
+            nextLayoutRefresh = Time.unscaledTime + 0.25f;
+            RefreshRuntimeLayout();
+        }
+
+        bool visibilityChanged = UpdateVisibility();
+        RefreshUiIfNeeded(visibilityChanged);
     }
 
     void OnDestroy()
@@ -98,12 +109,12 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         buttonObject = new GameObject(InventoryButtonName, typeof(RectTransform), typeof(Image), typeof(Button));
         buttonObject.transform.SetParent(parent, false);
 
-        RectTransform rect = buttonObject.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0f, 1f);
-        rect.anchorMax = new Vector2(0f, 1f);
-        rect.pivot = new Vector2(0f, 1f);
-        rect.sizeDelta = new Vector2(CargoButtonHitboxWidth, CargoButtonHeight);
-        rect.anchoredPosition = GetCargoButtonPosition();
+        buttonRect = buttonObject.GetComponent<RectTransform>();
+        buttonRect.anchorMin = new Vector2(0f, 1f);
+        buttonRect.anchorMax = new Vector2(0f, 1f);
+        buttonRect.pivot = new Vector2(0f, 1f);
+        buttonRect.sizeDelta = new Vector2(CargoButtonHitboxWidth, CargoButtonHeight);
+        buttonRect.anchoredPosition = GetCargoButtonPosition();
 
         buttonImage = buttonObject.GetComponent<Image>();
         buttonImage.color = new Color(0f, 0f, 0f, 0f);
@@ -113,12 +124,12 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         GameObject visualObject = new GameObject("CargoButtonVisual", typeof(RectTransform), typeof(Image));
         visualObject.transform.SetParent(buttonObject.transform, false);
 
-        RectTransform visualRect = visualObject.GetComponent<RectTransform>();
-        visualRect.anchorMin = new Vector2(0f, 1f);
-        visualRect.anchorMax = new Vector2(0f, 1f);
-        visualRect.pivot = new Vector2(0f, 1f);
-        visualRect.anchoredPosition = Vector2.zero;
-        visualRect.sizeDelta = new Vector2(CargoButtonWidth, CargoButtonHeight);
+        cargoVisualRect = visualObject.GetComponent<RectTransform>();
+        cargoVisualRect.anchorMin = new Vector2(0f, 1f);
+        cargoVisualRect.anchorMax = new Vector2(0f, 1f);
+        cargoVisualRect.pivot = new Vector2(0f, 1f);
+        cargoVisualRect.anchoredPosition = Vector2.zero;
+        cargoVisualRect.sizeDelta = new Vector2(CargoButtonWidth, CargoButtonHeight);
 
         Image visualImage = visualObject.GetComponent<Image>();
         visualImage.color = new Color(0.035f, 0.07f, 0.1f, 0.82f);
@@ -173,12 +184,12 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         panelObject = new GameObject(InventoryPanelName, typeof(RectTransform), typeof(Image));
         panelObject.transform.SetParent(parent, false);
 
-        RectTransform rect = panelObject.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0f, 1f);
-        rect.anchorMax = new Vector2(0f, 1f);
-        rect.pivot = new Vector2(0f, 1f);
-        rect.sizeDelta = new Vector2(CargoPanelWidth, CargoPanelHeight);
-        rect.anchoredPosition = GetCargoPanelPosition();
+        panelRect = panelObject.GetComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(0f, 1f);
+        panelRect.anchorMax = new Vector2(0f, 1f);
+        panelRect.pivot = new Vector2(0f, 1f);
+        panelRect.sizeDelta = new Vector2(CargoPanelWidth, CargoPanelHeight);
+        panelRect.anchoredPosition = GetCargoPanelPosition();
 
         Image bg = panelObject.GetComponent<Image>();
         bg.color = new Color(0f, 0f, 0f, 0f);
@@ -330,6 +341,19 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         panelVisible = !panelVisible;
         if (panelObject != null)
             panelObject.SetActive(panelVisible && hudVisible);
+
+        forceUiRefresh = true;
+    }
+
+    void RefreshUiIfNeeded(bool visibilityChanged)
+    {
+        int revision = PlayerProfileService.HasInstance ? PlayerProfileService.Instance.InventoryRevision : -1;
+        if (!forceUiRefresh && !visibilityChanged && revision == observedInventoryRevision)
+            return;
+
+        RefreshUi();
+        observedInventoryRevision = revision;
+        forceUiRefresh = false;
     }
 
     void RefreshUi()
@@ -343,7 +367,7 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         PlayerInventoryData normalized = inventory != null ? inventory.Clone() : PlayerInventoryData.Default();
         normalized.Normalize();
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
-        int shipCapacity = ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
+        int shipCapacity = PlayerProfileService.GetEffectiveShipInventoryCapacity(shipSkinIndex, normalized.EquipmentSlots);
 
         int filledSlots = 0;
 
@@ -351,6 +375,7 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         {
             bool slotEnabled = i < shipCapacity;
             bool isSafePocket = slotEnabled && PlayerProfileService.IsSafePocketIndex(shipSkinIndex, i);
+            bool isAstronautSlot = slotEnabled && PlayerProfileService.IsAstronautCargoIndex(shipSkinIndex, shipCapacity, i);
             string itemId = normalized.ShipSlots[i];
             bool occupied = slotEnabled && !string.IsNullOrWhiteSpace(itemId);
             Sprite icon = occupied ? InventoryItemCatalog.GetIcon(itemId) : null;
@@ -367,15 +392,21 @@ public class ShipInventoryHudUI : MonoBehaviourPun
                 if (occupied)
                 {
                     Color baseColor = InventoryItemCatalog.GetRarityColor(itemId);
-                    slotImage.color = isSafePocket
-                        ? Color.Lerp(baseColor, new Color(0.24f, 0.74f, 0.66f, baseColor.a), 0.32f)
-                        : baseColor;
+                    if (isSafePocket)
+                        slotImage.color = Color.Lerp(baseColor, new Color(0.24f, 0.74f, 0.66f, baseColor.a), 0.32f);
+                    else if (isAstronautSlot)
+                        slotImage.color = Color.Lerp(baseColor, new Color(1f, 0.67f, 0.28f, baseColor.a), 0.28f);
+                    else
+                        slotImage.color = baseColor;
                 }
                 else
                 {
-                    slotImage.color = isSafePocket
-                        ? new Color(0.09f, 0.23f, 0.22f, 0.98f)
-                        : new Color(0.11f, 0.16f, 0.22f, 0.98f);
+                    if (isSafePocket)
+                        slotImage.color = new Color(0.09f, 0.23f, 0.22f, 0.98f);
+                    else if (isAstronautSlot)
+                        slotImage.color = new Color(0.28f, 0.18f, 0.08f, 0.98f);
+                    else
+                        slotImage.color = new Color(0.11f, 0.16f, 0.22f, 0.98f);
                 }
             }
 
@@ -398,6 +429,11 @@ public class ShipInventoryHudUI : MonoBehaviourPun
                     slotLabels[i].text = "SAFE";
                     slotLabels[i].color = occupied ? new Color(0f, 0f, 0f, 0f) : new Color(0.56f, 1f, 0.95f, 0.86f);
                 }
+                else if (isAstronautSlot)
+                {
+                    slotLabels[i].text = "ASTRO";
+                    slotLabels[i].color = occupied ? new Color(0f, 0f, 0f, 0f) : new Color(1f, 0.79f, 0.42f, 0.88f);
+                }
                 else
                 {
                     slotLabels[i].text = string.Empty;
@@ -413,6 +449,14 @@ public class ShipInventoryHudUI : MonoBehaviourPun
                     if (outline == null)
                         outline = slotButtons[i].gameObject.AddComponent<Outline>();
                     outline.effectColor = new Color(0.38f, 0.98f, 0.88f, 0.95f);
+                    outline.effectDistance = new Vector2(2f, 2f);
+                    outline.enabled = true;
+                }
+                else if (isAstronautSlot)
+                {
+                    if (outline == null)
+                        outline = slotButtons[i].gameObject.AddComponent<Outline>();
+                    outline.effectColor = new Color(1f, 0.64f, 0.22f, 0.95f);
                     outline.effectDistance = new Vector2(2f, 2f);
                     outline.enabled = true;
                 }
@@ -549,7 +593,11 @@ public class ShipInventoryHudUI : MonoBehaviourPun
 
         Camera eventCamera = eventData.pressEventCamera;
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
-        int shipCapacity = ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
+        PlayerInventoryData inventory = PlayerProfileService.Instance.CurrentProfile != null
+            ? PlayerProfileService.Instance.CurrentProfile.Inventory
+            : null;
+        string[] equipmentSlots = inventory != null ? inventory.EquipmentSlots : null;
+        int shipCapacity = PlayerProfileService.GetEffectiveShipInventoryCapacity(shipSkinIndex, equipmentSlots);
 
         for (int i = 0; i < slotButtons.Length && i < shipCapacity; i++)
         {
@@ -627,8 +675,6 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         if (buttonObject == null)
             return;
 
-        RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
-
         if (buttonRect == null)
             return;
 
@@ -639,10 +685,15 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         buttonRect.anchoredPosition = GetCargoButtonPosition();
         buttonObject.transform.SetAsLastSibling();
 
+        if (cargoVisualRect != null)
+        {
+            cargoVisualRect.anchoredPosition = Vector2.zero;
+            cargoVisualRect.sizeDelta = new Vector2(CargoButtonWidth, CargoButtonHeight);
+        }
+
         if (panelObject == null)
             return;
 
-        RectTransform panelRect = panelObject.GetComponent<RectTransform>();
         if (panelRect == null)
             return;
 
@@ -658,9 +709,10 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         }
     }
 
-    void UpdateVisibility()
+    bool UpdateVisibility()
     {
         bool shouldShow = IsGameplayHudVisible();
+        bool changed = hudVisible != shouldShow;
         if (hudVisible != shouldShow)
         {
             previousHudVisible = hudVisible;
@@ -675,10 +727,19 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         previousHudVisible = hudVisible;
 
         if (buttonObject != null)
+        {
+            bool wasActive = buttonObject.activeSelf;
             buttonObject.SetActive(shouldShow);
+            changed |= wasActive != shouldShow;
+        }
 
         if (panelObject != null)
-            panelObject.SetActive(shouldShow && panelVisible);
+        {
+            bool panelShouldShow = shouldShow && panelVisible;
+            bool wasActive = panelObject.activeSelf;
+            panelObject.SetActive(panelShouldShow);
+            changed |= wasActive != panelShouldShow;
+        }
 
         if (!shouldShow)
         {
@@ -686,6 +747,8 @@ public class ShipInventoryHudUI : MonoBehaviourPun
             draggedSlotIndex = -1;
             HideDragVisual();
         }
+
+        return changed;
     }
 
     bool IsGameplayHudVisible()
@@ -696,7 +759,7 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
             value is bool started)
         {
-            return started;
+            return GameplayHudVisibility.IsGameplayHudVisible(started);
         }
 
         return false;

@@ -39,6 +39,7 @@ public class PlayerMovement : MonoBehaviourPun
     bool fusionEngineEquipped;
     int equippedFusionEngineCount;
     int equippedFuelTankCount;
+    int equippedAfterburnerStabilizerCount;
     string lastAppliedEngineSignature = string.Empty;
     float pilotSpeedBoostMultiplier = 1f;
     float pilotSpeedBoostUntil = -1f;
@@ -55,8 +56,9 @@ public class PlayerMovement : MonoBehaviourPun
     const float BatteringFullSpeedRatio = 0.9f;
     const float BatteringSpeedGraceSeconds = 0.25f;
     const float BatteringPairCooldown = 0.5f;
-    const float BatteringProbeRadius = 0.72f;
-    const float BatteringFrontDotThreshold = 0.42f;
+    const float BatteringProbeRadius = 0.82f;
+    const float BatteringFrontDotThreshold = 0.34f;
+    const float AvengerBatteringFrontDotThreshold = 0.24f;
     const float RemotePushNoseProbeRadius = 0.52f;
     const float RemotePushBodyProbeRadius = 0.38f;
     const float RemotePushContactTolerance = 0.12f;
@@ -162,6 +164,11 @@ public class PlayerMovement : MonoBehaviourPun
         }
 
         ResolveJoysticks();
+
+        if (GetComponent<AdvancedMoveInputZone>() == null)
+        {
+            gameObject.AddComponent<AdvancedMoveInputZone>();
+        }
 
         if (!isAstronaut && GetComponent<BoosterBarUI>() == null)
         {
@@ -400,7 +407,7 @@ public class PlayerMovement : MonoBehaviourPun
 
         Vector2 probeCenter = rb.position + (Vector2)transform.up * GetBatteringProbeDistance();
         ContactFilter2D contactFilter = new ContactFilter2D { useTriggers = false };
-        int hitCount = Physics2D.OverlapCircle(probeCenter, BatteringProbeRadius, contactFilter, BatteringProbeHits);
+        int hitCount = Physics2D.OverlapCircle(probeCenter, GetBatteringProbeRadius(), contactFilter, BatteringProbeHits);
         for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = BatteringProbeHits[i];
@@ -614,7 +621,7 @@ public class PlayerMovement : MonoBehaviourPun
         }
 
         impactPoint = bestPoint;
-        return bestDot >= BatteringFrontDotThreshold;
+        return bestDot >= GetBatteringFrontDotThreshold();
     }
 
     bool IsBatteringImpactInFront(Vector2 impactPoint)
@@ -623,7 +630,7 @@ public class PlayerMovement : MonoBehaviourPun
         if (toImpact.sqrMagnitude < 0.0001f)
             return false;
 
-        return Vector2.Dot(((Vector2)transform.up).normalized, toImpact.normalized) >= BatteringFrontDotThreshold;
+        return Vector2.Dot(((Vector2)transform.up).normalized, toImpact.normalized) >= GetBatteringFrontDotThreshold();
     }
 
     bool IsAtBatteringSpeed(float currentMagnitude)
@@ -643,6 +650,32 @@ public class PlayerMovement : MonoBehaviourPun
             return 0.9f;
 
         return Mathf.Clamp(renderer.bounds.extents.y * 0.95f, 0.55f, 1.5f);
+    }
+
+    float GetBatteringProbeRadius()
+    {
+        float radius = BatteringProbeRadius;
+        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+        if (renderer != null)
+            radius = Mathf.Max(radius, renderer.bounds.extents.x * 0.66f);
+
+        if (GetCurrentShipType() == ShipType.Avenger)
+            radius = Mathf.Max(radius, 0.98f);
+
+        return Mathf.Clamp(radius, BatteringProbeRadius, 1.16f);
+    }
+
+    float GetBatteringFrontDotThreshold()
+    {
+        return GetCurrentShipType() == ShipType.Avenger
+            ? AvengerBatteringFrontDotThreshold
+            : BatteringFrontDotThreshold;
+    }
+
+    ShipType GetCurrentShipType()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        return ShipCatalog.GetShipTypeFromSkinIndex(RoomSettings.GetPlayerShipSkin(owner, 0));
     }
 
     Vector2 ResolveBatteringImpactNormal(Vector2 impactPoint)
@@ -894,6 +927,21 @@ public class PlayerMovement : MonoBehaviourPun
         return false;
     }
 
+    public bool CanUseAdvancedMoveJoystick()
+    {
+        if (!enabled || photonView == null || !photonView.IsMine || GetComponent<EnemyBot>() != null)
+            return false;
+
+        if (!RoomSettings.IsAdvancedMovingJoystickEnabled())
+            return false;
+
+        if (!IsGameStarted() || IsStartingEntryActive())
+            return false;
+
+        PlayerHealth health = GetComponent<PlayerHealth>();
+        return health == null || (!health.IsWreck && !health.IsEvacuationAnimating);
+    }
+
     bool IsStartingEntryActive()
     {
         StartingShipEntryVfx entry = GetComponent<StartingShipEntryVfx>();
@@ -1064,7 +1112,11 @@ public class PlayerMovement : MonoBehaviourPun
 
         float t = Mathf.InverseLerp(1f, 10f, driftLevel);
         float slowdown = Mathf.Lerp(1f, MaxDriftInertiaSlowdown, t);
-        return 1f / slowdown;
+        float response = 1f / slowdown;
+        if (equippedAfterburnerStabilizerCount > 0)
+            response = Mathf.Lerp(response, 1f, Mathf.Clamp01(0.38f * equippedAfterburnerStabilizerCount));
+
+        return response;
     }
 
     void UpdateFacingDirection()
@@ -1086,7 +1138,8 @@ public class PlayerMovement : MonoBehaviourPun
         lastFacingDirection = desiredDirection;
 
         float angle = Mathf.Atan2(lastFacingDirection.y, lastFacingDirection.x) * Mathf.Rad2Deg;
-        if (GetComponent<AstronautSurvivor>() != null)
+        AstronautSurvivor astronaut = GetComponent<AstronautSurvivor>();
+        if (astronaut != null && !astronaut.IsEscapePodMode)
             angle += 180f;
         targetRotationAngle = angle - 90f;
 
@@ -1130,6 +1183,7 @@ public class PlayerMovement : MonoBehaviourPun
         movementJoystick.deadZone = 0.12f;
         movementJoystick.rescaleInputAfterDeadZone = true;
         movementJoystick.responseExponent = 1.08f;
+        movementJoystick.recenterOnPointerDown = RoomSettings.IsAdvancedMovingJoystickEnabled();
     }
 
     void SetupEngineAudio()
@@ -1282,8 +1336,9 @@ public class PlayerMovement : MonoBehaviourPun
         string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
         int fusionCount = CountEquippedFusionEngines(equipmentSlots, shipSkinIndex);
         int fuelTankCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.FuelTankId);
+        int afterburnerStabilizerCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.AfterburnerStabilizerId);
         bool hasFusion = fusionCount > 0;
-        string signature = shipSkinIndex + ":" + fusionCount + ":" + fuelTankCount;
+        string signature = shipSkinIndex + ":" + fusionCount + ":" + fuelTankCount + ":" + afterburnerStabilizerCount;
         if (!forceRefresh && signature == lastAppliedEngineSignature)
             return;
 
@@ -1294,10 +1349,11 @@ public class PlayerMovement : MonoBehaviourPun
 
         equippedFusionEngineCount = fusionCount;
         equippedFuelTankCount = fuelTankCount;
+        equippedAfterburnerStabilizerCount = afterburnerStabilizerCount;
         fusionEngineEquipped = hasFusion;
         baseSpeed = Mathf.Max(0.1f, baseShipSpeed);
         baseBoosterDuration = Mathf.Max(0.1f, baseShipBoosterDuration);
-        turnRateMultiplier = Mathf.Max(0.1f, baseShipTurnRate);
+        turnRateMultiplier = Mathf.Max(0.1f, baseShipTurnRate * (1f + 0.25f * equippedAfterburnerStabilizerCount));
         maxBoostPercent = Mathf.Max(0, baseShipMaxBoostPercent);
         speed = baseSpeed * (1f + (0.15f * equippedFusionEngineCount)) * GetPilotSpeedMultiplier();
         boosterDuration = baseBoosterDuration * (1f + (0.5f * equippedFuelTankCount));
@@ -1456,13 +1512,22 @@ public class PlayerMovement : MonoBehaviourPun
 public class EngineThrusterVFX : MonoBehaviour
 {
     const string ThrusterRootName = "EngineVFX";
+    const float PlayerTrailMinVertexDistance = 0.07f;
+    const float EnemyTrailMinVertexDistance = 0.08f;
+    const float AstronautTrailMinVertexDistance = 0.06f;
 
+    static Material sharedSpritesMaterial;
+
+    PlayerMovement movement;
+    HideInNebulaTarget nebulaTarget;
+    PhotonView photonViewCache;
     Rigidbody2D rb;
     SpriteRenderer shipRenderer;
     TrailRenderer[] trailRenderers;
     float referenceSpeed = 5f;
     bool isEnemyBot;
     bool isAstronaut;
+    bool isEscapePod;
     bool fusionTrailEquipped;
     EnemyTrailProfile enemyTrailProfile;
     Vector2[] playerThrusterOffsetFactors = new[] { new Vector2(0f, 0.02f) };
@@ -1471,7 +1536,9 @@ public class EngineThrusterVFX : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         shipRenderer = GetComponent<SpriteRenderer>();
-        PlayerMovement movement = GetComponent<PlayerMovement>();
+        movement = GetComponent<PlayerMovement>();
+        nebulaTarget = GetComponent<HideInNebulaTarget>();
+        photonViewCache = GetComponent<PhotonView>();
         referenceSpeed = Mathf.Max(1f, movement != null ? movement.speed : 5f);
         RefreshMode();
         CreateThrusterObjects();
@@ -1480,20 +1547,36 @@ public class EngineThrusterVFX : MonoBehaviour
 
     public void RefreshMode()
     {
+        bool previousIsAstronaut = isAstronaut;
+        bool previousIsEscapePod = isEscapePod;
+        int previousTrailCount = trailRenderers != null ? trailRenderers.Length : -1;
         EnemyBot enemyBot = GetComponent<EnemyBot>();
         isEnemyBot = enemyBot != null;
         enemyTrailProfile = enemyBot != null && enemyBot.Definition != null ? enemyBot.Definition.Trails : null;
-        isAstronaut = GetComponent<AstronautSurvivor>() != null;
-        PlayerMovement movement = GetComponent<PlayerMovement>();
+        AstronautSurvivor astronaut = GetComponent<AstronautSurvivor>();
+        isAstronaut = astronaut != null;
+        isEscapePod = astronaut != null && astronaut.IsEscapePodMode;
         fusionTrailEquipped = movement != null && movement.HasFusionEngineEquipped && !isEnemyBot && !isAstronaut;
 
-        PhotonView view = GetComponent<PhotonView>();
+        if (photonViewCache == null)
+            photonViewCache = GetComponent<PhotonView>();
+
+        PhotonView view = photonViewCache;
         int skinIndex = view != null && view.Owner != null ? RoomSettings.GetPlayerShipSkin(view.Owner, 0) : 0;
         playerThrusterOffsetFactors = !isEnemyBot && !isAstronaut
             ? ShipCatalog.GetThrusterOffsetFactors(skinIndex)
-            : new[] { new Vector2(0f, 0.02f) };
+            : isEscapePod
+                ? new[] { new Vector2(-0.18f, 0.02f), new Vector2(0.18f, 0.02f) }
+                : new[] { new Vector2(0f, 0.02f) };
 
-        ReapplyTrailAppearance();
+        bool shouldRecreateTrails = trailRenderers != null &&
+                                    (previousIsAstronaut != isAstronaut ||
+                                     previousIsEscapePod != isEscapePod ||
+                                     previousTrailCount != playerThrusterOffsetFactors.Length);
+        if (shouldRecreateTrails)
+            CreateThrusterObjects();
+        else
+            ReapplyTrailAppearance();
     }
 
     void Update()
@@ -1501,7 +1584,9 @@ public class EngineThrusterVFX : MonoBehaviour
         if (rb == null)
             return;
 
-        PlayerMovement movement = GetComponent<PlayerMovement>();
+        if (movement == null)
+            movement = GetComponent<PlayerMovement>();
+
         if (movement != null)
             referenceSpeed = Mathf.Max(1f, movement.CurrentSpeedReference);
 
@@ -1534,7 +1619,7 @@ public class EngineThrusterVFX : MonoBehaviour
             : isEnemyBot
                 ? new Vector3(0f, shipHeight * 0.44f, 0f)
             : isAstronaut
-                ? new Vector3(0f, -shipHeight * 0.34f, 0f)
+                ? new Vector3(0f, -shipHeight * (isEscapePod ? 0.42f : 0.34f), 0f)
                 : new Vector3(0f, -shipHeight * 0.46f, 0f);
         rootObject.transform.localRotation = enemyTrailProfile != null
             ? Quaternion.Euler(0f, 0f, enemyTrailProfile.RootRotationZ)
@@ -1559,16 +1644,16 @@ public class EngineThrusterVFX : MonoBehaviour
 
     void ConfigureTrail(TrailRenderer trail)
     {
-        trail.time = isAstronaut ? 0.24f : enemyTrailProfile != null ? enemyTrailProfile.MaxTrailTime : 0.42f;
-        trail.minVertexDistance = 0.01f;
-        trail.widthMultiplier = isAstronaut ? 0.04f : enemyTrailProfile != null ? enemyTrailProfile.MaxTrailWidth : 0.08f;
+        trail.time = isAstronaut ? (isEscapePod ? 0.36f : 0.2f) : enemyTrailProfile != null ? Mathf.Min(enemyTrailProfile.MaxTrailTime, 0.58f) : 0.36f;
+        trail.minVertexDistance = isAstronaut ? (isEscapePod ? 0.05f : AstronautTrailMinVertexDistance) : enemyTrailProfile != null ? EnemyTrailMinVertexDistance : PlayerTrailMinVertexDistance;
+        trail.widthMultiplier = isAstronaut ? (isEscapePod ? 0.085f : 0.04f) : enemyTrailProfile != null ? enemyTrailProfile.MaxTrailWidth : 0.08f;
         trail.shadowCastingMode = ShadowCastingMode.Off;
         trail.receiveShadows = false;
         trail.alignment = LineAlignment.View;
         trail.textureMode = LineTextureMode.Stretch;
-        trail.numCapVertices = 12;
-        trail.numCornerVertices = 8;
-        trail.material = CreateSpritesMaterial();
+        trail.numCapVertices = 3;
+        trail.numCornerVertices = 2;
+        trail.sharedMaterial = GetSpritesMaterial();
         trail.generateLightingData = false;
         ApplyTrailAppearance(trail);
     }
@@ -1594,7 +1679,25 @@ public class EngineThrusterVFX : MonoBehaviour
             return;
 
         Gradient gradient = new Gradient();
-        if (isAstronaut)
+        if (isAstronaut && isEscapePod)
+        {
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(1f, 0.98f, 0.86f), 0f),
+                    new GradientColorKey(new Color(1f, 0.78f, 0.28f), 0.18f),
+                    new GradientColorKey(new Color(1f, 0.42f, 0.08f), 0.55f),
+                    new GradientColorKey(new Color(0.32f, 0.06f, 0.01f), 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0.95f, 0f),
+                    new GradientAlphaKey(0.66f, 0.24f),
+                    new GradientAlphaKey(0.26f, 0.68f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+        }
+        else if (isAstronaut)
         {
             gradient.SetKeys(
                 new[]
@@ -1801,9 +1904,12 @@ public class EngineThrusterVFX : MonoBehaviour
 
     void UpdateVisuals(float speedNormalized)
     {
-        HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>();
-        PhotonView view = GetComponent<PhotonView>();
-        bool hideForOthers = nebulaTarget != null && nebulaTarget.IsHiddenFromLocalPlayer() && view != null && !view.IsMine;
+        if (nebulaTarget == null)
+            nebulaTarget = GetComponent<HideInNebulaTarget>();
+        if (photonViewCache == null)
+            photonViewCache = GetComponent<PhotonView>();
+
+        bool hideForOthers = nebulaTarget != null && nebulaTarget.IsHiddenFromLocalPlayer() && photonViewCache != null && !photonViewCache.IsMine;
         if (hideForOthers)
         {
             DisableEmission();
@@ -1811,7 +1917,7 @@ public class EngineThrusterVFX : MonoBehaviour
         }
 
         float clamped = Mathf.Clamp01(speedNormalized);
-        float intensity = Mathf.Lerp(isAstronaut ? 0.28f : 0.18f, 1f, clamped);
+        float intensity = Mathf.Lerp(isAstronaut ? (isEscapePod ? 0.36f : 0.28f) : 0.18f, 1f, clamped);
 
         if (trailRenderers == null)
             return;
@@ -1826,21 +1932,30 @@ public class EngineThrusterVFX : MonoBehaviour
 
             if (isAstronaut)
             {
-                trailRenderer.time = Mathf.Lerp(0.12f, 0.28f, intensity);
-                trailRenderer.widthMultiplier = Mathf.Lerp(0.015f, 0.055f, intensity);
-                trailRenderer.emitting = clamped > 0.08f;
+                if (isEscapePod)
+                {
+                    trailRenderer.time = Mathf.Lerp(0.22f, 0.44f, intensity);
+                    trailRenderer.widthMultiplier = Mathf.Lerp(0.04f, 0.12f, intensity);
+                    trailRenderer.emitting = clamped > 0.05f;
+                }
+                else
+                {
+                    trailRenderer.time = Mathf.Lerp(0.12f, 0.28f, intensity);
+                    trailRenderer.widthMultiplier = Mathf.Lerp(0.015f, 0.055f, intensity);
+                    trailRenderer.emitting = clamped > 0.08f;
+                }
             }
             else if (enemyTrailProfile != null)
             {
-                trailRenderer.time = Mathf.Lerp(enemyTrailProfile.MinTrailTime, enemyTrailProfile.MaxTrailTime, intensity);
+                trailRenderer.time = Mathf.Lerp(enemyTrailProfile.MinTrailTime, Mathf.Min(enemyTrailProfile.MaxTrailTime, 0.58f), intensity);
                 trailRenderer.widthMultiplier = Mathf.Lerp(enemyTrailProfile.MinTrailWidth, enemyTrailProfile.MaxTrailWidth, intensity);
                 trailRenderer.emitting = clamped > enemyTrailProfile.EmissionThreshold;
             }
             else
             {
-                float trailLengthMultiplier = fusionTrailEquipped ? 1.5f : 1f;
-                trailRenderer.time = Mathf.Lerp(0.22f, 0.82f, intensity) * trailLengthMultiplier;
-                trailRenderer.widthMultiplier = Mathf.Lerp(0.03f, 0.16f, intensity);
+                float maxTrailTime = fusionTrailEquipped ? 0.72f : 0.58f;
+                trailRenderer.time = Mathf.Lerp(0.18f, maxTrailTime, intensity);
+                trailRenderer.widthMultiplier = Mathf.Lerp(0.028f, 0.12f, intensity);
                 trailRenderer.emitting = clamped > 0.04f;
             }
         }
@@ -1903,11 +2018,16 @@ public class EngineThrusterVFX : MonoBehaviour
         }
     }
 
-    Material CreateSpritesMaterial()
+    static Material GetSpritesMaterial()
     {
+        if (sharedSpritesMaterial != null)
+            return sharedSpritesMaterial;
+
         Shader shader = Shader.Find("Sprites/Default");
-        Material material = new Material(shader);
-        material.name = "EngineThrusterVFXMaterial";
-        return material;
+        sharedSpritesMaterial = new Material(shader)
+        {
+            name = "EngineThrusterVFXMaterial"
+        };
+        return sharedSpritesMaterial;
     }
 }

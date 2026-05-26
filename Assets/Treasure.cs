@@ -52,7 +52,7 @@ public class Treasure : MonoBehaviourPun
             ? MovingSpaceObject.SpaceObjectType.Container
             : MovingSpaceObject.SpaceObjectType.Treasure;
         movingObject.Configure(stableId, objectType);
-        GameVisualTheme.RequestRuntimeRefresh();
+        GameVisualTheme.ApplyTreasureVisual(this);
     }
 
     void InitializeFromPhotonData()
@@ -74,6 +74,9 @@ public class Treasure : MonoBehaviourPun
 
         if (InventoryItemCatalog.IsContainerItem(itemId))
             return 0.78f;
+
+        if (itemId == InventoryItemCatalog.SpaceAnimalRemainsId)
+            return 0.82f;
 
         switch (InventoryItemCatalog.GetRarity(itemId))
         {

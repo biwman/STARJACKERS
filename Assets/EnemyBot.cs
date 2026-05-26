@@ -19,7 +19,10 @@ public enum EnemyBotKind
     PirateFighter,
     PirateFighterElite,
     PirateFighterAce,
-    PirateBase
+    SpaceManta,
+    PirateBase,
+    GravitySquid,
+    HunterLance
 }
 
 public sealed class RescueShipBeamVfx : MonoBehaviour
@@ -286,6 +289,611 @@ public sealed class RescueShipBeamVfx : MonoBehaviour
         };
         sharedMaterial.renderQueue = 3350;
         return sharedMaterial;
+    }
+}
+
+public sealed class GravitySquidTetherVfx : MonoBehaviour
+{
+    const int BeamPointCount = 24;
+    const float EffectZOffset = -0.085f;
+    const int SortingOrderOffset = 282;
+
+    static readonly Dictionary<int, GravitySquidTetherVfx> ActiveBySourceViewId = new Dictionary<int, GravitySquidTetherVfx>();
+    static Material sharedMaterial;
+
+    Transform source;
+    Transform target;
+    LineRenderer coreLine;
+    LineRenderer glowLine;
+    AudioSource audioSource;
+    int sourceViewId;
+    int sortingLayerId;
+    int sortingOrder = 2400;
+
+    public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId)
+    {
+        StopBeam(sourcePhotonViewId);
+
+        PhotonView sourceView = PhotonView.Find(sourcePhotonViewId);
+        PhotonView targetView = PhotonView.Find(targetPhotonViewId);
+        if (sourceView == null || targetView == null)
+            return;
+
+        GameObject effect = new GameObject("GravitySquidTetherVfx_" + sourcePhotonViewId);
+        GravitySquidTetherVfx vfx = effect.AddComponent<GravitySquidTetherVfx>();
+        vfx.Initialize(sourceView.transform, targetView.transform, sourcePhotonViewId);
+        ActiveBySourceViewId[sourcePhotonViewId] = vfx;
+    }
+
+    public static void StopBeam(int sourcePhotonViewId)
+    {
+        if (!ActiveBySourceViewId.TryGetValue(sourcePhotonViewId, out GravitySquidTetherVfx vfx))
+            return;
+
+        ActiveBySourceViewId.Remove(sourcePhotonViewId);
+        if (vfx != null)
+            Destroy(vfx.gameObject);
+    }
+
+    void Initialize(Transform sourceTransform, Transform targetTransform, int resolvedSourceViewId)
+    {
+        source = sourceTransform;
+        target = targetTransform;
+        sourceViewId = resolvedSourceViewId;
+
+        SpriteRenderer sourceRenderer = source != null ? source.GetComponentInChildren<SpriteRenderer>() : null;
+        if (sourceRenderer != null)
+        {
+            sortingLayerId = sourceRenderer.sortingLayerID;
+            sortingOrder = sourceRenderer.sortingOrder + SortingOrderOffset;
+        }
+
+        if (source != null)
+            gameObject.layer = source.gameObject.layer;
+
+        glowLine = CreateLine("GravitySquidTetherGlow", 0.42f, sortingOrder);
+        coreLine = CreateLine("GravitySquidTetherCore", 0.13f, sortingOrder + 1);
+        CreateAudioSource();
+    }
+
+    void Update()
+    {
+        if (source == null || target == null)
+        {
+            StopBeam(sourceViewId);
+            return;
+        }
+
+        UpdateBeam();
+        UpdateAudio();
+    }
+
+    void OnDestroy()
+    {
+        if (ActiveBySourceViewId.TryGetValue(sourceViewId, out GravitySquidTetherVfx active) && active == this)
+            ActiveBySourceViewId.Remove(sourceViewId);
+
+        if (audioSource != null)
+            audioSource.Stop();
+    }
+
+    void UpdateBeam()
+    {
+        Vector3 start = GetSourcePoint();
+        Vector3 end = GetTargetPoint(start);
+        Vector3 delta = end - start;
+        Vector3 direction = delta.sqrMagnitude > 0.0001f ? delta.normalized : source.up;
+        Vector3 perpendicular = Vector3.Cross(direction, Vector3.forward);
+        float distance = Mathf.Max(0.1f, delta.magnitude);
+        float pulse = Mathf.Sin(Time.time * 8.2f) * 0.5f + 0.5f;
+        float wave = Mathf.Lerp(0.04f, 0.16f, pulse) * Mathf.Clamp01(distance / 10f);
+
+        UpdateLine(glowLine, start, end, perpendicular, wave, pulse, false);
+        UpdateLine(coreLine, start, end, perpendicular, wave * 0.34f, pulse, true);
+    }
+
+    void UpdateLine(LineRenderer line, Vector3 start, Vector3 end, Vector3 perpendicular, float wave, float pulse, bool core)
+    {
+        if (line == null)
+            return;
+
+        line.enabled = true;
+        for (int i = 0; i < line.positionCount; i++)
+        {
+            float t = i / (float)(line.positionCount - 1);
+            Vector3 point = Vector3.Lerp(start, end, t);
+            float taper = Mathf.Sin(t * Mathf.PI);
+            float ripple = Mathf.Sin((t * Mathf.PI * 6f) - Time.time * 11f) * wave * taper;
+            float pull = Mathf.Sin((t * Mathf.PI * 15f) + Time.time * 6.5f) * wave * 0.2f * taper;
+            point += perpendicular * (ripple + pull);
+            point.z = source.position.z + EffectZOffset;
+            line.SetPosition(i, point);
+        }
+
+        float alpha = core ? Mathf.Lerp(0.84f, 1f, pulse) : Mathf.Lerp(0.32f, 0.66f, pulse);
+        line.colorGradient = core ? BuildCoreGradient(alpha) : BuildGlowGradient(alpha);
+        line.widthMultiplier = core
+            ? Mathf.Lerp(0.1f, 0.17f, pulse)
+            : Mathf.Lerp(0.27f, 0.48f, pulse);
+    }
+
+    Vector3 GetSourcePoint()
+    {
+        SpriteRenderer renderer = source != null ? source.GetComponentInChildren<SpriteRenderer>() : null;
+        if (renderer == null)
+            return source != null ? source.position : Vector3.zero;
+
+        Vector3 center = renderer.bounds.center;
+        Vector3 targetPosition = target != null ? target.position : center;
+        Vector3 towardTarget = targetPosition - center;
+        if (towardTarget.sqrMagnitude <= 0.0001f)
+            towardTarget = source.up;
+
+        return center + towardTarget.normalized * Mathf.Max(0.08f, renderer.bounds.extents.y * 0.18f);
+    }
+
+    Vector3 GetTargetPoint(Vector3 sourcePoint)
+    {
+        Collider2D collider = target != null ? target.GetComponent<Collider2D>() : null;
+        if (collider != null)
+            return collider.ClosestPoint(sourcePoint);
+
+        return target != null ? target.position : sourcePoint;
+    }
+
+    LineRenderer CreateLine(string objectName, float width, int order)
+    {
+        GameObject lineObject = new GameObject(objectName);
+        lineObject.transform.SetParent(transform, false);
+        if (source != null)
+            lineObject.layer = source.gameObject.layer;
+
+        LineRenderer line = lineObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.positionCount = BeamPointCount;
+        line.widthMultiplier = width;
+        line.numCapVertices = 14;
+        line.numCornerVertices = 12;
+        line.alignment = LineAlignment.View;
+        line.textureMode = LineTextureMode.Stretch;
+        line.material = GetMaterial();
+        line.sortingLayerID = sortingLayerId;
+        line.sortingOrder = order;
+        line.widthCurve = new AnimationCurve(
+            new Keyframe(0f, 0.18f),
+            new Keyframe(0.18f, 0.94f),
+            new Keyframe(0.72f, 0.82f),
+            new Keyframe(1f, 0.24f));
+        return line;
+    }
+
+    void CreateAudioSource()
+    {
+        audioSource = gameObject.AddComponent<AudioSource>();
+        audioSource.clip = AudioManager.Instance.GravitySquidTetherClip;
+        audioSource.loop = true;
+        audioSource.playOnAwake = false;
+        audioSource.volume = 0.7f;
+        audioSource.spatialBlend = 1f;
+        audioSource.rolloffMode = AudioRolloffMode.Linear;
+        audioSource.minDistance = 3.5f;
+        audioSource.maxDistance = 22f;
+
+        if (audioSource.clip != null)
+            audioSource.Play();
+    }
+
+    void UpdateAudio()
+    {
+        transform.position = source != null ? source.position : transform.position;
+        if (audioSource != null && audioSource.clip != null && !audioSource.isPlaying)
+            audioSource.Play();
+    }
+
+    static Gradient BuildCoreGradient(float alpha)
+    {
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(0.96f, 1f, 1f), 0f),
+                new GradientColorKey(new Color(0.16f, 0.95f, 1f), 0.48f),
+                new GradientColorKey(new Color(0.58f, 0.22f, 1f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(alpha, 0f),
+                new GradientAlphaKey(alpha * 0.92f, 0.55f),
+                new GradientAlphaKey(alpha * 0.38f, 1f)
+            });
+        return gradient;
+    }
+
+    static Gradient BuildGlowGradient(float alpha)
+    {
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(0.08f, 0.92f, 1f), 0f),
+                new GradientColorKey(new Color(0.32f, 0.34f, 1f), 0.5f),
+                new GradientColorKey(new Color(0.48f, 0.08f, 0.86f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(alpha * 0.78f, 0f),
+                new GradientAlphaKey(alpha * 0.58f, 0.52f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        return gradient;
+    }
+
+    static Material GetMaterial()
+    {
+        if (sharedMaterial != null)
+            return sharedMaterial;
+
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null)
+            shader = Shader.Find("Unlit/Color");
+
+        sharedMaterial = new Material(shader)
+        {
+            name = "GravitySquidTetherVfxMaterial",
+            color = Color.white
+        };
+        sharedMaterial.renderQueue = 3360;
+        return sharedMaterial;
+    }
+}
+
+public sealed class HunterLanceBeamVfx : MonoBehaviour
+{
+    const float EffectZOffset = -0.092f;
+    const int SortingOrder = 2385;
+    const float ShotGlowWidth = 0.96f;
+    const float ShotCoreWidth = 0.27f;
+    const float AimGlowWidth = 0.48f;
+    const float AimCoreWidth = 0.11f;
+
+    static Material sharedMaterial;
+
+    LineRenderer glowLine;
+    LineRenderer coreLine;
+    Vector3 origin;
+    Vector3 direction = Vector3.up;
+    float range = 12f;
+    float duration = 0.6f;
+    float startedAt;
+    bool isShot;
+
+    public static void SpawnAim(Vector2 start, Vector2 aimDirection, float beamRange, float warningDuration)
+    {
+        if (!RoomSettings.AreVisualEffectsEnabled())
+            return;
+
+        GameObject effect = new GameObject("HunterLanceAimVfx");
+        HunterLanceBeamVfx vfx = effect.AddComponent<HunterLanceBeamVfx>();
+        vfx.Initialize(start, aimDirection, beamRange, Mathf.Max(0.1f, warningDuration), false);
+    }
+
+    public static void SpawnShot(Vector2 start, Vector2 aimDirection, float beamRange)
+    {
+        if (!RoomSettings.AreVisualEffectsEnabled())
+            return;
+
+        GameObject effect = new GameObject("HunterLanceShotVfx");
+        HunterLanceBeamVfx vfx = effect.AddComponent<HunterLanceBeamVfx>();
+        vfx.Initialize(start, aimDirection, beamRange, 0.22f, true);
+    }
+
+    void Initialize(Vector2 start, Vector2 aimDirection, float beamRange, float effectDuration, bool shot)
+    {
+        origin = new Vector3(start.x, start.y, EffectZOffset);
+        direction = aimDirection.sqrMagnitude > 0.001f
+            ? new Vector3(aimDirection.x, aimDirection.y, 0f).normalized
+            : Vector3.up;
+        range = Mathf.Max(0.5f, beamRange);
+        duration = Mathf.Max(0.05f, effectDuration);
+        isShot = shot;
+        startedAt = Time.time;
+
+        transform.position = origin;
+        glowLine = CreateLine("HunterLanceGlow", shot ? ShotGlowWidth : AimGlowWidth, SortingOrder);
+        coreLine = CreateLine("HunterLanceCore", shot ? ShotCoreWidth : AimCoreWidth, SortingOrder + 1);
+        UpdateLines(0f);
+    }
+
+    void Update()
+    {
+        float t = Mathf.Clamp01((Time.time - startedAt) / duration);
+        UpdateLines(t);
+
+        if (t >= 1f)
+            Destroy(gameObject);
+    }
+
+    void UpdateLines(float t)
+    {
+        Vector3 start = origin;
+        Vector3 end = origin + direction * range;
+        float pulse = Mathf.Sin(Time.time * (isShot ? 52f : 18f)) * 0.5f + 0.5f;
+        float alpha = isShot
+            ? Mathf.Lerp(1f, 0f, t)
+            : Mathf.Lerp(0.28f, 0.76f, Mathf.PingPong(t * 2.4f, 1f)) * Mathf.Lerp(1f, 0.15f, Mathf.Max(0f, t - 0.72f) / 0.28f);
+
+        ApplyLine(glowLine, start, end, isShot ? BuildShotGlow(alpha, pulse) : BuildAimGlow(alpha, pulse), isShot ? ShotGlowWidth : Mathf.Lerp(0.32f, 0.56f, pulse));
+        ApplyLine(coreLine, start, end, isShot ? BuildShotCore(alpha, pulse) : BuildAimCore(alpha, pulse), isShot ? ShotCoreWidth : Mathf.Lerp(0.07f, 0.14f, pulse));
+    }
+
+    void ApplyLine(LineRenderer line, Vector3 start, Vector3 end, Gradient gradient, float width)
+    {
+        if (line == null)
+            return;
+
+        line.SetPosition(0, start);
+        line.SetPosition(1, end);
+        line.colorGradient = gradient;
+        line.widthMultiplier = width;
+    }
+
+    LineRenderer CreateLine(string lineName, float width, int order)
+    {
+        GameObject lineObject = new GameObject(lineName);
+        lineObject.transform.SetParent(transform, false);
+        LineRenderer line = lineObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.positionCount = 2;
+        line.widthMultiplier = width;
+        line.numCapVertices = 12;
+        line.alignment = LineAlignment.View;
+        line.textureMode = LineTextureMode.Stretch;
+        line.material = GetMaterial();
+        line.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        line.sortingOrder = order;
+        line.widthCurve = new AnimationCurve(
+            new Keyframe(0f, 0.15f),
+            new Keyframe(0.12f, 1f),
+            new Keyframe(0.88f, 1f),
+            new Keyframe(1f, 0.15f));
+        return line;
+    }
+
+    static Gradient BuildAimCore(float alpha, float pulse)
+    {
+        return BuildGradient(
+            new Color(0.68f, 0.95f, 1f),
+            new Color(0.08f, 0.72f, 1f),
+            new Color(0.04f, 0.28f, 0.9f),
+            alpha * Mathf.Lerp(0.74f, 1f, pulse));
+    }
+
+    static Gradient BuildAimGlow(float alpha, float pulse)
+    {
+        return BuildGradient(
+            new Color(0.08f, 0.58f, 1f),
+            new Color(0.12f, 0.24f, 1f),
+            new Color(0.52f, 0.08f, 1f),
+            alpha * Mathf.Lerp(0.35f, 0.58f, pulse));
+    }
+
+    static Gradient BuildShotCore(float alpha, float pulse)
+    {
+        return BuildGradient(
+            Color.white,
+            new Color(0.48f, 0.96f, 1f),
+            new Color(0.08f, 0.6f, 1f),
+            alpha * Mathf.Lerp(0.82f, 1f, pulse));
+    }
+
+    static Gradient BuildShotGlow(float alpha, float pulse)
+    {
+        return BuildGradient(
+            new Color(0.62f, 0.96f, 1f),
+            new Color(0.02f, 0.6f, 1f),
+            new Color(0.08f, 0.12f, 0.92f),
+            alpha * Mathf.Lerp(0.38f, 0.72f, pulse));
+    }
+
+    static Gradient BuildGradient(Color start, Color middle, Color end, float alpha)
+    {
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(start, 0f),
+                new GradientColorKey(middle, 0.46f),
+                new GradientColorKey(end, 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(alpha * 0.12f, 0f),
+                new GradientAlphaKey(alpha, 0.18f),
+                new GradientAlphaKey(alpha * 0.86f, 0.82f),
+                new GradientAlphaKey(alpha * 0.08f, 1f)
+            });
+        return gradient;
+    }
+
+    static Material GetMaterial()
+    {
+        if (sharedMaterial != null)
+            return sharedMaterial;
+
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null)
+            shader = Shader.Find("Unlit/Color");
+
+        sharedMaterial = new Material(shader)
+        {
+            name = "HunterLanceBeamVfxMaterial",
+            color = Color.white
+        };
+        sharedMaterial.renderQueue = 3370;
+        return sharedMaterial;
+    }
+}
+
+public sealed class SpaceAnimalDeathVfx : MonoBehaviour
+{
+    const float FramesPerSecond = 18f;
+    const float FallbackDuration = 0.45f;
+    const float EffectZOffset = -0.06f;
+
+    SpriteRenderer spriteRenderer;
+    Sprite[] frames = System.Array.Empty<Sprite>();
+    float targetSize = 2.5f;
+    float frameCursor;
+    float startedAt;
+
+    public static void Play(EnemyBotKind kind, Vector3 position, float rotationZ, float visualTargetSize)
+    {
+        GameObject effect = new GameObject("SpaceAnimalDeathVfx_" + kind);
+        effect.transform.position = new Vector3(position.x, position.y, position.z + EffectZOffset);
+        effect.transform.rotation = Quaternion.Euler(0f, 0f, rotationZ);
+        SpaceAnimalDeathVfx vfx = effect.AddComponent<SpaceAnimalDeathVfx>();
+        vfx.Initialize(kind, visualTargetSize);
+    }
+
+    void Initialize(EnemyBotKind kind, float visualTargetSize)
+    {
+        targetSize = Mathf.Max(0.6f, visualTargetSize);
+        startedAt = Time.time;
+        frames = LoadFrames(ResolveResourcePath(kind));
+
+        spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
+        spriteRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        spriteRenderer.sortingOrder = GameVisualTheme.EnemySortingOrder + 4;
+        spriteRenderer.color = Color.white;
+
+        if (frames.Length > 0)
+        {
+            spriteRenderer.sprite = frames[0];
+            FitRendererToTargetSize(spriteRenderer, targetSize * 1.12f);
+        }
+
+        AudioManager.Instance.PlayExplosionAt(transform.position);
+    }
+
+    void Update()
+    {
+        if (frames == null || frames.Length == 0)
+        {
+            if (Time.time - startedAt >= FallbackDuration)
+                Destroy(gameObject);
+            return;
+        }
+
+        frameCursor += Time.deltaTime * FramesPerSecond;
+        int frameIndex = Mathf.FloorToInt(frameCursor);
+        if (frameIndex >= frames.Length)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        spriteRenderer.sprite = frames[frameIndex];
+        FitRendererToTargetSize(spriteRenderer, targetSize * Mathf.Lerp(1.12f, 1.34f, frameIndex / Mathf.Max(1f, frames.Length - 1f)));
+    }
+
+    static string ResolveResourcePath(EnemyBotKind kind)
+    {
+        return kind == EnemyBotKind.GravitySquid
+            ? "Enemies/GravitySquid/Death"
+            : "Enemies/SpaceManta/Death";
+    }
+
+    static Sprite[] LoadFrames(string resourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(resourcePath))
+            return System.Array.Empty<Sprite>();
+
+        List<Sprite> result = new List<Sprite>();
+        Sprite[] sprites = Resources.LoadAll<Sprite>(resourcePath);
+        if (sprites != null)
+        {
+            for (int i = 0; i < sprites.Length; i++)
+            {
+                if (sprites[i] != null)
+                    result.Add(sprites[i]);
+            }
+        }
+
+        if (result.Count == 0)
+        {
+            Texture2D[] textures = Resources.LoadAll<Texture2D>(resourcePath);
+            if (textures != null)
+            {
+                for (int i = 0; i < textures.Length; i++)
+                {
+                    Sprite sprite = CreateSpriteFromTexture(textures[i]);
+                    if (sprite != null)
+                        result.Add(sprite);
+                }
+            }
+        }
+
+        result.Sort(CompareSpritesForAnimation);
+        return result.ToArray();
+    }
+
+    static Sprite CreateSpriteFromTexture(Texture2D texture)
+    {
+        if (texture == null)
+            return null;
+
+        float pixelsPerUnit = Mathf.Max(100f, Mathf.Max(texture.width, texture.height));
+        Sprite sprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            pixelsPerUnit);
+        sprite.name = texture.name;
+        return sprite;
+    }
+
+    static int CompareSpritesForAnimation(Sprite a, Sprite b)
+    {
+        int indexA = ExtractTrailingNumber(a != null ? a.name : string.Empty);
+        int indexB = ExtractTrailingNumber(b != null ? b.name : string.Empty);
+        if (indexA >= 0 && indexB >= 0 && indexA != indexB)
+            return indexA.CompareTo(indexB);
+
+        return string.CompareOrdinal(a != null ? a.name : string.Empty, b != null ? b.name : string.Empty);
+    }
+
+    static int ExtractTrailingNumber(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return -1;
+
+        int endIndex = value.Length - 1;
+        while (endIndex >= 0 && !char.IsDigit(value[endIndex]))
+            endIndex--;
+
+        if (endIndex < 0)
+            return -1;
+
+        int startIndex = endIndex;
+        while (startIndex >= 0 && char.IsDigit(value[startIndex]))
+            startIndex--;
+
+        string numberPart = value.Substring(startIndex + 1, endIndex - startIndex);
+        return int.TryParse(numberPart, out int number) ? number : -1;
+    }
+
+    static void FitRendererToTargetSize(SpriteRenderer renderer, float size)
+    {
+        if (renderer == null || renderer.sprite == null)
+            return;
+
+        Bounds spriteBounds = renderer.sprite.bounds;
+        float largest = Mathf.Max(spriteBounds.size.x, spriteBounds.size.y);
+        if (largest <= 0.0001f)
+            return;
+
+        float scale = size / largest;
+        renderer.transform.localScale = new Vector3(scale, scale, 1f);
     }
 }
 
@@ -609,7 +1217,10 @@ public enum EnemyMovementModel
     RadarShip,
     RescueShip,
     PirateFighter,
-    PirateBase
+    PirateBase,
+    SpaceManta,
+    GravitySquid,
+    HunterLance
 }
 
 public enum EnemySpawnPattern
@@ -895,7 +1506,9 @@ public class EnemyBotDefinition
     public string DisplayName;
     public string InstantiationMarker;
     public string VisualResourcePath;
+    public string AnimationResourcePath;
     public string EditorAssetPath;
+    public float AnimationFramesPerSecond;
     public float TargetSize;
     public float PhysicsMass;
     public float LinearDamping;
@@ -1453,6 +2066,87 @@ public static class EnemyBotCatalog
         },
         new EnemyBotDefinition
         {
+            Kind = EnemyBotKind.HunterLance,
+            Id = "hunter_lance",
+            DisplayName = "Hunter Lance",
+            InstantiationMarker = "enemy_bot_hunter_lance",
+            VisualResourcePath = "Enemies/HunterLance/hunter_lance_resource",
+            EditorAssetPath = "Assets/Resources/Enemies/HunterLance/hunter_lance_resource.png",
+            TargetSize = 2.2f,
+            PhysicsMass = 12.5f,
+            LinearDamping = 0.1f,
+            AngularDamping = 0.26f,
+            DefaultHp = 85,
+            DefaultShield = 115,
+            MaxHp = 250,
+            MaxShield = 250,
+            DefaultSpeedMultiplier = 1f,
+            DefaultEnabled = false,
+            DefaultCount = 1,
+            DefaultSpawnSecond = 0,
+            Movement = new EnemyMovementProfile
+            {
+                Model = EnemyMovementModel.HunterLance,
+                SpawnPattern = EnemySpawnPattern.SafePerimeter,
+                MoveSpeed = 1.28f,
+                TurnResponsiveness = 295f,
+                DetectionRadius = 14.5f,
+                DisengageRadius = 20f,
+                OrbitDistance = 6.8f,
+                PreferredDistance = 9.2f,
+                ShootDistance = 13.8f,
+                RepathInterval = 0.18f,
+                TargetRefreshInterval = 0.22f,
+                IdleDriftTurnSpeed = 19f,
+                OrbitAngularSpeed = 0.58f
+            },
+            Weapon = new EnemyWeaponProfile
+            {
+                AmmoCount = 0,
+                ReloadDuration = 0f,
+                FireRate = 4.6f,
+                Damage = 36,
+                BulletScaleMultiplier = 0f,
+                BulletColor = new Color(0.36f, 0.9f, 1f, 1f),
+                BulletSpeed = 0f,
+                MuzzleOffsetDistance = 0f,
+                InfiniteAmmo = true,
+                RotateTowardAim = false,
+                Range = 13.8f,
+                ShotSoundId = string.Empty
+            },
+            Wreck = new EnemyWreckProfile
+            {
+                Mass = 12f,
+                LinearDamping = 0.78f,
+                AngularDamping = 0.98f,
+                DriftSpeed = 0.08f,
+                AngularVelocityRange = 1.8f,
+                RewardItemId = InventoryItemCatalog.HunterLanceCoreId,
+                DestroyWhenEmpty = false,
+                BaseColor = new Color(0.18f, 0.2f, 0.24f, 0.98f),
+                VisualResourcePath = "Enemies/HunterLance/hunter_lance_wreck_resource",
+                EditorAssetPath = "Assets/Resources/Enemies/HunterLance/hunter_lance_wreck_resource.png"
+            },
+            Trails = new EnemyTrailProfile
+            {
+                RootOffsetFactors = new Vector2(0f, -0.56f),
+                RootRotationZ = 180f,
+                TrailOffsetFactors = new[]
+                {
+                    new Vector2(-0.24f, 0.04f),
+                    new Vector2(0.24f, 0.04f)
+                },
+                MinTrailTime = 0.34f,
+                MaxTrailTime = 1.08f,
+                MinTrailWidth = 0.045f,
+                MaxTrailWidth = 0.18f,
+                EmissionThreshold = 0.02f,
+                VisualStyle = EnemyTrailVisualStyle.BlueTwin
+            }
+        },
+        new EnemyBotDefinition
+        {
             Kind = EnemyBotKind.PirateFighter,
             Id = "pirate_fighter",
             DisplayName = "Pirate Fighter",
@@ -1689,6 +2383,170 @@ public static class EnemyBotCatalog
                 MaxTrailWidth = 0.15f,
                 EmissionThreshold = 0.025f,
                 VisualStyle = EnemyTrailVisualStyle.OrangeRedTwin
+            }
+        },
+        new EnemyBotDefinition
+        {
+            Kind = EnemyBotKind.SpaceManta,
+            Id = "space_manta",
+            DisplayName = "Space Manta",
+            InstantiationMarker = "enemy_bot_space_manta",
+            VisualResourcePath = "Enemies/SpaceManta/space_manta_flap_00",
+            AnimationResourcePath = "Enemies/SpaceManta",
+            EditorAssetPath = "Assets/Resources/Enemies/SpaceManta/space_manta_flap_00.png",
+            AnimationFramesPerSecond = 7f,
+            TargetSize = 2.42f,
+            PhysicsMass = 9.2f,
+            LinearDamping = 0.09f,
+            AngularDamping = 0.2f,
+            DefaultHp = 100,
+            DefaultShield = 0,
+            DefaultSpeedMultiplier = 1f,
+            DefaultEnabled = false,
+            DefaultCount = 1,
+            DefaultSpawnSecond = 0,
+            Movement = new EnemyMovementProfile
+            {
+                Model = EnemyMovementModel.SpaceManta,
+                SpawnPattern = EnemySpawnPattern.SafePerimeter,
+                MoveSpeed = 1.32f,
+                TurnResponsiveness = 330f,
+                DetectionRadius = 13.5f,
+                DisengageRadius = 20f,
+                OrbitDistance = 3.3f,
+                PreferredDistance = 5.8f,
+                ShootDistance = 8.8f,
+                RepathInterval = 0.22f,
+                TargetRefreshInterval = 0.24f,
+                IdleDriftTurnSpeed = 22f,
+                OrbitAngularSpeed = 0.86f
+            },
+            Weapon = new EnemyWeaponProfile
+            {
+                AmmoCount = 0,
+                ReloadDuration = 0f,
+                FireRate = 3.4f,
+                Damage = 40,
+                BulletScaleMultiplier = 0f,
+                BulletColor = new Color(0.3f, 0.88f, 1f, 1f),
+                BulletSpeed = 0f,
+                MuzzleOffsetDistance = 0f,
+                InfiniteAmmo = true,
+                RotateTowardAim = false,
+                Range = 8.8f,
+                ShotSoundId = string.Empty
+            },
+            Wreck = new EnemyWreckProfile
+            {
+                Mass = 7.5f,
+                LinearDamping = 0.74f,
+                AngularDamping = 0.94f,
+                DriftSpeed = 0.08f,
+                AngularVelocityRange = 2.4f,
+                RewardItemId = InventoryItemCatalog.SpaceAnimalRemainsId,
+                DestroyWhenEmpty = true,
+                BaseColor = new Color(0.26f, 0.28f, 0.36f, 0.96f),
+                VisualResourcePath = "Enemies/SpaceManta/space_manta_wreck_resource",
+                EditorAssetPath = "Assets/Resources/Enemies/SpaceManta/space_manta_wreck_resource.png"
+            },
+            Trails = new EnemyTrailProfile
+            {
+                RootOffsetFactors = new Vector2(0f, -0.34f),
+                RootRotationZ = 180f,
+                TrailOffsetFactors = new[]
+                {
+                    new Vector2(-0.34f, 0.04f),
+                    new Vector2(0.34f, 0.04f)
+                },
+                MinTrailTime = 0.3f,
+                MaxTrailTime = 0.96f,
+                MinTrailWidth = 0.04f,
+                MaxTrailWidth = 0.18f,
+                EmissionThreshold = 0.035f,
+                VisualStyle = EnemyTrailVisualStyle.BlueTwin
+            }
+        },
+        new EnemyBotDefinition
+        {
+            Kind = EnemyBotKind.GravitySquid,
+            Id = "gravity_squid",
+            DisplayName = "Gravity Squid",
+            InstantiationMarker = "enemy_bot_gravity_squid",
+            VisualResourcePath = "Enemies/GravitySquid/gravity_squid_flap_00",
+            AnimationResourcePath = "Enemies/GravitySquid",
+            EditorAssetPath = "Assets/Resources/Enemies/GravitySquid/gravity_squid_flap_00.png",
+            AnimationFramesPerSecond = 6.3f,
+            TargetSize = 2.68f,
+            PhysicsMass = 10.5f,
+            LinearDamping = 0.12f,
+            AngularDamping = 0.24f,
+            DefaultHp = 80,
+            DefaultShield = 70,
+            MaxHp = 200,
+            MaxShield = 200,
+            DefaultSpeedMultiplier = 1f,
+            DefaultEnabled = false,
+            DefaultCount = 1,
+            DefaultSpawnSecond = 0,
+            Movement = new EnemyMovementProfile
+            {
+                Model = EnemyMovementModel.GravitySquid,
+                SpawnPattern = EnemySpawnPattern.SafePerimeter,
+                MoveSpeed = 1.15f,
+                TurnResponsiveness = 260f,
+                DetectionRadius = 13.2f,
+                DisengageRadius = 21f,
+                OrbitDistance = 5.1f,
+                PreferredDistance = 8.2f,
+                ShootDistance = 10.6f,
+                RepathInterval = 0.22f,
+                TargetRefreshInterval = 0.24f,
+                IdleDriftTurnSpeed = 18f,
+                OrbitAngularSpeed = 0.74f
+            },
+            Weapon = new EnemyWeaponProfile
+            {
+                AmmoCount = 0,
+                ReloadDuration = 0f,
+                FireRate = 7f,
+                Damage = 8,
+                BulletScaleMultiplier = 0f,
+                BulletColor = new Color(0.12f, 0.96f, 1f, 1f),
+                BulletSpeed = 0f,
+                MuzzleOffsetDistance = 0f,
+                InfiniteAmmo = true,
+                RotateTowardAim = false,
+                Range = 10.6f,
+                ShotSoundId = string.Empty
+            },
+            Wreck = new EnemyWreckProfile
+            {
+                Mass = 8.6f,
+                LinearDamping = 0.82f,
+                AngularDamping = 0.96f,
+                DriftSpeed = 0.06f,
+                AngularVelocityRange = 2.1f,
+                RewardItemId = InventoryItemCatalog.SpaceAnimalRemainsId,
+                DestroyWhenEmpty = true,
+                BaseColor = new Color(0.16f, 0.12f, 0.28f, 0.96f),
+                VisualResourcePath = "Enemies/GravitySquid/gravity_squid_wreck_resource",
+                EditorAssetPath = "Assets/Resources/Enemies/GravitySquid/gravity_squid_wreck_resource.png"
+            },
+            Trails = new EnemyTrailProfile
+            {
+                RootOffsetFactors = new Vector2(0f, -0.28f),
+                RootRotationZ = 180f,
+                TrailOffsetFactors = new[]
+                {
+                    new Vector2(-0.22f, -0.02f),
+                    new Vector2(0.22f, -0.02f)
+                },
+                MinTrailTime = 0.26f,
+                MaxTrailTime = 0.78f,
+                MinTrailWidth = 0.035f,
+                MaxTrailWidth = 0.14f,
+                EmissionThreshold = 0.03f,
+                VisualStyle = EnemyTrailVisualStyle.PurpleLarge
             }
         },
         new EnemyBotDefinition
@@ -1970,6 +2828,138 @@ public static class EnemyBotCatalog
     }
 }
 
+public sealed class EnemySpriteFrameAnimator : MonoBehaviour
+{
+    SpriteRenderer targetRenderer;
+    Sprite[] frames = System.Array.Empty<Sprite>();
+    string loadedResourcePath;
+    float framesPerSecond = 7f;
+    float speedMultiplier = 1f;
+    float frameCursor;
+
+    public void Configure(SpriteRenderer renderer, string resourcePath, float fps)
+    {
+        targetRenderer = renderer;
+        framesPerSecond = Mathf.Max(0.1f, fps);
+
+        if (!string.Equals(loadedResourcePath, resourcePath, System.StringComparison.Ordinal))
+        {
+            loadedResourcePath = resourcePath;
+            frames = LoadFrames(resourcePath);
+            frameCursor = frames.Length > 0 ? Random.Range(0f, frames.Length) : 0f;
+        }
+    }
+
+    public void SetSpeedMultiplier(float value)
+    {
+        speedMultiplier = Mathf.Clamp(value, 0.15f, 3.5f);
+    }
+
+    void LateUpdate()
+    {
+        if (targetRenderer == null || frames == null || frames.Length == 0)
+            return;
+
+        frameCursor += Time.deltaTime * framesPerSecond * speedMultiplier;
+        int frameIndex = Mathf.FloorToInt(frameCursor) % frames.Length;
+        if (frameIndex < 0)
+            frameIndex += frames.Length;
+
+        targetRenderer.sprite = frames[frameIndex];
+    }
+
+    static Sprite[] LoadFrames(string resourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(resourcePath))
+            return System.Array.Empty<Sprite>();
+
+        Sprite[] allSprites = Resources.LoadAll<Sprite>(resourcePath);
+        System.Collections.Generic.List<Sprite> candidates = new System.Collections.Generic.List<Sprite>();
+        System.Collections.Generic.List<Sprite> flapCandidates = new System.Collections.Generic.List<Sprite>();
+        if (allSprites != null)
+        {
+            for (int i = 0; i < allSprites.Length; i++)
+                AddAnimationCandidate(allSprites[i], candidates, flapCandidates);
+        }
+
+        if (candidates.Count == 0)
+        {
+            Texture2D[] textures = Resources.LoadAll<Texture2D>(resourcePath);
+            if (textures != null)
+            {
+                for (int i = 0; i < textures.Length; i++)
+                {
+                    Sprite sprite = CreateSpriteFromTexture(textures[i]);
+                    AddAnimationCandidate(sprite, candidates, flapCandidates);
+                }
+            }
+        }
+
+        System.Collections.Generic.List<Sprite> selected = flapCandidates.Count > 0 ? flapCandidates : candidates;
+        selected.Sort(CompareSpritesForAnimation);
+        return selected.ToArray();
+    }
+
+    static void AddAnimationCandidate(Sprite sprite, System.Collections.Generic.List<Sprite> candidates, System.Collections.Generic.List<Sprite> flapCandidates)
+    {
+        if (sprite == null)
+            return;
+
+        string name = sprite.name ?? string.Empty;
+        if (name.IndexOf("wreck", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            return;
+
+        candidates.Add(sprite);
+        if (name.IndexOf("flap", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            flapCandidates.Add(sprite);
+    }
+
+    static Sprite CreateSpriteFromTexture(Texture2D texture)
+    {
+        if (texture == null)
+            return null;
+
+        float pixelsPerUnit = Mathf.Max(100f, Mathf.Max(texture.width, texture.height));
+        Sprite sprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            pixelsPerUnit);
+        sprite.name = texture.name;
+        return sprite;
+    }
+
+    static int CompareSpritesForAnimation(Sprite a, Sprite b)
+    {
+        int indexA = ExtractTrailingNumber(a != null ? a.name : string.Empty);
+        int indexB = ExtractTrailingNumber(b != null ? b.name : string.Empty);
+        if (indexA >= 0 && indexB >= 0 && indexA != indexB)
+            return indexA.CompareTo(indexB);
+
+        return string.CompareOrdinal(a != null ? a.name : string.Empty, b != null ? b.name : string.Empty);
+    }
+
+    static int ExtractTrailingNumber(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return -1;
+
+        int endIndex = value.Length - 1;
+        while (endIndex >= 0 && !char.IsDigit(value[endIndex]))
+            endIndex--;
+
+        if (endIndex < 0)
+            return -1;
+
+        int startIndex = endIndex;
+        while (startIndex >= 0 && char.IsDigit(value[startIndex]))
+            startIndex--;
+
+        string numberPart = value.Substring(startIndex + 1, endIndex - startIndex);
+        return int.TryParse(numberPart, out int number) ? number : -1;
+    }
+}
+
 [RequireComponent(typeof(PhotonView))]
 [RequireComponent(typeof(Rigidbody2D))]
 public class EnemyBot : MonoBehaviourPun
@@ -2052,6 +3042,12 @@ public class EnemyBot : MonoBehaviourPun
                candidate == EnemyBotKind.PirateFighterAce;
     }
 
+    public static bool IsSpaceAnimalKind(EnemyBotKind candidate)
+    {
+        return candidate == EnemyBotKind.SpaceManta ||
+               candidate == EnemyBotKind.GravitySquid;
+    }
+
     public static bool IsBotObject(GameObject target)
     {
         return target != null && target.GetComponent<EnemyBot>() != null;
@@ -2101,6 +3097,7 @@ public class EnemyBot : MonoBehaviourPun
         DisablePlayerOnlySystems();
         EnsureBehavior();
         ApplyBotVisuals();
+        EnsureAnimatedVisual();
         PlaySpawnTeleportVfx();
         ConfigurePhysics();
         ConfigureColliderToVisual();
@@ -2194,7 +3191,7 @@ public class EnemyBot : MonoBehaviourPun
 
     void ConfigureColliderToVisual()
     {
-        if (kind != EnemyBotKind.Mothership && kind != EnemyBotKind.PirateBase)
+        if (kind != EnemyBotKind.Mothership && kind != EnemyBotKind.PirateBase && kind != EnemyBotKind.SpaceManta && kind != EnemyBotKind.GravitySquid && kind != EnemyBotKind.HunterLance)
             return;
 
         if (cachedRenderer == null)
@@ -2207,9 +3204,15 @@ public class EnemyBot : MonoBehaviourPun
         BoxCollider2D boxCollider = GetComponent<BoxCollider2D>();
         if (boxCollider != null)
         {
-            Vector2 boxScale = kind == EnemyBotKind.PirateBase
-                ? new Vector2(bounds.size.x * 0.78f, bounds.size.y * 0.7f)
-                : new Vector2(bounds.size.x * 0.82f, bounds.size.y * 0.72f);
+            Vector2 boxScale = kind == EnemyBotKind.SpaceManta
+                ? new Vector2(bounds.size.x * 0.68f, bounds.size.y * 0.46f)
+                : kind == EnemyBotKind.GravitySquid
+                    ? new Vector2(bounds.size.x * 0.56f, bounds.size.y * 0.68f)
+                : kind == EnemyBotKind.HunterLance
+                    ? new Vector2(bounds.size.x * 0.48f, bounds.size.y * 0.84f)
+                : kind == EnemyBotKind.PirateBase
+                    ? new Vector2(bounds.size.x * 0.78f, bounds.size.y * 0.7f)
+                    : new Vector2(bounds.size.x * 0.82f, bounds.size.y * 0.72f);
             SetWorldBoxSize(boxCollider, boxScale);
         }
 
@@ -2268,6 +3271,15 @@ public class EnemyBot : MonoBehaviourPun
                     case EnemyMovementModel.PirateBase:
                         behavior = gameObject.AddComponent<EnemyPirateBaseBehavior>();
                         break;
+                    case EnemyMovementModel.SpaceManta:
+                        behavior = gameObject.AddComponent<EnemySpaceMantaBehavior>();
+                        break;
+                    case EnemyMovementModel.GravitySquid:
+                        behavior = gameObject.AddComponent<EnemyGravitySquidBehavior>();
+                        break;
+                    case EnemyMovementModel.HunterLance:
+                        behavior = gameObject.AddComponent<EnemyHunterLanceBehavior>();
+                        break;
                     case EnemyMovementModel.Mothership:
                         behavior = gameObject.AddComponent<EnemyMothershipBehavior>();
                         break;
@@ -2302,6 +3314,9 @@ public class EnemyBot : MonoBehaviourPun
             EnemyMovementModel.RescueShip => existingBehavior is EnemyRescueShipBehavior,
             EnemyMovementModel.PirateFighter => existingBehavior is EnemyPirateFighterBehavior,
             EnemyMovementModel.PirateBase => existingBehavior is EnemyPirateBaseBehavior,
+            EnemyMovementModel.SpaceManta => existingBehavior is EnemySpaceMantaBehavior,
+            EnemyMovementModel.GravitySquid => existingBehavior is EnemyGravitySquidBehavior,
+            EnemyMovementModel.HunterLance => existingBehavior is EnemyHunterLanceBehavior,
             EnemyMovementModel.Mothership => existingBehavior is EnemyMothershipBehavior,
             EnemyMovementModel.NeutralFighter => existingBehavior is EnemyNeutralFighterBehavior,
             _ => existingBehavior is EnemyDroneBehavior
@@ -2349,6 +3364,32 @@ public class EnemyBot : MonoBehaviourPun
         FitRendererToTargetSize(renderer, VisualTargetSize);
     }
 
+    void EnsureAnimatedVisual()
+    {
+        if (Definition == null || string.IsNullOrWhiteSpace(Definition.AnimationResourcePath))
+            return;
+
+        if (cachedRenderer == null)
+            cachedRenderer = GetComponent<SpriteRenderer>();
+
+        if (cachedRenderer == null)
+            return;
+
+        EnemySpriteFrameAnimator animator = GetComponent<EnemySpriteFrameAnimator>();
+        if (animator == null)
+            animator = gameObject.AddComponent<EnemySpriteFrameAnimator>();
+
+        animator.Configure(
+            cachedRenderer,
+            Definition.AnimationResourcePath,
+            Definition.AnimationFramesPerSecond > 0f ? Definition.AnimationFramesPerSecond : 7f);
+    }
+
+    bool UsesAnimatedVisual()
+    {
+        return Definition != null && !string.IsNullOrWhiteSpace(Definition.AnimationResourcePath);
+    }
+
     void EnsureStableVisuals()
     {
         if (health != null && health.IsWreck)
@@ -2360,9 +3401,16 @@ public class EnemyBot : MonoBehaviourPun
         if (cachedRenderer == null)
             return;
 
-        Sprite desiredSprite = GetVisualSprite();
-        if (desiredSprite != null && cachedRenderer.sprite != desiredSprite)
-            cachedRenderer.sprite = desiredSprite;
+        if (!UsesAnimatedVisual())
+        {
+            Sprite desiredSprite = GetVisualSprite();
+            if (desiredSprite != null && cachedRenderer.sprite != desiredSprite)
+                cachedRenderer.sprite = desiredSprite;
+        }
+        else if (cachedRenderer.sprite == null)
+        {
+            cachedRenderer.sprite = GetVisualSprite();
+        }
 
         cachedRenderer.color = Color.white;
         cachedRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
@@ -2783,6 +3831,15 @@ public class EnemyBot : MonoBehaviourPun
         if (kind == EnemyBotKind.PirateBase && behavior is EnemyPirateBaseBehavior pirateBaseBehavior)
             pirateBaseBehavior.NotifyDamageSource(attackerViewID);
 
+        if (kind == EnemyBotKind.SpaceManta && behavior is EnemySpaceMantaBehavior spaceMantaBehavior)
+            spaceMantaBehavior.NotifyDamageSource(attackerViewID);
+
+        if (kind == EnemyBotKind.GravitySquid && behavior is EnemyGravitySquidBehavior gravitySquidBehavior)
+            gravitySquidBehavior.NotifyDamageSource(attackerViewID);
+
+        if (kind == EnemyBotKind.HunterLance && behavior is EnemyHunterLanceBehavior hunterLanceBehavior)
+            hunterLanceBehavior.NotifyDamageSource(attackerViewID);
+
         if (kind != EnemyBotKind.SpaceTruck)
             return;
 
@@ -2863,6 +3920,54 @@ public class EnemyBot : MonoBehaviourPun
     public void PlayRescueShipIncomingRpc(float x, float y, float z)
     {
         AudioManager.Instance.PlayRescueShipIncomingAt(new Vector3(x, y, z));
+    }
+
+    [PunRPC]
+    public void PlaySpaceMantaWarningRpc(float x, float y, float z)
+    {
+        AudioManager.Instance.PlaySpaceMantaWarningAt(new Vector3(x, y, z));
+    }
+
+    [PunRPC]
+    public void PlayGravitySquidWarningRpc(float x, float y, float z)
+    {
+        AudioManager.Instance.PlayGravitySquidWarningAt(new Vector3(x, y, z));
+    }
+
+    [PunRPC]
+    public void PlayHunterLanceLockRpc(float x, float y, float z)
+    {
+        AudioManager.Instance.PlayHunterLanceLockAt(new Vector3(x, y, z));
+    }
+
+    [PunRPC]
+    public void PlayHunterLanceFireRpc(float x, float y, float z)
+    {
+        AudioManager.Instance.PlayHunterLanceFireAt(new Vector3(x, y, z));
+    }
+
+    [PunRPC]
+    public void SpawnHunterLanceAimRpc(float originX, float originY, float directionX, float directionY, float range, float duration)
+    {
+        HunterLanceBeamVfx.SpawnAim(new Vector2(originX, originY), new Vector2(directionX, directionY), range, duration);
+    }
+
+    [PunRPC]
+    public void SpawnHunterLanceShotRpc(float originX, float originY, float directionX, float directionY, float range)
+    {
+        HunterLanceBeamVfx.SpawnShot(new Vector2(originX, originY), new Vector2(directionX, directionY), range);
+    }
+
+    [PunRPC]
+    public void StartGravitySquidTetherRpc(int targetViewId)
+    {
+        GravitySquidTetherVfx.StartBeam(photonView != null ? photonView.ViewID : 0, targetViewId);
+    }
+
+    [PunRPC]
+    public void StopGravitySquidTetherRpc()
+    {
+        GravitySquidTetherVfx.StopBeam(photonView != null ? photonView.ViewID : 0);
     }
 
     [PunRPC]
@@ -4588,6 +5693,1509 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
             return false;
 
         return health.CurrentHP <= Mathf.CeilToInt(health.maxHP * CriticalHpFraction);
+    }
+
+    void RotateNoseToward(Vector2 direction)
+    {
+        if (direction.sqrMagnitude <= 0.001f)
+            return;
+
+        float targetAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
+        float nextAngle = Mathf.MoveTowardsAngle(rb.rotation, targetAngle, movement.TurnResponsiveness * Time.fixedDeltaTime);
+        rb.MoveRotation(nextAngle);
+    }
+}
+
+[RequireComponent(typeof(EnemyBot))]
+public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
+{
+    enum MantaMode
+    {
+        Patrol,
+        Stalk,
+        ChargeWindup,
+        Dash,
+        Recovery
+    }
+
+    const float ChargeWindupDuration = 0.82f;
+    const float DashDuration = 0.58f;
+    const float RecoveryDuration = 0.68f;
+    const float DashSpeedMultiplier = 5.9f;
+    const float DashHitRadiusFactor = 0.42f;
+    const float AvoidanceScanRadius = 1.9f;
+    const float AvoidanceWeight = 0.46f;
+    const float MapEdgeMargin = 2.4f;
+    const float PatrolTurnIntervalMin = 1.2f;
+    const float PatrolTurnIntervalMax = 2.4f;
+
+    readonly HashSet<int> damagedThisDash = new HashSet<int>();
+
+    Rigidbody2D rb;
+    PhotonView view;
+    PlayerHealth health;
+    EnemyMovementProfile movement;
+    EnemyWeaponProfile weapon;
+    EnemySpriteFrameAnimator frameAnimator;
+    Transform currentTarget;
+    Vector2 patrolDirection = Vector2.up;
+    Vector2 chargeDirection = Vector2.up;
+    float nextTargetRefreshTime;
+    float nextRepathTime;
+    float nextPatrolTurnTime;
+    float nextChargeTime;
+    float modeStartedAt;
+    float orbitDirection = 1f;
+    MantaMode mode = MantaMode.Patrol;
+
+    public override void Initialize(EnemyBot owner)
+    {
+        base.Initialize(owner);
+        rb = owner.GetComponent<Rigidbody2D>();
+        view = owner.GetComponent<PhotonView>();
+        health = owner.GetComponent<PlayerHealth>();
+        movement = owner.Definition != null ? owner.Definition.Movement : null;
+        weapon = owner.Definition != null ? owner.Definition.Weapon : null;
+        frameAnimator = owner.GetComponent<EnemySpriteFrameAnimator>();
+
+        int seed = view != null ? view.ViewID : Random.Range(1, 9999);
+        float angle = Mathf.Abs(seed * 0.193f) % (Mathf.PI * 2f);
+        patrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+        orbitDirection = seed % 2 == 0 ? 1f : -1f;
+        nextChargeTime = Time.time + Random.Range(0.65f, 1.45f);
+    }
+
+    public override void TickBehavior()
+    {
+        if (bot == null || view == null || !view.IsMine || rb == null || movement == null)
+            return;
+
+        if (health != null && health.IsWreck)
+            return;
+
+        if (frameAnimator == null)
+            frameAnimator = GetComponent<EnemySpriteFrameAnimator>();
+
+        RefreshTargetIfNeeded();
+
+        switch (mode)
+        {
+            case MantaMode.ChargeWindup:
+                TickChargeWindup();
+                break;
+            case MantaMode.Dash:
+                TickDash();
+                break;
+            case MantaMode.Recovery:
+                TickRecovery();
+                break;
+            default:
+                TickPatrolOrStalk();
+                break;
+        }
+    }
+
+    public void NotifyDamageSource(int attackerViewID)
+    {
+        PhotonView attackerView = attackerViewID > 0 ? PhotonView.Find(attackerViewID) : null;
+        if (attackerView == null)
+            return;
+
+        currentTarget = attackerView.transform;
+        nextTargetRefreshTime = Time.time + 0.35f;
+        nextChargeTime = Mathf.Min(nextChargeTime, Time.time + 0.25f);
+        if (mode == MantaMode.Patrol)
+            mode = MantaMode.Stalk;
+    }
+
+    void TickPatrolOrStalk()
+    {
+        SetAnimationSpeed(1f);
+
+        if (currentTarget != null)
+        {
+            Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
+            float distance = toTarget.magnitude;
+            if (distance > 0.001f && distance <= ResolveChargeRange() && Time.time >= nextChargeTime)
+            {
+                BeginChargeWindup(toTarget / distance);
+                return;
+            }
+
+            mode = MantaMode.Stalk;
+        }
+        else
+        {
+            mode = MantaMode.Patrol;
+        }
+
+        if (Time.time >= nextRepathTime)
+        {
+            nextRepathTime = Time.time + Mathf.Max(0.12f, movement.RepathInterval);
+            patrolDirection = currentTarget != null ? ResolveStalkDirection() : ResolvePatrolDirection();
+        }
+
+        Vector2 desired = ApplyAvoidance(ApplyMapEdgeSteering(patrolDirection));
+        if (desired.sqrMagnitude <= 0.001f)
+            desired = rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity.normalized : Vector2.up;
+
+        float speedMultiplier = currentTarget != null ? 1f : 0.54f;
+        Vector2 desiredVelocity = desired.normalized * (bot.EffectiveMoveSpeed * speedMultiplier);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, currentTarget != null ? 0.17f : 0.1f);
+
+        Vector2 lookDirection = currentTarget != null
+            ? (Vector2)currentTarget.position - rb.position
+            : rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity : desired;
+        RotateNoseToward(lookDirection);
+    }
+
+    void BeginChargeWindup(Vector2 direction)
+    {
+        chargeDirection = direction.sqrMagnitude > 0.001f ? direction.normalized : transform.up;
+        mode = MantaMode.ChargeWindup;
+        modeStartedAt = Time.time;
+        rb.linearVelocity *= 0.28f;
+        SetAnimationSpeed(1.75f);
+
+        if (bot.photonView != null)
+            bot.photonView.RPC(nameof(EnemyBot.PlaySpaceMantaWarningRpc), RpcTarget.All, rb.position.x, rb.position.y, transform.position.z);
+    }
+
+    void TickChargeWindup()
+    {
+        SetAnimationSpeed(1.8f);
+        RefreshChargeDirection();
+        RotateNoseToward(chargeDirection);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, -chargeDirection * (bot.EffectiveMoveSpeed * 0.18f), 0.2f);
+
+        if (Time.time - modeStartedAt >= ChargeWindupDuration)
+            BeginDash();
+    }
+
+    void BeginDash()
+    {
+        mode = MantaMode.Dash;
+        modeStartedAt = Time.time;
+        damagedThisDash.Clear();
+        SetAnimationSpeed(2.55f);
+        rb.linearVelocity = chargeDirection * ResolveDashSpeed();
+    }
+
+    void TickDash()
+    {
+        SetAnimationSpeed(2.55f);
+        RotateNoseToward(chargeDirection);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, chargeDirection * ResolveDashSpeed(), 0.36f);
+
+        if (TryApplyDashDamage() || Time.time - modeStartedAt >= DashDuration)
+            BeginRecovery();
+    }
+
+    void BeginRecovery()
+    {
+        mode = MantaMode.Recovery;
+        modeStartedAt = Time.time;
+        nextChargeTime = Time.time + ResolveChargeCooldown();
+        SetAnimationSpeed(0.72f);
+        rb.linearVelocity *= 0.42f;
+    }
+
+    void TickRecovery()
+    {
+        SetAnimationSpeed(0.72f);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 0.08f);
+        RotateNoseToward(rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity : chargeDirection);
+
+        if (Time.time - modeStartedAt >= RecoveryDuration)
+            mode = currentTarget != null ? MantaMode.Stalk : MantaMode.Patrol;
+    }
+
+    void RefreshTargetIfNeeded()
+    {
+        if (Time.time < nextTargetRefreshTime)
+            return;
+
+        nextTargetRefreshTime = Time.time + Mathf.Max(0.12f, movement.TargetRefreshInterval);
+        currentTarget = ResolveTarget();
+    }
+
+    Transform ResolveTarget()
+    {
+        float allowedRange = currentTarget != null ? movement.DisengageRadius : movement.DetectionRadius;
+        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, allowedRange, true))
+            return currentTarget;
+
+        return EnemyTargetingUtility.FindClosestTarget(rb.position, health, movement.DetectionRadius, true);
+    }
+
+    Vector2 ResolvePatrolDirection()
+    {
+        if (Time.time >= nextPatrolTurnTime)
+        {
+            nextPatrolTurnTime = Time.time + Random.Range(PatrolTurnIntervalMin, PatrolTurnIntervalMax);
+            float angle = Mathf.Atan2(patrolDirection.y, patrolDirection.x) + Random.Range(-0.58f, 0.58f);
+            patrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+        }
+
+        return patrolDirection.sqrMagnitude > 0.001f ? patrolDirection.normalized : Vector2.up;
+    }
+
+    Vector2 ResolveStalkDirection()
+    {
+        if (currentTarget == null)
+            return ResolvePatrolDirection();
+
+        Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
+        float distance = toTarget.magnitude;
+        if (distance <= 0.001f)
+            return ResolvePatrolDirection();
+
+        Vector2 toward = toTarget / distance;
+        Vector2 tangent = orbitDirection > 0f
+            ? new Vector2(-toward.y, toward.x)
+            : new Vector2(toward.y, -toward.x);
+        float wave = Mathf.Sin(Time.time * 1.35f + (view != null ? view.ViewID : 1) * 0.17f) * 0.16f;
+
+        if (distance > movement.PreferredDistance)
+            return (toward * 0.82f + tangent * (0.26f + wave)).normalized;
+
+        if (distance < movement.OrbitDistance)
+            return (-toward * 0.5f + tangent * 0.78f).normalized;
+
+        return (tangent * 0.88f + toward * 0.18f).normalized;
+    }
+
+    void RefreshChargeDirection()
+    {
+        if (currentTarget == null)
+            return;
+
+        Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
+        if (toTarget.sqrMagnitude <= 0.001f)
+            return;
+
+        chargeDirection = Vector2.Lerp(chargeDirection, toTarget.normalized, 0.18f).normalized;
+    }
+
+    bool TryApplyDashDamage()
+    {
+        float hitRadius = Mathf.Max(0.55f, bot.VisualTargetSize * DashHitRadiusFactor);
+        Vector2 hitCenter = rb.position + chargeDirection * Mathf.Max(0.18f, hitRadius * 0.35f);
+        Collider2D[] hits = Physics2D.OverlapCircleAll(hitCenter, hitRadius);
+        bool appliedHit = false;
+        int attackerViewId = bot.photonView != null ? bot.photonView.ViewID : 0;
+        int damage = RoomSettings.GetEnemyDamage(bot.Kind);
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null || hit.attachedRigidbody == rb)
+                continue;
+
+            PlayerHealth candidate = hit.GetComponentInParent<PlayerHealth>();
+            PhotonView targetView = candidate != null ? candidate.GetComponent<PhotonView>() : null;
+            if (candidate == null || targetView == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating)
+                continue;
+
+            if (candidate.IsBotControlled || candidate.IsAstronautControlled || candidate.GetComponent<LureBeaconDecoy>() != null)
+                continue;
+
+            if (!damagedThisDash.Add(targetView.ViewID))
+                continue;
+
+            targetView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, damage, damage, attackerViewId, hitCenter.x, hitCenter.y);
+            appliedHit = true;
+        }
+
+        foreach (LureBeaconDecoy beacon in LureBeaconDecoy.GetActiveBeacons())
+        {
+            if (beacon == null || !beacon.CanBeTargeted || beacon.photonView == null)
+                continue;
+
+            if (Vector2.Distance(hitCenter, beacon.transform.position) > hitRadius)
+                continue;
+
+            if (!damagedThisDash.Add(beacon.photonView.ViewID))
+                continue;
+
+            beacon.photonView.RPC(nameof(LureBeaconDecoy.TakeBeaconDamageProfileAt), RpcTarget.MasterClient, damage, damage, attackerViewId, hitCenter.x, hitCenter.y);
+            appliedHit = true;
+        }
+
+        foreach (PlayerDeployableBase deployable in PlayerDeployableBase.GetActiveDeployables())
+        {
+            if (deployable == null || !deployable.CanBeTargeted || deployable.photonView == null)
+                continue;
+
+            if (Vector2.Distance(hitCenter, deployable.transform.position) > hitRadius)
+                continue;
+
+            if (!damagedThisDash.Add(deployable.photonView.ViewID))
+                continue;
+
+            deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, damage, damage, attackerViewId, hitCenter.x, hitCenter.y);
+            appliedHit = true;
+        }
+
+        return appliedHit;
+    }
+
+    Vector2 ApplyAvoidance(Vector2 desiredDirection)
+    {
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
+        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        Vector2 avoidance = Vector2.zero;
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null || hit.attachedRigidbody == rb)
+                continue;
+
+            if (!IsAvoidedObject(hit))
+                continue;
+
+            Vector2 closest = hit.ClosestPoint(rb.position);
+            Vector2 away = rb.position - closest;
+            if (away.sqrMagnitude <= 0.0001f)
+                away = rb.position - (Vector2)hit.transform.position;
+
+            float distance = Mathf.Max(0.12f, away.magnitude);
+            if (distance > AvoidanceScanRadius)
+                continue;
+
+            avoidance += away.normalized * Mathf.Clamp01((AvoidanceScanRadius - distance) / AvoidanceScanRadius);
+        }
+
+        if (avoidance.sqrMagnitude <= 0.001f)
+            return desiredDirection;
+
+        return (desired + avoidance.normalized * AvoidanceWeight).normalized;
+    }
+
+    bool IsAvoidedObject(Collider2D hit)
+    {
+        if (hit.GetComponentInParent<ObstacleChunk>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<Treasure>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<ShipWreck>() != null)
+            return true;
+
+        return hit.GetComponentInParent<DroppedCargoCrate>() != null;
+    }
+
+    Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
+    {
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
+        float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
+        Vector2 predicted = rb.position + desired * Mathf.Max(1.2f, bot.EffectiveMoveSpeed * 1.8f);
+        Vector2 inward = Vector2.zero;
+
+        if (predicted.x > halfX)
+            inward.x -= Mathf.InverseLerp(halfX + MapEdgeMargin, halfX, predicted.x);
+        else if (predicted.x < -halfX)
+            inward.x += Mathf.InverseLerp(-halfX - MapEdgeMargin, -halfX, predicted.x);
+
+        if (predicted.y > halfY)
+            inward.y -= Mathf.InverseLerp(halfY + MapEdgeMargin, halfY, predicted.y);
+        else if (predicted.y < -halfY)
+            inward.y += Mathf.InverseLerp(-halfY - MapEdgeMargin, -halfY, predicted.y);
+
+        if (inward.sqrMagnitude <= 0.001f)
+            return desiredDirection;
+
+        return (desired * 0.38f + inward.normalized * 0.78f).normalized;
+    }
+
+    float ResolveChargeRange()
+    {
+        return weapon != null && weapon.Range > 0f ? weapon.Range : Mathf.Max(6f, movement.ShootDistance);
+    }
+
+    float ResolveChargeCooldown()
+    {
+        return weapon != null && weapon.FireRate > 0f ? weapon.FireRate : 3.4f;
+    }
+
+    float ResolveDashSpeed()
+    {
+        return Mathf.Max(bot.EffectiveMoveSpeed * DashSpeedMultiplier, bot.EffectiveMoveSpeed + 5.2f);
+    }
+
+    void SetAnimationSpeed(float multiplier)
+    {
+        if (frameAnimator == null)
+            frameAnimator = GetComponent<EnemySpriteFrameAnimator>();
+
+        if (frameAnimator != null)
+            frameAnimator.SetSpeedMultiplier(multiplier);
+    }
+
+    void RotateNoseToward(Vector2 direction)
+    {
+        if (direction.sqrMagnitude <= 0.001f)
+            return;
+
+        float targetAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
+        float nextAngle = Mathf.MoveTowardsAngle(rb.rotation, targetAngle, movement.TurnResponsiveness * Time.fixedDeltaTime);
+        rb.MoveRotation(nextAngle);
+    }
+}
+
+[RequireComponent(typeof(EnemyBot))]
+public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
+{
+    enum SquidMode
+    {
+        Patrol,
+        Stalk,
+        Windup,
+        Channel,
+        Recovery
+    }
+
+    const float WindupDuration = 1.05f;
+    const float ChannelDuration = 2.45f;
+    const float RecoveryDuration = 0.95f;
+    const float BreakDistance = 13.2f;
+    const float DamageTickInterval = 0.5f;
+    const float PullTickInterval = 0.16f;
+    const float PullEffectDuration = 0.28f;
+    const float PullAcceleration = 12.2f;
+    const float PullMaxSpeed = 8.2f;
+    const float ChannelMoveSpeedMultiplier = 0.52f;
+    const float AvoidanceScanRadius = 2.05f;
+    const float AvoidanceWeight = 0.42f;
+    const float MapEdgeMargin = 2.6f;
+    const float PatrolTurnIntervalMin = 1.2f;
+    const float PatrolTurnIntervalMax = 2.3f;
+
+    Rigidbody2D rb;
+    PhotonView view;
+    PlayerHealth health;
+    EnemyMovementProfile movement;
+    EnemyWeaponProfile weapon;
+    EnemySpriteFrameAnimator frameAnimator;
+    Transform currentTarget;
+    Vector2 patrolDirection = Vector2.up;
+    int activeTargetViewId;
+    float nextTargetRefreshTime;
+    float nextRepathTime;
+    float nextPatrolTurnTime;
+    float nextAttackTime;
+    float nextDamageTickTime;
+    float nextPullTickTime;
+    float modeStartedAt;
+    float orbitDirection = 1f;
+    SquidMode mode = SquidMode.Patrol;
+
+    public override void Initialize(EnemyBot owner)
+    {
+        base.Initialize(owner);
+        rb = owner.GetComponent<Rigidbody2D>();
+        view = owner.GetComponent<PhotonView>();
+        health = owner.GetComponent<PlayerHealth>();
+        movement = owner.Definition != null ? owner.Definition.Movement : null;
+        weapon = owner.Definition != null ? owner.Definition.Weapon : null;
+        frameAnimator = owner.GetComponent<EnemySpriteFrameAnimator>();
+
+        int seed = view != null ? view.ViewID : Random.Range(1, 9999);
+        float angle = Mathf.Abs(seed * 0.217f) % (Mathf.PI * 2f);
+        patrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+        orbitDirection = seed % 2 == 0 ? 1f : -1f;
+        nextAttackTime = Time.time + Random.Range(1.1f, 2.2f);
+    }
+
+    public override void TickBehavior()
+    {
+        if (bot == null || view == null || !view.IsMine || rb == null || movement == null)
+            return;
+
+        if (health != null && health.IsWreck)
+            return;
+
+        if (frameAnimator == null)
+            frameAnimator = GetComponent<EnemySpriteFrameAnimator>();
+
+        switch (mode)
+        {
+            case SquidMode.Windup:
+                TickWindup();
+                break;
+            case SquidMode.Channel:
+                TickChannel();
+                break;
+            case SquidMode.Recovery:
+                TickRecovery();
+                break;
+            default:
+                RefreshTargetIfNeeded();
+                TickPatrolOrStalk();
+                break;
+        }
+    }
+
+    void OnDisable()
+    {
+        StopActiveTetherVfx();
+    }
+
+    public void NotifyDamageSource(int attackerViewID)
+    {
+        PhotonView attackerView = attackerViewID > 0 ? PhotonView.Find(attackerViewID) : null;
+        if (attackerView == null)
+            return;
+
+        currentTarget = attackerView.transform;
+        nextTargetRefreshTime = Time.time + 0.35f;
+        nextAttackTime = Mathf.Min(nextAttackTime, Time.time + 0.35f);
+        if (mode == SquidMode.Patrol)
+            mode = SquidMode.Stalk;
+    }
+
+    void TickPatrolOrStalk()
+    {
+        SetAnimationSpeed(currentTarget != null ? 1.08f : 0.82f);
+
+        if (currentTarget != null)
+        {
+            Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
+            float distance = toTarget.magnitude;
+            if (distance > 0.001f && distance <= ResolveTetherRange() && Time.time >= nextAttackTime)
+            {
+                BeginWindup(currentTarget);
+                return;
+            }
+
+            mode = SquidMode.Stalk;
+        }
+        else
+        {
+            mode = SquidMode.Patrol;
+        }
+
+        if (Time.time >= nextRepathTime)
+        {
+            nextRepathTime = Time.time + Mathf.Max(0.12f, movement.RepathInterval);
+            patrolDirection = currentTarget != null ? ResolveStalkDirection() : ResolvePatrolDirection();
+        }
+
+        Vector2 desired = ApplyAvoidance(ApplyMapEdgeSteering(patrolDirection));
+        if (desired.sqrMagnitude <= 0.001f)
+            desired = rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity.normalized : Vector2.up;
+
+        float speedMultiplier = currentTarget != null ? 1f : 0.5f;
+        Vector2 desiredVelocity = desired.normalized * (bot.EffectiveMoveSpeed * speedMultiplier);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, currentTarget != null ? 0.16f : 0.09f);
+
+        Vector2 lookDirection = currentTarget != null
+            ? (Vector2)currentTarget.position - rb.position
+            : rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity : desired;
+        RotateToward(lookDirection);
+    }
+
+    void BeginWindup(Transform target)
+    {
+        PhotonView targetView = target != null ? target.GetComponentInParent<PhotonView>() : null;
+        if (targetView == null)
+            return;
+
+        activeTargetViewId = targetView.ViewID;
+        mode = SquidMode.Windup;
+        modeStartedAt = Time.time;
+        rb.linearVelocity *= 0.28f;
+        SetAnimationSpeed(1.55f);
+
+        if (bot.photonView != null)
+            bot.photonView.RPC(nameof(EnemyBot.PlayGravitySquidWarningRpc), RpcTarget.All, rb.position.x, rb.position.y, transform.position.z);
+    }
+
+    void TickWindup()
+    {
+        SetAnimationSpeed(1.65f);
+        if (!IsActiveTargetStillValid(ResolveTetherRange() + 1.5f))
+        {
+            BeginRecovery();
+            return;
+        }
+
+        Transform target = ResolveActiveTargetTransform();
+        Vector2 toTarget = target != null ? (Vector2)target.position - rb.position : patrolDirection;
+        RotateToward(toTarget);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, -toTarget.normalized * (bot.EffectiveMoveSpeed * 0.12f), 0.18f);
+
+        if (Time.time - modeStartedAt >= WindupDuration)
+            BeginChannel();
+    }
+
+    void BeginChannel()
+    {
+        mode = SquidMode.Channel;
+        modeStartedAt = Time.time;
+        nextDamageTickTime = 0f;
+        nextPullTickTime = 0f;
+        SetAnimationSpeed(2.05f);
+
+        if (bot.photonView != null)
+            bot.photonView.RPC(nameof(EnemyBot.StartGravitySquidTetherRpc), RpcTarget.All, activeTargetViewId);
+    }
+
+    void TickChannel()
+    {
+        SetAnimationSpeed(2.05f);
+        if (!IsActiveTargetStillValid(BreakDistance))
+        {
+            BeginRecovery();
+            return;
+        }
+
+        Transform target = ResolveActiveTargetTransform();
+        Vector2 toTarget = target != null ? (Vector2)target.position - rb.position : patrolDirection;
+        RotateToward(toTarget);
+
+        Vector2 channelDirection = ResolveChannelMoveDirection(target);
+        rb.linearVelocity = Vector2.Lerp(
+            rb.linearVelocity,
+            channelDirection * (bot.EffectiveMoveSpeed * ChannelMoveSpeedMultiplier),
+            0.13f);
+
+        if (Time.time >= nextDamageTickTime)
+        {
+            nextDamageTickTime = Time.time + DamageTickInterval;
+            ApplyTetherDamageTick();
+        }
+
+        if (Time.time >= nextPullTickTime)
+        {
+            nextPullTickTime = Time.time + PullTickInterval;
+            ApplyTetherPullTick();
+        }
+
+        if (Time.time - modeStartedAt >= ChannelDuration)
+            BeginRecovery();
+    }
+
+    void BeginRecovery()
+    {
+        StopActiveTetherVfx();
+        mode = SquidMode.Recovery;
+        modeStartedAt = Time.time;
+        nextAttackTime = Time.time + ResolveTetherCooldown();
+        SetAnimationSpeed(0.72f);
+        rb.linearVelocity *= 0.55f;
+        activeTargetViewId = 0;
+    }
+
+    void TickRecovery()
+    {
+        SetAnimationSpeed(0.72f);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 0.065f);
+        RotateToward(rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity : patrolDirection);
+
+        if (Time.time - modeStartedAt >= RecoveryDuration)
+        {
+            RefreshTargetIfNeeded();
+            mode = currentTarget != null ? SquidMode.Stalk : SquidMode.Patrol;
+        }
+    }
+
+    void RefreshTargetIfNeeded()
+    {
+        if (Time.time < nextTargetRefreshTime)
+            return;
+
+        nextTargetRefreshTime = Time.time + Mathf.Max(0.12f, movement.TargetRefreshInterval);
+        currentTarget = ResolveTarget();
+    }
+
+    Transform ResolveTarget()
+    {
+        float allowedRange = currentTarget != null ? movement.DisengageRadius : movement.DetectionRadius;
+        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, allowedRange, true))
+            return currentTarget;
+
+        return EnemyTargetingUtility.FindClosestTarget(rb.position, health, movement.DetectionRadius, true);
+    }
+
+    Vector2 ResolvePatrolDirection()
+    {
+        if (Time.time >= nextPatrolTurnTime)
+        {
+            nextPatrolTurnTime = Time.time + Random.Range(PatrolTurnIntervalMin, PatrolTurnIntervalMax);
+            float angle = Mathf.Atan2(patrolDirection.y, patrolDirection.x) + Random.Range(-0.48f, 0.48f);
+            patrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+        }
+
+        return patrolDirection.sqrMagnitude > 0.001f ? patrolDirection.normalized : Vector2.up;
+    }
+
+    Vector2 ResolveStalkDirection()
+    {
+        if (currentTarget == null)
+            return ResolvePatrolDirection();
+
+        Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
+        float distance = toTarget.magnitude;
+        if (distance <= 0.001f)
+            return ResolvePatrolDirection();
+
+        Vector2 toward = toTarget / distance;
+        Vector2 tangent = orbitDirection > 0f
+            ? new Vector2(-toward.y, toward.x)
+            : new Vector2(toward.y, -toward.x);
+        float wave = Mathf.Sin(Time.time * 1.15f + (view != null ? view.ViewID : 1) * 0.17f) * 0.14f;
+
+        if (distance > movement.PreferredDistance)
+            return (toward * 0.74f + tangent * (0.34f + wave)).normalized;
+
+        if (distance < movement.OrbitDistance)
+            return (-toward * 0.62f + tangent * 0.72f).normalized;
+
+        return (tangent * 0.9f + toward * 0.1f).normalized;
+    }
+
+    Vector2 ResolveChannelMoveDirection(Transform target)
+    {
+        if (target == null)
+            return patrolDirection.sqrMagnitude > 0.001f ? patrolDirection.normalized : Vector2.up;
+
+        Vector2 toTarget = (Vector2)target.position - rb.position;
+        float distance = toTarget.magnitude;
+        if (distance <= 0.001f)
+            return Vector2.zero;
+
+        Vector2 toward = toTarget / distance;
+        Vector2 tangent = orbitDirection > 0f
+            ? new Vector2(-toward.y, toward.x)
+            : new Vector2(toward.y, -toward.x);
+
+        if (distance > movement.PreferredDistance + 1.2f)
+            return (toward * 0.36f + tangent * 0.24f).normalized;
+
+        if (distance < movement.OrbitDistance)
+            return (-toward * 0.54f + tangent * 0.32f).normalized;
+
+        return (tangent * 0.42f + toward * 0.05f).normalized;
+    }
+
+    bool IsActiveTargetStillValid(float maxDistance)
+    {
+        PhotonView targetView = activeTargetViewId > 0 ? PhotonView.Find(activeTargetViewId) : null;
+        if (targetView == null)
+            return false;
+
+        float distance = Vector2.Distance(rb.position, targetView.transform.position);
+        if (distance > maxDistance)
+            return false;
+
+        LureBeaconDecoy beacon = targetView.GetComponent<LureBeaconDecoy>();
+        if (beacon != null)
+            return beacon.CanBeTargeted;
+
+        PlayerDeployableBase deployable = targetView.GetComponent<PlayerDeployableBase>();
+        if (deployable != null)
+            return deployable.CanBeTargeted;
+
+        PlayerHealth player = targetView.GetComponent<PlayerHealth>();
+        return player != null && player != health && !player.IsWreck && !player.IsBotControlled && !player.IsEvacuationAnimating;
+    }
+
+    Transform ResolveActiveTargetTransform()
+    {
+        PhotonView targetView = activeTargetViewId > 0 ? PhotonView.Find(activeTargetViewId) : null;
+        return targetView != null ? targetView.transform : null;
+    }
+
+    void ApplyTetherDamageTick()
+    {
+        PhotonView targetView = activeTargetViewId > 0 ? PhotonView.Find(activeTargetViewId) : null;
+        if (targetView == null)
+            return;
+
+        Vector2 impact = ResolveTargetImpactPoint(targetView.transform);
+        int attackerViewId = bot.photonView != null ? bot.photonView.ViewID : 0;
+        int baseDamagePerSecond = Mathf.Max(0, RoomSettings.GetEnemyDamage(bot.Kind));
+        int shieldDamage = Mathf.Max(1, Mathf.CeilToInt(baseDamagePerSecond * DamageTickInterval));
+        int hpDamage = Mathf.Max(1, Mathf.CeilToInt(baseDamagePerSecond * 0.5f * DamageTickInterval));
+
+        LureBeaconDecoy beacon = targetView.GetComponent<LureBeaconDecoy>();
+        if (beacon != null)
+        {
+            if (beacon.CanBeTargeted)
+                beacon.photonView.RPC(nameof(LureBeaconDecoy.TakeBeaconDamageProfileAt), RpcTarget.MasterClient, shieldDamage, hpDamage, attackerViewId, impact.x, impact.y);
+            return;
+        }
+
+        PlayerDeployableBase deployable = targetView.GetComponent<PlayerDeployableBase>();
+        if (deployable != null)
+        {
+            if (deployable.CanBeTargeted)
+                deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, shieldDamage, hpDamage, attackerViewId, impact.x, impact.y);
+            return;
+        }
+
+        PlayerHealth targetHealth = targetView.GetComponent<PlayerHealth>();
+        if (targetHealth != null && targetHealth != health && !targetHealth.IsWreck && !targetHealth.IsBotControlled && !targetHealth.IsEvacuationAnimating)
+            targetView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, shieldDamage, hpDamage, attackerViewId, impact.x, impact.y);
+    }
+
+    void ApplyTetherPullTick()
+    {
+        PhotonView targetView = activeTargetViewId > 0 ? PhotonView.Find(activeTargetViewId) : null;
+        if (targetView == null || targetView.Owner == null)
+            return;
+
+        if (targetView.GetComponent<LureBeaconDecoy>() != null || targetView.GetComponent<PlayerDeployableBase>() != null)
+            return;
+
+        PlayerHealth targetHealth = targetView.GetComponent<PlayerHealth>();
+        if (targetHealth == null || targetHealth == health || targetHealth.IsWreck || targetHealth.IsBotControlled || targetHealth.IsEvacuationAnimating)
+            return;
+
+        int sourceViewId = bot.photonView != null ? bot.photonView.ViewID : 0;
+        targetView.RPC(
+            nameof(PlayerHealth.ApplyGravityTetherPullRpc),
+            targetView.Owner,
+            sourceViewId,
+            rb.position.x,
+            rb.position.y,
+            PullAcceleration,
+            PullMaxSpeed,
+            PullEffectDuration);
+    }
+
+    Vector2 ResolveTargetImpactPoint(Transform target)
+    {
+        if (target == null)
+            return rb.position;
+
+        Collider2D collider = target.GetComponent<Collider2D>();
+        if (collider != null)
+            return collider.ClosestPoint(rb.position);
+
+        return target.position;
+    }
+
+    Vector2 ApplyAvoidance(Vector2 desiredDirection)
+    {
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
+        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        Vector2 avoidance = Vector2.zero;
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null || hit.attachedRigidbody == rb)
+                continue;
+
+            if (!IsAvoidedObject(hit))
+                continue;
+
+            Vector2 closest = hit.ClosestPoint(rb.position);
+            Vector2 away = rb.position - closest;
+            if (away.sqrMagnitude <= 0.0001f)
+                away = rb.position - (Vector2)hit.transform.position;
+
+            float distance = Mathf.Max(0.12f, away.magnitude);
+            if (distance > AvoidanceScanRadius)
+                continue;
+
+            avoidance += away.normalized * Mathf.Clamp01((AvoidanceScanRadius - distance) / AvoidanceScanRadius);
+        }
+
+        if (avoidance.sqrMagnitude <= 0.001f)
+            return desiredDirection;
+
+        return (desired + avoidance.normalized * AvoidanceWeight).normalized;
+    }
+
+    bool IsAvoidedObject(Collider2D hit)
+    {
+        if (hit.GetComponentInParent<ObstacleChunk>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<Treasure>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<ShipWreck>() != null)
+            return true;
+
+        return hit.GetComponentInParent<DroppedCargoCrate>() != null;
+    }
+
+    Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
+    {
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
+        float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
+        Vector2 predicted = rb.position + desired * Mathf.Max(1.2f, bot.EffectiveMoveSpeed * 1.9f);
+        Vector2 inward = Vector2.zero;
+
+        if (predicted.x > halfX)
+            inward.x -= Mathf.InverseLerp(halfX + MapEdgeMargin, halfX, predicted.x);
+        else if (predicted.x < -halfX)
+            inward.x += Mathf.InverseLerp(-halfX - MapEdgeMargin, -halfX, predicted.x);
+
+        if (predicted.y > halfY)
+            inward.y -= Mathf.InverseLerp(halfY + MapEdgeMargin, halfY, predicted.y);
+        else if (predicted.y < -halfY)
+            inward.y += Mathf.InverseLerp(-halfY - MapEdgeMargin, -halfY, predicted.y);
+
+        if (inward.sqrMagnitude <= 0.001f)
+            return desiredDirection;
+
+        return (desired * 0.36f + inward.normalized * 0.72f).normalized;
+    }
+
+    float ResolveTetherRange()
+    {
+        return weapon != null && weapon.Range > 0f ? weapon.Range : Mathf.Max(8f, movement.ShootDistance);
+    }
+
+    float ResolveTetherCooldown()
+    {
+        return weapon != null && weapon.FireRate > 0f ? weapon.FireRate : 7f;
+    }
+
+    void StopActiveTetherVfx()
+    {
+        if (view == null || !view.IsMine || activeTargetViewId <= 0 || bot == null || bot.photonView == null)
+            return;
+
+        bot.photonView.RPC(nameof(EnemyBot.StopGravitySquidTetherRpc), RpcTarget.All);
+    }
+
+    void SetAnimationSpeed(float multiplier)
+    {
+        if (frameAnimator == null)
+            frameAnimator = GetComponent<EnemySpriteFrameAnimator>();
+
+        if (frameAnimator != null)
+            frameAnimator.SetSpeedMultiplier(multiplier);
+    }
+
+    void RotateToward(Vector2 direction)
+    {
+        if (direction.sqrMagnitude <= 0.001f)
+            return;
+
+        float targetAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
+        float nextAngle = Mathf.MoveTowardsAngle(rb.rotation, targetAngle, movement.TurnResponsiveness * Time.fixedDeltaTime);
+        rb.MoveRotation(nextAngle);
+    }
+}
+
+[RequireComponent(typeof(EnemyBot))]
+public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
+{
+    enum LanceMode
+    {
+        Patrol,
+        Stalk,
+        LockOn,
+        Recovery
+    }
+
+    const float LockOnDuration = 0.9f;
+    const float RecoveryDuration = 0.82f;
+    const float BeamRadius = 0.46f;
+    const float HpDamageMultiplier = 0.48f;
+    const float LockReverseSpeedMultiplier = 0.18f;
+    const float AvoidanceScanRadius = 2.1f;
+    const float AvoidanceWeight = 0.44f;
+    const float MapEdgeMargin = 2.6f;
+    const float PatrolTurnIntervalMin = 1.05f;
+    const float PatrolTurnIntervalMax = 2.05f;
+
+    readonly HashSet<int> damagedThisShot = new HashSet<int>();
+
+    Rigidbody2D rb;
+    PhotonView view;
+    PlayerHealth health;
+    EnemyMovementProfile movement;
+    EnemyWeaponProfile weapon;
+    Transform currentTarget;
+    Vector2 patrolDirection = Vector2.up;
+    Vector2 lockedDirection = Vector2.up;
+    int lockedTargetViewId;
+    float nextTargetRefreshTime;
+    float nextRepathTime;
+    float nextPatrolTurnTime;
+    float nextShotTime;
+    float modeStartedAt;
+    float orbitDirection = 1f;
+    LanceMode mode = LanceMode.Patrol;
+
+    public override void Initialize(EnemyBot owner)
+    {
+        base.Initialize(owner);
+        rb = owner.GetComponent<Rigidbody2D>();
+        view = owner.GetComponent<PhotonView>();
+        health = owner.GetComponent<PlayerHealth>();
+        movement = owner.Definition != null ? owner.Definition.Movement : null;
+        weapon = owner.Definition != null ? owner.Definition.Weapon : null;
+
+        int seed = view != null ? view.ViewID : Random.Range(1, 9999);
+        float angle = Mathf.Abs(seed * 0.239f) % (Mathf.PI * 2f);
+        patrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+        orbitDirection = seed % 2 == 0 ? 1f : -1f;
+        nextShotTime = Time.time + Random.Range(1.0f, 1.8f);
+    }
+
+    public override void TickBehavior()
+    {
+        if (bot == null || view == null || !view.IsMine || rb == null || movement == null)
+            return;
+
+        if (health != null && health.IsWreck)
+            return;
+
+        switch (mode)
+        {
+            case LanceMode.LockOn:
+                TickLockOn();
+                break;
+            case LanceMode.Recovery:
+                TickRecovery();
+                break;
+            default:
+                RefreshTargetIfNeeded();
+                TickPatrolOrStalk();
+                break;
+        }
+    }
+
+    public void NotifyDamageSource(int attackerViewID)
+    {
+        PhotonView attackerView = attackerViewID > 0 ? PhotonView.Find(attackerViewID) : null;
+        if (attackerView == null)
+            return;
+
+        currentTarget = attackerView.transform;
+        nextTargetRefreshTime = Time.time + 0.35f;
+        nextShotTime = Mathf.Min(nextShotTime, Time.time + 0.35f);
+        if (mode == LanceMode.Patrol)
+            mode = LanceMode.Stalk;
+    }
+
+    void TickPatrolOrStalk()
+    {
+        if (currentTarget != null)
+        {
+            Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
+            float distance = toTarget.magnitude;
+            if (distance > 0.001f && distance <= ResolveBeamRange() && Time.time >= nextShotTime)
+            {
+                BeginLockOn(currentTarget);
+                return;
+            }
+
+            mode = LanceMode.Stalk;
+        }
+        else
+        {
+            mode = LanceMode.Patrol;
+        }
+
+        if (Time.time >= nextRepathTime)
+        {
+            nextRepathTime = Time.time + Mathf.Max(0.12f, movement.RepathInterval);
+            patrolDirection = currentTarget != null ? ResolveStalkDirection() : ResolvePatrolDirection();
+        }
+
+        Vector2 desired = ApplyAvoidance(ApplyMapEdgeSteering(patrolDirection));
+        if (desired.sqrMagnitude <= 0.001f)
+            desired = rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity.normalized : Vector2.up;
+
+        float speedMultiplier = currentTarget != null ? 1f : 0.58f;
+        Vector2 desiredVelocity = desired.normalized * (bot.EffectiveMoveSpeed * speedMultiplier);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, currentTarget != null ? 0.17f : 0.1f);
+
+        Vector2 lookDirection = currentTarget != null
+            ? (Vector2)currentTarget.position - rb.position
+            : rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity : desired;
+        RotateNoseToward(lookDirection);
+    }
+
+    void BeginLockOn(Transform target)
+    {
+        PhotonView targetView = target != null ? target.GetComponentInParent<PhotonView>() : null;
+        if (targetView == null)
+            return;
+
+        lockedTargetViewId = targetView.ViewID;
+        lockedDirection = ResolvePredictedAimDirection(target);
+        if (lockedDirection.sqrMagnitude <= 0.001f)
+            lockedDirection = transform.up;
+
+        mode = LanceMode.LockOn;
+        modeStartedAt = Time.time;
+        rb.linearVelocity *= 0.24f;
+        RotateNoseToward(lockedDirection);
+
+        Vector2 origin = ResolveMuzzlePosition(lockedDirection);
+        float range = ResolveBlockedBeamRange(origin, lockedDirection, ResolveBeamRange());
+        if (bot.photonView != null)
+        {
+            bot.photonView.RPC(nameof(EnemyBot.PlayHunterLanceLockRpc), RpcTarget.All, rb.position.x, rb.position.y, transform.position.z);
+            bot.photonView.RPC(nameof(EnemyBot.SpawnHunterLanceAimRpc), RpcTarget.All, origin.x, origin.y, lockedDirection.x, lockedDirection.y, range, LockOnDuration);
+        }
+    }
+
+    void TickLockOn()
+    {
+        Transform target = ResolveLockedTargetTransform();
+        if (!IsLockedTargetStillValid(ResolveBeamRange() + 2f))
+        {
+            BeginRecovery(0.45f);
+            return;
+        }
+
+        RotateNoseToward(lockedDirection);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, -lockedDirection * (bot.EffectiveMoveSpeed * LockReverseSpeedMultiplier), 0.18f);
+
+        if (target != null && Time.time - modeStartedAt < LockOnDuration * 0.45f)
+            lockedDirection = Vector2.Lerp(lockedDirection, ResolvePredictedAimDirection(target), 0.025f).normalized;
+
+        if (Time.time - modeStartedAt >= LockOnDuration)
+            FireLance();
+    }
+
+    void FireLance()
+    {
+        Vector2 direction = lockedDirection.sqrMagnitude > 0.001f ? lockedDirection.normalized : Vector2.up;
+        Vector2 origin = ResolveMuzzlePosition(direction);
+        float range = ResolveBlockedBeamRange(origin, direction, ResolveBeamRange());
+
+        if (bot.photonView != null)
+        {
+            bot.photonView.RPC(nameof(EnemyBot.PlayHunterLanceFireRpc), RpcTarget.All, origin.x, origin.y, transform.position.z);
+            bot.photonView.RPC(nameof(EnemyBot.SpawnHunterLanceShotRpc), RpcTarget.All, origin.x, origin.y, direction.x, direction.y, range);
+        }
+
+        ApplyLanceDamage(origin, direction, range);
+        BeginRecovery(RecoveryDuration);
+    }
+
+    void BeginRecovery(float duration)
+    {
+        mode = LanceMode.Recovery;
+        modeStartedAt = Time.time;
+        nextShotTime = Time.time + ResolveShotCooldown();
+        rb.linearVelocity *= 0.55f;
+        lockedTargetViewId = 0;
+        recoveryDuration = Mathf.Max(0.1f, duration);
+    }
+
+    float recoveryDuration = RecoveryDuration;
+
+    void TickRecovery()
+    {
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 0.065f);
+        RotateNoseToward(rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity : lockedDirection);
+
+        if (Time.time - modeStartedAt >= recoveryDuration)
+        {
+            RefreshTargetIfNeeded();
+            mode = currentTarget != null ? LanceMode.Stalk : LanceMode.Patrol;
+        }
+    }
+
+    void RefreshTargetIfNeeded()
+    {
+        if (Time.time < nextTargetRefreshTime)
+            return;
+
+        nextTargetRefreshTime = Time.time + Mathf.Max(0.12f, movement.TargetRefreshInterval);
+        currentTarget = ResolveTarget();
+    }
+
+    Transform ResolveTarget()
+    {
+        float allowedRange = currentTarget != null ? movement.DisengageRadius : movement.DetectionRadius;
+        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, allowedRange, true))
+            return currentTarget;
+
+        return EnemyTargetingUtility.FindClosestTarget(rb.position, health, movement.DetectionRadius, true);
+    }
+
+    Vector2 ResolvePatrolDirection()
+    {
+        if (Time.time >= nextPatrolTurnTime)
+        {
+            nextPatrolTurnTime = Time.time + Random.Range(PatrolTurnIntervalMin, PatrolTurnIntervalMax);
+            float angle = Mathf.Atan2(patrolDirection.y, patrolDirection.x) + Random.Range(-0.46f, 0.46f);
+            patrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+        }
+
+        return patrolDirection.sqrMagnitude > 0.001f ? patrolDirection.normalized : Vector2.up;
+    }
+
+    Vector2 ResolveStalkDirection()
+    {
+        if (currentTarget == null)
+            return ResolvePatrolDirection();
+
+        Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
+        float distance = toTarget.magnitude;
+        if (distance <= 0.001f)
+            return ResolvePatrolDirection();
+
+        Vector2 toward = toTarget / distance;
+        Vector2 tangent = orbitDirection > 0f
+            ? new Vector2(-toward.y, toward.x)
+            : new Vector2(toward.y, -toward.x);
+        float wave = Mathf.Sin(Time.time * 1.05f + (view != null ? view.ViewID : 1) * 0.13f) * 0.12f;
+
+        if (distance > movement.PreferredDistance)
+            return (toward * 0.76f + tangent * (0.28f + wave)).normalized;
+
+        if (distance < movement.OrbitDistance)
+            return (-toward * 0.66f + tangent * 0.58f).normalized;
+
+        return (tangent * 0.86f + toward * 0.08f).normalized;
+    }
+
+    Vector2 ResolvePredictedAimDirection(Transform target)
+    {
+        Vector2 targetPosition = target != null ? (Vector2)target.position : rb.position + patrolDirection;
+        Rigidbody2D targetBody = target != null ? target.GetComponent<Rigidbody2D>() : null;
+        float distance = Vector2.Distance(rb.position, targetPosition);
+        if (targetBody != null)
+        {
+            float leadTime = Mathf.Clamp(distance / 16f, 0.12f, 0.46f);
+            targetPosition += targetBody.linearVelocity * leadTime;
+        }
+
+        Vector2 direction = targetPosition - rb.position;
+        return direction.sqrMagnitude > 0.001f ? direction.normalized : patrolDirection;
+    }
+
+    Transform ResolveLockedTargetTransform()
+    {
+        PhotonView targetView = lockedTargetViewId > 0 ? PhotonView.Find(lockedTargetViewId) : null;
+        return targetView != null ? targetView.transform : null;
+    }
+
+    bool IsLockedTargetStillValid(float maxDistance)
+    {
+        PhotonView targetView = lockedTargetViewId > 0 ? PhotonView.Find(lockedTargetViewId) : null;
+        if (targetView == null)
+            return false;
+
+        if (Vector2.Distance(rb.position, targetView.transform.position) > maxDistance)
+            return false;
+
+        LureBeaconDecoy beacon = targetView.GetComponent<LureBeaconDecoy>();
+        if (beacon != null)
+            return beacon.CanBeTargeted;
+
+        PlayerDeployableBase deployable = targetView.GetComponent<PlayerDeployableBase>();
+        if (deployable != null)
+            return deployable.CanBeTargeted;
+
+        PlayerHealth targetHealth = targetView.GetComponent<PlayerHealth>();
+        return targetHealth != null && targetHealth != health && !targetHealth.IsWreck && !targetHealth.IsBotControlled && !targetHealth.IsEvacuationAnimating;
+    }
+
+    Vector2 ResolveMuzzlePosition(Vector2 direction)
+    {
+        Vector2 forward = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector2.up;
+        return rb.position + forward * Mathf.Max(0.35f, bot.VisualTargetSize * 0.43f);
+    }
+
+    float ResolveBlockedBeamRange(Vector2 origin, Vector2 direction, float maxRange)
+    {
+        Vector2 normalized = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector2.up;
+        RaycastHit2D[] hits = Physics2D.CircleCastAll(origin, BeamRadius * 0.92f, normalized, maxRange);
+        float closestBlockDistance = maxRange;
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            RaycastHit2D hit = hits[i];
+            Collider2D hitCollider = hit.collider;
+            if (hitCollider == null || hitCollider.attachedRigidbody == rb)
+                continue;
+
+            float hitDistance = hit.distance;
+            if (hitDistance <= 0.04f || hitDistance >= closestBlockDistance)
+                continue;
+
+            if (!IsBeamBlockingObject(hitCollider))
+                continue;
+
+            closestBlockDistance = Mathf.Max(0.08f, hitDistance - 0.06f);
+        }
+
+        return closestBlockDistance;
+    }
+
+    void ApplyLanceDamage(Vector2 origin, Vector2 direction, float range)
+    {
+        damagedThisShot.Clear();
+        int attackerViewId = bot.photonView != null ? bot.photonView.ViewID : 0;
+        int baseDamage = Mathf.Max(0, RoomSettings.GetEnemyDamage(bot.Kind));
+        int shieldDamage = Mathf.Max(1, baseDamage);
+        int hpDamage = Mathf.Max(1, Mathf.CeilToInt(baseDamage * HpDamageMultiplier));
+
+        RaycastHit2D[] hits = Physics2D.CircleCastAll(origin, BeamRadius, direction.normalized, range);
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hitCollider = hits[i].collider;
+            if (hitCollider == null || hitCollider.attachedRigidbody == rb)
+                continue;
+
+            PlayerHealth candidate = hitCollider.GetComponentInParent<PlayerHealth>();
+            PhotonView targetView = candidate != null ? candidate.GetComponent<PhotonView>() : null;
+            if (candidate == null || targetView == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating)
+                continue;
+
+            if (candidate.IsBotControlled || candidate.GetComponent<LureBeaconDecoy>() != null)
+                continue;
+
+            if (!damagedThisShot.Add(targetView.ViewID))
+                continue;
+
+            Vector2 impact = hits[i].point.sqrMagnitude > 0.001f ? hits[i].point : candidate.transform.position;
+            targetView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, shieldDamage, hpDamage, attackerViewId, impact.x, impact.y);
+        }
+
+        foreach (LureBeaconDecoy beacon in LureBeaconDecoy.GetActiveBeacons())
+        {
+            if (beacon == null || !beacon.CanBeTargeted || beacon.photonView == null)
+                continue;
+
+            if (!IsPointInsideBeam(beacon.transform.position, origin, direction, range, BeamRadius))
+                continue;
+
+            if (!damagedThisShot.Add(beacon.photonView.ViewID))
+                continue;
+
+            Vector2 impact = ResolveClosestPointOnBeam(beacon.transform.position, origin, direction, range);
+            beacon.photonView.RPC(nameof(LureBeaconDecoy.TakeBeaconDamageProfileAt), RpcTarget.MasterClient, shieldDamage, hpDamage, attackerViewId, impact.x, impact.y);
+        }
+
+        foreach (PlayerDeployableBase deployable in PlayerDeployableBase.GetActiveDeployables())
+        {
+            if (deployable == null || !deployable.CanBeTargeted || deployable.photonView == null)
+                continue;
+
+            if (!IsPointInsideBeam(deployable.transform.position, origin, direction, range, BeamRadius))
+                continue;
+
+            if (!damagedThisShot.Add(deployable.photonView.ViewID))
+                continue;
+
+            Vector2 impact = ResolveClosestPointOnBeam(deployable.transform.position, origin, direction, range);
+            deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, shieldDamage, hpDamage, attackerViewId, impact.x, impact.y);
+        }
+    }
+
+    bool IsPointInsideBeam(Vector2 point, Vector2 origin, Vector2 direction, float range, float radius)
+    {
+        Vector2 closest = ResolveClosestPointOnBeam(point, origin, direction, range);
+        return Vector2.Distance(point, closest) <= radius;
+    }
+
+    Vector2 ResolveClosestPointOnBeam(Vector2 point, Vector2 origin, Vector2 direction, float range)
+    {
+        Vector2 normalized = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector2.up;
+        float projection = Vector2.Dot(point - origin, normalized);
+        projection = Mathf.Clamp(projection, 0f, Mathf.Max(0.01f, range));
+        return origin + normalized * projection;
+    }
+
+    Vector2 ApplyAvoidance(Vector2 desiredDirection)
+    {
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
+        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        Vector2 avoidance = Vector2.zero;
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null || hit.attachedRigidbody == rb)
+                continue;
+
+            if (!IsAvoidedObject(hit))
+                continue;
+
+            Vector2 closest = hit.ClosestPoint(rb.position);
+            Vector2 away = rb.position - closest;
+            if (away.sqrMagnitude <= 0.0001f)
+                away = rb.position - (Vector2)hit.transform.position;
+
+            float distance = Mathf.Max(0.12f, away.magnitude);
+            if (distance > AvoidanceScanRadius)
+                continue;
+
+            avoidance += away.normalized * Mathf.Clamp01((AvoidanceScanRadius - distance) / AvoidanceScanRadius);
+        }
+
+        if (avoidance.sqrMagnitude <= 0.001f)
+            return desiredDirection;
+
+        return (desired + avoidance.normalized * AvoidanceWeight).normalized;
+    }
+
+    bool IsAvoidedObject(Collider2D hit)
+    {
+        if (hit.GetComponentInParent<ObstacleChunk>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<Treasure>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<ShipWreck>() != null)
+            return true;
+
+        return hit.GetComponentInParent<DroppedCargoCrate>() != null;
+    }
+
+    bool IsBeamBlockingObject(Collider2D hit)
+    {
+        return IsAvoidedObject(hit);
+    }
+
+    Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
+    {
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
+        float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
+        Vector2 predicted = rb.position + desired * Mathf.Max(1.2f, bot.EffectiveMoveSpeed * 1.85f);
+        Vector2 inward = Vector2.zero;
+
+        if (predicted.x > halfX)
+            inward.x -= Mathf.InverseLerp(halfX + MapEdgeMargin, halfX, predicted.x);
+        else if (predicted.x < -halfX)
+            inward.x += Mathf.InverseLerp(-halfX - MapEdgeMargin, -halfX, predicted.x);
+
+        if (predicted.y > halfY)
+            inward.y -= Mathf.InverseLerp(halfY + MapEdgeMargin, halfY, predicted.y);
+        else if (predicted.y < -halfY)
+            inward.y += Mathf.InverseLerp(-halfY - MapEdgeMargin, -halfY, predicted.y);
+
+        if (inward.sqrMagnitude <= 0.001f)
+            return desiredDirection;
+
+        return (desired * 0.34f + inward.normalized * 0.76f).normalized;
+    }
+
+    float ResolveBeamRange()
+    {
+        return weapon != null && weapon.Range > 0f ? weapon.Range : Mathf.Max(10f, movement.ShootDistance);
+    }
+
+    float ResolveShotCooldown()
+    {
+        return weapon != null && weapon.FireRate > 0f ? weapon.FireRate : 4.6f;
     }
 
     void RotateNoseToward(Vector2 direction)

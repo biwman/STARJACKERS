@@ -25,12 +25,21 @@ public static class RoomSettings
     public const string FogOfWarModeKey = "mapEffect.fogOfWar.mode";
     public const string FogOfWarStartUtcMsKey = "mapEffect.fogOfWar.startUtcMs";
     public const string FogOfWarActiveKey = "mapEffect.fogOfWar.active";
+    public const string PirateBaseModeKey = "mapEffect.pirateBase.mode";
+    public const string PirateBaseStartUtcMsKey = "mapEffect.pirateBase.startUtcMs";
+    public const string PirateBaseActiveKey = "mapEffect.pirateBase.active";
+    public const string AsteroidShowerModeKey = "mapEffect.asteroidShower.mode";
+    public const string AsteroidShowerStartUtcMsKey = "mapEffect.asteroidShower.startUtcMs";
+    public const string AsteroidShowerActiveKey = "mapEffect.asteroidShower.active";
     public const string SpaceJunkDensityKey = "spaceJunkDensity";
     public const string ContainersDensityKey = "containersDensity";
     public const string NebulaDensityKey = "nebulaDensity";
     public const string FireNebulaDensityKey = "fireNebulaDensity";
     public const string NebulaSizeKey = "nebulaSize";
     public const string FireNebulaSizeKey = "fireNebulaSize";
+    public const string AdvancedNebulaEnabledKey = "advancedNebulaEnabled";
+    public const string CloudsDensityKey = "cloudsDensity";
+    public const string CloudsSizeKey = "cloudsSize";
     public const string ExtractionCountKey = "extractionCount";
     public const string RepairBayCountKey = "repairBayCount";
     public const string SpaceFactoryCountKey = "spaceFactoryCount";
@@ -48,9 +57,15 @@ public static class RoomSettings
     public const string MapBackgroundKey = "mapBackground";
     public const string SelectedMapKey = "selectedMap";
     public const string VisualEffectsEnabledKey = "visualEffectsEnabled";
+    public const string AdvancedBackgroundEnabledKey = "advancedBackgroundEnabled";
+    public const string ParallaxBackgroundKey = "parallaxBackground";
+    public const string BackgroundObjectKey = "backgroundObject";
+    public const string GravityWellPhysicsEnabledKey = "gravityWellPhysicsEnabled";
     public const string StartingVfxEnabledKey = "startingVfxEnabled";
     public const string EndDisasterModeKey = "endDisasterMode";
     public const string EndDisasterWarningSecondsKey = "endDisasterWarningSeconds";
+    public const string DynamicUseLabelEnabledKey = "dynamicUseLabelEnabled";
+    public const string CollectKeepAliveRangeBonusPercentKey = "collectKeepAliveRangeBonusPercent";
     public const string HapticsEnabledKey = "hapticsEnabled";
     public const string FpsCounterEnabledKey = "fpsCounterEnabled";
     public const string MovingObjectsEnabledKey = "movingObjectsEnabled";
@@ -63,6 +78,7 @@ public static class RoomSettings
     public const string TreasureWeightFactorKey = "treasureWeightFactor";
     public const string BatteringDamageKey = "batteringDamage";
     public const string ShootingModelKey = "shootingModel";
+    public const string AdvancedMovingJoystickEnabledKey = "advancedMovingJoystickEnabled";
     public const string AdvancedShootingJoystickEnabledKey = "advancedShootingJoystickEnabled";
     public const string SuperAttackEnabledKey = "superAttackEnabled";
     public const string GunSetupKeyPrefix = "gunSetup.";
@@ -105,7 +121,36 @@ public static class RoomSettings
     public const int MaxMapBackground = 21;
     public const string DefaultLobbyMapId = "just_space";
     public const bool DefaultVisualEffectsEnabled = true;
+    public const bool DefaultAdvancedBackgroundEnabled = true;
+    public const string ParallaxBackgroundKosmos3 = "kosmos3";
+    public const string ParallaxBackgroundKosmos6 = "kosmos6";
+    public const string ParallaxBackgroundKosmos8 = "kosmos8";
+    public const string ParallaxBackgroundKosmos9 = "kosmos9";
+    public const string ParallaxBackgroundKosmos10 = "kosmos10";
+    public const string ParallaxBackgroundKosmos11 = "kosmos11";
+    public const string ParallaxBackgroundKosmos12 = "kosmos12";
+    public const string ParallaxBackgroundKosmos13 = "kosmos13";
+    public const string ParallaxBackgroundKosmos14 = "kosmos14";
+    public const string DefaultParallaxBackground = ParallaxBackgroundKosmos9;
+    public const string BackgroundObjectOff = "off";
+    public const string BackgroundObject1 = "background_object1";
+    public const string BackgroundObject2 = "background_object2";
+    public const string BackgroundObject3 = "background_object3";
+    public const string BackgroundObject4 = "background_object4";
+    public const string BackgroundObject5 = "background_object5";
+    public const string BackgroundObject6 = "background_object6";
+    public const string BackgroundObject7 = "background_object7";
+    public const string BackgroundObject8 = "background_object8";
+    public const string BackgroundObject9 = "background_object9";
+    public const string BackgroundObject10 = "background_object10";
+    public const string BackgroundObject11 = "background_object11";
+    public const string BackgroundObject12 = "background_object12";
+    public const string BackgroundObject13 = "background_object13";
+    public const string DefaultBackgroundObject = BackgroundObjectOff;
+    public const bool DefaultGravityWellPhysicsEnabled = false;
     public const bool DefaultStartingVfxEnabled = true;
+    public const bool DefaultDynamicUseLabelEnabled = true;
+    public const int DefaultCollectKeepAliveRangeBonusPercent = 50;
     public const bool DefaultHapticsEnabled = true;
     public const bool DefaultFpsCounterEnabled = false;
     public const string EndDisasterOff = "off";
@@ -126,6 +171,7 @@ public static class RoomSettings
     public const string ShootingModelSimple = "simple";
     public const string ShootingModelComplex = "complex";
     public const string DefaultShootingModel = ShootingModelComplex;
+    public const bool DefaultAdvancedMovingJoystickEnabled = true;
     public const bool DefaultAdvancedShootingJoystickEnabled = true;
     public const bool DefaultSuperAttackEnabled = true;
     public const int MaxObstacleWeightFactor = 999;
@@ -173,6 +219,9 @@ public static class RoomSettings
     public const string NebulaSizeVeryBig = "very_big";
     public const string DefaultNebulaSize = NebulaSizeNormal;
     public const string DefaultFireNebulaSize = NebulaSizeNormal;
+    public const bool DefaultAdvancedNebulaEnabled = false;
+    public const string DefaultCloudsDensity = SpaceJunkDensityNone;
+    public const string DefaultCloudsSize = NebulaSizeNormal;
 
     public static float GetRoundDuration()
     {
@@ -410,6 +459,96 @@ public static class RoomSettings
         return DefaultVisualEffectsEnabled;
     }
 
+    public static bool IsAdvancedBackgroundEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(AdvancedBackgroundEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultAdvancedBackgroundEnabled;
+    }
+
+    public static string GetParallaxBackgroundId()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ParallaxBackgroundKey, out object value) &&
+            value is string backgroundId)
+        {
+            return NormalizeParallaxBackgroundId(backgroundId);
+        }
+
+        return DefaultParallaxBackground;
+    }
+
+    public static string NormalizeParallaxBackgroundId(string backgroundId)
+    {
+        switch (backgroundId)
+        {
+            case ParallaxBackgroundKosmos3:
+            case ParallaxBackgroundKosmos6:
+            case ParallaxBackgroundKosmos8:
+            case ParallaxBackgroundKosmos9:
+            case ParallaxBackgroundKosmos10:
+            case ParallaxBackgroundKosmos11:
+            case ParallaxBackgroundKosmos12:
+            case ParallaxBackgroundKosmos13:
+            case ParallaxBackgroundKosmos14:
+                return backgroundId;
+            default:
+                return DefaultParallaxBackground;
+        }
+    }
+
+    public static string GetBackgroundObjectId()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(BackgroundObjectKey, out object value) &&
+            value is string objectId)
+        {
+            return NormalizeBackgroundObjectId(objectId);
+        }
+
+        return DefaultBackgroundObject;
+    }
+
+    public static string NormalizeBackgroundObjectId(string objectId)
+    {
+        switch (objectId)
+        {
+            case BackgroundObject1:
+            case BackgroundObject2:
+            case BackgroundObject3:
+            case BackgroundObject4:
+            case BackgroundObject5:
+            case BackgroundObject6:
+            case BackgroundObject7:
+            case BackgroundObject8:
+            case BackgroundObject9:
+            case BackgroundObject10:
+            case BackgroundObject11:
+            case BackgroundObject12:
+            case BackgroundObject13:
+                return objectId;
+            default:
+                return DefaultBackgroundObject;
+        }
+    }
+
+    public static bool IsGravityWellPhysicsEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(GravityWellPhysicsEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultGravityWellPhysicsEnabled;
+    }
+
     public static bool AreStartingVfxEnabled()
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -420,6 +559,23 @@ public static class RoomSettings
         }
 
         return DefaultStartingVfxEnabled;
+    }
+
+    public static bool IsDynamicUseLabelEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(DynamicUseLabelEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultDynamicUseLabelEnabled;
+    }
+
+    public static int GetCollectKeepAliveRangeBonusPercent()
+    {
+        return GetInt(CollectKeepAliveRangeBonusPercentKey, DefaultCollectKeepAliveRangeBonusPercent, 0, 200);
     }
 
     public static bool AreHapticsEnabled()
@@ -553,7 +709,16 @@ public static class RoomSettings
     public static string GetResourceRichness()
     {
         string richness = GetBaseResourceRichness();
-        return IsFogOfWarActive() ? IncreaseResourceRichness(richness) : richness;
+        if (IsFogOfWarActive())
+            richness = IncreaseResourceRichness(richness);
+
+        if (IsPirateBaseActive())
+            richness = IncreaseResourceRichness(richness);
+
+        if (IsAsteroidShowerActive())
+            richness = IncreaseResourceRichness(richness);
+
+        return richness;
     }
 
     public static string NormalizeResourceRichness(string richness)
@@ -637,6 +802,30 @@ public static class RoomSettings
         return DefaultFireNebulaDensity;
     }
 
+    public static string GetCloudsDensity()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(CloudsDensityKey, out object value) &&
+            value is string density)
+        {
+            return NormalizeCloudsDensity(density);
+        }
+
+        return DefaultCloudsDensity;
+    }
+
+    public static bool IsAdvancedNebulaEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(AdvancedNebulaEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultAdvancedNebulaEnabled;
+    }
+
     public static string NormalizeFireNebulaDensity(string density)
     {
         string normalized = string.IsNullOrWhiteSpace(density)
@@ -652,6 +841,24 @@ public static class RoomSettings
                 return normalized;
             default:
                 return DefaultFireNebulaDensity;
+        }
+    }
+
+    public static string NormalizeCloudsDensity(string density)
+    {
+        string normalized = string.IsNullOrWhiteSpace(density)
+            ? DefaultCloudsDensity
+            : density.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case SpaceJunkDensityNone:
+            case SpaceJunkDensityLow:
+            case SpaceJunkDensityMedium:
+            case SpaceJunkDensityHigh:
+                return normalized;
+            default:
+                return DefaultCloudsDensity;
         }
     }
 
@@ -677,6 +884,18 @@ public static class RoomSettings
         }
 
         return DefaultFireNebulaSize;
+    }
+
+    public static string GetCloudsSize()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(CloudsSizeKey, out object value) &&
+            value is string size)
+        {
+            return NormalizeNebulaSize(size);
+        }
+
+        return DefaultCloudsSize;
     }
 
     public static string NormalizeNebulaSize(string size)
@@ -706,6 +925,11 @@ public static class RoomSettings
     public static float GetFireNebulaSizeMultiplier()
     {
         return GetNebulaSizeMultiplierForValue(GetFireNebulaSize());
+    }
+
+    public static float GetCloudsSizeMultiplier()
+    {
+        return GetNebulaSizeMultiplierForValue(GetCloudsSize());
     }
 
     public static float GetNebulaSizeMultiplierForValue(string size)
@@ -831,6 +1055,9 @@ public static class RoomSettings
     {
         EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
         if (definition == null)
+            return true;
+
+        if (kind == EnemyBotKind.PirateBase && IsPirateBaseEffectReadyOrActive())
             return true;
 
         if (PhotonNetwork.CurrentRoom != null &&
@@ -1102,6 +1329,18 @@ public static class RoomSettings
         return DefaultAdvancedShootingJoystickEnabled;
     }
 
+    public static bool IsAdvancedMovingJoystickEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(AdvancedMovingJoystickEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultAdvancedMovingJoystickEnabled;
+    }
+
     public static string GetMapEffectMode(string modeKey)
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -1166,6 +1405,30 @@ public static class RoomSettings
     public static bool IsFogOfWarActive()
     {
         return IsMapEffectActive(FogOfWarActiveKey);
+    }
+
+    public static bool IsPirateBaseActive()
+    {
+        return IsMapEffectActive(PirateBaseActiveKey);
+    }
+
+    public static bool IsAsteroidShowerActive()
+    {
+        return IsMapEffectActive(AsteroidShowerActiveKey);
+    }
+
+    static bool IsPirateBaseEffectReadyOrActive()
+    {
+        if (IsPirateBaseActive())
+            return true;
+
+        if (GetSessionState() != SessionStateInLobby)
+            return false;
+
+        return ShouldMapEffectActivate(
+            PirateBaseModeKey,
+            PirateBaseStartUtcMsKey,
+            System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
     }
 
     static bool IsMapEffectActive(string activeKey)

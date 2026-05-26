@@ -53,6 +53,8 @@ public sealed class LobbyMapDefinition
     public string FireNebulaDensity { get; }
     public string NebulaSize { get; }
     public string FireNebulaSize { get; }
+    public string CloudsDensity { get; }
+    public string CloudsSize { get; }
     public int ExtractionZoneCount { get; }
     public bool MovingObjectsEnabled { get; }
     public int ObstacleMassFactor { get; }
@@ -100,6 +102,77 @@ public sealed class LobbyMapDefinition
         int repairBayCount,
         int spaceFactoryCount,
         params LobbyEnemyMapPreset[] enemyPresets)
+        : this(
+            id,
+            displayName,
+            description,
+            roundDurationSeconds,
+            mapSize,
+            loneShipTimerMultiplier,
+            obstacleDensity,
+            obstaclesDestroyEnabled,
+            obstacleHp,
+            obstacleSizePercent,
+            obstaclesNoBorders,
+            resourceDensity,
+            resourceRichness,
+            nebulaDensity,
+            fireNebulaDensity,
+            nebulaSize,
+            fireNebulaSize,
+            RoomSettings.DefaultCloudsDensity,
+            RoomSettings.DefaultCloudsSize,
+            extractionZoneCount,
+            movingObjectsEnabled,
+            obstacleMassFactor,
+            treasureMassFactor,
+            mapBackgroundIndex,
+            visualEffectsEnabled,
+            inventoryLossEnabled,
+            equipmentLossEnabled,
+            spaceJunkDensity,
+            containersDensity,
+            randomLootWreckCount,
+            repairBayCount,
+            spaceFactoryCount,
+            enemyPresets)
+    {
+    }
+
+    public LobbyMapDefinition(
+        string id,
+        string displayName,
+        string description,
+        float roundDurationSeconds,
+        string mapSize,
+        float loneShipTimerMultiplier,
+        string obstacleDensity,
+        bool obstaclesDestroyEnabled,
+        int obstacleHp,
+        int obstacleSizePercent,
+        bool obstaclesNoBorders,
+        string resourceDensity,
+        string resourceRichness,
+        string nebulaDensity,
+        string fireNebulaDensity,
+        string nebulaSize,
+        string fireNebulaSize,
+        string cloudsDensity,
+        string cloudsSize,
+        int extractionZoneCount,
+        bool movingObjectsEnabled,
+        int obstacleMassFactor,
+        int treasureMassFactor,
+        int mapBackgroundIndex,
+        bool visualEffectsEnabled,
+        bool inventoryLossEnabled,
+        bool equipmentLossEnabled,
+        string spaceJunkDensity,
+        string containersDensity,
+        int randomLootWreckCount,
+        int repairBayCount,
+        int spaceFactoryCount,
+        params LobbyEnemyMapPreset[] enemyPresets)
     {
         Id = id;
         DisplayName = displayName;
@@ -118,6 +191,8 @@ public sealed class LobbyMapDefinition
         FireNebulaDensity = string.IsNullOrWhiteSpace(fireNebulaDensity) ? RoomSettings.DefaultFireNebulaDensity : fireNebulaDensity;
         NebulaSize = RoomSettings.NormalizeNebulaSize(nebulaSize);
         FireNebulaSize = RoomSettings.NormalizeNebulaSize(fireNebulaSize);
+        CloudsDensity = RoomSettings.NormalizeCloudsDensity(cloudsDensity);
+        CloudsSize = RoomSettings.NormalizeNebulaSize(cloudsSize);
         ExtractionZoneCount = extractionZoneCount;
         MovingObjectsEnabled = movingObjectsEnabled;
         ObstacleMassFactor = obstacleMassFactor;
@@ -137,6 +212,16 @@ public sealed class LobbyMapDefinition
 
 public static class LobbyMapCatalog
 {
+    public const string JustSpaceMapId = "just_space";
+    public const string NoobHavenMapId = "noob_haven";
+    public const string MinefieldMapId = "minefield";
+    public const string SnowFieldMapId = "snow_field";
+    public const string DeepSpaceMapId = "deep_space";
+    public const string PirateBayMapId = "pirate_bay";
+    public const string AncientSpaceMapId = "ancient_space";
+    public const string TheThreatMapId = "mothership";
+    public const string GravityWellMapId = "gravity_well";
+
     static readonly LobbyMapDefinition[] Maps =
     {
         new LobbyMapDefinition(
@@ -182,11 +267,14 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterAce, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceManta, false, 1, false, 100, 0, 1f, 0, 90, 40),
+            new LobbyEnemyMapPreset(EnemyBotKind.GravitySquid, false, 1, false, 80, 70, 1f, 0, 120, 8),
+            new LobbyEnemyMapPreset(EnemyBotKind.HunterLance, false, 1, false, 85, 115, 1f, 0, 120, 36),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
             new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
         new LobbyMapDefinition(
-            "noob_haven",
+            NoobHavenMapId,
             "NOOB HAVEN",
             "Loot your first asteroids. Beware of neutral pilots.\n" +
             "You lose your inventory if you die.\n" +
@@ -226,6 +314,9 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterAce, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceManta, false, 1, false, 100, 0, 1f, 0, 90, 40),
+            new LobbyEnemyMapPreset(EnemyBotKind.GravitySquid, false, 1, false, 80, 70, 1f, 0, 120, 8),
+            new LobbyEnemyMapPreset(EnemyBotKind.HunterLance, false, 1, false, 85, 115, 1f, 0, 120, 36),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
             new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
@@ -270,6 +361,108 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterAce, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceManta, false, 1, false, 100, 0, 1f, 0, 90, 40),
+            new LobbyEnemyMapPreset(EnemyBotKind.GravitySquid, false, 1, false, 80, 70, 1f, 0, 120, 8),
+            new LobbyEnemyMapPreset(EnemyBotKind.HunterLance, false, 1, false, 85, 115, 1f, 0, 120, 36),
+            new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
+            new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
+        new LobbyMapDefinition(
+            SnowFieldMapId,
+            "SNOW FIELD",
+            "Frozen open field on a snow planet. Clouds drift across the battlefield and hide sudden manta charges.\n" +
+            "You lose your inventory if you die.\n" +
+            "No loss of equipment.",
+            300f,
+            "very_large",
+            1f,
+            "medium",
+            true,
+            450,
+            110,
+            false,
+            "medium",
+            RoomSettings.ResourceRichnessHigh,
+            "none",
+            RoomSettings.DefaultFireNebulaDensity,
+            RoomSettings.DefaultNebulaSize,
+            RoomSettings.DefaultFireNebulaSize,
+            RoomSettings.SpaceJunkDensityMedium,
+            RoomSettings.NebulaSizeNormal,
+            1,
+            true,
+            12,
+            6,
+            14,
+            true,
+            true,
+            false,
+            RoomSettings.SpaceJunkDensityLow,
+            RoomSettings.ContainersDensityVeryLow,
+            1,
+            1,
+            0,
+            new LobbyEnemyMapPreset(EnemyBotKind.Drone, false, 1, false, 50, 20, 1f, 0, 60),
+            new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 5, false, 60, 20, 1f, 0, 120, 50),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, true, 2, true, 20, 20, 1.35f, 0, 90, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterAce, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceManta, true, 3, true, 100, 0, 1.05f, 0, 90, 40),
+            new LobbyEnemyMapPreset(EnemyBotKind.GravitySquid, true, 2, true, 80, 70, 1f, 0, 120, 8),
+            new LobbyEnemyMapPreset(EnemyBotKind.HunterLance, false, 1, false, 85, 115, 1f, 0, 120, 36),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateBase, false, 1, false, 500, 1000, 1f, 0, 90, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 120, 38),
+            new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
+        new LobbyMapDefinition(
+            DeepSpaceMapId,
+            "DEEP SPACE",
+            "Far beyond regular trade routes, deep space is rich with rare materials and hunted by long-range lance ships.\n" +
+            "You lose your inventory and equipment here if you die.",
+            330f,
+            "super_large",
+            1f,
+            "low",
+            true,
+            500,
+            90,
+            false,
+            "medium",
+            RoomSettings.ResourceRichnessVeryHigh,
+            "low",
+            RoomSettings.SpaceJunkDensityNone,
+            RoomSettings.DefaultNebulaSize,
+            RoomSettings.DefaultFireNebulaSize,
+            RoomSettings.SpaceJunkDensityNone,
+            RoomSettings.NebulaSizeNormal,
+            2,
+            true,
+            12,
+            6,
+            20,
+            true,
+            true,
+            true,
+            RoomSettings.SpaceJunkDensityMedium,
+            RoomSettings.ContainersDensityMedium,
+            2,
+            0,
+            1,
+            new LobbyEnemyMapPreset(EnemyBotKind.Drone, false, 1, false, 50, 20, 1f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 8, false, 60, 20, 1f, 0, 120, 50),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, true, 3, true, 20, 20, 1.5f, 0, 90, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterAce, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceManta, false, 1, false, 100, 0, 1f, 0, 90, 40),
+            new LobbyEnemyMapPreset(EnemyBotKind.GravitySquid, false, 1, false, 80, 70, 1f, 0, 120, 8),
+            new LobbyEnemyMapPreset(EnemyBotKind.HunterLance, true, 3, true, 85, 115, 1.05f, 0, 60, 36),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateBase, false, 1, false, 500, 1000, 1f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
             new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
@@ -313,6 +506,9 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, true, 3, true, 50, 50, 2f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 3, true, 66, 66, 2f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterAce, false, 3, true, 66, 66, 2f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceManta, false, 1, false, 100, 0, 1f, 0, 90, 40),
+            new LobbyEnemyMapPreset(EnemyBotKind.GravitySquid, false, 1, false, 80, 70, 1f, 0, 120, 8),
+            new LobbyEnemyMapPreset(EnemyBotKind.HunterLance, false, 1, false, 85, 115, 1f, 0, 120, 36),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
             new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, true, 1, true, 50, 150, 2f, 0, 120, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
@@ -356,6 +552,9 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterAce, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceManta, false, 1, false, 100, 0, 1f, 0, 90, 40),
+            new LobbyEnemyMapPreset(EnemyBotKind.GravitySquid, false, 1, false, 80, 70, 1f, 0, 120, 8),
+            new LobbyEnemyMapPreset(EnemyBotKind.HunterLance, false, 1, false, 85, 115, 1f, 0, 120, 36),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateBase, false, 1, false, 500, 1000, 1f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
             new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
@@ -400,9 +599,61 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterAce, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceManta, false, 1, false, 100, 0, 1f, 0, 90, 40),
+            new LobbyEnemyMapPreset(EnemyBotKind.GravitySquid, false, 1, false, 80, 70, 1f, 0, 120, 8),
+            new LobbyEnemyMapPreset(EnemyBotKind.HunterLance, false, 1, false, 85, 115, 1f, 0, 120, 36),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, true, 1, false, 90, 110, 1f, 0, 120, 38),
             new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, true, 1, true, 50, 150, 2f, 0, 120, 0),
-            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, true, 1, false, 200, 200, 1f, 0, 90, 10))
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, true, 1, false, 200, 200, 1f, 0, 90, 10)),
+        new LobbyMapDefinition(
+            GravityWellMapId,
+            "GRAVITY WELL",
+            "A cracked singularity bends the whole sector into a dangerous orbit of dust, wreckage and rare resources.\n" +
+            "You lose your inventory and equipment here if you die.",
+            330f,
+            "super_large",
+            1f,
+            "medium",
+            true,
+            300,
+            150,
+            false,
+            "medium",
+            RoomSettings.ResourceRichnessVeryHigh,
+            "low",
+            RoomSettings.SpaceJunkDensityLow,
+            RoomSettings.NebulaSizeNormal,
+            RoomSettings.NebulaSizeSmall,
+            RoomSettings.SpaceJunkDensityNone,
+            RoomSettings.NebulaSizeNormal,
+            2,
+            true,
+            12,
+            6,
+            21,
+            true,
+            true,
+            true,
+            RoomSettings.SpaceJunkDensityMedium,
+            RoomSettings.ContainersDensityLow,
+            2,
+            0,
+            1,
+            new LobbyEnemyMapPreset(EnemyBotKind.Drone, false, 1, false, 50, 20, 1f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 6, false, 60, 20, 1f, 15, 120, 50),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, true, 1, true, 100, 60, 1.25f, 0, 120, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 90, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterAce, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceManta, false, 1, false, 100, 0, 1f, 0, 90, 40),
+            new LobbyEnemyMapPreset(EnemyBotKind.GravitySquid, true, 3, true, 80, 85, 1.05f, 0, 90, 8),
+            new LobbyEnemyMapPreset(EnemyBotKind.HunterLance, false, 1, false, 85, 115, 1f, 0, 120, 36),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateBase, false, 1, false, 500, 1000, 1f, 0, 90, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, true, 2, true, 90, 120, 1.05f, 20, 120, 38),
+            new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90))
     };
 
     static readonly Dictionary<string, LobbyMapDefinition> MapsById = BuildMapsById();
@@ -420,6 +671,60 @@ public static class LobbyMapCatalog
             return GetDefault();
 
         return MapsById.TryGetValue(id, out LobbyMapDefinition map) ? map : GetDefault();
+    }
+
+    public static string GetDefaultParallaxBackgroundId(string mapId)
+    {
+        switch (mapId)
+        {
+            case NoobHavenMapId:
+                return RoomSettings.ParallaxBackgroundKosmos6;
+            case AncientSpaceMapId:
+                return RoomSettings.ParallaxBackgroundKosmos8;
+            case JustSpaceMapId:
+                return RoomSettings.ParallaxBackgroundKosmos9;
+            case MinefieldMapId:
+                return RoomSettings.ParallaxBackgroundKosmos10;
+            case PirateBayMapId:
+                return RoomSettings.ParallaxBackgroundKosmos11;
+            case SnowFieldMapId:
+                return RoomSettings.ParallaxBackgroundKosmos12;
+            case DeepSpaceMapId:
+                return RoomSettings.ParallaxBackgroundKosmos3;
+            case TheThreatMapId:
+                return RoomSettings.ParallaxBackgroundKosmos13;
+            case GravityWellMapId:
+                return RoomSettings.ParallaxBackgroundKosmos14;
+            default:
+                return RoomSettings.DefaultParallaxBackground;
+        }
+    }
+
+    public static string GetDefaultBackgroundObjectId(string mapId)
+    {
+        switch (mapId)
+        {
+            case NoobHavenMapId:
+                return RoomSettings.BackgroundObject2;
+            case AncientSpaceMapId:
+                return RoomSettings.BackgroundObject9;
+            case JustSpaceMapId:
+                return RoomSettings.BackgroundObject7;
+            case MinefieldMapId:
+                return RoomSettings.BackgroundObject1;
+            case PirateBayMapId:
+                return RoomSettings.BackgroundObject3;
+            case SnowFieldMapId:
+                return RoomSettings.BackgroundObject12;
+            case DeepSpaceMapId:
+                return RoomSettings.BackgroundObject6;
+            case TheThreatMapId:
+                return RoomSettings.BackgroundObject8;
+            case GravityWellMapId:
+                return RoomSettings.BackgroundObject13;
+            default:
+                return RoomSettings.DefaultBackgroundObject;
+        }
     }
 
     public static void ApplyToProperties(LobbyMapDefinition map, Hashtable props)
@@ -447,6 +752,8 @@ public static class LobbyMapCatalog
         props[RoomSettings.FireNebulaDensityKey] = map.FireNebulaDensity;
         props[RoomSettings.NebulaSizeKey] = map.NebulaSize;
         props[RoomSettings.FireNebulaSizeKey] = map.FireNebulaSize;
+        props[RoomSettings.CloudsDensityKey] = map.CloudsDensity;
+        props[RoomSettings.CloudsSizeKey] = map.CloudsSize;
         props[RoomSettings.ExtractionCountKey] = map.ExtractionZoneCount;
         props[RoomSettings.RepairBayCountKey] = map.RepairBayCount;
         props[RoomSettings.SpaceFactoryCountKey] = map.SpaceFactoryCount;
@@ -455,8 +762,21 @@ public static class LobbyMapCatalog
         props[RoomSettings.TreasureWeightFactorKey] = map.TreasureMassFactor;
         props[RoomSettings.MapBackgroundKey] = map.MapBackgroundIndex;
         props[RoomSettings.VisualEffectsEnabledKey] = map.VisualEffectsEnabled;
+        props[RoomSettings.AdvancedBackgroundEnabledKey] = RoomSettings.DefaultAdvancedBackgroundEnabled;
+        props[RoomSettings.ParallaxBackgroundKey] = GetDefaultParallaxBackgroundId(map.Id);
+        props[RoomSettings.BackgroundObjectKey] = GetDefaultBackgroundObjectId(map.Id);
+        props[RoomSettings.GravityWellPhysicsEnabledKey] = map.Id == GravityWellMapId;
+
         props[RoomSettings.EndDisasterModeKey] = RoomSettings.EndDisasterMeteor;
         props[RoomSettings.EndDisasterWarningSecondsKey] = RoomSettings.DefaultEndDisasterWarningSeconds;
+
+        ApplyEnemyPresetsToProperties(map, props);
+    }
+
+    public static void ApplyEnemyPresetsToProperties(LobbyMapDefinition map, Hashtable props, ISet<string> preservedKeys = null)
+    {
+        if (map == null || props == null)
+            return;
 
         for (int i = 0; i < map.EnemyPresets.Count; i++)
         {
@@ -465,25 +785,36 @@ public static class LobbyMapCatalog
             if (definition == null)
                 continue;
 
-            props[definition.EnabledRoomKey] = enemyPreset.Enabled;
-            props[definition.CountRoomKey] = enemyPreset.Count;
-            props[definition.HpRoomKey] = enemyPreset.Hp;
-            props[definition.ShieldRoomKey] = enemyPreset.Shield;
-            props[definition.DamageRoomKey] = enemyPreset.Damage >= 0 ? enemyPreset.Damage : definition.DefaultDamage;
-            props[definition.SpeedRoomKey] = enemyPreset.SpeedMultiplier;
-            props[definition.SpawnSecondRoomKey] = enemyPreset.FirstRespawnSeconds;
-            props[definition.RespawnEnabledRoomKey] = enemyPreset.RespawnEnabled;
-            props[definition.RespawnIntervalRoomKey] = enemyPreset.RespawnLoopSeconds;
+            SetPresetProperty(props, definition.EnabledRoomKey, enemyPreset.Enabled, preservedKeys);
+            SetPresetProperty(props, definition.CountRoomKey, enemyPreset.Count, preservedKeys);
+            SetPresetProperty(props, definition.HpRoomKey, enemyPreset.Hp, preservedKeys);
+            SetPresetProperty(props, definition.ShieldRoomKey, enemyPreset.Shield, preservedKeys);
+            SetPresetProperty(props, definition.DamageRoomKey, enemyPreset.Damage >= 0 ? enemyPreset.Damage : definition.DefaultDamage, preservedKeys);
+            SetPresetProperty(props, definition.SpeedRoomKey, enemyPreset.SpeedMultiplier, preservedKeys);
+            SetPresetProperty(props, definition.SpawnSecondRoomKey, enemyPreset.FirstRespawnSeconds, preservedKeys);
+            SetPresetProperty(props, definition.RespawnEnabledRoomKey, enemyPreset.RespawnEnabled, preservedKeys);
+            SetPresetProperty(props, definition.RespawnIntervalRoomKey, enemyPreset.RespawnLoopSeconds, preservedKeys);
 
             if (enemyPreset.Kind == EnemyBotKind.Drone)
-                props[RoomSettings.EnemyBotsEnabledKey] = enemyPreset.Enabled;
+                SetPresetProperty(props, RoomSettings.EnemyBotsEnabledKey, enemyPreset.Enabled, preservedKeys);
             else if (enemyPreset.Kind == EnemyBotKind.Corsair)
             {
-                props[RoomSettings.CorsairEnabledKey] = enemyPreset.Enabled;
-                props[RoomSettings.CorsairSpawnSecondKey] = enemyPreset.FirstRespawnSeconds;
-                props[RoomSettings.CorsairHpKey] = enemyPreset.Hp;
+                SetPresetProperty(props, RoomSettings.CorsairEnabledKey, enemyPreset.Enabled, preservedKeys);
+                SetPresetProperty(props, RoomSettings.CorsairSpawnSecondKey, enemyPreset.FirstRespawnSeconds, preservedKeys);
+                SetPresetProperty(props, RoomSettings.CorsairHpKey, enemyPreset.Hp, preservedKeys);
             }
         }
+    }
+
+    static void SetPresetProperty(Hashtable props, string key, object value, ISet<string> preservedKeys)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return;
+
+        if (preservedKeys != null && preservedKeys.Contains(key))
+            return;
+
+        props[key] = value;
     }
 
     static Dictionary<string, LobbyMapDefinition> BuildMapsById()

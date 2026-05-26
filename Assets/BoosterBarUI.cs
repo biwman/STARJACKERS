@@ -15,6 +15,7 @@ public class BoosterBarUI : MonoBehaviourPun
     PlayerMovement movement;
     Slider boosterBar;
     RectTransform boosterRect;
+    RectTransform hpBarRect;
     Image fillImage;
     Image handleImage;
     TextMeshProUGUI percentText;
@@ -71,9 +72,9 @@ public class BoosterBarUI : MonoBehaviourPun
         GameObject clone = Instantiate(hpBarObject, hpBarObject.transform.parent);
         clone.name = BoosterBarName;
 
-        RectTransform hpRect = hpBarObject.GetComponent<RectTransform>();
+        hpBarRect = hpBarObject.GetComponent<RectTransform>();
         boosterRect = clone.GetComponent<RectTransform>();
-        ApplyLayout(hpRect);
+        ApplyLayout(hpBarRect);
 
         boosterBar = clone.GetComponent<Slider>();
         boosterBar.minValue = 0f;
@@ -164,7 +165,7 @@ public class BoosterBarUI : MonoBehaviourPun
         if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
             value is bool started)
         {
-            return started;
+            return GameplayHudVisibility.IsGameplayHudVisible(started);
         }
 
         return false;
@@ -175,9 +176,13 @@ public class BoosterBarUI : MonoBehaviourPun
         if (boosterRect == null)
             return;
 
-        GameObject hpBarObject = GameObject.Find("HP_Bar");
-        RectTransform hpRect = hpBarObject != null ? hpBarObject.GetComponent<RectTransform>() : null;
-        ApplyLayout(hpRect);
+        if (hpBarRect == null)
+        {
+            GameObject hpBarObject = GameObject.Find("HP_Bar");
+            hpBarRect = hpBarObject != null ? hpBarObject.GetComponent<RectTransform>() : null;
+        }
+
+        ApplyLayout(hpBarRect);
     }
 
     void ApplyLayout(RectTransform hpRect)

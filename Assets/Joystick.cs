@@ -6,6 +6,7 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
     public float deadZone = 0.15f;
     public bool rescaleInputAfterDeadZone;
     public float responseExponent = 1f;
+    public bool recenterOnPointerDown;
     public RectTransform background;
     public RectTransform handle;
 
@@ -36,7 +37,11 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
     public void OnPointerDown(PointerEventData eventData)
     {
         IsPressed = true;
-        IsExternalControlActive = false;
+        IsExternalControlActive = recenterOnPointerDown;
+
+        if (recenterOnPointerDown)
+            SetBackgroundScreenPosition(eventData.position, eventData.pressEventCamera);
+
         ApplyPointer(eventData.position, eventData.pressEventCamera);
     }
 

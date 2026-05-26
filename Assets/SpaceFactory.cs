@@ -28,6 +28,7 @@ public sealed class SpaceFactory : MonoBehaviourPunCallbacks
     };
 
     static readonly Dictionary<string, SpaceFactory> FactoriesById = new Dictionary<string, SpaceFactory>();
+    static bool containerIconsPrewarmed;
 
     string stableId;
     Vector2 anchorPosition;
@@ -109,10 +110,19 @@ public sealed class SpaceFactory : MonoBehaviourPunCallbacks
     public static bool TryDepositContainerAuthority(string factoryId, string itemId, out bool completedNow)
     {
         completedNow = false;
+        bool accepted = TryDepositContainersAuthority(factoryId, new[] { itemId }, out int acceptedCount, out completedNow);
+        return accepted && acceptedCount > 0;
+    }
+
+    public static bool TryDepositContainersAuthority(string factoryId, string[] itemIds, out int acceptedCount, out bool completedNow)
+    {
+        acceptedCount = 0;
+        completedNow = false;
         if (!PhotonNetwork.IsMasterClient ||
             PhotonNetwork.CurrentRoom == null ||
             string.IsNullOrWhiteSpace(factoryId) ||
-            !InventoryItemCatalog.IsContainerItem(itemId))
+            itemIds == null ||
+            itemIds.Length == 0)
         {
             return false;
         }
@@ -127,7 +137,19 @@ public sealed class SpaceFactory : MonoBehaviourPunCallbacks
         if (progress.Completed || progress.ContainerIds.Count >= RequiredContainerCount)
             return false;
 
-        progress.ContainerIds.Add(itemId);
+        for (int i = 0; i < itemIds.Length && progress.ContainerIds.Count < RequiredContainerCount; i++)
+        {
+            string itemId = itemIds[i];
+            if (!InventoryItemCatalog.IsContainerItem(itemId))
+                continue;
+
+            progress.ContainerIds.Add(itemId);
+            acceptedCount++;
+        }
+
+        if (acceptedCount <= 0)
+            return false;
+
         if (progress.ContainerIds.Count >= RequiredContainerCount)
         {
             progress.Completed = true;
@@ -135,7 +157,7 @@ public sealed class SpaceFactory : MonoBehaviourPunCallbacks
         }
 
         PublishFactoryState(state);
-        RefreshAllContainerVisuals();
+        RefreshFactoryContainerVisuals(factoryId);
         return true;
     }
 
@@ -214,6 +236,7 @@ public sealed class SpaceFactory : MonoBehaviourPunCallbacks
         interactionTrigger.radius = InteractionRadius / worldScale;
         interactionTrigger.offset = GetLandingLocalOffset();
 
+        PrewarmContainerIcons();
         EnsureContainerSlotRenderers();
     }
 
@@ -277,13 +300,21 @@ public sealed class SpaceFactory : MonoBehaviourPunCallbacks
         }
     }
 
-    static void RefreshAllContainerVisuals()
+    static void RefreshFactoryContainerVisuals(string factoryId)
     {
-        foreach (SpaceFactory factory in FactoriesById.Values)
-        {
-            if (factory != null)
-                factory.RefreshContainerVisuals();
-        }
+        SpaceFactory factory = Find(factoryId);
+        if (factory != null)
+            factory.RefreshContainerVisuals();
+    }
+
+    static void PrewarmContainerIcons()
+    {
+        if (containerIconsPrewarmed)
+            return;
+
+        containerIconsPrewarmed = true;
+        for (int i = 0; i < InventoryItemCatalog.ContainerVariantCount; i++)
+            InventoryItemCatalog.GetIcon(InventoryItemCatalog.GetContainerItemId(i));
     }
 
     void FitContainerIcon(SpriteRenderer renderer)

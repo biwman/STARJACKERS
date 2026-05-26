@@ -25,6 +25,7 @@ public class GameVisualTheme : MonoBehaviour
     const float TreasureTargetSize = 1.5f;
     const float ContainerTargetSize = 1.05f;
     const float RandomLootWreckTargetSize = 1.24f;
+    const float SpaceAnimalRemainsTargetSize = 1.1f;
     const float TreasureColliderSizeMultiplier = 0.9f;
     const float PlayerBodyColliderWidthFactor = 0.46f;
     const float PlayerBodyColliderHeightFactor = 0.62f;
@@ -51,6 +52,7 @@ public class GameVisualTheme : MonoBehaviour
     Sprite spaceJunkTrashSprite;
     Sprite spaceJunkStandardSprite;
     Sprite spaceJunkAsteroidSprite;
+    Sprite spaceAnimalRemainsSprite;
     Sprite[] containerSprites;
     Sprite[] randomLootWreckSprites;
     Sprite[] obstacleSprites;
@@ -62,6 +64,10 @@ public class GameVisualTheme : MonoBehaviour
     int lastRuntimeBackgroundIndex = int.MinValue;
     int lastRuntimeObstacleSizePercent = int.MinValue;
     string lastRuntimeMapSizeMode = string.Empty;
+    string lastRuntimeSelectedMapId = string.Empty;
+    string lastRuntimeParallaxBackgroundId = string.Empty;
+    string lastRuntimeBackgroundObjectId = string.Empty;
+    bool lastRuntimeAdvancedBackgroundEnabled;
 #if UNITY_EDITOR
     double nextEditorRefreshTime;
 #endif
@@ -121,6 +127,30 @@ public class GameVisualTheme : MonoBehaviour
 
         instance.LoadAssets();
         instance.ApplyObstacleVisualInternal(target);
+    }
+
+    public static void ApplyTreasureVisual(Treasure target)
+    {
+        EnsureInstance();
+        if (instance == null || target == null)
+            return;
+
+        if (instance.treasureSprite == null)
+            instance.LoadAssets();
+
+        instance.ApplyTreasureVisualInternal(target);
+    }
+
+    public static void ApplyPlayerVisual(PlayerHealth target)
+    {
+        EnsureInstance();
+        if (instance == null || target == null)
+            return;
+
+        if (instance.shipSprites == null || instance.shipSprites.Length == 0)
+            instance.LoadAssets();
+
+        instance.ApplyPlayerVisualInternal(target);
     }
 
     public static void RequestRuntimeRefresh(bool reloadAssets = false)
@@ -233,6 +263,10 @@ public class GameVisualTheme : MonoBehaviour
         lastRuntimeBackgroundIndex = RoomSettings.GetMapBackgroundIndex();
         lastRuntimeMapSizeMode = RoomSettings.GetMapSizeMode();
         lastRuntimeObstacleSizePercent = RoomSettings.GetObstacleSizePercent();
+        lastRuntimeSelectedMapId = RoomSettings.GetSelectedLobbyMapId();
+        lastRuntimeParallaxBackgroundId = RoomSettings.GetParallaxBackgroundId();
+        lastRuntimeBackgroundObjectId = RoomSettings.GetBackgroundObjectId();
+        lastRuntimeAdvancedBackgroundEnabled = RoomSettings.IsAdvancedBackgroundEnabled();
     }
 
     void RefreshRuntimeSettingsIfNeeded()
@@ -240,9 +274,21 @@ public class GameVisualTheme : MonoBehaviour
         int backgroundIndex = RoomSettings.GetMapBackgroundIndex();
         string mapSizeMode = RoomSettings.GetMapSizeMode();
         int obstacleSizePercent = RoomSettings.GetObstacleSizePercent();
+        string selectedMapId = RoomSettings.GetSelectedLobbyMapId();
+        string parallaxBackgroundId = RoomSettings.GetParallaxBackgroundId();
+        string backgroundObjectId = RoomSettings.GetBackgroundObjectId();
+        bool advancedBackgroundEnabled = RoomSettings.IsAdvancedBackgroundEnabled();
 
         bool backgroundChanged = backgroundIndex != lastRuntimeBackgroundIndex;
+        bool selectedMapChanged = !string.Equals(selectedMapId, lastRuntimeSelectedMapId, System.StringComparison.Ordinal);
+        bool parallaxBackgroundChanged = !string.Equals(parallaxBackgroundId, lastRuntimeParallaxBackgroundId, System.StringComparison.Ordinal);
+        bool backgroundObjectChanged = !string.Equals(backgroundObjectId, lastRuntimeBackgroundObjectId, System.StringComparison.Ordinal);
+        bool advancedBackgroundChanged = advancedBackgroundEnabled != lastRuntimeAdvancedBackgroundEnabled;
         if (!backgroundChanged &&
+            !selectedMapChanged &&
+            !parallaxBackgroundChanged &&
+            !backgroundObjectChanged &&
+            !advancedBackgroundChanged &&
             string.Equals(mapSizeMode, lastRuntimeMapSizeMode, System.StringComparison.Ordinal) &&
             obstacleSizePercent == lastRuntimeObstacleSizePercent)
         {
@@ -252,7 +298,11 @@ public class GameVisualTheme : MonoBehaviour
         lastRuntimeBackgroundIndex = backgroundIndex;
         lastRuntimeMapSizeMode = mapSizeMode;
         lastRuntimeObstacleSizePercent = obstacleSizePercent;
-        MarkRuntimeThemeDirty(backgroundChanged, 0f);
+        lastRuntimeSelectedMapId = selectedMapId;
+        lastRuntimeParallaxBackgroundId = parallaxBackgroundId;
+        lastRuntimeBackgroundObjectId = backgroundObjectId;
+        lastRuntimeAdvancedBackgroundEnabled = advancedBackgroundEnabled;
+        MarkRuntimeThemeDirty(backgroundChanged || selectedMapChanged, 0f);
     }
 
 #if UNITY_EDITOR
@@ -273,6 +323,7 @@ public class GameVisualTheme : MonoBehaviour
 
     void LoadAssets()
     {
+        bool snowFieldTheme = IsSnowFieldTheme();
         shipSprites = new Sprite[ShipCatalog.MaxShipSkinIndex + 1];
         wreckSprites = new Sprite[ShipCatalog.MaxShipSkinIndex + 1];
         for (int skinIndex = 0; skinIndex <= ShipCatalog.MaxShipSkinIndex; skinIndex++)
@@ -291,27 +342,31 @@ public class GameVisualTheme : MonoBehaviour
         corsairSprite = LoadSpriteFromResourcesOrEditor("statek_duzy_resource", "Assets/Resources/statek_duzy_resource.png", "Assets/statek_duzy.png");
         astronautSprite = LoadSpriteFromResourcesOrEditor("kosmonauta_resource", "Assets/Resources/kosmonauta_resource.png", "Assets/kosmonauta.png");
 
-        treasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_white_common_resource", "Assets/Resources/treasure_asteroid_white_common_resource.png", "Assets/treasure_asteroid_white_common.png");
-        goldTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_green_uncommon_resource", "Assets/Resources/treasure_asteroid_green_uncommon_resource.png", "Assets/treasure_asteroid_green_uncommon.png");
-        rareTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_blue_rare_resource", "Assets/Resources/treasure_asteroid_blue_rare_resource.png", "Assets/treasure_asteroid_blue_rare.png");
-        richTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_violet_very_rare_resource", "Assets/Resources/treasure_asteroid_violet_very_rare_resource.png", "Assets/treasure_asteroid_violet_very_rare.png");
-        epicTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_burgundy_epic_resource", "Assets/Resources/treasure_asteroid_burgundy_epic_resource.png", "Assets/treasure_asteroid_burgundy_epic.png");
-        legendaryTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_gold_legendary_resource", "Assets/Resources/treasure_asteroid_gold_legendary_resource.png", "Assets/treasure_asteroid_gold_legendary.png");
+        if (snowFieldTheme)
+        {
+            treasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_white_common_snow", "Assets/Resources/treasure_asteroid_white_common_snow.png", "Assets/treasure_asteroid_white_common.png");
+            goldTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_green_uncommon_snow", "Assets/Resources/treasure_asteroid_green_uncommon_snow.png", "Assets/treasure_asteroid_green_uncommon.png");
+            rareTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_blue_rare_snow", "Assets/Resources/treasure_asteroid_blue_rare_snow.png", "Assets/treasure_asteroid_blue_rare.png");
+            richTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_violet_veryrare_snow", "Assets/Resources/treasure_asteroid_violet_veryrare_snow.png", "Assets/treasure_asteroid_violet_very_rare.png");
+            epicTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_burgundy_epic_snow", "Assets/Resources/treasure_asteroid_burgundy_epic_snow.png", "Assets/treasure_asteroid_burgundy_epic.png");
+            legendaryTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_gold_legendary_snow", "Assets/Resources/treasure_asteroid_gold_legendary_snow.png", "Assets/treasure_asteroid_gold_legendary.png");
+        }
+        else
+        {
+            treasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_white_common_resource", "Assets/Resources/treasure_asteroid_white_common_resource.png", "Assets/treasure_asteroid_white_common.png");
+            goldTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_green_uncommon_resource", "Assets/Resources/treasure_asteroid_green_uncommon_resource.png", "Assets/treasure_asteroid_green_uncommon.png");
+            rareTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_blue_rare_resource", "Assets/Resources/treasure_asteroid_blue_rare_resource.png", "Assets/treasure_asteroid_blue_rare.png");
+            richTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_violet_very_rare_resource", "Assets/Resources/treasure_asteroid_violet_very_rare_resource.png", "Assets/treasure_asteroid_violet_very_rare.png");
+            epicTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_burgundy_epic_resource", "Assets/Resources/treasure_asteroid_burgundy_epic_resource.png", "Assets/treasure_asteroid_burgundy_epic.png");
+            legendaryTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_gold_legendary_resource", "Assets/Resources/treasure_asteroid_gold_legendary_resource.png", "Assets/treasure_asteroid_gold_legendary.png");
+        }
         spaceJunkTrashSprite = LoadSpriteFromResourcesOrEditor("space_junk_trash", "Assets/Resources/space_junk_trash.png", "Assets/space_junk_trash.png");
         spaceJunkStandardSprite = LoadSpriteFromResourcesOrEditor("space_junk_standard", "Assets/Resources/space_junk_standard.png", "Assets/space_junk_standard.png");
         spaceJunkAsteroidSprite = LoadSpriteFromResourcesOrEditor("space_junk_asteroid", "Assets/Resources/space_junk_asteroid.png", "Assets/space_junk_asteroid.png");
+        spaceAnimalRemainsSprite = LoadSpriteFromResourcesOrEditor("space_animal_remains_resource", "Assets/Resources/space_animal_remains_resource.png", "Assets/Resources/space_animal_remains_resource.png");
         containerSprites = LoadSpritesFromResourcesOrEditor("kontenery_9", "Assets/Resources/kontenery_9.png", "Assets/kontenery_9.png");
         randomLootWreckSprites = LoadRandomLootWreckSprites();
-        obstacleSprites = new[]
-        {
-            LoadObstacleSprite("asteroida_1_clean_resource", "Assets/Resources/asteroida_1_clean_resource.png", "Assets/asteroida_1_clean.png"),
-            LoadObstacleSprite("asteroida_2_clean_resource", "Assets/Resources/asteroida_2_clean_resource.png", "Assets/asteroida_2_clean.png"),
-            LoadObstacleSprite("asteroida_3_clean_resource", "Assets/Resources/asteroida_3_clean_resource.png", "Assets/asteroida_3_clean.png"),
-            LoadObstacleSprite("asteroida_podluzna_1_clean_resource", "Assets/Resources/asteroida_podluzna_1_clean_resource.png", "Assets/asteroida_podluzna_1_clean.png"),
-            LoadObstacleSprite("asteroida_podluzna_2_clean_resource", "Assets/Resources/asteroida_podluzna_2_clean_resource.png", "Assets/asteroida_podluzna_2_clean.png"),
-            LoadObstacleSprite("asteroida_nadkruszona_resource", "Assets/Resources/asteroida_nadkruszona_resource.png", "Assets/asteroida_nadkruszona.png"),
-            LoadObstacleSprite("asteroida_ziemniak_resource", "Assets/Resources/asteroida_ziemniak_resource.png", "Assets/asteroida_ziemniak.png")
-        };
+        obstacleSprites = snowFieldTheme ? LoadSnowObstacleSprites() : LoadDefaultObstacleSprites();
         extractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/base1_resource", "Assets/Resources/Visuals/Bases/base1_resource.png", "Assets/baza1.png");
         backgroundSprite = LoadBackgroundSprite(RoomSettings.GetMapBackgroundIndex());
         backgroundSprite = LoadSpriteFromResourcesOrEditor("Visuals/Backgrounds/background5_resource", "Assets/Resources/Visuals/Backgrounds/background5_resource.png", "Assets/tło5.png");
@@ -322,9 +377,43 @@ public class GameVisualTheme : MonoBehaviour
         backgroundSprite = LoadBackgroundSprite(RoomSettings.GetMapBackgroundIndex());
     }
 
+    bool IsSnowFieldTheme()
+    {
+        return string.Equals(RoomSettings.GetSelectedLobbyMapId(), LobbyMapCatalog.SnowFieldMapId, System.StringComparison.Ordinal);
+    }
+
+    Sprite[] LoadDefaultObstacleSprites()
+    {
+        return new[]
+        {
+            LoadObstacleSprite("asteroida_1_clean_resource", "Assets/Resources/asteroida_1_clean_resource.png", "Assets/asteroida_1_clean.png"),
+            LoadObstacleSprite("asteroida_2_clean_resource", "Assets/Resources/asteroida_2_clean_resource.png", "Assets/asteroida_2_clean.png"),
+            LoadObstacleSprite("asteroida_3_clean_resource", "Assets/Resources/asteroida_3_clean_resource.png", "Assets/asteroida_3_clean.png"),
+            LoadObstacleSprite("asteroida_podluzna_1_clean_resource", "Assets/Resources/asteroida_podluzna_1_clean_resource.png", "Assets/asteroida_podluzna_1_clean.png"),
+            LoadObstacleSprite("asteroida_podluzna_2_clean_resource", "Assets/Resources/asteroida_podluzna_2_clean_resource.png", "Assets/asteroida_podluzna_2_clean.png"),
+            LoadObstacleSprite("asteroida_nadkruszona_resource", "Assets/Resources/asteroida_nadkruszona_resource.png", "Assets/asteroida_nadkruszona.png"),
+            LoadObstacleSprite("asteroida_ziemniak_resource", "Assets/Resources/asteroida_ziemniak_resource.png", "Assets/asteroida_ziemniak.png")
+        };
+    }
+
+    Sprite[] LoadSnowObstacleSprites()
+    {
+        return new[]
+        {
+            LoadObstacleSprite("obstacle_ice_2", "Assets/Resources/obstacle_ice_2.png", "Assets/asteroida_1_clean.png"),
+            LoadObstacleSprite("obstacle_ice_3", "Assets/Resources/obstacle_ice_3.png", "Assets/asteroida_2_clean.png"),
+            LoadObstacleSprite("obstacle_ice_4", "Assets/Resources/obstacle_ice_4.png", "Assets/asteroida_3_clean.png"),
+            LoadObstacleSprite("obstacle_ice_5", "Assets/Resources/obstacle_ice_5.png", "Assets/asteroida_podluzna_1_clean.png"),
+            LoadObstacleSprite("obstacle_ice_6", "Assets/Resources/obstacle_ice_6.png", "Assets/asteroida_podluzna_2_clean.png"),
+            LoadObstacleSprite("obstacle_ice_7", "Assets/Resources/obstacle_ice_7.png", "Assets/asteroida_nadkruszona.png"),
+            LoadObstacleSprite("obstacle_ice_8", "Assets/Resources/obstacle_ice_8.png", "Assets/asteroida_ziemniak.png")
+        };
+    }
+
     void ApplyTheme()
     {
         ApplyGroundBackground();
+        AdvancedSpaceBackground.RefreshForCurrentSettings();
         ApplyMapBounds();
         ApplyPlayerSprites();
         ApplyTreasureSprites();
@@ -348,7 +437,7 @@ public class GameVisualTheme : MonoBehaviour
             return;
 
         renderer.sprite = backgroundSprite;
-        renderer.color = Color.white;
+        renderer.color = AdvancedSpaceBackground.GetGroundTintForCurrentSettings();
         renderer.drawMode = SpriteDrawMode.Tiled;
         renderer.tileMode = SpriteTileMode.Continuous;
         renderer.size = mapSize;
@@ -385,7 +474,7 @@ public class GameVisualTheme : MonoBehaviour
         {
             collider.offset = Vector2.zero;
             collider.size = size;
-            collider.sharedMaterial = MovingSpaceObject.GetSharedBouncyMaterial();
+            collider.sharedMaterial = MovingSpaceObject.GetSharedSoftBoundaryMaterial();
         }
 
         wall.transform.localScale = horizontal
@@ -401,106 +490,125 @@ public class GameVisualTheme : MonoBehaviour
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         foreach (PlayerHealth player in players)
         {
-            if (player == null)
-                continue;
+            ApplyPlayerVisualInternal(player);
+        }
+    }
 
-            if (player.GetComponent<LureBeaconDecoy>() != null)
-                continue;
+    void ApplyPlayerVisualInternal(PlayerHealth player)
+    {
+        if (player == null)
+            return;
 
-            PhotonView view = player.GetComponent<PhotonView>();
-            if (PlayerDeployableRuntime.IsInstantiationData(view != null ? view.InstantiationData : null) ||
-                player.GetComponent<PlayerDeployableBase>() != null)
+        if (player.GetComponent<LureBeaconDecoy>() != null)
+            return;
+
+        PhotonView view = player.GetComponent<PhotonView>();
+        if (PlayerDeployableRuntime.IsInstantiationData(view != null ? view.InstantiationData : null) ||
+            player.GetComponent<PlayerDeployableBase>() != null)
+        {
+            PlayerDeployableRuntime.EnsureAttached(player.gameObject);
+            return;
+        }
+
+        SpriteRenderer renderer = player.GetComponent<SpriteRenderer>();
+
+        if (view == null || renderer == null || view.Owner == null)
+            return;
+
+        EnemyBot enemyBot = player.GetComponent<EnemyBot>();
+        AstronautSurvivor astronautSurvivor = player.GetComponent<AstronautSurvivor>();
+        bool isEnemyBot = player.IsBotControlled || EnemyBot.IsBotInstantiationData(view.InstantiationData);
+        bool isAstronaut = astronautSurvivor != null || AstronautSurvivor.IsAstronautInstantiationData(view.InstantiationData);
+        bool isEscapePod = astronautSurvivor != null
+            ? astronautSurvivor.IsEscapePodMode
+            : AstronautSurvivor.IsEscapePodInstantiationData(view.InstantiationData);
+
+        Sprite sprite = null;
+        float targetSize = PlayerTargetSize;
+        if (player.IsWreck)
+        {
+            ShipWreck wreck = player.GetComponent<ShipWreck>();
+            bool isEnemyWreck = wreck != null && wreck.SourceShipSkinIndex < 0 && isEnemyBot;
+            if (isEnemyWreck)
             {
-                PlayerDeployableRuntime.EnsureAttached(player.gameObject);
-                continue;
-            }
-
-            SpriteRenderer renderer = player.GetComponent<SpriteRenderer>();
-
-            if (view == null || renderer == null || view.Owner == null)
-                continue;
-
-            EnemyBot enemyBot = player.GetComponent<EnemyBot>();
-            bool isEnemyBot = player.IsBotControlled || EnemyBot.IsBotInstantiationData(view.InstantiationData);
-            bool isAstronaut = player.GetComponent<AstronautSurvivor>() != null || AstronautSurvivor.IsAstronautInstantiationData(view.InstantiationData);
-
-            Sprite sprite;
-            float targetSize = PlayerTargetSize;
-            if (player.IsWreck)
-            {
-                ShipWreck wreck = player.GetComponent<ShipWreck>();
-                bool isEnemyWreck = wreck != null && wreck.SourceShipSkinIndex < 0 && isEnemyBot;
-                if (isEnemyWreck)
-                {
-                    EnemyBotKind botKind = enemyBot != null ? enemyBot.Kind : EnemyBot.GetKindFromInstantiationData(view.InstantiationData);
-                    EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(botKind);
-                    Sprite wreckSprite = definition != null && definition.Wreck != null ? definition.Wreck.GetVisualSprite() : null;
-                    sprite = renderer.sprite != null
-                        ? renderer.sprite
-                        : wreckSprite != null
-                            ? wreckSprite
+                EnemyBotKind botKind = enemyBot != null ? enemyBot.Kind : EnemyBot.GetKindFromInstantiationData(view.InstantiationData);
+                EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(botKind);
+                Sprite wreckSprite = definition != null && definition.Wreck != null ? definition.Wreck.GetVisualSprite() : null;
+                sprite = renderer.sprite != null
+                    ? renderer.sprite
+                    : wreckSprite != null
+                        ? wreckSprite
                         : enemyBot != null
                             ? enemyBot.GetVisualSprite()
                             : definition != null
                                 ? definition.GetVisualSprite()
                                 : botKind == EnemyBotKind.Corsair ? corsairSprite : enemyBotSprite;
-                    targetSize = enemyBot != null
-                        ? enemyBot.VisualTargetSize
-                        : definition != null ? definition.TargetSize : botKind == EnemyBotKind.Corsair ? 5.2f : PlayerTargetSize;
-                }
-                else
-                {
-                    int wreckSkinIndex = wreck != null ? wreck.SourceShipSkinIndex : RoomSettings.GetPlayerShipSkin(view.Owner, 0);
-                    sprite = GetMappedWreckSprite(wreckSkinIndex, renderer.sprite);
-                }
-            }
-            else if (isAstronaut && astronautSprite != null)
-            {
-                sprite = astronautSprite;
-                targetSize = AstronautTargetSize;
-            }
-            else if (isEnemyBot)
-            {
-                EnemyBotKind botKind = enemyBot != null ? enemyBot.Kind : EnemyBot.GetKindFromInstantiationData(view.InstantiationData);
-                EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(botKind);
-                sprite = enemyBot != null
-                    ? enemyBot.GetVisualSprite()
-                    : definition != null ? definition.GetVisualSprite() : botKind == EnemyBotKind.Corsair ? corsairSprite : enemyBotSprite;
                 targetSize = enemyBot != null
                     ? enemyBot.VisualTargetSize
                     : definition != null ? definition.TargetSize : botKind == EnemyBotKind.Corsair ? 5.2f : PlayerTargetSize;
             }
             else
             {
-                int fallbackIndex = Mathf.Abs(view.Owner.ActorNumber - 1) % shipSprites.Length;
-                int shipIndex = RoomSettings.GetPlayerShipSkin(view.Owner, fallbackIndex) % shipSprites.Length;
-                sprite = shipSprites[shipIndex];
+                int wreckSkinIndex = wreck != null ? wreck.SourceShipSkinIndex : RoomSettings.GetPlayerShipSkin(view.Owner, 0);
+                sprite = GetMappedWreckSprite(wreckSkinIndex, renderer.sprite);
             }
-
-            if (sprite == null)
-                continue;
-
-            BoxCollider2D bodyCollider = player.GetComponent<BoxCollider2D>();
-            CircleCollider2D pickupCollider = player.GetComponent<CircleCollider2D>();
-
-            if (renderer.sprite != sprite)
-            {
-                renderer.sprite = sprite;
-            }
-            if (!player.IsWreck)
-                renderer.color = Color.white;
-            renderer.sortingLayerName = WorldSortingLayerName;
-            renderer.sortingOrder = player.IsWreck
-                ? WreckSortingOrder
-                : isEnemyBot ? EnemySortingOrder : PlayerSortingOrder;
-            FitSpriteToTargetSize(renderer, targetSize);
-
-            Vector2 spriteWorldSize = GetSpriteWorldSize(renderer);
-            SetWorldBoxSize(bodyCollider, new Vector2(
-                spriteWorldSize.x * PlayerBodyColliderWidthFactor,
-                spriteWorldSize.y * PlayerBodyColliderHeightFactor));
-            SetWorldCircleRadius(pickupCollider, Mathf.Max(spriteWorldSize.x, spriteWorldSize.y) * PlayerPickupRadiusFactor);
         }
+        else if (isAstronaut)
+        {
+            if (isEscapePod && astronautSurvivor != null)
+            {
+                sprite = astronautSurvivor.GetVisualSprite();
+                targetSize = astronautSurvivor.VisualTargetSize;
+            }
+            else if (astronautSprite != null)
+            {
+                sprite = astronautSprite;
+                targetSize = AstronautTargetSize;
+            }
+        }
+        else if (isEnemyBot)
+        {
+            EnemyBotKind botKind = enemyBot != null ? enemyBot.Kind : EnemyBot.GetKindFromInstantiationData(view.InstantiationData);
+            EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(botKind);
+            sprite = enemyBot != null
+                ? enemyBot.GetVisualSprite()
+                : definition != null ? definition.GetVisualSprite() : botKind == EnemyBotKind.Corsair ? corsairSprite : enemyBotSprite;
+            targetSize = enemyBot != null
+                ? enemyBot.VisualTargetSize
+                : definition != null ? definition.TargetSize : botKind == EnemyBotKind.Corsair ? 5.2f : PlayerTargetSize;
+        }
+        else
+        {
+            int fallbackIndex = Mathf.Abs(view.Owner.ActorNumber - 1) % shipSprites.Length;
+            int shipIndex = RoomSettings.GetPlayerShipSkin(view.Owner, fallbackIndex) % shipSprites.Length;
+            sprite = shipSprites[shipIndex];
+        }
+
+        if (sprite == null)
+            return;
+
+        BoxCollider2D bodyCollider = player.GetComponent<BoxCollider2D>();
+        CircleCollider2D pickupCollider = player.GetComponent<CircleCollider2D>();
+
+        if (renderer.sprite != sprite)
+        {
+            renderer.sprite = sprite;
+        }
+        if (!player.IsWreck)
+            renderer.color = Color.white;
+        renderer.sortingLayerName = WorldSortingLayerName;
+        renderer.sortingOrder = player.IsWreck
+            ? WreckSortingOrder
+            : isEnemyBot ? EnemySortingOrder : PlayerSortingOrder;
+        FitSpriteToTargetSize(renderer, targetSize);
+
+        Vector2 spriteWorldSize = GetSpriteWorldSize(renderer);
+        float bodyWidthFactor = isAstronaut ? (isEscapePod ? 0.52f : 0.42f) : PlayerBodyColliderWidthFactor;
+        float bodyHeightFactor = isAstronaut ? (isEscapePod ? 0.68f : 0.58f) : PlayerBodyColliderHeightFactor;
+        SetWorldBoxSize(bodyCollider, new Vector2(
+            spriteWorldSize.x * bodyWidthFactor,
+            spriteWorldSize.y * bodyHeightFactor));
+        SetWorldCircleRadius(pickupCollider, Mathf.Max(spriteWorldSize.x, spriteWorldSize.y) * PlayerPickupRadiusFactor);
     }
 
     void ApplyTreasureSprites()
@@ -511,34 +619,39 @@ public class GameVisualTheme : MonoBehaviour
         Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
         foreach (Treasure treasure in treasures)
         {
-            if (treasure == null)
-                continue;
+            ApplyTreasureVisualInternal(treasure);
+        }
+    }
 
-            SpriteRenderer renderer = treasure.GetComponent<SpriteRenderer>();
-            if (renderer == null)
-                continue;
+    void ApplyTreasureVisualInternal(Treasure treasure)
+    {
+        if (treasure == null)
+            return;
 
-            BoxCollider2D triggerCollider = treasure.GetComponent<BoxCollider2D>();
+        SpriteRenderer renderer = treasure.GetComponent<SpriteRenderer>();
+        if (renderer == null)
+            return;
 
-            Sprite desiredSprite = GetTreasureSprite(treasure);
-            if (desiredSprite == null)
-                desiredSprite = treasureSprite;
+        BoxCollider2D triggerCollider = treasure.GetComponent<BoxCollider2D>();
 
-            if (renderer.sprite != desiredSprite)
-            {
-                renderer.sprite = desiredSprite;
-            }
-            renderer.sortingLayerName = WorldSortingLayerName;
-            renderer.sortingOrder = TreasureSortingOrder;
-            FitSpriteToTargetSize(renderer, GetTreasureTargetSize(treasure));
+        Sprite desiredSprite = GetTreasureSprite(treasure);
+        if (desiredSprite == null)
+            desiredSprite = treasureSprite;
 
-            if (triggerCollider != null)
-            {
-                Vector2 spriteWorldSize = GetSpriteWorldSize(renderer);
-                Vector2 colliderSize = spriteWorldSize * treasure.GetColliderSizeMultiplier();
-                triggerCollider.isTrigger = false;
-                SetWorldBoxSize(triggerCollider, colliderSize);
-            }
+        if (renderer.sprite != desiredSprite)
+        {
+            renderer.sprite = desiredSprite;
+        }
+        renderer.sortingLayerName = WorldSortingLayerName;
+        renderer.sortingOrder = TreasureSortingOrder;
+        FitSpriteToTargetSize(renderer, GetTreasureTargetSize(treasure));
+
+        if (triggerCollider != null)
+        {
+            Vector2 spriteWorldSize = GetSpriteWorldSize(renderer);
+            Vector2 colliderSize = spriteWorldSize * treasure.GetColliderSizeMultiplier();
+            triggerCollider.isTrigger = false;
+            SetWorldBoxSize(triggerCollider, colliderSize);
         }
     }
 
@@ -584,6 +697,8 @@ public class GameVisualTheme : MonoBehaviour
                 return spaceJunkTrashSprite != null ? spaceJunkTrashSprite : treasureSprite;
             case InventoryItemCatalog.SpaceJunkAsteroidId:
                 return spaceJunkAsteroidSprite != null ? spaceJunkAsteroidSprite : treasureSprite;
+            case InventoryItemCatalog.SpaceAnimalRemainsId:
+                return spaceAnimalRemainsSprite != null ? spaceAnimalRemainsSprite : treasureSprite;
             default:
                 return treasureSprite;
         }
@@ -596,6 +711,9 @@ public class GameVisualTheme : MonoBehaviour
 
         if (treasure != null && InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
             return RandomLootWreckTargetSize;
+
+        if (treasure != null && treasure.itemId == InventoryItemCatalog.SpaceAnimalRemainsId)
+            return SpaceAnimalRemainsTargetSize;
 
         return TreasureTargetSize;
     }

@@ -12,8 +12,10 @@ public class PlayerProfileService : MonoBehaviour
 {
     const int CloudRetryCount = 3;
     const int CloudRetryDelayMs = 1200;
+    const int DeferredInventorySaveDelayMs = 750;
     const int PlayerInventoryExtendBasePrice = 1000;
     const int PlayerInventoryExtendMaxPrice = 64000;
+    public const int DefaultAstronautCargoSlotCount = 1;
     const string CloudNicknameKey = "profile_nickname";
     const string CloudShipSkinKey = "profile_ship_skin";
     const string CloudGamesPlayedKey = "profile_games_played";
@@ -30,6 +32,15 @@ public class PlayerProfileService : MonoBehaviour
     static PlayerProfileService instance;
     Task initializationTask;
     bool initialized;
+    int deferredInventorySaveVersion;
+    bool deferredInventorySavePending;
+    string[] pendingAstronautCargoSlots;
+    int pendingAstronautCargoShipSkinIndex = -1;
+    bool hasPendingAstronautCargo;
+    string pendingProtectedEquipmentItemId;
+    int pendingProtectedEquipmentSlotIndex = -1;
+    int pendingProtectedEquipmentShipSkinIndex = -1;
+    bool hasPendingProtectedEquipment;
     readonly HashSet<string> awardedMatchTokens = new HashSet<string>();
 
     public static PlayerProfileService Instance
@@ -45,6 +56,7 @@ public class PlayerProfileService : MonoBehaviour
 
     public bool IsInitialized => initialized;
     public bool IsBusy { get; private set; }
+    public int InventoryRevision { get; private set; }
     public string PlayerId => TryGetAuthenticationPlayerId();
     public PlayerProfileData CurrentProfile { get; private set; } = PlayerProfileData.Default();
     public int CurrentPlayerInventorySlotCount
@@ -354,6 +366,7 @@ public class PlayerProfileService : MonoBehaviour
         try
         {
             IsBusy = true;
+            ClearPendingAstronautCargo();
             CurrentProfile.GamesPlayed = Mathf.Max(0, CurrentProfile.GamesPlayed + 1);
 
             var data = new Dictionary<string, object>
@@ -530,7 +543,7 @@ public class PlayerProfileService : MonoBehaviour
         await SaveInventoryOnlyAsync();
     }
 
-    public async Task ApplyShipLossAsync(int shipSkinIndex, bool loseShipInventory, bool loseEquipment)
+    public async Task ApplyShipLossAsync(int shipSkinIndex, bool loseShipInventory, bool loseEquipment, string serializedAstronautCargo = null, string protectedEquipmentItemId = null)
     {
         await EnsureInitializedAsync();
         EnsureInventory();
@@ -538,18 +551,93 @@ public class PlayerProfileService : MonoBehaviour
         bool changed = false;
         if (loseShipInventory)
         {
+            int shipCapacity = GetActiveShipInventoryCapacity();
+            StagePendingAstronautCargo(serializedAstronautCargo, CurrentProfile.Inventory.ShipSlots, shipSkinIndex, shipCapacity);
             CurrentProfile.Inventory.SetShipSlots(BuildPostLossShipInventory(CurrentProfile.Inventory.ShipSlots, shipSkinIndex));
             changed = true;
+        }
+        else
+        {
+            ClearPendingAstronautCargo();
         }
 
         if (loseEquipment)
         {
+            StagePendingProtectedEquipment(protectedEquipmentItemId, CurrentProfile.Inventory.EquipmentSlots, shipSkinIndex);
             CurrentProfile.Inventory.EquipmentSlots = new string[PlayerInventoryData.EquipmentSlotCount];
             changed = true;
+        }
+        else
+        {
+            ClearPendingProtectedEquipment();
         }
 
         if (changed)
             await SaveInventoryOnlyAsync();
+    }
+
+    public async Task<bool> RestorePendingAstronautCargoAsync()
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        int shipSkinIndex = pendingAstronautCargoShipSkinIndex >= 0
+            ? pendingAstronautCargoShipSkinIndex
+            : pendingProtectedEquipmentShipSkinIndex >= 0
+                ? pendingProtectedEquipmentShipSkinIndex
+                : GetActiveShipSkinIndex();
+        CurrentProfile.Inventory.SetShipSlots(BuildPostLossShipInventory(CurrentProfile.Inventory.ShipSlots, shipSkinIndex));
+        bool changed = true;
+        changed |= RestorePendingProtectedEquipment(shipSkinIndex);
+
+        if (!hasPendingAstronautCargo || pendingAstronautCargoSlots == null)
+        {
+            await SaveInventoryOnlyAsync();
+            return true;
+        }
+
+        string[] cargoSlots = NormalizeShipSlots(pendingAstronautCargoSlots);
+        ClearPendingAstronautCargo();
+
+        int capacity = GetActiveShipInventoryCapacity();
+        for (int i = 0; i < cargoSlots.Length; i++)
+        {
+            string itemId = cargoSlots[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            if (i < capacity &&
+                string.IsNullOrWhiteSpace(CurrentProfile.Inventory.ShipSlots[i]) &&
+                CanStoreItemInShipSlot(itemId, shipSkinIndex, i))
+            {
+                CurrentProfile.Inventory.ShipSlots[i] = itemId;
+                changed = true;
+                continue;
+            }
+
+            if (CurrentProfile.Inventory.TryAddToShip(itemId, capacity, shipSkinIndex))
+            {
+                changed = true;
+            }
+            else
+            {
+                Debug.LogWarning("Astronaut cargo could not be restored: " + itemId);
+            }
+        }
+
+        if (changed)
+        {
+            ApplyInventoryToPhoton();
+            await SaveInventoryOnlyAsync();
+        }
+
+        return changed;
+    }
+
+    public void DiscardPendingAstronautCargo()
+    {
+        ClearPendingAstronautCargo();
+        ClearPendingProtectedEquipment();
     }
 
     public async Task<bool> MoveShipItemWithinShipAsync(int sourceIndex, int targetIndex)
@@ -600,7 +688,7 @@ public class PlayerProfileService : MonoBehaviour
 
         bool moved = fromShipInventory
             ? CurrentProfile.Inventory.TryAddToPlayer(movedItem)
-            : CurrentProfile.Inventory.TryAddToShip(movedItem, ShipCatalog.GetShipInventoryCapacity(CurrentProfile.ShipSkinIndex), CurrentProfile.ShipSkinIndex);
+            : CurrentProfile.Inventory.TryAddToShip(movedItem, GetActiveShipInventoryCapacity(), CurrentProfile.ShipSkinIndex);
 
         if (!moved)
         {
@@ -742,7 +830,7 @@ public class PlayerProfileService : MonoBehaviour
         PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
         bool stored = workingInventory.TryAddToPlayer(itemId);
         if (!stored)
-            stored = workingInventory.TryAddToShip(itemId, ShipCatalog.GetShipInventoryCapacity(CurrentProfile.ShipSkinIndex), CurrentProfile.ShipSkinIndex);
+            stored = workingInventory.TryAddToShip(itemId, GetEffectiveShipInventoryCapacity(CurrentProfile.ShipSkinIndex, workingInventory.EquipmentSlots), CurrentProfile.ShipSkinIndex);
 
         if (!stored)
             return false;
@@ -778,7 +866,7 @@ public class PlayerProfileService : MonoBehaviour
         {
             string output = salvageOutputs[i];
             bool added = fromShipInventory
-                ? workingInventory.TryAddToShip(output, ShipCatalog.GetShipInventoryCapacity(CurrentProfile.ShipSkinIndex), CurrentProfile.ShipSkinIndex)
+                ? workingInventory.TryAddToShip(output, GetEffectiveShipInventoryCapacity(CurrentProfile.ShipSkinIndex, workingInventory.EquipmentSlots), CurrentProfile.ShipSkinIndex)
                 : workingInventory.TryAddToPlayer(output);
 
             if (!added)
@@ -798,43 +886,45 @@ public class PlayerProfileService : MonoBehaviour
         if (!CurrentProfile.Inventory.IsEquipmentSlotEnabled(equipmentSlotIndex, shipSkinIndex))
             return false;
 
+        PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
         string movedItem = fromShipInventory
-            ? GetSlotItem(CurrentProfile.Inventory.ShipSlots, sourceIndex)
-            : GetSlotItem(CurrentProfile.Inventory.PlayerSlots, sourceIndex);
+            ? GetSlotItem(workingInventory.ShipSlots, sourceIndex)
+            : GetSlotItem(workingInventory.PlayerSlots, sourceIndex);
 
         if (!InventoryItemCatalog.IsCompatibleWithEquipmentSlot(movedItem, equipmentSlotIndex))
             return false;
 
-        if (string.Equals(movedItem, InventoryItemCatalog.LootingFriendId, StringComparison.Ordinal) &&
-            IsItemAlreadyEquipped(CurrentProfile.Inventory.EquipmentSlots, movedItem, equipmentSlotIndex))
+        if ((string.Equals(movedItem, InventoryItemCatalog.LootingFriendId, StringComparison.Ordinal) ||
+             string.Equals(movedItem, InventoryItemCatalog.EscapePodId, StringComparison.Ordinal)) &&
+            IsItemAlreadyEquipped(workingInventory.EquipmentSlots, movedItem, equipmentSlotIndex))
         {
             return false;
         }
 
         movedItem = fromShipInventory
-            ? CurrentProfile.Inventory.RemoveFromShip(sourceIndex)
-            : CurrentProfile.Inventory.RemoveFromPlayer(sourceIndex);
+            ? workingInventory.RemoveFromShip(sourceIndex)
+            : workingInventory.RemoveFromPlayer(sourceIndex);
 
         if (string.IsNullOrWhiteSpace(movedItem))
             return false;
 
-        string replacedItem = CurrentProfile.Inventory.RemoveFromEquipment(equipmentSlotIndex);
-        CurrentProfile.Inventory.SetEquipment(equipmentSlotIndex, movedItem);
+        string replacedItem = workingInventory.RemoveFromEquipment(equipmentSlotIndex);
+        workingInventory.SetEquipment(equipmentSlotIndex, movedItem);
+
+        if (!TryMoveOverflowShipCargoToPlayer(workingInventory, shipSkinIndex))
+            return false;
 
         if (!string.IsNullOrWhiteSpace(replacedItem))
         {
             bool restored = fromShipInventory
-                ? CurrentProfile.Inventory.TryAddToShip(replacedItem, ShipCatalog.GetShipInventoryCapacity(shipSkinIndex), shipSkinIndex)
-                : CurrentProfile.Inventory.TryAddToPlayer(replacedItem);
+                ? workingInventory.TryAddToShip(replacedItem, GetEffectiveShipInventoryCapacity(shipSkinIndex, workingInventory.EquipmentSlots), shipSkinIndex)
+                : workingInventory.TryAddToPlayer(replacedItem);
 
             if (!restored)
-            {
-                CurrentProfile.Inventory.SetEquipment(equipmentSlotIndex, replacedItem);
-                RestoreInventorySource(fromShipInventory, sourceIndex, movedItem);
                 return false;
-            }
         }
 
+        CurrentProfile.Inventory = workingInventory;
         await SaveInventoryOnlyAsync();
         return true;
     }
@@ -864,6 +954,28 @@ public class PlayerProfileService : MonoBehaviour
         return false;
     }
 
+    bool TryMoveOverflowShipCargoToPlayer(PlayerInventoryData inventory, int shipSkinIndex)
+    {
+        if (inventory == null)
+            return false;
+
+        inventory.Normalize();
+        int capacity = GetEffectiveShipInventoryCapacity(shipSkinIndex, inventory.EquipmentSlots);
+        for (int i = capacity; i < inventory.ShipSlots.Length; i++)
+        {
+            string itemId = inventory.ShipSlots[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            if (!inventory.TryAddToPlayer(itemId))
+                return false;
+
+            inventory.ShipSlots[i] = null;
+        }
+
+        return true;
+    }
+
     public async Task<bool> MoveEquipmentItemToInventoryAsync(int equipmentSlotIndex, bool toPlayerInventory, int shipSkinIndex)
     {
         await EnsureInitializedAsync();
@@ -872,20 +984,22 @@ public class PlayerProfileService : MonoBehaviour
         if (!CurrentProfile.Inventory.IsEquipmentSlotEnabled(equipmentSlotIndex, shipSkinIndex))
             return false;
 
-        string movedItem = CurrentProfile.Inventory.RemoveFromEquipment(equipmentSlotIndex);
+        PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
+        string movedItem = workingInventory.RemoveFromEquipment(equipmentSlotIndex);
         if (string.IsNullOrWhiteSpace(movedItem))
             return false;
 
+        if (!TryMoveOverflowShipCargoToPlayer(workingInventory, shipSkinIndex))
+            return false;
+
         bool moved = toPlayerInventory
-            ? CurrentProfile.Inventory.TryAddToPlayer(movedItem)
-            : CurrentProfile.Inventory.TryAddToShip(movedItem, ShipCatalog.GetShipInventoryCapacity(shipSkinIndex), shipSkinIndex);
+            ? workingInventory.TryAddToPlayer(movedItem)
+            : workingInventory.TryAddToShip(movedItem, GetEffectiveShipInventoryCapacity(shipSkinIndex, workingInventory.EquipmentSlots), shipSkinIndex);
 
         if (!moved)
-        {
-            CurrentProfile.Inventory.SetEquipment(equipmentSlotIndex, movedItem);
             return false;
-        }
 
+        CurrentProfile.Inventory = workingInventory;
         await SaveInventoryOnlyAsync();
         return true;
     }
@@ -896,10 +1010,23 @@ public class PlayerProfileService : MonoBehaviour
         EnsureInventory();
 
         int shipSkinIndex = GetActiveShipSkinIndex();
-        if (!CurrentProfile.Inventory.TryAddToShip(itemId, ShipCatalog.GetShipInventoryCapacity(shipSkinIndex), shipSkinIndex))
+        if (!CurrentProfile.Inventory.TryAddToShip(itemId, GetActiveShipInventoryCapacity(), shipSkinIndex))
             return false;
 
         await SaveInventoryOnlyAsync();
+        return true;
+    }
+
+    public async Task<bool> AddItemToShipDeferredSaveAsync(string itemId)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        int shipSkinIndex = GetActiveShipSkinIndex();
+        if (!CurrentProfile.Inventory.TryAddToShip(itemId, GetActiveShipInventoryCapacity(), shipSkinIndex))
+            return false;
+
+        MarkInventoryChangedDeferred();
         return true;
     }
 
@@ -929,11 +1056,45 @@ public class PlayerProfileService : MonoBehaviour
             }
         }
 
-        if (!workingInventory.TryAddToShip(itemId, ShipCatalog.GetShipInventoryCapacity(shipSkinIndex), shipSkinIndex))
+        if (!workingInventory.TryAddToShip(itemId, GetEffectiveShipInventoryCapacity(shipSkinIndex, workingInventory.EquipmentSlots), shipSkinIndex))
             return false;
 
         CurrentProfile.Inventory = workingInventory;
         await SaveInventoryOnlyAsync();
+        return true;
+    }
+
+    public async Task<bool> AddRandomLootEquipmentDeferredSaveAsync(string itemId)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        InventoryItemDefinition definition = InventoryItemCatalog.GetDefinition(itemId);
+        if (definition == null || definition.ItemType != InventoryItemType.Equipment)
+            return false;
+
+        PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
+        int shipSkinIndex = GetActiveShipSkinIndex();
+
+        if (definition.Category == InventoryItemCategory.Gadget)
+        {
+            int gadgetSlot = GetFirstFreeGadgetEquipmentSlot(workingInventory.EquipmentSlots, shipSkinIndex);
+            if (gadgetSlot >= 0 &&
+                (!string.Equals(itemId, InventoryItemCatalog.LootingFriendId, StringComparison.Ordinal) ||
+                 !IsItemAlreadyEquipped(workingInventory.EquipmentSlots, itemId, gadgetSlot)))
+            {
+                workingInventory.SetEquipment(gadgetSlot, itemId);
+                CurrentProfile.Inventory = workingInventory;
+                MarkInventoryChangedDeferred();
+                return true;
+            }
+        }
+
+        if (!workingInventory.TryAddToShip(itemId, GetEffectiveShipInventoryCapacity(shipSkinIndex, workingInventory.EquipmentSlots), shipSkinIndex))
+            return false;
+
+        CurrentProfile.Inventory = workingInventory;
+        MarkInventoryChangedDeferred();
         return true;
     }
 
@@ -1092,7 +1253,7 @@ public class PlayerProfileService : MonoBehaviour
             return true;
 
         PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
-        int newCapacity = ShipCatalog.GetShipInventoryCapacity(clampedSkin);
+        int newCapacity = GetEffectiveShipInventoryCapacity(clampedSkin, workingInventory.EquipmentSlots);
 
         for (int i = newCapacity; i < workingInventory.ShipSlots.Length; i++)
         {
@@ -1281,6 +1442,80 @@ public class PlayerProfileService : MonoBehaviour
         return null;
     }
 
+    public async Task<string> RemoveFirstShipContainerDeferredSaveAsync()
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        int capacity = GetActiveShipInventoryCapacity();
+        CurrentProfile.Inventory.Normalize();
+        for (int i = 0; i < CurrentProfile.Inventory.ShipSlots.Length && i < capacity; i++)
+        {
+            string itemId = CurrentProfile.Inventory.ShipSlots[i];
+            if (!InventoryItemCatalog.IsContainerItem(itemId))
+                continue;
+
+            CurrentProfile.Inventory.ShipSlots[i] = null;
+            MarkInventoryChangedDeferred();
+            return itemId;
+        }
+
+        return null;
+    }
+
+    public async Task<string[]> RemoveShipContainersDeferredSaveAsync(int maxCount)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        int targetCount = Mathf.Clamp(maxCount, 1, PlayerInventoryData.ShipSlotCount);
+        List<string> removedItems = new List<string>(targetCount);
+        int capacity = GetActiveShipInventoryCapacity();
+        CurrentProfile.Inventory.Normalize();
+        for (int i = 0; i < CurrentProfile.Inventory.ShipSlots.Length && i < capacity; i++)
+        {
+            string itemId = CurrentProfile.Inventory.ShipSlots[i];
+            if (!InventoryItemCatalog.IsContainerItem(itemId))
+                continue;
+
+            CurrentProfile.Inventory.ShipSlots[i] = null;
+            removedItems.Add(itemId);
+            if (removedItems.Count >= targetCount)
+                break;
+        }
+
+        if (removedItems.Count > 0)
+            MarkInventoryChangedDeferred();
+
+        return removedItems.ToArray();
+    }
+
+    public async Task<int> AddItemsToShipDeferredSaveAsync(string[] itemIds)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        if (itemIds == null || itemIds.Length == 0)
+            return 0;
+
+        int shipSkinIndex = GetActiveShipSkinIndex();
+        int addedCount = 0;
+        for (int i = 0; i < itemIds.Length; i++)
+        {
+            string itemId = itemIds[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            if (CurrentProfile.Inventory.TryAddToShip(itemId, GetActiveShipInventoryCapacity(), shipSkinIndex))
+                addedCount++;
+        }
+
+        if (addedCount > 0)
+            MarkInventoryChangedDeferred();
+
+        return addedCount;
+    }
+
     public async Task RestoreShipItemAtAsync(int index, string itemId)
     {
         await EnsureInitializedAsync();
@@ -1292,7 +1527,7 @@ public class PlayerProfileService : MonoBehaviour
         int shipSkinIndex = GetActiveShipSkinIndex();
         if (CanStoreItemInShipSlot(itemId, shipSkinIndex, index))
             CurrentProfile.Inventory.RestoreShip(index, itemId);
-        else if (!CurrentProfile.Inventory.TryAddToShip(itemId, ShipCatalog.GetShipInventoryCapacity(shipSkinIndex), shipSkinIndex))
+        else if (!CurrentProfile.Inventory.TryAddToShip(itemId, GetActiveShipInventoryCapacity(), shipSkinIndex))
             return;
 
         await SaveInventoryOnlyAsync();
@@ -1322,6 +1557,7 @@ public class PlayerProfileService : MonoBehaviour
             await RunCloudOperationWithRetryAsync(
                 () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
                 "save inventory");
+            InventoryRevision++;
             ApplyInventoryToPhoton();
             NotifyProfileChanged();
         }
@@ -1333,6 +1569,38 @@ public class PlayerProfileService : MonoBehaviour
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    void MarkInventoryChangedDeferred()
+    {
+        EnsureInventory();
+        InventoryRevision++;
+        ApplyInventoryToPhoton();
+        ScheduleDeferredInventorySave();
+    }
+
+    void ScheduleDeferredInventorySave()
+    {
+        deferredInventorySavePending = true;
+        int version = ++deferredInventorySaveVersion;
+        _ = SaveInventoryAfterDebounceAsync(version);
+    }
+
+    async Task SaveInventoryAfterDebounceAsync(int version)
+    {
+        await Task.Delay(DeferredInventorySaveDelayMs);
+        if (version != deferredInventorySaveVersion || !deferredInventorySavePending)
+            return;
+
+        deferredInventorySavePending = false;
+        try
+        {
+            await SaveInventoryOnlyAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("PlayerProfileService deferred inventory save failed: " + ex);
         }
     }
 
@@ -1552,7 +1820,7 @@ public class PlayerProfileService : MonoBehaviour
             ? CurrentProfile.Inventory.Clone()
             : PlayerInventoryData.Default();
         int shipSkinIndex = GetActiveShipSkinIndex();
-        int shipCapacity = ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
+        int shipCapacity = GetActiveShipInventoryCapacity();
 
         string[] itemIds = reward.ItemIds ?? Array.Empty<string>();
         for (int i = 0; i < itemIds.Length; i++)
@@ -1601,6 +1869,19 @@ public class PlayerProfileService : MonoBehaviour
         return new string[PlayerInventoryData.ShipSlotCount];
     }
 
+    public static int GetPlayerShipInventoryCapacity(Photon.Realtime.Player player)
+    {
+        int shipSkinIndex = player != null ? RoomSettings.GetPlayerShipSkin(player, 0) : 0;
+        return GetEffectiveShipInventoryCapacity(shipSkinIndex, GetPlayerEquipmentSlots(player));
+    }
+
+    public static int GetEffectiveShipInventoryCapacity(int shipSkinIndex, string[] equipmentSlots)
+    {
+        int baseCapacity = ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
+        int cargoExtensions = InventoryItemCatalog.CountEquippedItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.CargoBayExtensionId);
+        return Mathf.Clamp(baseCapacity + cargoExtensions * 2, 0, PlayerInventoryData.ShipSlotCount);
+    }
+
     public static int GetSafePocketSlotCount(int shipSkinIndex)
     {
         return ShipCatalog.GetSafePocketSlots(shipSkinIndex);
@@ -1626,6 +1907,48 @@ public class PlayerProfileService : MonoBehaviour
         return slotIndex < safePocketEnd;
     }
 
+    public static int GetAstronautCargoSlotCount(int shipSkinIndex)
+    {
+        return Mathf.Max(0, DefaultAstronautCargoSlotCount);
+    }
+
+    public static int GetPlayerAstronautCargoSlotCount(Photon.Realtime.Player player)
+    {
+        int shipSkinIndex = player != null ? RoomSettings.GetPlayerShipSkin(player, 0) : 0;
+        return GetAstronautCargoSlotCount(shipSkinIndex);
+    }
+
+    public static bool IsAstronautCargoIndex(int shipSkinIndex, int shipCapacity, int slotIndex)
+    {
+        return IsAstronautCargoIndex(shipSkinIndex, shipCapacity, slotIndex, GetAstronautCargoSlotCount(shipSkinIndex));
+    }
+
+    public static bool IsAstronautCargoIndex(int shipSkinIndex, int shipCapacity, int slotIndex, int astronautCargoSlotCount)
+    {
+        if (slotIndex < 0 || slotIndex >= PlayerInventoryData.ShipSlotCount || astronautCargoSlotCount <= 0)
+            return false;
+
+        int clampedCapacity = Mathf.Clamp(shipCapacity, 0, PlayerInventoryData.ShipSlotCount);
+        if (slotIndex >= clampedCapacity)
+            return false;
+
+        int astronautSlotsSeen = 0;
+        for (int i = 0; i < clampedCapacity; i++)
+        {
+            if (IsSafePocketIndex(shipSkinIndex, i))
+                continue;
+
+            if (i == slotIndex)
+                return astronautSlotsSeen < astronautCargoSlotCount;
+
+            astronautSlotsSeen++;
+            if (astronautSlotsSeen >= astronautCargoSlotCount)
+                return false;
+        }
+
+        return false;
+    }
+
     public static bool CanStoreItemInShipSlot(string itemId, int shipSkinIndex, int slotIndex)
     {
         if (string.IsNullOrWhiteSpace(itemId))
@@ -1634,16 +1957,41 @@ public class PlayerProfileService : MonoBehaviour
         return !IsSafePocketIndex(shipSkinIndex, slotIndex) || InventoryItemCatalog.CanEnterSafePocket(itemId);
     }
 
-    public static string[] BuildLossWreckLoot(string[] sourceSlots, int shipSkinIndex)
+    public static string[] BuildLossWreckLoot(string[] sourceSlots, int shipSkinIndex, int shipCapacity = -1)
     {
         string[] normalized = NormalizeShipSlots(sourceSlots);
+        int effectiveCapacity = shipCapacity >= 0
+            ? Mathf.Clamp(shipCapacity, 0, PlayerInventoryData.ShipSlotCount)
+            : ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
         for (int i = 0; i < normalized.Length; i++)
         {
             if (IsSafePocketIndex(shipSkinIndex, i) && InventoryItemCatalog.CanEnterSafePocket(normalized[i]))
                 normalized[i] = null;
+            else if (IsAstronautCargoIndex(shipSkinIndex, effectiveCapacity, i))
+                normalized[i] = null;
         }
 
         return normalized;
+    }
+
+    public static string[] BuildAstronautCargoSnapshot(string[] sourceSlots, int shipSkinIndex, int shipCapacity, int astronautCargoSlotCount = -1)
+    {
+        string[] normalized = NormalizeShipSlots(sourceSlots);
+        string[] snapshot = new string[PlayerInventoryData.ShipSlotCount];
+        int slotCount = astronautCargoSlotCount >= 0
+            ? astronautCargoSlotCount
+            : GetAstronautCargoSlotCount(shipSkinIndex);
+
+        for (int i = 0; i < normalized.Length; i++)
+        {
+            if (IsAstronautCargoIndex(shipSkinIndex, shipCapacity, i, slotCount) &&
+                !string.IsNullOrWhiteSpace(normalized[i]))
+            {
+                snapshot[i] = normalized[i];
+            }
+        }
+
+        return snapshot;
     }
 
     public static string[] BuildPostLossShipInventory(string[] sourceSlots, int shipSkinIndex)
@@ -1662,7 +2010,7 @@ public class PlayerProfileService : MonoBehaviour
     {
         string[] slots = GetPlayerShipInventorySlots(player);
         int shipSkinIndex = player != null ? RoomSettings.GetPlayerShipSkin(player, 0) : 0;
-        int capacity = ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
+        int capacity = GetPlayerShipInventoryCapacity(player);
         for (int i = 0; i < slots.Length && i < capacity; i++)
         {
             if (string.IsNullOrWhiteSpace(slots[i]) && CanStoreItemInShipSlot(itemId, shipSkinIndex, i))
@@ -1726,6 +2074,110 @@ public class PlayerProfileService : MonoBehaviour
             Debug.LogWarning("Failed to deserialize ship inventory snapshot: " + ex.Message);
             return new string[PlayerInventoryData.ShipSlotCount];
         }
+    }
+
+    void StagePendingAstronautCargo(string serializedAstronautCargo, string[] fallbackSourceSlots, int shipSkinIndex, int shipCapacity)
+    {
+        string[] snapshot = serializedAstronautCargo != null
+            ? DeserializeShipInventorySlots(serializedAstronautCargo)
+            : BuildAstronautCargoSnapshot(fallbackSourceSlots, shipSkinIndex, shipCapacity);
+
+        if (!HasAnyShipSlotItem(snapshot))
+        {
+            ClearPendingAstronautCargo();
+            return;
+        }
+
+        pendingAstronautCargoSlots = NormalizeShipSlots(snapshot);
+        pendingAstronautCargoShipSkinIndex = shipSkinIndex;
+        hasPendingAstronautCargo = true;
+    }
+
+    void StagePendingProtectedEquipment(string itemId, string[] sourceEquipmentSlots, int shipSkinIndex)
+    {
+        ClearPendingProtectedEquipment();
+        if (string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        string[] slots = NormalizeEquipmentSlots(sourceEquipmentSlots);
+        for (int i = 0; i < slots.Length; i++)
+        {
+            if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
+                continue;
+
+            if (!string.Equals(slots[i], itemId, StringComparison.Ordinal))
+                continue;
+
+            pendingProtectedEquipmentItemId = itemId;
+            pendingProtectedEquipmentSlotIndex = i;
+            pendingProtectedEquipmentShipSkinIndex = shipSkinIndex;
+            hasPendingProtectedEquipment = true;
+            return;
+        }
+    }
+
+    bool RestorePendingProtectedEquipment(int fallbackShipSkinIndex)
+    {
+        if (!hasPendingProtectedEquipment || string.IsNullOrWhiteSpace(pendingProtectedEquipmentItemId))
+        {
+            ClearPendingProtectedEquipment();
+            return false;
+        }
+
+        string itemId = pendingProtectedEquipmentItemId;
+        int preferredSlot = pendingProtectedEquipmentSlotIndex;
+        int shipSkinIndex = pendingProtectedEquipmentShipSkinIndex >= 0
+            ? pendingProtectedEquipmentShipSkinIndex
+            : fallbackShipSkinIndex;
+        ClearPendingProtectedEquipment();
+
+        if (TryRestoreEquipmentToSlot(itemId, preferredSlot, shipSkinIndex))
+            return true;
+
+        int fallbackSlot = GetFirstFreeGadgetEquipmentSlot(CurrentProfile.Inventory.EquipmentSlots, shipSkinIndex);
+        if (TryRestoreEquipmentToSlot(itemId, fallbackSlot, shipSkinIndex))
+            return true;
+
+        int capacity = GetEffectiveShipInventoryCapacity(shipSkinIndex, CurrentProfile.Inventory.EquipmentSlots);
+        if (CurrentProfile.Inventory.TryAddToShip(itemId, capacity, shipSkinIndex))
+            return true;
+
+        if (CurrentProfile.Inventory.TryAddToPlayer(itemId))
+            return true;
+
+        Debug.LogWarning("Protected equipment could not be restored after evacuation: " + itemId);
+        return false;
+    }
+
+    bool TryRestoreEquipmentToSlot(string itemId, int slotIndex, int shipSkinIndex)
+    {
+        if (string.IsNullOrWhiteSpace(itemId) ||
+            slotIndex < 0 ||
+            slotIndex >= PlayerInventoryData.EquipmentSlotCount ||
+            !ShipCatalog.IsEquipmentSlotEnabled(slotIndex, shipSkinIndex) ||
+            !InventoryItemCatalog.IsCompatibleWithEquipmentSlot(itemId, slotIndex) ||
+            !string.IsNullOrWhiteSpace(CurrentProfile.Inventory.EquipmentSlots[slotIndex]))
+        {
+            return false;
+        }
+
+        CurrentProfile.Inventory.SetEquipment(slotIndex, itemId);
+        return true;
+    }
+
+    void ClearPendingAstronautCargo()
+    {
+        pendingAstronautCargoSlots = null;
+        pendingAstronautCargoShipSkinIndex = -1;
+        hasPendingAstronautCargo = false;
+    }
+
+    void ClearPendingProtectedEquipment()
+    {
+        pendingProtectedEquipmentItemId = null;
+        pendingProtectedEquipmentSlotIndex = -1;
+        pendingProtectedEquipmentShipSkinIndex = -1;
+        hasPendingProtectedEquipment = false;
     }
 
     public static string SerializeEquipmentSlots(string[] slots)
@@ -1899,7 +2351,9 @@ public class PlayerProfileService : MonoBehaviour
 
     int GetActiveShipInventoryCapacity()
     {
-        return ShipCatalog.GetShipInventoryCapacity(GetActiveShipSkinIndex());
+        return GetEffectiveShipInventoryCapacity(
+            GetActiveShipSkinIndex(),
+            CurrentProfile != null && CurrentProfile.Inventory != null ? CurrentProfile.Inventory.EquipmentSlots : null);
     }
 
     void ApplyInventoryToPhoton()
@@ -2063,6 +2517,20 @@ public class PlayerProfileService : MonoBehaviour
         }
 
         return normalized;
+    }
+
+    static bool HasAnyShipSlotItem(string[] slots)
+    {
+        if (slots == null)
+            return false;
+
+        for (int i = 0; i < slots.Length; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(slots[i]))
+                return true;
+        }
+
+        return false;
     }
 
     static string[] NormalizeEquipmentSlots(string[] source)

@@ -114,6 +114,19 @@ public static class PlayerProfileCraftingCatalog
         },
         new PlayerProfileCraftingRecipe
         {
+            Id = "gatling_gun_from_rotary_parts",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.TripleGunId,
+                InventoryItemCatalog.NeutralFighterSalvageId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.SpaceJunkStandardId
+            },
+            OutputItemId = InventoryItemCatalog.GatlingGunId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
             Id = "artillery_gun_from_mid_asteroids",
             Inputs = new[]
             {
@@ -122,6 +135,32 @@ public static class PlayerProfileCraftingCatalog
                 InventoryItemCatalog.AsteroidRareId
             },
             OutputItemId = InventoryItemCatalog.ArtilleryGunId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "rocket_launcher_from_artillery_salvage",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.ArtilleryGunId,
+                InventoryItemCatalog.NeutralFighterSalvageId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidGoldId
+            },
+            OutputItemId = InventoryItemCatalog.RocketLauncherId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "double_rocket_launcher_from_launcher_parts",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.RocketLauncherId,
+                InventoryItemCatalog.DoubleIonizerId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.NeutralFighterSalvageId
+            },
+            OutputItemId = InventoryItemCatalog.DoubleRocketLauncherId,
             OutputCount = 1
         },
         new PlayerProfileCraftingRecipe
@@ -165,6 +204,19 @@ public static class PlayerProfileCraftingCatalog
         },
         new PlayerProfileCraftingRecipe
         {
+            Id = "pulse_disruptor_from_ionizer",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.DoubleIonizerId,
+                InventoryItemCatalog.PirateFighterSalvageId,
+                InventoryItemCatalog.RichAsteroidId,
+                InventoryItemCatalog.SpaceMineWreckId
+            },
+            OutputItemId = InventoryItemCatalog.PulseDisruptorId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
             Id = "fusion_engine_from_droid_wreck",
             Inputs = new[]
             {
@@ -200,6 +252,19 @@ public static class PlayerProfileCraftingCatalog
                 InventoryItemCatalog.AsteroidGoldId
             },
             OutputItemId = InventoryItemCatalog.SuperBoosterId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "afterburner_stabilizer_from_fusion_engine",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.FusionEngineId,
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.SpaceJunkStandardId
+            },
+            OutputItemId = InventoryItemCatalog.AfterburnerStabilizerId,
             OutputCount = 1
         },
         new PlayerProfileCraftingRecipe
@@ -334,6 +399,44 @@ public static class PlayerProfileCraftingCatalog
         },
         new PlayerProfileCraftingRecipe
         {
+            Id = "emergency_suit_beacon_from_common_parts",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.AsteroidResourceId,
+                InventoryItemCatalog.AsteroidResourceId,
+                InventoryItemCatalog.DroidScrapId
+            },
+            OutputItemId = InventoryItemCatalog.EmergencySuitBeaconId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "escape_pod_from_rescue_salvage",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.RescueShipSalvageId,
+                InventoryItemCatalog.SpaceTruckWreckId,
+                InventoryItemCatalog.AsteroidEpicId,
+                InventoryItemCatalog.EmergencySuitBeaconId
+            },
+            OutputItemId = InventoryItemCatalog.EscapePodId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "salvage_magnet_array_from_tractor_beam",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.TractorBeamId,
+                InventoryItemCatalog.RadarShipSalvageId,
+                InventoryItemCatalog.SpaceJunkStandardId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.SalvageMagnetArrayId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
             Id = "shield_reactor_from_truck_wreck",
             Inputs = new[]
             {
@@ -343,6 +446,58 @@ public static class PlayerProfileCraftingCatalog
                 InventoryItemCatalog.AsteroidGoldId
             },
             OutputItemId = InventoryItemCatalog.ShieldReactorId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "kinetic_dampener_from_impact_salvage",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.NeutralFighterSalvageId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.SpaceJunkStandardId
+            },
+            OutputItemId = InventoryItemCatalog.KineticDampenerId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "phase_shield_from_radar_salvage",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.ShieldReactorId,
+                InventoryItemCatalog.RadarShipSalvageId,
+                InventoryItemCatalog.RichAsteroidId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.PhaseShieldId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "cargo_bay_extension_from_truck_wreck",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceTruckWreckId,
+                InventoryItemCatalog.SpaceJunkStandardId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.CargoBayExtensionId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "strong_plating_from_rescue_salvage",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.RescueShipSalvageId,
+                InventoryItemCatalog.SpaceTruckWreckId,
+                InventoryItemCatalog.AsteroidEpicId,
+                InventoryItemCatalog.SpaceJunkStandardId
+            },
+            OutputItemId = InventoryItemCatalog.StrongPlatingId,
             OutputCount = 1
         }
     };

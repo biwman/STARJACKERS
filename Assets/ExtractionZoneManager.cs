@@ -15,6 +15,7 @@ public class ExtractionZoneManager : MonoBehaviourPunCallbacks
     const float Margin = 3.5f;
     const float MinZoneDistance = 8f;
     const float HideSceneZonesRetryInterval = 0.25f;
+    const float RoundEndZoneCleanupDelay = 6f;
     const int HideSceneZonesRetryCount = 8;
 
     static ExtractionZoneManager instance;
@@ -22,6 +23,7 @@ public class ExtractionZoneManager : MonoBehaviourPunCallbacks
     bool lastStartedState;
     float nextSceneZoneHideRetryTime;
     int sceneZoneHideRetriesRemaining;
+    Coroutine runtimeZoneCleanupRoutine;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -63,13 +65,14 @@ public class ExtractionZoneManager : MonoBehaviourPunCallbacks
         {
             if (lastStartedState && PhotonNetwork.IsMasterClient)
             {
-                DestroyRuntimeZones();
+                ScheduleRuntimeZoneCleanup();
             }
 
             lastStartedState = false;
             return;
         }
 
+        CancelRuntimeZoneCleanup();
         lastStartedState = true;
 
         string layout = GetExtractionLayout();
@@ -95,7 +98,7 @@ public class ExtractionZoneManager : MonoBehaviourPunCallbacks
     {
         if (propertiesThatChanged.ContainsKey(GameStartedKey) && !IsRoundStarted() && PhotonNetwork.IsMasterClient)
         {
-            DestroyRuntimeZones();
+            ScheduleRuntimeZoneCleanup();
         }
     }
 
@@ -163,6 +166,34 @@ public class ExtractionZoneManager : MonoBehaviourPunCallbacks
                 PhotonNetwork.Destroy(zone.gameObject);
             }
         }
+    }
+
+    void ScheduleRuntimeZoneCleanup()
+    {
+        if (runtimeZoneCleanupRoutine != null)
+            return;
+
+        runtimeZoneCleanupRoutine = StartCoroutine(DestroyRuntimeZonesAfterRoundEnd());
+    }
+
+    void CancelRuntimeZoneCleanup()
+    {
+        if (runtimeZoneCleanupRoutine == null)
+            return;
+
+        StopCoroutine(runtimeZoneCleanupRoutine);
+        runtimeZoneCleanupRoutine = null;
+    }
+
+    System.Collections.IEnumerator DestroyRuntimeZonesAfterRoundEnd()
+    {
+        yield return new WaitForSecondsRealtime(RoundEndZoneCleanupDelay);
+        runtimeZoneCleanupRoutine = null;
+
+        if (!PhotonNetwork.InRoom || !PhotonNetwork.IsMasterClient || IsRoundStarted())
+            yield break;
+
+        DestroyRuntimeZones();
     }
 
     int GetRuntimeZoneCount()

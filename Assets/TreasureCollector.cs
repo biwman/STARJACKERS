@@ -9,6 +9,7 @@ using UnityEngine.UI;
 
 public class TreasureCollector : MonoBehaviourPun
 {
+    static readonly System.Collections.Generic.Dictionary<int, int> ReservedTreasureCollections = new System.Collections.Generic.Dictionary<int, int>();
     static readonly System.Collections.Generic.Dictionary<int, int> ReservedWreckLoot = new System.Collections.Generic.Dictionary<int, int>();
     static readonly System.Collections.Generic.Dictionary<int, int> ReservedDroppedCargoLoot = new System.Collections.Generic.Dictionary<int, int>();
     static readonly System.Collections.Generic.Dictionary<int, int> ReservedRandomLootWrecks = new System.Collections.Generic.Dictionary<int, int>();
@@ -19,10 +20,18 @@ public class TreasureCollector : MonoBehaviourPun
     const float BeamJitterFrequency = 22f;
     const float BeamZOffset = -0.35f;
     const int BeamPointCount = 13;
-    const float CollectFacingTurnSpeed = 720f;
     const float HudButtonVerticalNudge = 12f;
     const float ExtractionUseSearchRadius = 2.1f;
     const float ExtractionUseKeepAliveDistance = 1.15f;
+
+    enum UseActionType
+    {
+        None,
+        Collect,
+        Land,
+        Activate,
+        Escape
+    }
 
     public Button collectButton;
     public TMP_Text scoreText;
@@ -45,16 +54,22 @@ public class TreasureCollector : MonoBehaviourPun
     Image pickupToastIcon;
     TMP_Text pickupToastLabel;
     Coroutine pickupToastRoutine;
-    Coroutine extractionUseRoutine;
     Coroutine collectibleUseRoutine;
+    Coroutine extractionActivationRoutine;
     bool collectButtonHooked;
+    bool isActivatingExtraction;
     RectTransform nudgedCollectButtonRect;
     UseButtonVisualController useButtonVisual;
+    ExtractionZone pendingActivatedExtraction;
+    float pendingActivatedExtractionUntil;
+    int pendingTreasureReservationViewId;
+    int activeTreasureReservationViewId;
 
     public bool IsCollectingAny => isCollecting;
 
     public static void ResetRoundReservations()
     {
+        ReservedTreasureCollections.Clear();
         ReservedWreckLoot.Clear();
         ReservedDroppedCargoLoot.Clear();
         ReservedRandomLootWrecks.Clear();
@@ -103,7 +118,11 @@ public class TreasureCollector : MonoBehaviourPun
 
         if (photonView.IsMine && IsAstronautMode())
         {
-            if (currentTreasure != null || currentWreck != null || currentDroppedCargo != null)
+            if (isCollecting)
+            {
+                CancelActiveCollection();
+            }
+            else if (currentTreasure != null || currentWreck != null || currentDroppedCargo != null)
             {
                 ClearCurrentHighlight();
                 currentTreasure = null;
@@ -111,7 +130,7 @@ public class TreasureCollector : MonoBehaviourPun
                 currentDroppedCargo = null;
             }
 
-            SetUseButtonAvailable(false);
+            UpdateUseButtonAvailability();
             UpdateCollectionBeam();
             return;
         }
@@ -123,8 +142,36 @@ public class TreasureCollector : MonoBehaviourPun
                 RefreshClosestCollectible();
         }
 
+        if (photonView.IsMine)
+            EnsureActiveCollectibleTargetStillValid();
+
         UpdateUseButtonAvailability();
         UpdateCollectionBeam();
+    }
+
+    void EnsureActiveCollectibleTargetStillValid()
+    {
+        if (!isCollecting)
+            return;
+
+        if (pendingTreasureReservationViewId > 0)
+        {
+            if (PhotonView.Find(pendingTreasureReservationViewId) == null)
+                CancelActiveCollection();
+
+            return;
+        }
+
+        if (currentTreasure != null && activeTreasureReservationViewId > 0)
+        {
+            PhotonView treasureView = currentTreasure.GetComponent<PhotonView>();
+            if (treasureView == null || treasureView.ViewID != activeTreasureReservationViewId)
+                CancelActiveCollection();
+        }
+        else if (currentTreasure == null && currentWreck == null && currentDroppedCargo == null)
+        {
+            CancelActiveCollection();
+        }
     }
 
     void TryBindHudReferences()
@@ -164,11 +211,6 @@ public class TreasureCollector : MonoBehaviourPun
         down.callback.AddListener(_ => StartHolding());
         trigger.triggers.Add(down);
 
-        EventTrigger.Entry up = new EventTrigger.Entry();
-        up.eventID = EventTriggerType.PointerUp;
-        up.callback.AddListener(_ => StopHolding());
-        trigger.triggers.Add(up);
-
         collectButtonHooked = true;
         UpdateUseButtonAvailability();
     }
@@ -206,11 +248,15 @@ public class TreasureCollector : MonoBehaviourPun
         if (!photonView.IsMine)
             return;
 
+        if (isActivatingExtraction)
+            return;
+
         PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
         RepairBay repairBay = RepairBay.FindClosestUsable(transform.position);
         SpaceFactory spaceFactory = SpaceFactory.FindClosestUsable(transform.position);
         if (repairDocking != null && (repairDocking.IsBusy || repairBay != null || spaceFactory != null))
         {
+            CancelActiveCollection();
             if (repairDocking.TryStartUse(repairBay, spaceFactory))
                 return;
         }
@@ -218,18 +264,16 @@ public class TreasureCollector : MonoBehaviourPun
         currentExtraction = ResolveNearbyExtractionZone();
         if (currentExtraction != null)
         {
-            if (!isCollecting)
-            {
-                isCollecting = true;
-                LockControls();
-                extractionUseRoutine = StartCoroutine(HoldExtractionRoutine(currentExtraction));
-            }
-
+            CancelActiveCollection();
+            UseExtraction(currentExtraction);
             return;
         }
 
         if (!IsAstronautMode())
         {
+            if (isCollecting)
+                return;
+
             if (!HasLockedCollectibleTarget())
                 RefreshClosestCollectible();
 
@@ -245,9 +289,7 @@ public class TreasureCollector : MonoBehaviourPun
 
                 if (currentTreasure != null && !isCollecting)
                 {
-                    isCollecting = true;
-                    StartCollectibleFeedback(currentTreasure.GetComponent<PhotonView>());
-                    collectibleUseRoutine = StartCoroutine(CollectTreasureRoutine(currentTreasure));
+                    RequestTreasureCollectionReservation(currentTreasure);
                     return;
                 }
 
@@ -315,17 +357,29 @@ public class TreasureCollector : MonoBehaviourPun
         if (repairDocking != null)
             repairDocking.StopUseHold();
 
-        if (repairDocking != null && repairDocking.IsBusy)
+        CancelActiveCollection();
+        CancelExtractionActivation();
+    }
+
+    public void CancelCollectionForShot()
+    {
+        if (!photonView.IsMine || !isCollecting)
             return;
 
-        ReleaseCurrentCollectibleReservation();
+        CancelActiveCollection();
+    }
+
+    void CancelActiveCollection()
+    {
+        bool hadActiveCollection = isCollecting || collectibleUseRoutine != null;
+        bool hadTarget = currentTreasure != null || currentWreck != null || currentDroppedCargo != null;
+        if (!hadActiveCollection && !hadTarget)
+            return;
+
+        if (hadActiveCollection)
+            ReleaseCurrentCollectibleReservation();
+
         isCollecting = false;
-        StopCollectibleFeedback();
-        if (extractionUseRoutine != null)
-        {
-            StopCoroutine(extractionUseRoutine);
-            extractionUseRoutine = null;
-        }
 
         if (collectibleUseRoutine != null)
         {
@@ -333,32 +387,103 @@ public class TreasureCollector : MonoBehaviourPun
             collectibleUseRoutine = null;
         }
 
-        if (movement != null) movement.enabled = true;
-        if (shooting != null) shooting.enabled = true;
+        if (hadActiveCollection)
+        {
+            StopCollectibleFeedback();
+            SetUseProgress(0f, false);
+        }
+
+        ClearCurrentHighlight();
+        currentTreasure = null;
+        currentWreck = null;
+        currentDroppedCargo = null;
+        UpdateUseButtonAvailability();
     }
 
-    IEnumerator HoldExtractionRoutine(ExtractionZone extractionZone)
+    void UseExtraction(ExtractionZone extractionZone)
     {
-        float timer = 0f;
+        if (extractionZone == null)
+            return;
 
-        while (timer < collectTime)
+        if (extractionZone.IsTransitioning || extractionZone.IsEvacuating || IsPendingActivatedExtraction(extractionZone))
+            return;
+
+        if (!extractionZone.IsActive)
         {
-            if (!isCollecting || extractionZone == null || !IsExtractionStillUsable(extractionZone))
-            {
-                AbortCollection();
-                yield break;
-            }
-
-            currentExtraction = extractionZone;
-            timer += Time.deltaTime;
-            yield return null;
+            StartExtractionActivation(extractionZone);
+            return;
         }
 
         PhotonView ezView = extractionZone.GetComponent<PhotonView>();
         if (ezView != null)
             photonView.RPC(nameof(RequestUseExtraction), RpcTarget.MasterClient, ezView.ViewID);
+    }
 
-        FinishCollection();
+    void StartExtractionActivation(ExtractionZone extractionZone)
+    {
+        if (extractionZone == null || isActivatingExtraction)
+            return;
+
+        extractionActivationRoutine = StartCoroutine(ActivateExtractionRoutine(extractionZone));
+    }
+
+    IEnumerator ActivateExtractionRoutine(ExtractionZone extractionZone)
+    {
+        isActivatingExtraction = true;
+
+        float timer = 0f;
+        float requiredActivationTime = Mathf.Max(0.1f, extractionZone != null ? extractionZone.activationTime : collectTime);
+        SetUseProgress(0f, true);
+
+        while (timer < requiredActivationTime)
+        {
+            if (extractionZone == null ||
+                extractionZone.IsActive ||
+                extractionZone.IsTransitioning ||
+                extractionZone.IsEvacuating ||
+                !IsExtractionStillUsable(extractionZone))
+            {
+                FinishExtractionActivation(false);
+                yield break;
+            }
+
+            currentExtraction = extractionZone;
+            timer += Time.deltaTime;
+            SetUseProgress(timer / requiredActivationTime, true);
+            yield return null;
+        }
+
+        PhotonView ezView = extractionZone.GetComponent<PhotonView>();
+        if (ezView != null)
+        {
+            pendingActivatedExtraction = extractionZone;
+            pendingActivatedExtractionUntil = Time.time + 2f;
+            photonView.RPC(nameof(RequestUseExtraction), RpcTarget.MasterClient, ezView.ViewID);
+        }
+
+        FinishExtractionActivation(false);
+    }
+
+    void CancelExtractionActivation()
+    {
+        if (!isActivatingExtraction && extractionActivationRoutine == null)
+            return;
+
+        if (extractionActivationRoutine != null)
+        {
+            StopCoroutine(extractionActivationRoutine);
+            extractionActivationRoutine = null;
+        }
+
+        FinishExtractionActivation(false);
+    }
+
+    void FinishExtractionActivation(bool keepFullProgress)
+    {
+        isActivatingExtraction = false;
+        extractionActivationRoutine = null;
+        SetUseProgress(keepFullProgress ? 1f : 0f, keepFullProgress);
+        UpdateUseButtonAvailability();
     }
 
     bool IsExtractionStillUsable(ExtractionZone extractionZone)
@@ -384,6 +509,48 @@ public class TreasureCollector : MonoBehaviourPun
         return Vector2.Distance(transform.position, extractionZone.transform.position);
     }
 
+    void RequestTreasureCollectionReservation(Treasure treasure)
+    {
+        if (treasure == null || treasure.isBeingCollected)
+        {
+            AbortCollection(treasure);
+            return;
+        }
+
+        PhotonView treasureView = treasure.GetComponent<PhotonView>();
+        if (treasureView == null || !PhotonNetwork.InRoom)
+        {
+            BeginTreasureCollection(treasure, 0);
+            return;
+        }
+
+        isCollecting = true;
+        currentTreasure = treasure;
+        pendingTreasureReservationViewId = treasureView.ViewID;
+        activeTreasureReservationViewId = 0;
+        SetUseProgress(0f, true);
+        photonView.RPC(nameof(RequestReserveTreasureCollection), RpcTarget.MasterClient, treasureView.ViewID);
+    }
+
+    void BeginTreasureCollection(Treasure treasure, int reservedViewId)
+    {
+        if (!photonView.IsMine)
+            return;
+
+        if (treasure == null || treasure.isBeingCollected)
+        {
+            CancelActiveCollection();
+            return;
+        }
+
+        pendingTreasureReservationViewId = 0;
+        activeTreasureReservationViewId = reservedViewId;
+        currentTreasure = treasure;
+        isCollecting = true;
+        StartCollectibleFeedback(treasure.GetComponent<PhotonView>());
+        collectibleUseRoutine = StartCoroutine(CollectTreasureRoutine(treasure));
+    }
+
     IEnumerator CollectTreasureRoutine(Treasure treasureToCollect)
     {
         if (treasureToCollect == null || treasureToCollect.isBeingCollected)
@@ -393,22 +560,22 @@ public class TreasureCollector : MonoBehaviourPun
         }
 
         treasureToCollect.isBeingCollected = true;
-        LockControls();
 
         float timer = 0f;
         float requiredCollectTime = GetTreasureCollectTime();
+        SetUseProgress(0f, true);
 
         while (timer < requiredCollectTime)
         {
-            if (!isCollecting || treasureToCollect == null || !IsTreasureInCollectRange(treasureToCollect))
+            if (!isCollecting || treasureToCollect == null || !IsTreasureInCollectRange(treasureToCollect, true))
             {
                 AbortCollection(treasureToCollect);
                 yield break;
             }
 
             currentTreasure = treasureToCollect;
-            FaceCollectibleTarget();
             timer += Time.deltaTime;
+            SetUseProgress(timer / requiredCollectTime, true);
             yield return null;
         }
 
@@ -422,6 +589,7 @@ public class TreasureCollector : MonoBehaviourPun
                 photonView.RPC(nameof(RequestRandomLootWreck), RpcTarget.MasterClient, treasureViewId);
 
             treasureToCollect.isBeingCollected = false;
+            ReleaseMasterTreasureReservation(true);
             FinishCollection();
             yield break;
         }
@@ -432,6 +600,7 @@ public class TreasureCollector : MonoBehaviourPun
 
         treasureToCollect.isBeingCollected = false;
         FinishCollection();
+        ReleaseMasterTreasureReservation(false);
 
         if (treasureViewId > 0)
         {
@@ -440,6 +609,7 @@ public class TreasureCollector : MonoBehaviourPun
                 PhotonView viewToDestroy = PhotonView.Find(treasureViewId);
                 if (viewToDestroy != null)
                 {
+                    ReservedTreasureCollections.Remove(treasureViewId);
                     SpaceTrapTarget.DetonateIfArmed(treasureViewId, photonView != null ? photonView.ViewID : 0);
                     NotifyPirateBasesAboutCollectedTarget(treasureViewId);
                     PhotonNetwork.Destroy(viewToDestroy.gameObject);
@@ -467,13 +637,14 @@ public class TreasureCollector : MonoBehaviourPun
         }
 
         wreckToLoot.isBeingCollected = true;
-        LockControls();
 
         float timer = 0f;
+        float requiredCollectTime = Mathf.Max(0.1f, collectTime);
+        SetUseProgress(0f, true);
 
-        while (timer < collectTime)
+        while (timer < requiredCollectTime)
         {
-            if (!isCollecting || wreckToLoot == null || !wreckToLoot.HasLoot || !IsWreckInCollectRange(wreckToLoot))
+            if (!isCollecting || wreckToLoot == null || !wreckToLoot.HasLoot || !IsWreckInCollectRange(wreckToLoot, true))
             {
                 wreckToLoot.isBeingCollected = false;
                 AbortCollection();
@@ -481,8 +652,8 @@ public class TreasureCollector : MonoBehaviourPun
             }
 
             currentWreck = wreckToLoot;
-            FaceCollectibleTarget();
             timer += Time.deltaTime;
+            SetUseProgress(timer / requiredCollectTime, true);
             yield return null;
         }
 
@@ -505,13 +676,14 @@ public class TreasureCollector : MonoBehaviourPun
         }
 
         crateToLoot.isBeingCollected = true;
-        LockControls();
 
         float timer = 0f;
+        float requiredCollectTime = Mathf.Max(0.1f, collectTime);
+        SetUseProgress(0f, true);
 
-        while (timer < collectTime)
+        while (timer < requiredCollectTime)
         {
-            if (!isCollecting || crateToLoot == null || !crateToLoot.HasLoot || !IsDroppedCargoInCollectRange(crateToLoot))
+            if (!isCollecting || crateToLoot == null || !crateToLoot.HasLoot || !IsDroppedCargoInCollectRange(crateToLoot, true))
             {
                 crateToLoot.isBeingCollected = false;
                 AbortCollection();
@@ -519,8 +691,8 @@ public class TreasureCollector : MonoBehaviourPun
             }
 
             currentDroppedCargo = crateToLoot;
-            FaceCollectibleTarget();
             timer += Time.deltaTime;
+            SetUseProgress(timer / requiredCollectTime, true);
             yield return null;
         }
 
@@ -534,14 +706,10 @@ public class TreasureCollector : MonoBehaviourPun
         FinishCollection();
     }
 
-    void LockControls()
-    {
-        if (movement != null) movement.enabled = false;
-        if (shooting != null) shooting.enabled = false;
-    }
-
     void ReleaseCurrentCollectibleReservation()
     {
+        ReleaseMasterTreasureReservation(true);
+
         if (currentTreasure != null)
             currentTreasure.isBeingCollected = false;
         if (currentWreck != null)
@@ -550,23 +718,21 @@ public class TreasureCollector : MonoBehaviourPun
             currentDroppedCargo.isBeingCollected = false;
     }
 
-    void FaceCollectibleTarget()
+    void ReleaseMasterTreasureReservation(bool notifyMaster)
     {
-        if (!photonView.IsMine)
+        int viewId = activeTreasureReservationViewId > 0 ? activeTreasureReservationViewId : pendingTreasureReservationViewId;
+        activeTreasureReservationViewId = 0;
+        pendingTreasureReservationViewId = 0;
+
+        if (!notifyMaster || viewId <= 0 || !PhotonNetwork.InRoom || photonView == null)
             return;
 
-        Vector2 target = GetCurrentCollectibleCenter(transform.position);
-        Vector2 toTarget = target - (Vector2)transform.position;
-        if (toTarget.sqrMagnitude < 0.0001f)
-            return;
-
-        float targetAngle = Mathf.Atan2(toTarget.y, toTarget.x) * Mathf.Rad2Deg - 90f;
-        Quaternion targetRotation = Quaternion.Euler(0f, 0f, targetAngle);
-        transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, CollectFacingTurnSpeed * Time.deltaTime);
+        photonView.RPC(nameof(RequestReleaseTreasureCollection), RpcTarget.MasterClient, viewId);
     }
 
     public void ForceCancelCollectionForDeath()
     {
+        CancelExtractionActivation();
         isCollecting = false;
 
         if (currentTreasure != null)
@@ -576,11 +742,7 @@ public class TreasureCollector : MonoBehaviourPun
         if (currentDroppedCargo != null)
             currentDroppedCargo.isBeingCollected = false;
 
-        if (extractionUseRoutine != null)
-        {
-            StopCoroutine(extractionUseRoutine);
-            extractionUseRoutine = null;
-        }
+        ReleaseMasterTreasureReservation(true);
 
         if (collectibleUseRoutine != null)
         {
@@ -591,6 +753,7 @@ public class TreasureCollector : MonoBehaviourPun
         StopAllCoroutines();
         StopLocalDrillingLoop();
         SetBeamEnabled(false);
+        SetUseProgress(0f, false);
         ClearCurrentHighlight();
 
         currentTreasure = null;
@@ -606,6 +769,7 @@ public class TreasureCollector : MonoBehaviourPun
         if (treasure != null)
             treasure.isBeingCollected = false;
 
+        ReleaseMasterTreasureReservation(true);
         FinishCollection();
     }
 
@@ -614,25 +778,12 @@ public class TreasureCollector : MonoBehaviourPun
         isCollecting = false;
         collectibleUseRoutine = null;
         StopCollectibleFeedback();
+        SetUseProgress(0f, false);
+        ClearCurrentHighlight();
         currentTreasure = null;
         currentWreck = null;
         currentDroppedCargo = null;
-
-        if (!CanRestoreControlsAfterCollection())
-        {
-            if (movement != null) movement.enabled = false;
-            if (shooting != null) shooting.enabled = false;
-            return;
-        }
-
-        if (movement != null) movement.enabled = true;
-        if (shooting != null) shooting.enabled = true;
-    }
-
-    bool CanRestoreControlsAfterCollection()
-    {
-        PlayerHealth health = GetComponent<PlayerHealth>();
-        return health == null || (!health.IsWreck && !health.IsEvacuationAnimating);
+        UpdateUseButtonAvailability();
     }
 
     void StartCollectibleFeedback(PhotonView targetView)
@@ -665,7 +816,7 @@ public class TreasureCollector : MonoBehaviourPun
                 continue;
 
             float distance = GetDistanceFromTipToCollider(treasure.GetComponent<Collider2D>(), treasure.transform.position, tipPosition);
-            if (distance > Treasure.CollectRange)
+            if (distance > GetTreasureCollectRange(treasure))
                 continue;
 
             if (distance < bestDistance)
@@ -684,8 +835,7 @@ public class TreasureCollector : MonoBehaviourPun
                 continue;
 
             float distance = GetDistanceFromTipToCollider(wreck.GetComponent<Collider2D>(), wreck.transform.position, tipPosition);
-            float wreckCollectRange = wreck.SourceShipSkinIndex < 0 ? Treasure.CollectRange + 0.45f : Treasure.CollectRange;
-            if (distance > wreckCollectRange)
+            if (distance > GetWreckCollectRange(wreck))
                 continue;
 
             if (distance < bestDistance)
@@ -758,25 +908,49 @@ public class TreasureCollector : MonoBehaviourPun
 
     public bool HasUseActionAvailable()
     {
-        if (!photonView.IsMine || IsAstronautMode())
-            return false;
+        return ResolveUseActionType() != UseActionType.None;
+    }
 
-        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
-        RepairBay repairBay = RepairBay.FindClosestUsable(transform.position);
-        SpaceFactory spaceFactory = SpaceFactory.FindClosestUsable(transform.position);
-        if (repairDocking != null && (repairDocking.IsBusy || repairBay != null || spaceFactory != null))
-            return true;
+    UseActionType ResolveUseActionType()
+    {
+        if (!photonView.IsMine)
+            return UseActionType.None;
 
-        if (currentExtraction != null && IsExtractionStillUsable(currentExtraction))
-            return true;
+        bool astronautMode = IsAstronautMode();
 
-        if (ResolveNearbyExtractionZone() != null)
-            return true;
+        if (!astronautMode)
+        {
+            PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
+            RepairBay repairBay = RepairBay.FindClosestUsable(transform.position);
+            SpaceFactory spaceFactory = SpaceFactory.FindClosestUsable(transform.position);
+            if (repairDocking != null && (repairDocking.IsBusy || repairBay != null || spaceFactory != null))
+                return UseActionType.Land;
+        }
+
+        ExtractionZone extractionZone = ResolveUsableExtractionZone();
+        if (extractionZone != null)
+        {
+            if (extractionZone.IsTransitioning || extractionZone.IsEvacuating || IsPendingActivatedExtraction(extractionZone))
+                return UseActionType.None;
+
+            return extractionZone.IsActive ? UseActionType.Escape : UseActionType.Activate;
+        }
+
+        if (astronautMode)
+            return UseActionType.None;
 
         if (!HasUsableCollectibleTarget())
-            return false;
+            return UseActionType.None;
 
-        return CanStoreCurrentCollectible();
+        return CanStoreCurrentCollectible() ? UseActionType.Collect : UseActionType.None;
+    }
+
+    ExtractionZone ResolveUsableExtractionZone()
+    {
+        if (currentExtraction != null && IsExtractionStillUsable(currentExtraction))
+            return currentExtraction;
+
+        return ResolveNearbyExtractionZone();
     }
 
     bool CanStoreCurrentCollectible()
@@ -791,12 +965,26 @@ public class TreasureCollector : MonoBehaviourPun
         }
 
         if (currentTreasure != null)
-            return PlayerProfileService.Instance.HasFreeShipInventorySlot(currentTreasure.itemId);
+            return CanStoreTreasure(currentTreasure);
 
         if (currentDroppedCargo != null)
             return PlayerProfileService.Instance.HasFreeShipInventorySlot(currentDroppedCargo.StoredItemId);
 
         return PlayerProfileService.Instance.HasFreeShipInventorySlot();
+    }
+
+    bool CanStoreTreasure(Treasure treasure)
+    {
+        if (treasure == null || !PlayerProfileService.HasInstance)
+            return false;
+
+        if (InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
+        {
+            return PlayerProfileService.Instance.HasFreeShipInventorySlot() ||
+                   PlayerProfileService.PlayerHasFreeGadgetEquipmentSlot(PhotonNetwork.LocalPlayer);
+        }
+
+        return PlayerProfileService.Instance.HasFreeShipInventorySlot(treasure.itemId);
     }
 
     bool HasUsableCollectibleTarget()
@@ -808,10 +996,11 @@ public class TreasureCollector : MonoBehaviourPun
 
     void UpdateUseButtonAvailability()
     {
-        SetUseButtonAvailable(HasUseActionAvailable());
+        UseActionType actionType = ResolveUseActionType();
+        SetUseButtonState(actionType != UseActionType.None, actionType);
     }
 
-    void SetUseButtonAvailable(bool available)
+    void SetUseButtonState(bool available, UseActionType actionType)
     {
         if (collectButton == null)
             return;
@@ -819,14 +1008,82 @@ public class TreasureCollector : MonoBehaviourPun
         if (useButtonVisual == null)
             useButtonVisual = collectButton.GetComponent<UseButtonVisualController>();
 
+        string label = GetUseButtonLabel(actionType);
         if (useButtonVisual != null)
+        {
+            useButtonVisual.SetLabel(label);
             useButtonVisual.SetAvailable(available);
+            if (!IsUseProgressActive())
+                useButtonVisual.SetProgress(0f, false);
+        }
+        else
+        {
+            SetUseButtonText(label);
+        }
+    }
+
+    string GetUseButtonLabel(UseActionType actionType)
+    {
+        if (!RoomSettings.IsDynamicUseLabelEnabled())
+            return "USE";
+
+        switch (actionType)
+        {
+            case UseActionType.Collect:
+                return "COLLECT";
+            case UseActionType.Land:
+                return "LAND";
+            case UseActionType.Activate:
+                return "ACTIVATE";
+            case UseActionType.Escape:
+                return "ESCAPE";
+            default:
+                return string.Empty;
+        }
+    }
+
+    void SetUseButtonText(string label)
+    {
+        TMP_Text text = collectButton != null ? collectButton.GetComponentInChildren<TMP_Text>(true) : null;
+        if (text != null && text.text != label)
+            text.text = label;
+    }
+
+    bool IsUseProgressActive()
+    {
+        return isCollecting || isActivatingExtraction;
+    }
+
+    void SetUseProgress(float progress, bool visible)
+    {
+        if (useButtonVisual == null && collectButton != null)
+            useButtonVisual = collectButton.GetComponent<UseButtonVisualController>();
+
+        if (useButtonVisual != null)
+            useButtonVisual.SetProgress(progress, visible);
+    }
+
+    bool IsPendingActivatedExtraction(ExtractionZone extractionZone)
+    {
+        if (pendingActivatedExtraction == null)
+            return false;
+
+        bool sameZone = pendingActivatedExtraction == extractionZone;
+        bool expired = Time.time > pendingActivatedExtractionUntil;
+        if (!sameZone || expired || pendingActivatedExtraction.IsActive || pendingActivatedExtraction.IsTransitioning)
+        {
+            pendingActivatedExtraction = null;
+            pendingActivatedExtractionUntil = 0f;
+            return false;
+        }
+
+        return true;
     }
 
     void ForceResolveCollectibleAtUsePress()
     {
         Vector2 tipPosition = GetShipTipPosition();
-        Collider2D[] hits = Physics2D.OverlapCircleAll(tipPosition, Treasure.CollectRange + 0.55f);
+        Collider2D[] hits = Physics2D.OverlapCircleAll(tipPosition, GetCollectibleSearchRange(Treasure.CollectRange + 0.55f));
         Treasure nextTreasure = null;
         ShipWreck nextWreck = null;
         DroppedCargoCrate nextDroppedCargo = null;
@@ -842,7 +1099,7 @@ public class TreasureCollector : MonoBehaviourPun
             if (treasure != null)
             {
                 float distance = GetDistanceFromTipToCollider(treasure.GetComponent<Collider2D>(), treasure.transform.position, tipPosition);
-                if (distance <= Treasure.CollectRange && distance < bestDistance)
+                if (distance <= GetTreasureCollectRange(treasure) && distance < bestDistance)
                 {
                     bestDistance = distance;
                     nextTreasure = treasure;
@@ -856,9 +1113,8 @@ public class TreasureCollector : MonoBehaviourPun
             ShipWreck wreck = hit.GetComponent<ShipWreck>() ?? hit.GetComponentInParent<ShipWreck>();
             if (wreck != null && wreck.HasLoot)
             {
-                float wreckCollectRange = wreck.SourceShipSkinIndex < 0 ? Treasure.CollectRange + 0.45f : Treasure.CollectRange;
                 float distance = GetDistanceFromTipToCollider(wreck.GetComponent<Collider2D>(), wreck.transform.position, tipPosition);
-                if (distance <= wreckCollectRange && distance < bestDistance)
+                if (distance <= GetWreckCollectRange(wreck) && distance < bestDistance)
                 {
                     bestDistance = distance;
                     nextTreasure = null;
@@ -911,29 +1167,69 @@ public class TreasureCollector : MonoBehaviourPun
             currentDroppedCargo.Unhighlight();
     }
 
-    bool IsTreasureInCollectRange(Treasure treasure)
+    bool IsTreasureInCollectRange(Treasure treasure, bool useKeepAliveRange = false)
     {
         if (treasure == null)
             return false;
 
-        return GetDistanceFromTipToCollider(treasure.GetComponent<Collider2D>(), treasure.transform.position, GetShipTipPosition()) <= Treasure.CollectRange;
+        return GetDistanceFromTipToCollider(treasure.GetComponent<Collider2D>(), treasure.transform.position, GetShipTipPosition()) <= GetTreasureCollectRange(treasure, useKeepAliveRange);
     }
 
-    bool IsWreckInCollectRange(ShipWreck wreck)
+    bool IsWreckInCollectRange(ShipWreck wreck, bool useKeepAliveRange = false)
     {
         if (wreck == null || !wreck.HasLoot)
             return false;
 
-        float wreckCollectRange = wreck.SourceShipSkinIndex < 0 ? Treasure.CollectRange + 0.45f : Treasure.CollectRange;
-        return GetDistanceFromTipToCollider(wreck.GetComponent<Collider2D>(), wreck.transform.position, GetShipTipPosition()) <= wreckCollectRange;
+        return GetDistanceFromTipToCollider(wreck.GetComponent<Collider2D>(), wreck.transform.position, GetShipTipPosition()) <= GetWreckCollectRange(wreck, useKeepAliveRange);
     }
 
-    bool IsDroppedCargoInCollectRange(DroppedCargoCrate crate)
+    bool IsDroppedCargoInCollectRange(DroppedCargoCrate crate, bool useKeepAliveRange = false)
     {
         if (crate == null || !crate.HasLoot)
             return false;
 
-        return GetDistanceFromTipToCollider(crate.GetComponent<Collider2D>(), crate.transform.position, GetShipTipPosition()) <= Treasure.CollectRange;
+        return GetDistanceFromTipToCollider(crate.GetComponent<Collider2D>(), crate.transform.position, GetShipTipPosition()) <= GetCollectRange(Treasure.CollectRange, useKeepAliveRange);
+    }
+
+    float GetCollectRange(float baseRange, bool useKeepAliveRange)
+    {
+        if (!useKeepAliveRange)
+            return baseRange;
+
+        return baseRange * (1f + RoomSettings.GetCollectKeepAliveRangeBonusPercent() / 100f);
+    }
+
+    float GetTreasureCollectRange(Treasure treasure, bool useKeepAliveRange = false)
+    {
+        float baseRange = Treasure.CollectRange;
+        if (treasure != null && InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
+            baseRange = ApplySalvageMagnetRange(baseRange);
+
+        return GetCollectRange(baseRange, useKeepAliveRange);
+    }
+
+    float GetWreckCollectRange(ShipWreck wreck, bool useKeepAliveRange = false)
+    {
+        float baseRange = wreck != null && wreck.SourceShipSkinIndex < 0 ? Treasure.CollectRange + 0.45f : Treasure.CollectRange;
+        return GetCollectRange(ApplySalvageMagnetRange(baseRange), useKeepAliveRange);
+    }
+
+    float GetCollectibleSearchRange(float baseRange)
+    {
+        return HasSalvageMagnetArrayEquipped() ? baseRange * 2f : baseRange;
+    }
+
+    float ApplySalvageMagnetRange(float baseRange)
+    {
+        return HasSalvageMagnetArrayEquipped() ? baseRange * 2f : baseRange;
+    }
+
+    bool HasSalvageMagnetArrayEquipped()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        return InventoryItemCatalog.HasEquippedItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.SalvageMagnetArrayId);
     }
 
     float GetDistanceFromTipToCollider(Collider2D collider, Vector2 fallbackPosition, Vector2 tipPosition)
@@ -1020,11 +1316,12 @@ public class TreasureCollector : MonoBehaviourPun
         bool shouldShow = beamActive && (currentTreasure != null || currentWreck != null || currentDroppedCargo != null);
         if (shouldShow && photonView.IsMine)
         {
+            bool useKeepAliveRange = isCollecting;
             shouldShow = currentTreasure != null
-                ? IsTreasureInCollectRange(currentTreasure)
+                ? IsTreasureInCollectRange(currentTreasure, useKeepAliveRange)
                 : currentWreck != null
-                    ? IsWreckInCollectRange(currentWreck)
-                    : IsDroppedCargoInCollectRange(currentDroppedCargo);
+                    ? IsWreckInCollectRange(currentWreck, useKeepAliveRange)
+                    : IsDroppedCargoInCollectRange(currentDroppedCargo, useKeepAliveRange);
         }
 
         collectionBeam.enabled = shouldShow;
@@ -1101,18 +1398,6 @@ public class TreasureCollector : MonoBehaviourPun
         return fallbackPosition;
     }
 
-    Vector2 GetCurrentCollectibleCenter(Vector2 fallback)
-    {
-        if (currentTreasure != null)
-            return currentTreasure.transform.position;
-        if (currentWreck != null)
-            return currentWreck.transform.position;
-        if (currentDroppedCargo != null)
-            return currentDroppedCargo.transform.position;
-
-        return fallback;
-    }
-
     void SetBeamEnabled(bool enabled)
     {
         beamActive = enabled;
@@ -1122,6 +1407,7 @@ public class TreasureCollector : MonoBehaviourPun
 
     void OnDestroy()
     {
+        ReleaseMasterTreasureReservation(true);
         ClearCurrentHighlight();
         StopLocalDrillingLoop();
 
@@ -1130,18 +1416,119 @@ public class TreasureCollector : MonoBehaviourPun
     }
 
     [PunRPC]
-    void RequestDestroyTreasure(int viewID)
+    void RequestReserveTreasureCollection(int viewID, PhotonMessageInfo messageInfo)
     {
         if (!PhotonNetwork.IsMasterClient)
             return;
 
+        if (!IsRequestFromOwner(messageInfo))
+            return;
+
+        bool accepted = false;
         PhotonView pv = PhotonView.Find(viewID);
+        Treasure treasure = pv != null ? pv.GetComponent<Treasure>() : null;
+        if (treasure != null && !treasure.isBeingCollected && IsTreasureInCollectRange(treasure, true))
+        {
+            if (!ReservedTreasureCollections.TryGetValue(viewID, out int reservedActor) ||
+                reservedActor == photonView.OwnerActorNr)
+            {
+                ReservedTreasureCollections[viewID] = photonView.OwnerActorNr;
+                accepted = true;
+            }
+        }
+
+        if (photonView != null && photonView.Owner != null)
+            photonView.RPC(nameof(ConfirmTreasureCollectionReservationRpc), photonView.Owner, viewID, accepted);
+    }
+
+    [PunRPC]
+    void ConfirmTreasureCollectionReservationRpc(int viewID, bool accepted)
+    {
+        if (!photonView.IsMine)
+            return;
+
+        if (pendingTreasureReservationViewId != viewID)
+            return;
+
+        if (!accepted)
+        {
+            CancelActiveCollection();
+            return;
+        }
+
+        PhotonView targetView = PhotonView.Find(viewID);
+        Treasure treasure = targetView != null ? targetView.GetComponent<Treasure>() : null;
+        if (treasure == null || !CanStoreTreasure(treasure))
+        {
+            CancelActiveCollection();
+            return;
+        }
+
+        BeginTreasureCollection(treasure, viewID);
+    }
+
+    [PunRPC]
+    void RequestReleaseTreasureCollection(int viewID, PhotonMessageInfo messageInfo)
+    {
+        if (!PhotonNetwork.IsMasterClient || !IsRequestFromOwner(messageInfo))
+            return;
+
+        if (ReservedTreasureCollections.TryGetValue(viewID, out int reservedActor) &&
+            reservedActor == photonView.OwnerActorNr)
+        {
+            ReservedTreasureCollections.Remove(viewID);
+        }
+    }
+
+    [PunRPC]
+    void RequestDestroyTreasure(int viewID, PhotonMessageInfo messageInfo)
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        if (!IsRequestFromOwner(messageInfo))
+            return;
+
+        if (ReservedTreasureCollections.TryGetValue(viewID, out int reservedActor) &&
+            reservedActor != photonView.OwnerActorNr)
+        {
+            if (photonView != null && photonView.Owner != null)
+                photonView.RPC(nameof(ForceCancelCollectibleUseRpc), photonView.Owner, viewID);
+
+            return;
+        }
+
+        PhotonView pv = PhotonView.Find(viewID);
+        if (pv == null)
+        {
+            ReservedTreasureCollections.Remove(viewID);
+            return;
+        }
+
         if (pv != null)
         {
+            ReservedTreasureCollections.Remove(viewID);
             SpaceTrapTarget.DetonateIfArmed(viewID, photonView != null ? photonView.ViewID : 0);
             NotifyPirateBasesAboutCollectedTarget(viewID);
             PhotonNetwork.Destroy(pv.gameObject);
         }
+    }
+
+    [PunRPC]
+    void ForceCancelCollectibleUseRpc(int viewID)
+    {
+        if (!photonView.IsMine)
+            return;
+
+        int currentViewId = 0;
+        if (currentTreasure != null)
+        {
+            PhotonView treasureView = currentTreasure.GetComponent<PhotonView>();
+            currentViewId = treasureView != null ? treasureView.ViewID : 0;
+        }
+
+        if (viewID <= 0 || currentViewId == viewID || pendingTreasureReservationViewId == viewID || activeTreasureReservationViewId == viewID)
+            CancelActiveCollection();
     }
 
     void NotifyPirateBasesAboutCollectedTarget(int collectibleViewId)
@@ -1280,20 +1667,56 @@ public class TreasureCollector : MonoBehaviourPun
     }
 
     [PunRPC]
-    void RequestUseExtraction(int viewID)
+    void RequestUseExtraction(int viewID, PhotonMessageInfo messageInfo)
     {
         if (!PhotonNetwork.IsMasterClient)
             return;
 
+        if (!IsRequestFromOwner(messageInfo))
+            return;
+
         PhotonView pv = PhotonView.Find(viewID);
+        bool accepted = false;
         if (pv != null)
         {
             ExtractionZone ez = pv.GetComponent<ExtractionZone>();
             if (ez != null)
             {
-                ez.TryUse(photonView);
+                accepted = ez.TryUse(photonView);
             }
         }
+
+        if (!accepted && photonView != null && photonView.Owner != null)
+            photonView.RPC(nameof(RejectUseExtractionRpc), photonView.Owner, viewID);
+    }
+
+    bool IsRequestFromOwner(PhotonMessageInfo messageInfo)
+    {
+        return photonView != null &&
+               photonView.Owner != null &&
+               messageInfo.Sender != null &&
+               messageInfo.Sender.ActorNumber == photonView.Owner.ActorNumber;
+    }
+
+    [PunRPC]
+    void RejectUseExtractionRpc(int viewID)
+    {
+        if (!photonView.IsMine)
+            return;
+
+        if (pendingActivatedExtraction != null)
+        {
+            PhotonView pendingView = pendingActivatedExtraction.GetComponent<PhotonView>();
+            if (pendingView == null || pendingView.ViewID == viewID)
+            {
+                pendingActivatedExtraction = null;
+                pendingActivatedExtractionUntil = 0f;
+            }
+        }
+
+        CancelExtractionActivation();
+        SetUseProgress(0f, false);
+        UpdateUseButtonAvailability();
     }
 
     void SyncScoreProperty()
@@ -1383,7 +1806,7 @@ public class TreasureCollector : MonoBehaviourPun
     {
         try
         {
-            bool stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+            bool stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
             if (stored)
             {
                 AddScore(RoundXpTracker.RecordWreckLooted(photonView.Owner, false));
@@ -1410,7 +1833,7 @@ public class TreasureCollector : MonoBehaviourPun
         bool stored = false;
         try
         {
-            stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+            stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
             if (stored)
             {
                 AddScore(RoundXpTracker.RecordWreckLooted(photonView.Owner, playerWreck));
@@ -1432,7 +1855,7 @@ public class TreasureCollector : MonoBehaviourPun
         bool stored = false;
         try
         {
-            stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+            stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
             if (stored)
             {
                 AddScore(RoundXpTracker.RecordDroppedCargoLooted(photonView.Owner));
@@ -1454,7 +1877,7 @@ public class TreasureCollector : MonoBehaviourPun
         bool stored = false;
         try
         {
-            stored = await PlayerProfileService.Instance.AddRandomLootEquipmentAsync(itemId);
+            stored = await PlayerProfileService.Instance.AddRandomLootEquipmentDeferredSaveAsync(itemId);
             if (stored)
             {
                 AddScore(RoundXpTracker.RecordWreckLooted(photonView.Owner, false));
@@ -1557,14 +1980,14 @@ public class TreasureCollector : MonoBehaviourPun
     {
         try
         {
-            bool stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+            bool stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
             if (stored)
             {
                 ShowPickupToast(itemId);
 
                 if (IsNovaSpaceJunkBonusActive(itemId))
                 {
-                    bool bonusStored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+                    bool bonusStored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
                     if (bonusStored)
                         ShowPickupToast(itemId);
                 }

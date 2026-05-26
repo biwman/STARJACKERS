@@ -1,0 +1,637 @@
+fileFormatVersion: 2
+guid: a96ab27dd9bb5ff41b04e8b47cb87806
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -8984892325914904061
+    second: obstacle_ice_6_0
+  - first:
+      213: -8565907442816153095
+    second: obstacle_ice_6_1
+  - first:
+      213: -8786099525995703397
+    second: obstacle_ice_6_2
+  - first:
+      213: -7299989569596261187
+    second: obstacle_ice_6_3
+  - first:
+      213: 3018099651677359506
+    second: obstacle_ice_6_4
+  - first:
+      213: 2290500443927984047
+    second: obstacle_ice_6_5
+  - first:
+      213: 4856526937275655679
+    second: obstacle_ice_6_6
+  - first:
+      213: 4480389377342912141
+    second: obstacle_ice_6_7
+  - first:
+      213: 7828186542851379018
+    second: obstacle_ice_6_8
+  - first:
+      213: -8293232318882564113
+    second: obstacle_ice_6_9
+  - first:
+      213: -1648448255008219822
+    second: obstacle_ice_6_10
+  - first:
+      213: -4979803622793744859
+    second: obstacle_ice_6_11
+  - first:
+      213: -6270419229159816653
+    second: obstacle_ice_6_12
+  - first:
+      213: 6955857785244694762
+    second: obstacle_ice_6_13
+  - first:
+      213: 7910270132661718226
+    second: obstacle_ice_6_14
+  - first:
+      213: 6635650835386357465
+    second: obstacle_ice_6_15
+  - first:
+      213: -1884169258997702610
+    second: obstacle_ice_6_16
+  - first:
+      213: -7974007633955575428
+    second: obstacle_ice_6_17
+  - first:
+      213: -2741789246372776272
+    second: obstacle_ice_6_18
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: obstacle_ice_6_0
+      rect:
+        serializedVersion: 2
+        x: 30
+        y: 1
+        width: 1318
+        height: 1023
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 30a75b898004f4380800000000000000
+      internalID: -8984892325914904061
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_1
+      rect:
+        serializedVersion: 2
+        x: 1047
+        y: 913
+        width: 6
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9f9811c9098cf1980800000000000000
+      internalID: -8565907442816153095
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_2
+      rect:
+        serializedVersion: 2
+        x: 1207
+        y: 903
+        width: 10
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b935cc72801811680800000000000000
+      internalID: -8786099525995703397
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_3
+      rect:
+        serializedVersion: 2
+        x: 1338
+        y: 801
+        width: 8
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dbc7828d92a31ba90800000000000000
+      internalID: -7299989569596261187
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_4
+      rect:
+        serializedVersion: 2
+        x: 1350
+        y: 803
+        width: 28
+        height: 24
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 29d85f284a172e920800000000000000
+      internalID: 3018099651677359506
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_5
+      rect:
+        serializedVersion: 2
+        x: 1342
+        y: 755
+        width: 44
+        height: 47
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: fa7b336a40e79cf10800000000000000
+      internalID: 2290500443927984047
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_6
+      rect:
+        serializedVersion: 2
+        x: 1368
+        y: 742
+        width: 18
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ff56e6ab489d56340800000000000000
+      internalID: 4856526937275655679
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_7
+      rect:
+        serializedVersion: 2
+        x: 1331
+        y: 607
+        width: 24
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d8635fb866a8d2e30800000000000000
+      internalID: 4480389377342912141
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_8
+      rect:
+        serializedVersion: 2
+        x: 1335
+        y: 529
+        width: 170
+        height: 76
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a4f462a6f2e43ac60800000000000000
+      internalID: 7828186542851379018
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_9
+      rect:
+        serializedVersion: 2
+        x: 1340
+        y: 596
+        width: 6
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: fe73739352588ec80800000000000000
+      internalID: -8293232318882564113
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_10
+      rect:
+        serializedVersion: 2
+        x: 1304
+        y: 532
+        width: 46
+        height: 37
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 25d5f91cb098f19e0800000000000000
+      internalID: -1648448255008219822
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_11
+      rect:
+        serializedVersion: 2
+        x: 1349
+        y: 551
+        width: 17
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 52eec2c3dfe24eab0800000000000000
+      internalID: -4979803622793744859
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_12
+      rect:
+        serializedVersion: 2
+        x: 180
+        y: 444
+        width: 8
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3328625eeeefaf8a0800000000000000
+      internalID: -6270419229159816653
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_13
+      rect:
+        serializedVersion: 2
+        x: 184
+        y: 423
+        width: 20
+        height: 22
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ae835ad4dcb288060800000000000000
+      internalID: 6955857785244694762
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_14
+      rect:
+        serializedVersion: 2
+        x: 159
+        y: 416
+        width: 8
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2dc0fa676cce6cd60800000000000000
+      internalID: 7910270132661718226
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_15
+      rect:
+        serializedVersion: 2
+        x: 177
+        y: 399
+        width: 13
+        height: 16
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9d65ab01741961c50800000000000000
+      internalID: 6635650835386357465
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_16
+      rect:
+        serializedVersion: 2
+        x: 196
+        y: 394
+        width: 15
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e202bbcaa061ad5e0800000000000000
+      internalID: -1884169258997702610
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_17
+      rect:
+        serializedVersion: 2
+        x: 151
+        y: 368
+        width: 10
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c7923d51e42a65190800000000000000
+      internalID: -7974007633955575428
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: obstacle_ice_6_18
+      rect:
+        serializedVersion: 2
+        x: 174
+        y: 367
+        width: 31
+        height: 28
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0b6f6f0053533f9d0800000000000000
+      internalID: -2741789246372776272
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      obstacle_ice_6_0: -8984892325914904061
+      obstacle_ice_6_1: -8565907442816153095
+      obstacle_ice_6_10: -1648448255008219822
+      obstacle_ice_6_11: -4979803622793744859
+      obstacle_ice_6_12: -6270419229159816653
+      obstacle_ice_6_13: 6955857785244694762
+      obstacle_ice_6_14: 7910270132661718226
+      obstacle_ice_6_15: 6635650835386357465
+      obstacle_ice_6_16: -1884169258997702610
+      obstacle_ice_6_17: -7974007633955575428
+      obstacle_ice_6_18: -2741789246372776272
+      obstacle_ice_6_2: -8786099525995703397
+      obstacle_ice_6_3: -7299989569596261187
+      obstacle_ice_6_4: 3018099651677359506
+      obstacle_ice_6_5: 2290500443927984047
+      obstacle_ice_6_6: 4856526937275655679
+      obstacle_ice_6_7: 4480389377342912141
+      obstacle_ice_6_8: 7828186542851379018
+      obstacle_ice_6_9: -8293232318882564113
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

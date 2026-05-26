@@ -36,6 +36,8 @@ public class PlayerShooting : MonoBehaviourPun
     const float TractorBeamRadius = 8f;
     const float TractorBeamMaxDuration = 10f;
     const float TractorBeamPullStrength = 36f;
+    const float TractorBeamSlackDistance = 2.65f;
+    const float TractorBeamTetherRampDistance = 4.25f;
     const float LureBeaconDeployDistance = 1.15f;
     const float LureBeaconSpawnClearanceRadius = 0.42f;
     const float GuidanceSystemDuration = 9f;
@@ -45,7 +47,17 @@ public class PlayerShooting : MonoBehaviourPun
     const float AstroCutterSuperBeamRadius = 0.28f;
     const int AstroCutterObstacleDamageMultiplier = 4;
     const int AstroCutterSuperObstacleDamageMultiplier = 6;
+    const float RocketLockDuration = 2f;
+    const float RocketLockLineRadius = 0.64f;
+    const float RocketLockBreakAngle = 26f;
+    const float RocketHomingTurnRate = 145f;
+    const float DoubleRocketParallelLaneSpacing = 0.42f;
+    const float DoubleRocketUnguidedMinDivergenceAngle = 2.5f;
+    const float DoubleRocketUnguidedMaxDivergenceAngle = 7.5f;
+    const float DoubleRocketSuperChargeMultiplier = 0.7f;
+    const float PulseDisruptorWaveTickInterval = 0.035f;
     static readonly Color PlasmaBulletColor = new Color(0.15f, 1f, 0.28f, 1f);
+    static readonly Color RocketLockedMarkerColor = new Color(0.2f, 1f, 0.35f, 1f);
 
     sealed class GadgetRuntimeState
     {
@@ -124,6 +136,10 @@ public class PlayerShooting : MonoBehaviourPun
     float complexSuperMaxDragMagnitude;
     bool complexShootCanceledByCenteredAim;
     bool complexSuperCanceledByCenteredAim;
+    int rocketLockCandidateViewId;
+    int rocketLockedTargetViewId;
+    float rocketLockStartedAt;
+    bool rocketLockFeedbackPlayed;
     Vector2 complexLastAimDirection = Vector2.up;
     Vector2 complexLastSuperAimDirection = Vector2.up;
     Vector2 complexLastAimTargetPoint;
@@ -297,6 +313,13 @@ public class PlayerShooting : MonoBehaviourPun
             SyncComplexWeaponProfile();
             UpdateComplexAmmoReload();
             UpdateSuperCharge();
+            if (RoundChatCommandUI.IsLocalChatMenuOpen)
+            {
+                ResetComplexPressState();
+                HideAimMarker();
+                return;
+            }
+
             HandleComplexShootingInput();
             return;
         }
@@ -305,6 +328,9 @@ public class PlayerShooting : MonoBehaviourPun
         SyncEquippedWeaponProfile();
         SyncAmmoSetting();
         UpdateReload();
+
+        if (RoundChatCommandUI.IsLocalChatMenuOpen)
+            return;
 
         if (shootJoystick == null)
         {
@@ -328,9 +354,11 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (Time.time >= nextFireTime)
         {
-            Shoot(direction.normalized);
-            ConsumeAmmo();
-            nextFireTime = Time.time + fireRate;
+            if (Shoot(direction.normalized))
+            {
+                ConsumeAmmo();
+                nextFireTime = Time.time + fireRate;
+            }
         }
     }
 
@@ -404,12 +432,25 @@ public class PlayerShooting : MonoBehaviourPun
                 if (IsArcWeaponProfile(profile))
                     complexLastAimTargetPoint = ResolveArcTargetPointFromInput(profile, raw);
 
-                ShowAimMarker(profile, complexLastAimDirection, IsArcWeaponProfile(profile) ? complexLastAimTargetPoint : (Vector2?)null);
+                Color? markerColorOverride = null;
+                if (IsRocketWeaponProfile(profile))
+                {
+                    UpdateRocketLockState(profile, complexLastAimDirection);
+                    if (rocketLockedTargetViewId > 0)
+                        markerColorOverride = RocketLockedMarkerColor;
+                }
+                else
+                {
+                    ResetRocketLockState();
+                }
+
+                ShowAimMarker(profile, complexLastAimDirection, IsArcWeaponProfile(profile) ? complexLastAimTargetPoint : (Vector2?)null, markerColorOverride);
             }
             else
             {
                 if (complexShootMaxDragMagnitude >= markerThreshold)
                     complexShootCanceledByCenteredAim = true;
+                ResetRocketLockState();
                 HideAimMarker();
             }
             return;
@@ -427,6 +468,7 @@ public class PlayerShooting : MonoBehaviourPun
         {
             complexShootWasPressed = false;
             complexShootCanceledByCenteredAim = false;
+            ResetRocketLockState();
             HideAimMarker();
             return;
         }
@@ -442,11 +484,13 @@ public class PlayerShooting : MonoBehaviourPun
         Vector2 targetPoint = wasTap && IsArcWeaponProfile(profile)
             ? ResolveComplexAutoAimTargetPoint(profile)
             : complexLastAimTargetPoint;
+        int rocketTargetViewId = IsRocketWeaponProfile(profile) ? rocketLockedTargetViewId : 0;
 
         complexShootWasPressed = false;
         complexShootCanceledByCenteredAim = false;
+        ResetRocketLockState();
         HideAimMarker();
-        TryFireComplexAttack(profile, direction, targetPoint, true, false);
+        TryFireComplexAttack(profile, direction, targetPoint, true, false, rocketTargetViewId);
     }
 
     Vector2 GetCurrentShootRawInput()
@@ -478,6 +522,173 @@ public class PlayerShooting : MonoBehaviourPun
             return AdvancedShootMarkerRawThreshold;
 
         return ComplexTapMaxDragMagnitude;
+    }
+
+    bool IsRocketWeaponProfile(WeaponAttackProfile profile)
+    {
+        if (profile == null || string.IsNullOrWhiteSpace(profile.Id))
+            return false;
+
+        return string.Equals(profile.Id, WeaponAttackCatalog.RocketLauncherId, StringComparison.Ordinal) ||
+               string.Equals(profile.Id, WeaponAttackCatalog.DoubleRocketLauncherId, StringComparison.Ordinal) ||
+               profile.Id.StartsWith(WeaponAttackCatalog.RocketLauncherId + "_", StringComparison.Ordinal) ||
+               profile.Id.StartsWith(WeaponAttackCatalog.DoubleRocketLauncherId + "_", StringComparison.Ordinal);
+    }
+
+    bool IsDoubleRocketLauncherProfile(WeaponAttackProfile profile)
+    {
+        if (profile == null || string.IsNullOrWhiteSpace(profile.Id))
+            return false;
+
+        return string.Equals(profile.Id, WeaponAttackCatalog.DoubleRocketLauncherId, StringComparison.Ordinal) ||
+               profile.Id.StartsWith(WeaponAttackCatalog.DoubleRocketLauncherId + "_", StringComparison.Ordinal);
+    }
+
+    bool IsPulseDisruptorSuperProfile(WeaponAttackProfile profile)
+    {
+        return profile != null &&
+               string.Equals(profile.Id, WeaponAttackCatalog.PulseDisruptorId + "_super", StringComparison.Ordinal);
+    }
+
+    bool IsGatlingGunProfile(WeaponAttackProfile profile)
+    {
+        return profile != null &&
+               !string.IsNullOrWhiteSpace(profile.Id) &&
+               (string.Equals(profile.Id, WeaponAttackCatalog.GatlingGunId, StringComparison.Ordinal) ||
+                profile.Id.StartsWith(WeaponAttackCatalog.GatlingGunId + "_", StringComparison.Ordinal));
+    }
+
+    void UpdateRocketLockState(WeaponAttackProfile profile, Vector2 direction)
+    {
+        if (!IsRocketWeaponProfile(profile))
+        {
+            ResetRocketLockState();
+            return;
+        }
+
+        direction = ResolveSafeAimDirection(direction);
+        if (rocketLockedTargetViewId > 0)
+        {
+            if (IsRocketLockStillValid(profile, direction, rocketLockedTargetViewId))
+                return;
+
+            ResetRocketLockState();
+        }
+
+        int candidateViewId = FindRocketLockCandidateViewId(profile, direction);
+        if (candidateViewId <= 0)
+        {
+            ResetRocketLockState();
+            return;
+        }
+
+        if (candidateViewId != rocketLockCandidateViewId)
+        {
+            rocketLockCandidateViewId = candidateViewId;
+            rocketLockStartedAt = Time.time;
+            rocketLockFeedbackPlayed = false;
+            return;
+        }
+
+        if (Time.time - rocketLockStartedAt < RocketLockDuration)
+            return;
+
+        rocketLockedTargetViewId = candidateViewId;
+        if (!rocketLockFeedbackPlayed)
+        {
+            rocketLockFeedbackPlayed = true;
+            AudioManager.Instance.PlayRocketLockAt(transform.position);
+        }
+    }
+
+    int FindRocketLockCandidateViewId(WeaponAttackProfile profile, Vector2 direction)
+    {
+        direction = ResolveSafeAimDirection(direction);
+        float range = GetComplexRangeWorld(profile);
+        PlayerHealth[] targets = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth bestTarget = null;
+        float bestScore = float.MaxValue;
+
+        for (int i = 0; i < targets.Length; i++)
+        {
+            PlayerHealth target = targets[i];
+            if (!IsValidRocketLockTarget(target))
+                continue;
+
+            Vector2 toTarget = target.transform.position - transform.position;
+            float projection = Vector2.Dot(toTarget, direction);
+            if (projection < 0.35f || projection > range)
+                continue;
+
+            float lateralDistance = Mathf.Abs((direction.x * toTarget.y) - (direction.y * toTarget.x));
+            float lockRadius = ResolveRocketLockRadius(target);
+            if (lateralDistance > lockRadius)
+                continue;
+
+            if (IsLineBlockedByObstacle(transform.position, target.transform.position, target.transform))
+                continue;
+
+            float score = (lateralDistance * 4f) + (projection * 0.035f);
+            if (score >= bestScore)
+                continue;
+
+            bestScore = score;
+            bestTarget = target;
+        }
+
+        return bestTarget != null && bestTarget.photonView != null ? bestTarget.photonView.ViewID : 0;
+    }
+
+    bool IsRocketLockStillValid(WeaponAttackProfile profile, Vector2 direction, int targetViewId)
+    {
+        PhotonView targetView = targetViewId > 0 ? PhotonView.Find(targetViewId) : null;
+        PlayerHealth target = targetView != null ? targetView.GetComponent<PlayerHealth>() : null;
+        if (!IsValidRocketLockTarget(target))
+            return false;
+
+        Vector2 toTarget = target.transform.position - transform.position;
+        float distance = toTarget.magnitude;
+        if (distance <= 0.001f || distance > GetComplexRangeWorld(profile) * 1.15f)
+            return false;
+
+        float angle = Vector2.Angle(ResolveSafeAimDirection(direction), toTarget / distance);
+        if (angle > RocketLockBreakAngle)
+            return false;
+
+        return !IsLineBlockedByObstacle(transform.position, target.transform.position, target.transform);
+    }
+
+    bool IsValidRocketLockTarget(PlayerHealth target)
+    {
+        if (target == null || target.IsWreck || target.photonView == null)
+            return false;
+
+        if (target.photonView.ViewID == (photonView != null ? photonView.ViewID : 0))
+            return false;
+
+        if (target.GetComponent<LureBeaconDecoy>() != null)
+            return false;
+
+        HideInNebulaTarget nebulaState = target.GetComponent<HideInNebulaTarget>();
+        return nebulaState == null || !nebulaState.IsHiddenFromLocalPlayer();
+    }
+
+    float ResolveRocketLockRadius(PlayerHealth target)
+    {
+        Collider2D targetCollider = target != null ? target.GetComponentInChildren<Collider2D>() : null;
+        if (targetCollider == null)
+            return RocketLockLineRadius;
+
+        Bounds bounds = targetCollider.bounds;
+        return Mathf.Max(RocketLockLineRadius, Mathf.Max(bounds.extents.x, bounds.extents.y) * 0.9f);
+    }
+
+    void ResetRocketLockState()
+    {
+        rocketLockCandidateViewId = 0;
+        rocketLockedTargetViewId = 0;
+        rocketLockStartedAt = 0f;
+        rocketLockFeedbackPlayed = false;
     }
 
     bool HandleComplexSuperInput()
@@ -521,12 +732,25 @@ public class PlayerShooting : MonoBehaviourPun
                 if (IsArcWeaponProfile(superProfile))
                     complexLastSuperAimTargetPoint = ResolveArcTargetPointFromInput(superProfile, raw);
 
-                ShowAimMarker(superProfile, complexLastSuperAimDirection, IsArcWeaponProfile(superProfile) ? complexLastSuperAimTargetPoint : (Vector2?)null);
+                Color? markerColorOverride = null;
+                if (IsRocketWeaponProfile(superProfile))
+                {
+                    UpdateRocketLockState(superProfile, complexLastSuperAimDirection);
+                    if (rocketLockedTargetViewId > 0)
+                        markerColorOverride = RocketLockedMarkerColor;
+                }
+                else
+                {
+                    ResetRocketLockState();
+                }
+
+                ShowAimMarker(superProfile, complexLastSuperAimDirection, IsArcWeaponProfile(superProfile) ? complexLastSuperAimTargetPoint : (Vector2?)null, markerColorOverride);
             }
             else
             {
                 if (complexSuperMaxDragMagnitude >= ManualAimThreshold)
                     complexSuperCanceledByCenteredAim = true;
+                ResetRocketLockState();
                 HideAimMarker();
             }
             return true;
@@ -539,6 +763,7 @@ public class PlayerShooting : MonoBehaviourPun
         {
             complexSuperWasPressed = false;
             complexSuperCanceledByCenteredAim = false;
+            ResetRocketLockState();
             HideAimMarker();
             return true;
         }
@@ -551,11 +776,13 @@ public class PlayerShooting : MonoBehaviourPun
         Vector2 targetPoint = wasTap && IsArcWeaponProfile(superProfile)
             ? ResolveComplexAutoAimTargetPoint(superProfile)
             : complexLastSuperAimTargetPoint;
+        int rocketTargetViewId = IsRocketWeaponProfile(superProfile) ? rocketLockedTargetViewId : 0;
 
         complexSuperWasPressed = false;
         complexSuperCanceledByCenteredAim = false;
+        ResetRocketLockState();
         HideAimMarker();
-        if (TryFireComplexAttack(superProfile, direction, targetPoint, false, true))
+        if (TryFireComplexAttack(superProfile, direction, targetPoint, false, true, rocketTargetViewId))
             superCharge = 0f;
 
         return true;
@@ -567,6 +794,7 @@ public class PlayerShooting : MonoBehaviourPun
         complexSuperWasPressed = false;
         complexShootCanceledByCenteredAim = false;
         complexSuperCanceledByCenteredAim = false;
+        ResetRocketLockState();
     }
 
     WeaponAttackProfile SyncComplexWeaponProfile()
@@ -778,7 +1006,7 @@ public class PlayerShooting : MonoBehaviourPun
         superCharge = Mathf.Clamp01(superCharge + (Time.deltaTime / SuperChargeTimeSeconds) * GetSuperChargeGainMultiplier());
     }
 
-    bool TryFireComplexAttack(WeaponAttackProfile profile, Vector2 direction, Vector2 targetPoint, bool consumeAmmo, bool isSuper)
+    bool TryFireComplexAttack(WeaponAttackProfile profile, Vector2 direction, Vector2 targetPoint, bool consumeAmmo, bool isSuper, int homingTargetViewId = 0)
     {
         if (profile == null || Time.time < nextComplexAttackTime)
             return false;
@@ -803,6 +1031,19 @@ public class PlayerShooting : MonoBehaviourPun
             SyncActiveComplexAmmoMirror();
         }
 
+        int ownerId = photonView != null ? photonView.ViewID : 0;
+        if (IsPulseDisruptorSuperProfile(profile))
+        {
+            if (TryStartPulseDisruptorWave(profile, ownerId))
+            {
+                nextComplexAttackTime = Time.time + Mathf.Max(0.05f, profile.AttackCooldown);
+                NotifyShotFiredForUseCancel();
+                return true;
+            }
+
+            return false;
+        }
+
         if (IsAstroCutterProfile(profile))
         {
             if (complexBurstRoutine != null)
@@ -814,6 +1055,7 @@ public class PlayerShooting : MonoBehaviourPun
             if (TryStartAstroCutterBeam(profile, direction, photonView != null ? photonView.ViewID : 0))
             {
                 nextComplexAttackTime = Time.time + Mathf.Max(0.05f, profile.AttackCooldown);
+                NotifyShotFiredForUseCancel();
                 return true;
             }
 
@@ -823,8 +1065,9 @@ public class PlayerShooting : MonoBehaviourPun
         if (complexBurstRoutine != null)
             StopCoroutine(complexBurstRoutine);
 
-        complexBurstRoutine = StartCoroutine(FireComplexBurst(profile, direction, targetPoint));
+        complexBurstRoutine = StartCoroutine(FireComplexBurst(profile, direction, targetPoint, homingTargetViewId));
         nextComplexAttackTime = Time.time + Mathf.Max(0.05f, profile.AttackCooldown);
+        NotifyShotFiredForUseCancel();
         return true;
     }
 
@@ -839,7 +1082,7 @@ public class PlayerShooting : MonoBehaviourPun
         SyncActiveComplexAmmoMirror();
     }
 
-    IEnumerator FireComplexBurst(WeaponAttackProfile profile, Vector2 direction, Vector2 targetPoint)
+    IEnumerator FireComplexBurst(WeaponAttackProfile profile, Vector2 direction, Vector2 targetPoint, int homingTargetViewId)
     {
         if (profile == null)
             yield break;
@@ -849,18 +1092,29 @@ public class PlayerShooting : MonoBehaviourPun
 
         int ownerId = photonView != null ? photonView.ViewID : 0;
         int count = Mathf.Max(1, profile.ProjectileCount);
+        bool playOneSoundForBurst = ShouldPlayShotSoundOnceForBurst(profile);
+        if (playOneSoundForBurst)
+            photonView.RPC(nameof(PlayShotSfx), RpcTarget.All, profile.ShotSoundId ?? string.Empty);
+
         for (int i = 0; i < count; i++)
         {
-            Vector2 shotDirection = ResolveComplexProjectileDirection(direction, profile.SpreadAngle, i, count);
+            Vector2 shotDirection = IsDoubleRocketLauncherProfile(profile)
+                ? ResolveDoubleRocketProjectileDirection(direction, i, count, homingTargetViewId)
+                : ResolveComplexProjectileDirection(direction, profile.SpreadAngle, i, count);
             Vector2 projectileTargetPoint = ResolveComplexProjectileTargetPoint(profile, targetPoint, direction, i, count);
-            Vector3 spawnPos = transform.position + (Vector3)(shotDirection.normalized * Mathf.Max(0.05f, muzzleOffsetDistance));
-            bool spawned = SpawnComplexBullet(profile, shotDirection.normalized, spawnPos, ownerId, projectileTargetPoint);
-            if (spawned)
+            Vector3 spawnPos = ResolveComplexProjectileSpawnPosition(profile, shotDirection, i, count);
+            bool spawned = SpawnComplexBullet(profile, shotDirection.normalized, spawnPos, ownerId, projectileTargetPoint, homingTargetViewId);
+            if (spawned && !playOneSoundForBurst)
                 photonView.RPC(nameof(PlayShotSfx), RpcTarget.All, profile.ShotSoundId ?? string.Empty);
 
             if (i < count - 1 && profile.ProjectileInterval > 0f)
                 yield return new WaitForSeconds(profile.ProjectileInterval);
         }
+    }
+
+    bool ShouldPlayShotSoundOnceForBurst(WeaponAttackProfile profile)
+    {
+        return IsGatlingGunProfile(profile);
     }
 
     Vector2 ResolveComplexProjectileDirection(Vector2 baseDirection, float spreadAngle, int index, int count)
@@ -872,6 +1126,44 @@ public class PlayerShooting : MonoBehaviourPun
         float t = count == 1 ? 0f : index / (float)(count - 1);
         float angle = Mathf.Lerp(-spreadAngle * 0.5f, spreadAngle * 0.5f, t);
         return Quaternion.Euler(0f, 0f, angle) * baseDirection;
+    }
+
+    Vector2 ResolveDoubleRocketProjectileDirection(Vector2 baseDirection, int index, int count, int homingTargetViewId)
+    {
+        baseDirection = ResolveSafeAimDirection(baseDirection);
+        if (homingTargetViewId > 0 || count <= 1)
+            return baseDirection;
+
+        float centered = index - ((count - 1) * 0.5f);
+        float side = Mathf.Abs(centered) > 0.001f
+            ? Mathf.Sign(centered)
+            : (UnityEngine.Random.value < 0.5f ? -1f : 1f);
+        float edgeFactor = Mathf.Clamp01(Mathf.Abs(centered) / Mathf.Max(0.5f, (count - 1) * 0.5f));
+        float magnitude = UnityEngine.Random.Range(DoubleRocketUnguidedMinDivergenceAngle, DoubleRocketUnguidedMaxDivergenceAngle);
+        magnitude *= Mathf.Lerp(0.55f, 1f, edgeFactor);
+        float jitter = UnityEngine.Random.Range(-0.9f, 0.9f);
+        float angle = side * Mathf.Max(0.5f, magnitude + jitter);
+        return Quaternion.Euler(0f, 0f, angle) * baseDirection;
+    }
+
+    Vector3 ResolveComplexProjectileSpawnPosition(WeaponAttackProfile profile, Vector2 shotDirection, int index, int count)
+    {
+        Vector2 safeDirection = ResolveSafeAimDirection(shotDirection);
+        Vector2 spawnPos = (Vector2)transform.position + safeDirection * Mathf.Max(0.05f, muzzleOffsetDistance);
+        if (IsDoubleRocketLauncherProfile(profile) && count > 1)
+        {
+            Vector2 perpendicular = new Vector2(-safeDirection.y, safeDirection.x);
+            float centered = index - ((count - 1) * 0.5f);
+            spawnPos += perpendicular * centered * ResolveDoubleRocketLaneSpacing(profile);
+        }
+
+        return spawnPos;
+    }
+
+    float ResolveDoubleRocketLaneSpacing(WeaponAttackProfile profile)
+    {
+        float sizeFactor = profile != null ? Mathf.Clamp(profile.ProjectileSize / 0.49f, 0.85f, 1.25f) : 1f;
+        return DoubleRocketParallelLaneSpacing * sizeFactor;
     }
 
     Vector2 ResolveComplexProjectileTargetPoint(WeaponAttackProfile profile, Vector2 baseTargetPoint, Vector2 baseDirection, int index, int count)
@@ -1026,7 +1318,7 @@ public class PlayerShooting : MonoBehaviourPun
         return forward.sqrMagnitude > 0.001f ? forward.normalized : Vector2.up;
     }
 
-    void ShowAimMarker(WeaponAttackProfile profile, Vector2 direction, Vector2? explicitTargetPoint = null)
+    void ShowAimMarker(WeaponAttackProfile profile, Vector2 direction, Vector2? explicitTargetPoint = null, Color? markerColorOverride = null)
     {
         if (profile == null)
             return;
@@ -1039,16 +1331,17 @@ public class PlayerShooting : MonoBehaviourPun
 
         Vector2 resolvedDirection = ResolveSafeAimDirection(direction);
         float range = GetComplexRangeWorld(profile);
+        Color markerColor = markerColorOverride ?? profile.MarkerColor;
         if (IsArcWeaponProfile(profile))
         {
             Vector3 landingPoint = explicitTargetPoint.HasValue
                 ? (Vector3)explicitTargetPoint.Value
                 : transform.position + (Vector3)(resolvedDirection * range);
-            aimMarker.ShowArc(transform.position, landingPoint, profile.MarkerColor, ResolveArcHeight(range));
+            aimMarker.ShowArc(transform.position, landingPoint, markerColor, ResolveArcHeight(range));
             return;
         }
 
-        aimMarker.ShowLine(transform.position, resolvedDirection, range, profile.MarkerColor);
+        aimMarker.ShowLine(transform.position, resolvedDirection, range, markerColor);
     }
 
     void HideAimMarker()
@@ -1076,7 +1369,7 @@ public class PlayerShooting : MonoBehaviourPun
         return 1f;
     }
 
-    bool SpawnComplexBullet(WeaponAttackProfile profile, Vector2 direction, Vector3 spawnPos, int ownerId, Vector2 explicitTargetPoint)
+    bool SpawnComplexBullet(WeaponAttackProfile profile, Vector2 direction, Vector3 spawnPos, int ownerId, Vector2 explicitTargetPoint, int homingTargetViewId = 0)
     {
         if (bulletPrefab == null || profile == null)
             return false;
@@ -1084,6 +1377,7 @@ public class PlayerShooting : MonoBehaviourPun
         float clampedFlightTime = Mathf.Clamp(profile.FlightTime, 0.2f, 30f);
         float range = GetComplexRangeWorld(profile);
         bool isArcProjectile = IsArcWeaponProfile(profile);
+        bool isRocketProjectile = IsRocketWeaponProfile(profile);
         Vector2 targetPoint = isArcProjectile
             ? explicitTargetPoint
             : (Vector2)spawnPos + (direction.normalized * range);
@@ -1113,7 +1407,12 @@ public class PlayerShooting : MonoBehaviourPun
                 isArcProjectile,
                 targetPoint.x,
                 targetPoint.y,
-                arcHeight
+                arcHeight,
+                isRocketProjectile ? "rocket" : string.Empty,
+                isRocketProjectile ? homingTargetViewId : 0,
+                isRocketProjectile ? RocketHomingTurnRate : 0f,
+                isRocketProjectile ? profile.ProjectileSpeed : 0f,
+                isRocketProjectile
             }
         );
 
@@ -1134,6 +1433,93 @@ public class PlayerShooting : MonoBehaviourPun
             Physics2D.IgnoreCollision(bulletCollider, playerCollider);
 
         return true;
+    }
+
+    bool TryStartPulseDisruptorWave(WeaponAttackProfile profile, int ownerId)
+    {
+        if (profile == null || ownerId <= 0 || photonView == null)
+            return false;
+
+        Vector2 center = transform.position;
+        float radius = Mathf.Max(0.5f, profile.AreaDamageRadius);
+        float duration = Mathf.Clamp(profile.FlightTime, 0.2f, 2.5f);
+        photonView.RPC(nameof(StartPulseDisruptorWaveRpc), RpcTarget.All, center.x, center.y, radius, duration);
+        photonView.RPC(nameof(PlayShotSfx), RpcTarget.All, profile.ShotSoundId ?? string.Empty);
+        StartCoroutine(PulseDisruptorWaveDamageRoutine(profile, center, radius, duration, ownerId));
+        return true;
+    }
+
+    IEnumerator PulseDisruptorWaveDamageRoutine(WeaponAttackProfile profile, Vector2 center, float radius, float duration, int ownerId)
+    {
+        HashSet<int> damagedViews = new HashSet<int>();
+        WaitForSeconds wait = new WaitForSeconds(PulseDisruptorWaveTickInterval);
+        float startedAt = Time.time;
+        float endAt = startedAt + Mathf.Max(0.05f, duration);
+
+        while (Time.time < endAt)
+        {
+            float t = Mathf.Clamp01((Time.time - startedAt) / Mathf.Max(0.001f, duration));
+            ApplyPulseDisruptorWaveDamage(profile, center, Mathf.Lerp(0.2f, radius, t), ownerId, damagedViews);
+            yield return wait;
+        }
+
+        ApplyPulseDisruptorWaveDamage(profile, center, radius, ownerId, damagedViews);
+    }
+
+    void ApplyPulseDisruptorWaveDamage(WeaponAttackProfile profile, Vector2 center, float currentRadius, int ownerId, HashSet<int> damagedViews)
+    {
+        if (profile == null || damagedViews == null)
+            return;
+
+        Collider2D[] hits = Physics2D.OverlapCircleAll(center, Mathf.Max(0.05f, currentRadius));
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null)
+                continue;
+
+            PlayerDeployableBase deployable = hit.GetComponentInParent<PlayerDeployableBase>();
+            if (deployable != null && deployable.photonView != null)
+            {
+                if (damagedViews.Add(deployable.photonView.ViewID))
+                {
+                    Vector2 point = deployable.transform.position;
+                    deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableShieldOnlyDamageAt), RpcTarget.MasterClient, profile.ShieldDamage, ownerId, point.x, point.y);
+                    AddSuperChargeForDamage();
+                }
+
+                continue;
+            }
+
+            LureBeaconDecoy beacon = hit.GetComponentInParent<LureBeaconDecoy>();
+            if (beacon != null && beacon.photonView != null)
+            {
+                if (damagedViews.Add(beacon.photonView.ViewID))
+                {
+                    Vector2 point = beacon.transform.position;
+                    beacon.photonView.RPC(nameof(LureBeaconDecoy.TakeBeaconShieldOnlyDamageAt), RpcTarget.MasterClient, profile.ShieldDamage, ownerId, point.x, point.y);
+                }
+
+                continue;
+            }
+
+            PlayerHealth hp = hit.GetComponentInParent<PlayerHealth>();
+            if (hp == null || hp.photonView == null || hp.IsWreck || hp.photonView.ViewID == ownerId)
+                continue;
+
+            if (damagedViews.Add(hp.photonView.ViewID))
+            {
+                Vector2 point = hp.transform.position;
+                hp.photonView.RPC(nameof(PlayerHealth.TakeShieldOnlyDamageAt), RpcTarget.MasterClient, profile.ShieldDamage, ownerId, point.x, point.y);
+                AddSuperChargeForDamage();
+            }
+        }
+    }
+
+    [PunRPC]
+    void StartPulseDisruptorWaveRpc(float x, float y, float radius, float duration)
+    {
+        PulseDisruptorWaveVfx.Spawn(new Vector3(x, y, transform.position.z - 0.05f), radius, duration);
     }
 
     bool TryStartAstroCutterBeam(WeaponAttackProfile profile, Vector2 direction, int ownerId)
@@ -1257,12 +1643,18 @@ public class PlayerShooting : MonoBehaviourPun
     float GetSuperChargeGainMultiplier()
     {
         WeaponAttackProfile profile = activeComplexWeaponProfile ?? GetActiveComplexWeaponState()?.Profile;
+        if (IsDoubleRocketLauncherProfile(profile))
+            return DoubleRocketSuperChargeMultiplier;
+
         return IsAstroCutterProfile(profile) ? 0.5f : 1f;
     }
 
     float GetSuperChargeDamageGainMultiplier()
     {
         WeaponAttackProfile profile = activeComplexWeaponProfile ?? GetActiveComplexWeaponState()?.Profile;
+        if (IsDoubleRocketLauncherProfile(profile))
+            return DoubleRocketSuperChargeMultiplier;
+
         return IsAstroCutterProfile(profile) ? 0.25f : 1f;
     }
 
@@ -1312,12 +1704,12 @@ public class PlayerShooting : MonoBehaviourPun
         return transform.up;
     }
 
-    void Shoot(Vector2 direction)
+    bool Shoot(Vector2 direction)
     {
         if (bulletPrefab == null)
         {
             Debug.LogError("bulletPrefab NULL");
-            return;
+            return false;
         }
 
         PhotonView playerView = GetComponent<PhotonView>();
@@ -1327,11 +1719,38 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (IsAstroCutterProfile(profile))
         {
-            TryStartAstroCutterBeam(profile, direction.normalized, ownerId);
-            return;
+            bool firedBeam = TryStartAstroCutterBeam(profile, direction.normalized, ownerId);
+            if (firedBeam)
+                NotifyShotFiredForUseCancel();
+            return firedBeam;
         }
 
-        if (ShouldUseArcSimpleShot(profile))
+        if (IsGatlingGunProfile(profile))
+        {
+            if (complexBurstRoutine != null)
+                StopCoroutine(complexBurstRoutine);
+
+            Vector2 safeDirection = ResolveSafeAimDirection(direction);
+            Vector2 targetPoint = (Vector2)transform.position + (safeDirection * GetComplexRangeWorld(profile));
+            complexBurstRoutine = StartCoroutine(FireComplexBurst(profile, safeDirection, targetPoint, 0));
+            NotifyShotFiredForUseCancel();
+            return true;
+        }
+
+        if (IsRocketWeaponProfile(profile))
+        {
+            int count = Mathf.Max(1, profile.ProjectileCount);
+            for (int i = 0; i < count; i++)
+            {
+                Vector2 shotDirection = IsDoubleRocketLauncherProfile(profile)
+                    ? ResolveDoubleRocketProjectileDirection(direction.normalized, i, count, 0)
+                    : ResolveComplexProjectileDirection(direction.normalized, profile.SpreadAngle, i, count);
+                Vector3 spawnPos = ResolveComplexProjectileSpawnPosition(profile, shotDirection, i, count);
+                Vector2 targetPoint = (Vector2)spawnPos + (shotDirection.normalized * GetComplexRangeWorld(profile));
+                spawned |= SpawnComplexBullet(profile, shotDirection.normalized, spawnPos, ownerId, targetPoint);
+            }
+        }
+        else if (ShouldUseArcSimpleShot(profile))
         {
             Vector3 spawnPos = transform.position + (transform.up * muzzleOffsetDistance);
             Vector2 targetPoint = (Vector2)transform.position + (direction.normalized * GetComplexRangeWorld(profile));
@@ -1359,7 +1778,22 @@ public class PlayerShooting : MonoBehaviourPun
         }
 
         if (spawned)
+        {
             photonView.RPC(nameof(PlayLaserSfx), RpcTarget.All);
+            NotifyShotFiredForUseCancel();
+        }
+
+        return spawned;
+    }
+
+    void NotifyShotFiredForUseCancel()
+    {
+        if (!photonView.IsMine || GetComponent<EnemyBot>() != null)
+            return;
+
+        TreasureCollector collector = GetComponent<TreasureCollector>();
+        if (collector != null)
+            collector.CancelCollectionForShot();
     }
 
     bool ShouldUseSimpleSpreadShot(WeaponAttackProfile profile)
@@ -1430,7 +1864,9 @@ public class PlayerShooting : MonoBehaviourPun
         if (!infiniteAmmo && (isReloading || currentAmmo <= 0))
             return false;
 
-        Shoot(direction.normalized);
+        if (!Shoot(direction.normalized))
+            return false;
+
         if (!infiniteAmmo)
             ConsumeAmmo();
         nextFireTime = Time.time + fireRate;
@@ -1987,6 +2423,7 @@ public class PlayerShooting : MonoBehaviourPun
                IsGameStarted() &&
                IsComplexShootingActive &&
                RoomSettings.IsAdvancedShootingJoystickEnabled() &&
+               !RoundChatCommandUI.IsLocalChatMenuOpen &&
                !AreShipControlsBlocked();
     }
 
@@ -2198,6 +2635,12 @@ public class PlayerShooting : MonoBehaviourPun
             return;
         }
 
+        if (soundId == "gatling")
+        {
+            AudioManager.Instance.PlayGatlingGunAt(transform.position);
+            return;
+        }
+
         if (soundId == "corsair")
         {
             AudioManager.Instance.PlayCorsairLaserAt(transform.position);
@@ -2225,6 +2668,12 @@ public class PlayerShooting : MonoBehaviourPun
         if (soundId == "astro_cutter")
         {
             AudioManager.Instance.PlayAstroCutterAt(transform.position);
+            return;
+        }
+
+        if (soundId == "rocket")
+        {
+            AudioManager.Instance.PlayRocketLaunchAt(transform.position);
             return;
         }
 
@@ -2925,7 +3374,7 @@ public class PlayerShooting : MonoBehaviourPun
         MovingSpaceObject movingObject = targetView.GetComponent<MovingSpaceObject>();
         if (movingObject != null)
         {
-            movingObject.ApplyMagneticPull(sourcePosition, TractorBeamPullStrength, deltaTime);
+            movingObject.ApplyTractorTetherPull(sourcePosition, TractorBeamPullStrength, TractorBeamSlackDistance, deltaTime);
             return;
         }
 
@@ -2941,9 +3390,11 @@ public class PlayerShooting : MonoBehaviourPun
             return;
         }
 
-        float pullAcceleration = TractorBeamPullStrength * Mathf.Lerp(0.65f, 1.25f, Mathf.Clamp01(distance / TractorBeamRadius));
+        float stretch = Mathf.Max(0f, distance - TractorBeamSlackDistance);
+        float tetherRamp = Mathf.Clamp01(stretch / TractorBeamTetherRampDistance);
+        float pullAcceleration = TractorBeamPullStrength * Mathf.Lerp(0.78f, 3.2f, tetherRamp);
         targetBody.linearVelocity += toSource.normalized * pullAcceleration * deltaTime;
-        float maxSpeed = 6.4f;
+        float maxSpeed = Mathf.Lerp(6.4f, 11.5f, tetherRamp);
         if (targetBody.linearVelocity.sqrMagnitude > maxSpeed * maxSpeed)
             targetBody.linearVelocity = targetBody.linearVelocity.normalized * maxSpeed;
     }
@@ -3875,7 +4326,7 @@ public class ReloadButtonUI : MonoBehaviourPun
         if (shooting == null || reloadButton == null || backgroundImage == null || buttonText == null)
             return;
 
-        bool visible = !shooting.IsComplexShootingActive;
+        bool visible = GameplayHudVisibility.IsGameplayHudVisible(!shooting.IsComplexShootingActive);
         if (buttonObject != null && buttonObject.activeSelf != visible)
             buttonObject.SetActive(visible);
 
@@ -4112,7 +4563,7 @@ public class GadgetButtonUI : MonoBehaviourPun
             return;
 
         if (rootObject != null)
-            rootObject.SetActive(widgets.Count > 0);
+            rootObject.SetActive(GameplayHudVisibility.IsGameplayHudVisible(widgets.Count > 0));
 
         for (int i = 0; i < widgets.Count; i++)
         {

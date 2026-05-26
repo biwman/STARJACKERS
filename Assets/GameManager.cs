@@ -11,6 +11,8 @@ public class GameManager : MonoBehaviourPunCallbacks
     const string ExtractionLayoutKey = "extractionLayout";
     const string NebulaLayoutKey = "nebulaLayout";
     const string FireNebulaLayoutKey = NebulaSpawner.FireNebulaLayoutKey;
+    const string CloudLayoutKey = NebulaSpawner.CloudLayoutKey;
+    const string CloudDirectionKey = NebulaSpawner.CloudDirectionKey;
     const string RepairBayLayoutKey = "repairBayLayout";
     const string SpaceFactoryLayoutKey = SpaceFactorySpawner.LayoutKey;
     const string MapSeedKey = "mapSeed";
@@ -23,6 +25,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient) return;
 
+        GameplayHudVisibility.ResetSuppression();
         EarlyRoundExitUI.HideAll();
         RoundStartCurtainUI.ShowForRoundStart();
 
@@ -35,6 +38,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateInPlay;
         props[RoomSettings.CrazyEnemiesActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, roundStartUtcMs);
         props[RoomSettings.FogOfWarActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, roundStartUtcMs);
+        props[RoomSettings.PirateBaseActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, roundStartUtcMs);
+        props[RoomSettings.AsteroidShowerActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, roundStartUtcMs);
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;
@@ -46,6 +51,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.FinishedRoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
         props[FireNebulaLayoutKey] = string.Empty;
+        props[CloudLayoutKey] = string.Empty;
+        props[CloudDirectionKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
         props[SpaceFactoryLayoutKey] = string.Empty;
 
@@ -95,6 +102,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[ExtractionLayoutKey] = string.Empty;
         props[NebulaLayoutKey] = string.Empty;
         props[FireNebulaLayoutKey] = string.Empty;
+        props[CloudLayoutKey] = string.Empty;
+        props[CloudDirectionKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
         props[SpaceFactoryLayoutKey] = string.Empty;
         props[MapSeedKey] = -1;
@@ -102,6 +111,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.RoundEndUtcMsKey] = -1d;
         props[RoomSettings.CrazyEnemiesActiveKey] = false;
         props[RoomSettings.FogOfWarActiveKey] = false;
+        props[RoomSettings.PirateBaseActiveKey] = false;
+        props[RoomSettings.AsteroidShowerActiveKey] = false;
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;
@@ -167,6 +178,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[ExtractionLayoutKey] = string.Empty;
         props[NebulaLayoutKey] = string.Empty;
         props[FireNebulaLayoutKey] = string.Empty;
+        props[CloudLayoutKey] = string.Empty;
+        props[CloudDirectionKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
         props[SpaceFactoryLayoutKey] = string.Empty;
         props[MapSeedKey] = -1;
@@ -175,6 +188,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateInLobby;
         props[RoomSettings.CrazyEnemiesActiveKey] = false;
         props[RoomSettings.FogOfWarActiveKey] = false;
+        props[RoomSettings.PirateBaseActiveKey] = false;
+        props[RoomSettings.AsteroidShowerActiveKey] = false;
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;

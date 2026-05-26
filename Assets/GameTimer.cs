@@ -9,6 +9,8 @@ public class GameTimer : MonoBehaviourPun
     const string ExtractionLayoutKey = "extractionLayout";
     const string NebulaLayoutKey = "nebulaLayout";
     const string FireNebulaLayoutKey = NebulaSpawner.FireNebulaLayoutKey;
+    const string CloudLayoutKey = NebulaSpawner.CloudLayoutKey;
+    const string CloudDirectionKey = NebulaSpawner.CloudDirectionKey;
     const string RepairBayLayoutKey = "repairBayLayout";
     const string SpaceFactoryLayoutKey = SpaceFactorySpawner.LayoutKey;
     const string MapSeedKey = "mapSeed";
@@ -157,7 +159,9 @@ public class GameTimer : MonoBehaviourPun
                             pv.Owner,
                             shipSkinIndex,
                             RoomSettings.IsInventoryLossEnabled(),
-                            RoomSettings.IsEquipmentLossEnabled());
+                            RoomSettings.IsEquipmentLossEnabled(),
+                            string.Empty,
+                            string.Empty);
                     }
 
                     int currentScore = RoundResultsTracker.GetKnownScore(pv.Owner, p.gameObject);
@@ -183,6 +187,7 @@ public class GameTimer : MonoBehaviourPun
         if (!PhotonNetwork.IsMasterClient)
             return;
 
+        GameplayHudVisibility.ResetSuppression();
         EarlyRoundExitUI.HideAll();
 
         double roundStartUtcMs = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -193,6 +198,8 @@ public class GameTimer : MonoBehaviourPun
         props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateInPlay;
         props[RoomSettings.CrazyEnemiesActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, roundStartUtcMs);
         props[RoomSettings.FogOfWarActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, roundStartUtcMs);
+        props[RoomSettings.PirateBaseActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, roundStartUtcMs);
+        props[RoomSettings.AsteroidShowerActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, roundStartUtcMs);
         props[LoneShipModeStartTimeKey] = -1d;
         props[EvacuationPauseUntilKey] = -1d;
         props[EvacuationPauseRemainingKey] = -1f;
@@ -204,6 +211,8 @@ public class GameTimer : MonoBehaviourPun
         props[RoomSettings.FinishedRoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
         props[FireNebulaLayoutKey] = string.Empty;
+        props[CloudLayoutKey] = string.Empty;
+        props[CloudDirectionKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
         props[SpaceFactoryLayoutKey] = string.Empty;
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
@@ -259,13 +268,37 @@ public class GameTimer : MonoBehaviourPun
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         for (int i = 0; i < players.Length; i++)
         {
-            if (players[i] == null || players[i].IsWreck || players[i].IsBotControlled)
+            if (!IsActiveRoundPlayer(players[i]))
                 continue;
 
             count++;
         }
 
         return count;
+    }
+
+    public static bool IsActiveRoundPlayer(PlayerHealth player)
+    {
+        if (player == null ||
+            !player.isActiveAndEnabled ||
+            player.IsWreck ||
+            player.IsBotControlled ||
+            player.IsEvacuationAnimating ||
+            player.photonView == null)
+        {
+            return false;
+        }
+
+        object[] instantiationData = player.photonView.InstantiationData;
+        if (PlayerDeployableRuntime.IsInstantiationData(instantiationData) ||
+            LureBeaconDecoy.IsInstantiationData(instantiationData) ||
+            player.GetComponent<PlayerDeployableBase>() != null ||
+            player.GetComponent<LureBeaconDecoy>() != null)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     bool IsGameStarted()

@@ -333,6 +333,9 @@ public class UIRuntimeStyler : MonoBehaviour
         if (name.Contains("shipselectionskinbutton"))
             return "skin_choice";
 
+        if (name.Contains("collectbutton"))
+            return "use";
+
         if (name.Contains("restart") || label.Contains("restart"))
             return "restart";
 
@@ -366,6 +369,8 @@ public class UIRuntimeStyler : MonoBehaviour
                name.StartsWith("ShipInventoryButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShipInventoryHudSlot", System.StringComparison.Ordinal) ||
                name.StartsWith("RoomRow_", System.StringComparison.Ordinal) ||
+               name.StartsWith("BackButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("EarlyRoundSummaryBackButton", System.StringComparison.Ordinal) ||
                name.StartsWith("BrowserBackButton", System.StringComparison.Ordinal) ||
                name.StartsWith("BrowserRefreshButton", System.StringComparison.Ordinal) ||
                name.StartsWith("BrowserNewRoundButton", System.StringComparison.Ordinal) ||
@@ -373,9 +378,13 @@ public class UIRuntimeStyler : MonoBehaviour
                name.StartsWith("ShipPreviewHitbox", System.StringComparison.Ordinal) ||
                name.StartsWith("CraftingCatalogButton", System.StringComparison.Ordinal) ||
                name.StartsWith("CraftingRecipeCloseButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("ShipInventoryUnloadButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("PlayerInventoryFilterButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("PlayerInventoryExtendButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShopBuyButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShopCloseButton", System.StringComparison.Ordinal) ||
                name.StartsWith("EnemySettingButton_", System.StringComparison.Ordinal) ||
+               name.StartsWith("ItemPreviewInfoButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ItemPreviewSellButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ItemPreviewSalvageButton", System.StringComparison.Ordinal) ||
                name.StartsWith("CraftButton", System.StringComparison.Ordinal) ||
@@ -526,6 +535,7 @@ public class UIRuntimeStyler : MonoBehaviour
         StyleLobbySettingButton("ShipDriftSettingButton", new Vector2(-290f, -636f));
         StyleLobbySettingButton("DeathTimerSettingButton", new Vector2(-690f, -722f));
         StyleLobbySettingButton("MovingObjectsSettingButton", new Vector2(-290f, -722f));
+        StyleLobbySettingButton("GravityWellPhysicsSettingButton", new Vector2(-290f, -894f));
         StyleLobbySettingButton("BulletPushSettingButton", new Vector2(-690f, -808f));
         StyleLobbySettingButton("ObstacleWeightSettingButton", new Vector2(-290f, -808f));
         StyleLobbySettingButton("TreasureWeightSettingButton", new Vector2(-690f, -894f));
@@ -594,7 +604,7 @@ public class UIRuntimeStyler : MonoBehaviour
             RectTransform rect = endScreen.GetComponent<RectTransform>();
             if (rect != null)
             {
-                rect.sizeDelta = new Vector2(760f, 560f);
+                rect.sizeDelta = new Vector2(900f, 600f);
             }
         }
 
@@ -606,14 +616,14 @@ public class UIRuntimeStyler : MonoBehaviour
 
             if (image != null)
             {
-                image.color = new Color(0.94f, 0.94f, 0.9f, 0.98f);
+                image.color = new Color(0.035f, 0.055f, 0.082f, 0.98f);
                 image.type = Image.Type.Sliced;
-                ApplyOutline(gameOverPanel, new Color(0f, 0f, 0f, 0.22f), new Vector2(6f, -6f));
+                ApplyOutline(gameOverPanel, new Color(0f, 0f, 0f, 0.34f), new Vector2(6f, -6f));
             }
 
             if (rect != null)
             {
-                rect.sizeDelta = new Vector2(760f, 560f);
+                rect.sizeDelta = new Vector2(900f, 600f);
             }
         }
 
@@ -623,11 +633,11 @@ public class UIRuntimeStyler : MonoBehaviour
             TMP_Text text = endMessageTextObject.GetComponent<TMP_Text>();
             if (text != null)
             {
-                text.fontSize = 40f;
+                text.fontSize = 42f;
                 text.fontStyle = FontStyles.Bold;
-                text.color = new Color(0.15f, 0.18f, 0.24f, 1f);
-                text.alignment = TextAlignmentOptions.Center;
-                text.characterSpacing = 2f;
+                text.color = new Color(0.92f, 0.98f, 1f, 1f);
+                text.alignment = TextAlignmentOptions.Left;
+                text.characterSpacing = 1.6f;
             }
         }
     }
@@ -875,6 +885,23 @@ public class UIRuntimeStyler : MonoBehaviour
         innerShade.raycastTarget = false;
         innerShade.color = new Color(0.02f, 0.04f, 0.065f, 0.58f);
 
+        Image progressFill = GetOrCreateChildImage(panel.transform, "UseButtonProgressFill");
+        progressFill.gameObject.SetActive(false);
+        progressFill.rectTransform.anchorMin = Vector2.zero;
+        progressFill.rectTransform.anchorMax = Vector2.one;
+        progressFill.rectTransform.pivot = new Vector2(0f, 0.5f);
+        progressFill.rectTransform.offsetMin = new Vector2(9f, 8f);
+        progressFill.rectTransform.offsetMax = new Vector2(-9f, -8f);
+        progressFill.sprite = GetPlayButtonShapeSprite();
+        progressFill.type = Image.Type.Filled;
+        progressFill.fillMethod = Image.FillMethod.Horizontal;
+        progressFill.fillOrigin = (int)Image.OriginHorizontal.Left;
+        progressFill.fillAmount = 0f;
+        progressFill.preserveAspect = false;
+        progressFill.raycastTarget = false;
+        progressFill.color = new Color(0.16f, 0.95f, 0.34f, 0.76f);
+        progressFill.transform.SetSiblingIndex(innerShade.transform.GetSiblingIndex() + 1);
+
         Color accentColor = button.interactable
             ? new Color(0.35f, 0.82f, 1f, 0.95f)
             : new Color(0.38f, 0.42f, 0.46f, 0.4f);
@@ -898,7 +925,7 @@ public class UIRuntimeStyler : MonoBehaviour
 
         controller.Configure(button, rootRect, panel.rectTransform, innerShade.rectTransform,
             leftAccent, rightAccent, topAccent, bottomAccent, label != null ? label.rectTransform : null,
-            visual, panel, innerShade, label, baseColor, highlighted, pressed,
+            visual, panel, innerShade, progressFill, label, baseColor, highlighted, pressed,
             new Color(0.11f, 0.38f, 0.21f, 0.98f),
             new Color(0.15f, 0.5f, 0.28f, 1f),
             new Color(0.08f, 0.24f, 0.15f, 1f));

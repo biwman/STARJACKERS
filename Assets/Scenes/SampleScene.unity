@@ -194,6 +194,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 22042929}
   m_CullTransparentMesh: 1
+--- !u!62 &261778395
+PhysicsMaterial2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: MapBoundarySoft
+  serializedVersion: 2
+  friction: 0
+  bounciness: 0
+  m_FrictionCombine: 1
+  m_BounceCombine: 4
 --- !u!1 &261984987
 GameObject:
   m_ObjectHideFlags: 0
@@ -731,6 +743,10 @@ MonoBehaviour:
   mapSizeSettingText: {fileID: 0}
   mapBackgroundSettingText: {fileID: 0}
   visualEffectsSettingText: {fileID: 0}
+  advancedBackgroundSettingText: {fileID: 0}
+  parallaxBackgroundSettingText: {fileID: 0}
+  backgroundObjectSettingText: {fileID: 0}
+  gravityWellPhysicsSettingText: {fileID: 0}
   startingVfxSettingText: {fileID: 0}
   endDisasterSettingText: {fileID: 0}
   endDisasterTimeSettingText: {fileID: 0}
@@ -748,6 +764,9 @@ MonoBehaviour:
   fireNebulaSettingText: {fileID: 0}
   nebulaSizeSettingText: {fileID: 0}
   fireNebulaSizeSettingText: {fileID: 0}
+  advancedNebulaSettingText: {fileID: 0}
+  cloudsSettingText: {fileID: 0}
+  cloudsSizeSettingText: {fileID: 0}
   extractionSettingText: {fileID: 0}
   repairBaySettingText: {fileID: 0}
   spaceFactorySettingText: {fileID: 0}
@@ -760,6 +779,7 @@ MonoBehaviour:
   equipmentLossSettingText: {fileID: 0}
   crazyEnemiesEffectSettingText: {fileID: 0}
   fogOfWarEffectSettingText: {fileID: 0}
+  pirateBaseEffectSettingText: {fileID: 0}
   movingObjectsSettingText: {fileID: 0}
   enemyBotsSettingText: {fileID: 0}
   corsairSettingText: {fileID: 0}
@@ -771,7 +791,10 @@ MonoBehaviour:
   batteringSettingText: {fileID: 0}
   shootingModelSettingText: {fileID: 0}
   superAttackSettingText: {fileID: 0}
+  advancedMovingJoystickSettingText: {fileID: 0}
   advancedShootingJoystickSettingText: {fileID: 0}
+  dynamicUseSettingText: {fileID: 0}
+  collectKeepAliveRangeBonusSettingText: {fileID: 0}
   hapticsSettingText: {fileID: 0}
   fpsCounterSettingText: {fileID: 0}
   gunSetupSettingText: {fileID: 0}
@@ -779,6 +802,10 @@ MonoBehaviour:
   mapSizeSettingButton: {fileID: 0}
   mapBackgroundSettingButton: {fileID: 0}
   visualEffectsSettingButton: {fileID: 0}
+  advancedBackgroundSettingButton: {fileID: 0}
+  parallaxBackgroundSettingButton: {fileID: 0}
+  backgroundObjectSettingButton: {fileID: 0}
+  gravityWellPhysicsSettingButton: {fileID: 0}
   startingVfxSettingButton: {fileID: 0}
   endDisasterSettingButton: {fileID: 0}
   endDisasterTimeSettingButton: {fileID: 0}
@@ -796,6 +823,9 @@ MonoBehaviour:
   fireNebulaSettingButton: {fileID: 0}
   nebulaSizeSettingButton: {fileID: 0}
   fireNebulaSizeSettingButton: {fileID: 0}
+  advancedNebulaSettingButton: {fileID: 0}
+  cloudsSettingButton: {fileID: 0}
+  cloudsSizeSettingButton: {fileID: 0}
   extractionSettingButton: {fileID: 0}
   repairBaySettingButton: {fileID: 0}
   spaceFactorySettingButton: {fileID: 0}
@@ -808,6 +838,7 @@ MonoBehaviour:
   equipmentLossSettingButton: {fileID: 0}
   crazyEnemiesEffectSettingButton: {fileID: 0}
   fogOfWarEffectSettingButton: {fileID: 0}
+  pirateBaseEffectSettingButton: {fileID: 0}
   movingObjectsSettingButton: {fileID: 0}
   bulletPushSettingButton: {fileID: 0}
   obstacleWeightSettingButton: {fileID: 0}
@@ -815,7 +846,10 @@ MonoBehaviour:
   batteringSettingButton: {fileID: 0}
   shootingModelSettingButton: {fileID: 0}
   superAttackSettingButton: {fileID: 0}
+  advancedMovingJoystickSettingButton: {fileID: 0}
   advancedShootingJoystickSettingButton: {fileID: 0}
+  dynamicUseSettingButton: {fileID: 0}
+  collectKeepAliveRangeBonusSettingButton: {fileID: 0}
   hapticsSettingButton: {fileID: 0}
   fpsCounterSettingButton: {fileID: 0}
   gunSetupSettingButton: {fileID: 0}
@@ -1181,18 +1215,6 @@ MonoBehaviour:
   target: {fileID: 0}
   mapSizeX: 25
   mapSizeY: 25
---- !u!62 &539481660
-PhysicsMaterial2D:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: MovingSpaceObjectBouncy
-  serializedVersion: 2
-  friction: 0
-  bounciness: 1
-  m_FrictionCombine: 1
-  m_BounceCombine: 4
 --- !u!1 &561656650
 GameObject:
   m_ObjectHideFlags: 0
@@ -1720,216 +1742,6 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
---- !u!213 &844285446
-Sprite:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: 
-  m_Rect:
-    serializedVersion: 2
-    x: 0
-    y: 0
-    width: 1536
-    height: 1024
-  m_Offset: {x: 0, y: 0}
-  m_Border: {x: 0, y: 0, z: 0, w: 0}
-  m_PixelsToUnits: 192
-  m_Pivot: {x: 0.5, y: 0.5}
-  m_Extrude: 0
-  m_IsPolygon: 0
-  m_PackingTag: 
-  m_RenderDataKey:
-    00000000000000000000000000000000: 0
-  m_AtlasTags: []
-  m_SpriteAtlas: {fileID: 0}
-  m_RD:
-    serializedVersion: 3
-    texture: {fileID: 2800000, guid: d740e4af474d02a4792e6ef26e89387d, type: 3}
-    alphaTexture: {fileID: 0}
-    secondaryTextures: []
-    m_SubMeshes:
-    - serializedVersion: 2
-      firstByte: 0
-      indexCount: 6
-      topology: 0
-      baseVertex: 0
-      firstVertex: 0
-      vertexCount: 4
-      localAABB:
-        m_Center: {x: 0, y: 0, z: 0}
-        m_Extent: {x: 0, y: 0, z: 0}
-    m_IndexBuffer: 030000000100020001000000
-    m_VertexData:
-      serializedVersion: 3
-      m_VertexCount: 4
-      m_Channels:
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 3
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 1
-        offset: 0
-        format: 0
-        dimension: 2
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      m_DataSize: 80
-      _typelessdata: 000080c0abaa2a400000000000008040abaa2ac00000000000008040abaa2a4000000000000080c0abaa2ac0000000000000000000000000000000000000000000000000000000000000000000000000
-    m_Bindpose: []
-    textureRect:
-      serializedVersion: 2
-      x: 0
-      y: 0
-      width: 1536
-      height: 1024
-    textureRectOffset: {x: 0, y: 0}
-    atlasRectOffset: {x: -1, y: -1}
-    settingsRaw: 64
-    uvTransform: {x: 192, y: 768, z: 192, w: 512}
-    downscaleMultiplier: 1
-  m_AtlasRD:
-    serializedVersion: 3
-    texture: {fileID: 2800000, guid: d740e4af474d02a4792e6ef26e89387d, type: 3}
-    alphaTexture: {fileID: 0}
-    secondaryTextures: []
-    m_SubMeshes:
-    - serializedVersion: 2
-      firstByte: 0
-      indexCount: 6
-      topology: 0
-      baseVertex: 0
-      firstVertex: 0
-      vertexCount: 4
-      localAABB:
-        m_Center: {x: 0, y: 0, z: 0}
-        m_Extent: {x: 0, y: 0, z: 0}
-    m_IndexBuffer: 030000000100020001000000
-    m_VertexData:
-      serializedVersion: 3
-      m_VertexCount: 4
-      m_Channels:
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 3
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 1
-        offset: 0
-        format: 0
-        dimension: 2
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      m_DataSize: 80
-      _typelessdata: 000080c0abaa2a400000000000008040abaa2ac00000000000008040abaa2a4000000000000080c0abaa2ac0000000000000000000000000000000000000000000000000000000000000000000000000
-    m_Bindpose: []
-    textureRect:
-      serializedVersion: 2
-      x: 0
-      y: 0
-      width: 1536
-      height: 1024
-    textureRectOffset: {x: 0, y: 0}
-    atlasRectOffset: {x: -1, y: -1}
-    settingsRaw: 64
-    uvTransform: {x: 192, y: 768, z: 192, w: 512}
-    downscaleMultiplier: 1
-  m_PhysicsShape: []
-  m_Bones: []
-  m_ScriptableObjects: []
-  m_SpriteID: 
 --- !u!1 &852586369
 GameObject:
   m_ObjectHideFlags: 0
@@ -2033,7 +1845,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 539481660}
+  m_Material: {fileID: 261778395}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -2344,7 +2156,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 539481660}
+  m_Material: {fileID: 261778395}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -3101,7 +2913,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 200, y: 180}
+  m_AnchoredPosition: {x: 224, y: 204}
   m_SizeDelta: {x: 430, y: 430}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1130682800
@@ -3119,6 +2931,7 @@ MonoBehaviour:
   deadZone: 0.15
   rescaleInputAfterDeadZone: 0
   responseExponent: 1
+  recenterOnPointerDown: 0
   background: {fileID: 1130682799}
   handle: {fileID: 2091593306}
   inputVector: {x: 0, y: 0}
@@ -3203,7 +3016,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 539481660}
+  m_Material: {fileID: 261778395}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -3516,8 +3329,8 @@ SpriteRenderer:
   m_SortingLayer: 1
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 844285446}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Sprite: {fileID: 1529174181}
+  m_Color: {r: 1, g: 1, b: 1, a: 0}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 2
@@ -3897,7 +3710,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: -200, y: 180}
+  m_AnchoredPosition: {x: -224, y: 240}
   m_SizeDelta: {x: 430, y: 430}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1437756230
@@ -3915,6 +3728,7 @@ MonoBehaviour:
   deadZone: 0.15
   rescaleInputAfterDeadZone: 0
   responseExponent: 1
+  recenterOnPointerDown: 0
   background: {fileID: 1437756229}
   handle: {fileID: 1695922302}
   inputVector: {x: 0, y: 0}
@@ -3971,6 +3785,216 @@ MonoBehaviour:
   m_EffectColor: {r: 1, g: 1, b: 1, a: 0.08}
   m_EffectDistance: {x: 2, y: 2}
   m_UseGraphicAlpha: 1
+--- !u!213 &1529174181
+Sprite:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Rect:
+    serializedVersion: 2
+    x: 0
+    y: 0
+    width: 1536
+    height: 1024
+  m_Offset: {x: 0, y: 0}
+  m_Border: {x: 0, y: 0, z: 0, w: 0}
+  m_PixelsToUnits: 192
+  m_Pivot: {x: 0.5, y: 0.5}
+  m_Extrude: 0
+  m_IsPolygon: 0
+  m_PackingTag: 
+  m_RenderDataKey:
+    00000000000000000000000000000000: 0
+  m_AtlasTags: []
+  m_SpriteAtlas: {fileID: 0}
+  m_RD:
+    serializedVersion: 3
+    texture: {fileID: 2800000, guid: d740e4af474d02a4792e6ef26e89387d, type: 3}
+    alphaTexture: {fileID: 0}
+    secondaryTextures: []
+    m_SubMeshes:
+    - serializedVersion: 2
+      firstByte: 0
+      indexCount: 6
+      topology: 0
+      baseVertex: 0
+      firstVertex: 0
+      vertexCount: 4
+      localAABB:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 0, y: 0, z: 0}
+    m_IndexBuffer: 030000000100020001000000
+    m_VertexData:
+      serializedVersion: 3
+      m_VertexCount: 4
+      m_Channels:
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 3
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 1
+        offset: 0
+        format: 0
+        dimension: 2
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      m_DataSize: 80
+      _typelessdata: 000080c0abaa2a400000000000008040abaa2ac00000000000008040abaa2a4000000000000080c0abaa2ac0000000000000000000000000000000000000000000000000000000000000000000000000
+    m_Bindpose: []
+    textureRect:
+      serializedVersion: 2
+      x: 0
+      y: 0
+      width: 1536
+      height: 1024
+    textureRectOffset: {x: 0, y: 0}
+    atlasRectOffset: {x: -1, y: -1}
+    settingsRaw: 64
+    uvTransform: {x: 192, y: 768, z: 192, w: 512}
+    downscaleMultiplier: 1
+  m_AtlasRD:
+    serializedVersion: 3
+    texture: {fileID: 2800000, guid: d740e4af474d02a4792e6ef26e89387d, type: 3}
+    alphaTexture: {fileID: 0}
+    secondaryTextures: []
+    m_SubMeshes:
+    - serializedVersion: 2
+      firstByte: 0
+      indexCount: 6
+      topology: 0
+      baseVertex: 0
+      firstVertex: 0
+      vertexCount: 4
+      localAABB:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 0, y: 0, z: 0}
+    m_IndexBuffer: 030000000100020001000000
+    m_VertexData:
+      serializedVersion: 3
+      m_VertexCount: 4
+      m_Channels:
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 3
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 1
+        offset: 0
+        format: 0
+        dimension: 2
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      m_DataSize: 80
+      _typelessdata: 000080c0abaa2a400000000000008040abaa2ac00000000000008040abaa2a4000000000000080c0abaa2ac0000000000000000000000000000000000000000000000000000000000000000000000000
+    m_Bindpose: []
+    textureRect:
+      serializedVersion: 2
+      x: 0
+      y: 0
+      width: 1536
+      height: 1024
+    textureRectOffset: {x: 0, y: 0}
+    atlasRectOffset: {x: -1, y: -1}
+    settingsRaw: 64
+    uvTransform: {x: 192, y: 768, z: 192, w: 512}
+    downscaleMultiplier: 1
+  m_PhysicsShape: []
+  m_Bones: []
+  m_ScriptableObjects: []
+  m_SpriteID: 
 --- !u!1 &1644533087
 GameObject:
   m_ObjectHideFlags: 0
@@ -4640,7 +4664,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 539481660}
+  m_Material: {fileID: 261778395}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0

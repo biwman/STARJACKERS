@@ -139,7 +139,7 @@ public class HealthBarUI : MonoBehaviourPun
         if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
             value is bool started)
         {
-            return started;
+            return GameplayHudVisibility.IsGameplayHudVisible(started);
         }
 
         return false;

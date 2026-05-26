@@ -14,6 +14,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     const float LeaveRoomRetryPollSeconds = 0.5f;
     const float LeaveRoomRetryTimeoutSeconds = 6f;
     const float LateJoinBlockThresholdSeconds = 60f;
+    const float GameplayRejoinRetryDelaySeconds = 1f;
+    const float GameplayRejoinAttemptTimeoutSeconds = 12f;
+    const int GameplayRejoinMaxAttempts = 3;
+    const int RoomRejoinGracePeriodMilliseconds = 120000;
     const string ObstacleLayoutKey = "obstacleLayout";
     const string ExtractionLayoutKey = "extractionLayout";
     const string RepairBayLayoutKey = "repairBayLayout";
@@ -21,6 +25,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     const string EmptyLayoutSentinel = "__empty__";
     const float PlayerSpawnClearanceRadius = 2.85f;
     const float PlayerSpawnLayoutClearance = 4.25f;
+    const string PhotonUserIdPrefsKey = "BrawlRaiders.PhotonUserId.v1";
     const string RememberedLobbySettingsPrefsKey = "BrawlRaiders.LastLobbySettings.v2";
     const string FinishedRoundsPrefsKey = "BrawlRaiders.FinishedRounds.v1";
     const int MaxRememberedFinishedRounds = 64;
@@ -97,7 +102,13 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RoomSettings.CrazyEnemiesActiveKey,
         RoomSettings.FogOfWarModeKey,
         RoomSettings.FogOfWarStartUtcMsKey,
-        RoomSettings.FogOfWarActiveKey
+        RoomSettings.FogOfWarActiveKey,
+        RoomSettings.PirateBaseModeKey,
+        RoomSettings.PirateBaseStartUtcMsKey,
+        RoomSettings.PirateBaseActiveKey,
+        RoomSettings.AsteroidShowerModeKey,
+        RoomSettings.AsteroidShowerStartUtcMsKey,
+        RoomSettings.AsteroidShowerActiveKey
     };
 
     static NetworkManager instance;
@@ -111,9 +122,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     string leaveRoomBrowserStatus = string.Empty;
     Coroutine sessionBrowserRecoveryRoutine;
     Coroutine leaveRoomRetryRoutine;
+    Coroutine gameplayRejoinRoutine;
     float joiningLobbyStartedAt = -1f;
     bool reconnectingForBrowserRecovery;
     bool preservePendingBrowserActionAfterLeave;
+    bool rejoiningLastRoom;
+    string lastJoinedRoomName;
 
     public static bool SessionRequested { get; private set; }
     public static event Action<IReadOnlyList<SessionRoomEntry>> SessionRoomListChanged;
@@ -316,8 +330,32 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     void Awake()
     {
         instance = this;
+        EnsurePhotonConnectionSettings();
+    }
+
+    void EnsurePhotonConnectionSettings()
+    {
+        Application.runInBackground = true;
         PhotonNetwork.AutomaticallySyncScene = true;
-        PhotonNetwork.KeepAliveInBackground = 120f;
+        PhotonNetwork.KeepAliveInBackground = RoomRejoinGracePeriodMilliseconds / 1000f;
+
+        if (PhotonNetwork.AuthValues == null)
+            PhotonNetwork.AuthValues = new AuthenticationValues();
+
+        if (string.IsNullOrWhiteSpace(PhotonNetwork.AuthValues.UserId))
+            PhotonNetwork.AuthValues.UserId = GetOrCreatePhotonUserId();
+    }
+
+    string GetOrCreatePhotonUserId()
+    {
+        string storedUserId = PlayerPrefs.GetString(PhotonUserIdPrefsKey, string.Empty);
+        if (!string.IsNullOrWhiteSpace(storedUserId))
+            return storedUserId;
+
+        string generatedUserId = Guid.NewGuid().ToString("N");
+        PlayerPrefs.SetString(PhotonUserIdPrefsKey, generatedUserId);
+        PlayerPrefs.Save();
+        return generatedUserId;
     }
 
     void Start()
@@ -338,6 +376,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     void BeginSessionBrowserFlow()
     {
+        EnsurePhotonConnectionSettings();
         EnsureSessionBrowserRecoveryRoutine();
 
         if (PhotonNetwork.InRoom)
@@ -381,7 +420,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public override void OnConnectedToMaster()
     {
-        PhotonNetwork.AutomaticallySyncScene = true;
+        EnsurePhotonConnectionSettings();
         PlayerProfileService.Instance.ApplyProfileToPhoton();
 
         if (SessionRequested)
@@ -454,12 +493,22 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         joiningLobbyStartedAt = -1f;
         StopLeaveRoomRetryRoutine();
 
+        if (gameplayRejoinRoutine != null)
+            return;
+
+        if (!SessionRequested && IsTransientDisconnect(cause) && CanAttemptLastRoomRejoin())
+        {
+            StartGameplayRejoin(cause);
+            return;
+        }
+
         if (SessionRequested && !PhotonNetwork.InRoom && IsTransientDisconnect(cause))
         {
             pendingBrowserAction = PendingBrowserAction.None;
             pendingRoomName = null;
             reconnectingForBrowserRecovery = true;
             PublishBrowserStatus("Reconnecting to multiplayer services...");
+            EnsurePhotonConnectionSettings();
             PhotonNetwork.ConnectUsingSettings();
             EnsureSessionBrowserRecoveryRoutine();
             return;
@@ -469,6 +518,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         {
             reconnectingForBrowserRecovery = false;
             PublishBrowserStatus("Reconnecting to active rounds...");
+            EnsurePhotonConnectionSettings();
             PhotonNetwork.ConnectUsingSettings();
             EnsureSessionBrowserRecoveryRoutine();
             return;
@@ -502,6 +552,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         reconnectingForBrowserRecovery = true;
         PublishBrowserStatus("Reconnecting to multiplayer services...");
+        EnsurePhotonConnectionSettings();
         PhotonNetwork.ConnectUsingSettings();
         EnsureSessionBrowserRecoveryRoutine();
     }
@@ -523,8 +574,77 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         }
     }
 
+    bool CanAttemptLastRoomRejoin()
+    {
+        return !string.IsNullOrWhiteSpace(lastJoinedRoomName) && !returnToBrowserAfterLeave;
+    }
+
+    void StartGameplayRejoin(DisconnectCause cause)
+    {
+        rejoiningLastRoom = true;
+        gameplayRejoinRoutine = StartCoroutine(GameplayRejoinLoop(cause, lastJoinedRoomName));
+    }
+
+    void StopGameplayRejoinRoutine()
+    {
+        if (gameplayRejoinRoutine != null)
+        {
+            StopCoroutine(gameplayRejoinRoutine);
+            gameplayRejoinRoutine = null;
+        }
+
+        rejoiningLastRoom = false;
+    }
+
+    System.Collections.IEnumerator GameplayRejoinLoop(DisconnectCause cause, string roomName)
+    {
+        Debug.LogWarning("Photon transient disconnect while in room '" + roomName + "': " + cause + ". Trying to reconnect and rejoin.");
+
+        WaitForSecondsRealtime retryWait = new WaitForSecondsRealtime(GameplayRejoinRetryDelaySeconds);
+        for (int attempt = 1; attempt <= GameplayRejoinMaxAttempts && !PhotonNetwork.InRoom; attempt++)
+        {
+            EnsurePhotonConnectionSettings();
+            PublishBrowserStatus("Reconnecting to round...");
+
+            bool started = PhotonNetwork.ReconnectAndRejoin();
+            if (!started)
+            {
+                Debug.LogWarning("ReconnectAndRejoin did not start on attempt " + attempt + " for room '" + roomName + "'.");
+                yield return retryWait;
+                continue;
+            }
+
+            float deadline = Time.unscaledTime + GameplayRejoinAttemptTimeoutSeconds;
+            while (!PhotonNetwork.InRoom && Time.unscaledTime < deadline)
+                yield return null;
+
+            if (PhotonNetwork.InRoom)
+            {
+                gameplayRejoinRoutine = null;
+                rejoiningLastRoom = false;
+                PublishBrowserStatus(string.Empty);
+                yield break;
+            }
+
+            yield return retryWait;
+        }
+
+        Debug.LogWarning("Failed to reconnect and rejoin room '" + roomName + "'. Returning to active rounds browser.");
+        gameplayRejoinRoutine = null;
+        rejoiningLastRoom = false;
+        lastJoinedRoomName = null;
+        pendingBrowserAction = PendingBrowserAction.None;
+        pendingRoomName = null;
+        SessionRequested = true;
+        SessionBrowserPanelUI.ShowBrowser();
+        PublishBrowserStatus("Connection lost. Returning to active rounds...");
+        BeginSessionBrowserFlow();
+    }
+
     public override void OnJoinedRoom()
     {
+        lastJoinedRoomName = PhotonNetwork.CurrentRoom != null ? PhotonNetwork.CurrentRoom.Name : null;
+        StopGameplayRejoinRoutine();
         SessionRequested = false;
         pendingBrowserAction = PendingBrowserAction.None;
         pendingRoomName = null;
@@ -559,6 +679,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public override void OnLeftRoom()
     {
+        if (!rejoiningLastRoom)
+            lastJoinedRoomName = null;
+
         roomListCache.Clear();
         PublishRoomListChanged();
 
@@ -625,6 +748,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RandomLootWreckSpawner.EnsureExists();
         SpaceFactorySpawner.EnsureExists();
         FogOfWarOverlay.EnsureExists();
+        AsteroidShowerController.EnsureExists();
         if (started)
         {
             SpawnPlayerIfNeeded();
@@ -679,6 +803,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             IsVisible = true,
             IsOpen = true,
             CleanupCacheOnLeave = false,
+            PlayerTtl = RoomRejoinGracePeriodMilliseconds,
+            EmptyRoomTtl = RoomRejoinGracePeriodMilliseconds,
+            PublishUserId = true,
             CustomRoomProperties = roomProps,
             CustomRoomPropertiesForLobby = LobbyVisibleRoomKeys
         };
@@ -782,11 +909,19 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.FogOfWarModeKey] = RoomSettings.DefaultMapEffectMode,
             [RoomSettings.FogOfWarStartUtcMsKey] = -1d,
             [RoomSettings.FogOfWarActiveKey] = false,
+            [RoomSettings.PirateBaseModeKey] = RoomSettings.DefaultMapEffectMode,
+            [RoomSettings.PirateBaseStartUtcMsKey] = -1d,
+            [RoomSettings.PirateBaseActiveKey] = false,
+            [RoomSettings.AsteroidShowerModeKey] = RoomSettings.DefaultMapEffectMode,
+            [RoomSettings.AsteroidShowerStartUtcMsKey] = -1d,
+            [RoomSettings.AsteroidShowerActiveKey] = false,
             [RoomSettings.SpaceJunkDensityKey] = RoomSettings.DefaultSpaceJunkDensity,
             [RoomSettings.ContainersDensityKey] = RoomSettings.DefaultContainersDensity,
             [RoomSettings.NebulaSizeKey] = RoomSettings.DefaultNebulaSize,
             [RoomSettings.FireNebulaDensityKey] = RoomSettings.DefaultFireNebulaDensity,
             [RoomSettings.FireNebulaSizeKey] = RoomSettings.DefaultFireNebulaSize,
+            [RoomSettings.CloudsDensityKey] = RoomSettings.DefaultCloudsDensity,
+            [RoomSettings.CloudsSizeKey] = RoomSettings.DefaultCloudsSize,
             [RoomSettings.RandomLootWreckCountKey] = RoomSettings.DefaultRandomLootWreckCount,
             [RoomSettings.SpaceFactoryCountKey] = RoomSettings.DefaultSpaceFactoryCount,
             [RoomSettings.StartTimeKey] = -1d,
@@ -803,6 +938,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.SuperAttackEnabledKey] = RoomSettings.DefaultSuperAttackEnabled,
             [RoomSettings.InventoryLossEnabledKey] = RoomSettings.DefaultInventoryLossEnabled,
             [RoomSettings.EquipmentLossEnabledKey] = RoomSettings.DefaultEquipmentLossEnabled,
+            [RoomSettings.AdvancedBackgroundEnabledKey] = RoomSettings.DefaultAdvancedBackgroundEnabled,
+            [RoomSettings.ParallaxBackgroundKey] = RoomSettings.DefaultParallaxBackground,
+            [RoomSettings.BackgroundObjectKey] = RoomSettings.DefaultBackgroundObject,
             [RoomSettings.HapticsEnabledKey] = RoomSettings.DefaultHapticsEnabled,
             [RoomSettings.FpsCounterEnabledKey] = RoomSettings.DefaultFpsCounterEnabled
         };
@@ -844,6 +982,29 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
             if (TryGetRememberedLobbySettingValue(entry, out object value))
             {
+                if (entry.key == RoomSettings.ParallaxBackgroundKey)
+                {
+                    if (value is not string rememberedBackgroundId)
+                        continue;
+
+                    string normalizedBackgroundId = RoomSettings.NormalizeParallaxBackgroundId(rememberedBackgroundId);
+                    if (!string.Equals(normalizedBackgroundId, rememberedBackgroundId, StringComparison.Ordinal))
+                        continue;
+
+                    value = normalizedBackgroundId;
+                }
+                else if (entry.key == RoomSettings.BackgroundObjectKey)
+                {
+                    if (value is not string rememberedObjectId)
+                        continue;
+
+                    string normalizedObjectId = RoomSettings.NormalizeBackgroundObjectId(rememberedObjectId);
+                    if (!string.Equals(normalizedObjectId, rememberedObjectId, StringComparison.Ordinal))
+                        continue;
+
+                    value = normalizedObjectId;
+                }
+
                 props[entry.key] = value;
                 appliedKeys.Add(entry.key);
             }
@@ -872,6 +1033,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (!rememberedKeys.Contains(RoomSettings.SpaceFactoryCountKey))
             props[RoomSettings.SpaceFactoryCountKey] = map.SpaceFactoryCount;
 
+        if (!rememberedKeys.Contains(RoomSettings.NebulaDensityKey))
+            props[RoomSettings.NebulaDensityKey] = map.NebulaDensity;
+
         if (!rememberedKeys.Contains(RoomSettings.FireNebulaDensityKey))
             props[RoomSettings.FireNebulaDensityKey] = map.FireNebulaDensity;
 
@@ -880,6 +1044,26 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         if (!rememberedKeys.Contains(RoomSettings.FireNebulaSizeKey))
             props[RoomSettings.FireNebulaSizeKey] = map.FireNebulaSize;
+
+        if (!rememberedKeys.Contains(RoomSettings.CloudsDensityKey))
+            props[RoomSettings.CloudsDensityKey] = map.CloudsDensity;
+
+        if (!rememberedKeys.Contains(RoomSettings.CloudsSizeKey))
+            props[RoomSettings.CloudsSizeKey] = map.CloudsSize;
+
+        if (!rememberedKeys.Contains(RoomSettings.AdvancedBackgroundEnabledKey))
+            props[RoomSettings.AdvancedBackgroundEnabledKey] = RoomSettings.DefaultAdvancedBackgroundEnabled;
+
+        if (!rememberedKeys.Contains(RoomSettings.ParallaxBackgroundKey))
+            props[RoomSettings.ParallaxBackgroundKey] = LobbyMapCatalog.GetDefaultParallaxBackgroundId(map.Id);
+
+        if (!rememberedKeys.Contains(RoomSettings.BackgroundObjectKey))
+            props[RoomSettings.BackgroundObjectKey] = LobbyMapCatalog.GetDefaultBackgroundObjectId(map.Id);
+
+        if (!rememberedKeys.Contains(RoomSettings.GravityWellPhysicsEnabledKey))
+            props[RoomSettings.GravityWellPhysicsEnabledKey] = map.Id == LobbyMapCatalog.GravityWellMapId;
+
+        LobbyMapCatalog.ApplyEnemyPresetsToProperties(map, props, rememberedKeys);
     }
 
     static bool TryCreateRememberedLobbySettingEntry(string key, object value, out RememberedLobbySettingEntry entry)
@@ -957,6 +1141,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.MapSizeKey:
             case RoomSettings.MapBackgroundKey:
             case RoomSettings.VisualEffectsEnabledKey:
+            case RoomSettings.AdvancedBackgroundEnabledKey:
+            case RoomSettings.ParallaxBackgroundKey:
+            case RoomSettings.BackgroundObjectKey:
             case RoomSettings.StartingVfxEnabledKey:
             case RoomSettings.EndDisasterModeKey:
             case RoomSettings.EndDisasterWarningSecondsKey:
@@ -971,11 +1158,17 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.CrazyEnemiesStartUtcMsKey:
             case RoomSettings.FogOfWarModeKey:
             case RoomSettings.FogOfWarStartUtcMsKey:
+            case RoomSettings.PirateBaseModeKey:
+            case RoomSettings.PirateBaseStartUtcMsKey:
+            case RoomSettings.AsteroidShowerModeKey:
+            case RoomSettings.AsteroidShowerStartUtcMsKey:
             case RoomSettings.SpaceJunkDensityKey:
             case RoomSettings.ContainersDensityKey:
             case RoomSettings.FireNebulaDensityKey:
             case RoomSettings.NebulaSizeKey:
             case RoomSettings.FireNebulaSizeKey:
+            case RoomSettings.CloudsDensityKey:
+            case RoomSettings.CloudsSizeKey:
             case RoomSettings.RandomLootWreckCountKey:
             case RoomSettings.NebulaDensityKey:
             case RoomSettings.ExtractionCountKey:
@@ -1087,6 +1280,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         List<string> labels = new List<string>();
         AddActiveEffectLabel(labels, info, state, "CRAZY ENEMIES", RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, RoomSettings.CrazyEnemiesActiveKey);
         AddActiveEffectLabel(labels, info, state, "FOG OF WAR", RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, RoomSettings.FogOfWarActiveKey);
+        AddActiveEffectLabel(labels, info, state, "PIRATE BASE", RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, RoomSettings.PirateBaseActiveKey);
+        AddActiveEffectLabel(labels, info, state, "ASTEROID SHOWER", RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, RoomSettings.AsteroidShowerActiveKey);
         return labels.Count > 0 ? string.Join(", ", labels) : string.Empty;
     }
 
@@ -1505,6 +1700,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RandomLootWreckSpawner.EnsureExists();
         SpaceFactorySpawner.EnsureExists();
         FogOfWarOverlay.EnsureExists();
+        AsteroidShowerController.EnsureExists();
 
         if (PhotonNetwork.LocalPlayer != null && string.IsNullOrWhiteSpace(PhotonNetwork.NickName))
         {
@@ -1977,6 +2173,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             if (!PhotonNetwork.IsConnected)
             {
                 PublishBrowserStatus("Connecting...");
+                EnsurePhotonConnectionSettings();
                 PhotonNetwork.ConnectUsingSettings();
                 joiningLobbyStartedAt = -1f;
                 yield return wait;
@@ -2063,6 +2260,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     void CleanupLocalRoundScene()
     {
+        GameplayHudVisibility.ResetSuppression();
         PlayerMovement.gameStarted = false;
         PlayerShooting.gameStarted = false;
         EarlyRoundExitUI.HideAll();

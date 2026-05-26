@@ -1,0 +1,559 @@
+fileFormatVersion: 2
+guid: b0aabdce6fe2cd145b817e9038fb941b
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -3923215490345207211
+    second: chat_command_v7_15_watch_this_0
+  - first:
+      213: 1849064137316089924
+    second: chat_command_v7_15_watch_this_1
+  - first:
+      213: -4186109906712207925
+    second: chat_command_v7_15_watch_this_2
+  - first:
+      213: 6579858504114262369
+    second: chat_command_v7_15_watch_this_3
+  - first:
+      213: -3187767041508786930
+    second: chat_command_v7_15_watch_this_4
+  - first:
+      213: -7750179756747259594
+    second: chat_command_v7_15_watch_this_5
+  - first:
+      213: 886638985888440206
+    second: chat_command_v7_15_watch_this_6
+  - first:
+      213: -9077307880613519826
+    second: chat_command_v7_15_watch_this_7
+  - first:
+      213: 3622816929078328915
+    second: chat_command_v7_15_watch_this_8
+  - first:
+      213: -5297371794436924605
+    second: chat_command_v7_15_watch_this_9
+  - first:
+      213: -2198219425682433667
+    second: chat_command_v7_15_watch_this_10
+  - first:
+      213: -5674743770736149796
+    second: chat_command_v7_15_watch_this_11
+  - first:
+      213: -9046329190908920608
+    second: chat_command_v7_15_watch_this_12
+  - first:
+      213: 7563212829793722088
+    second: chat_command_v7_15_watch_this_13
+  - first:
+      213: 2090660487913332446
+    second: chat_command_v7_15_watch_this_14
+  - first:
+      213: -5820728832962737339
+    second: chat_command_v7_15_watch_this_15
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_0
+      rect:
+        serializedVersion: 2
+        x: 2
+        y: 89
+        width: 21
+        height: 21
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 55af9a03c40fd89c0800000000000000
+      internalID: -3923215490345207211
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_1
+      rect:
+        serializedVersion: 2
+        x: 23
+        y: 80
+        width: 12
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 440c3af390239a910800000000000000
+      internalID: 1849064137316089924
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_2
+      rect:
+        serializedVersion: 2
+        x: 37
+        y: 84
+        width: 8
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bcddca30833f7e5c0800000000000000
+      internalID: -4186109906712207925
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_3
+      rect:
+        serializedVersion: 2
+        x: 47
+        y: 86
+        width: 8
+        height: 24
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 161501aa27a505b50800000000000000
+      internalID: 6579858504114262369
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_4
+      rect:
+        serializedVersion: 2
+        x: 58
+        y: 84
+        width: 8
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e0dbb28e3c6c2c3d0800000000000000
+      internalID: -3187767041508786930
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_5
+      rect:
+        serializedVersion: 2
+        x: 68
+        y: 80
+        width: 12
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 63108adc294d17490800000000000000
+      internalID: -7750179756747259594
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_6
+      rect:
+        serializedVersion: 2
+        x: 82
+        y: 85
+        width: 20
+        height: 22
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e8f94e5c579fd4c00800000000000000
+      internalID: 886638985888440206
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_7
+      rect:
+        serializedVersion: 2
+        x: 4
+        y: 58
+        width: 11
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e2e5d23839ce60280800000000000000
+      internalID: -9077307880613519826
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_8
+      rect:
+        serializedVersion: 2
+        x: 14
+        y: 40
+        width: 88
+        height: 44
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 35e3cff6dc4d64230800000000000000
+      internalID: 3622816929078328915
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_9
+      rect:
+        serializedVersion: 2
+        x: 2
+        y: 19
+        width: 21
+        height: 22
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 34bd96d6b64fb76b0800000000000000
+      internalID: -5297371794436924605
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_10
+      rect:
+        serializedVersion: 2
+        x: 23
+        y: 32
+        width: 12
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d79d5d9341b5e71e0800000000000000
+      internalID: -2198219425682433667
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_11
+      rect:
+        serializedVersion: 2
+        x: 37
+        y: 31
+        width: 8
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: cda39e94b924f31b0800000000000000
+      internalID: -5674743770736149796
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_12
+      rect:
+        serializedVersion: 2
+        x: 47
+        y: 18
+        width: 8
+        height: 20
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0ec70a6c78bf47280800000000000000
+      internalID: -9046329190908920608
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_13
+      rect:
+        serializedVersion: 2
+        x: 58
+        y: 31
+        width: 8
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8ee18804ffde5f860800000000000000
+      internalID: 7563212829793722088
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_14
+      rect:
+        serializedVersion: 2
+        x: 68
+        y: 32
+        width: 11
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: eded40013a4830d10800000000000000
+      internalID: 2090660487913332446
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: chat_command_v7_15_watch_this_15
+      rect:
+        serializedVersion: 2
+        x: 82
+        y: 19
+        width: 20
+        height: 22
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 54bc16947fd983fa0800000000000000
+      internalID: -5820728832962737339
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      chat_command_v7_15_watch_this_0: -3923215490345207211
+      chat_command_v7_15_watch_this_1: 1849064137316089924
+      chat_command_v7_15_watch_this_10: -2198219425682433667
+      chat_command_v7_15_watch_this_11: -5674743770736149796
+      chat_command_v7_15_watch_this_12: -9046329190908920608
+      chat_command_v7_15_watch_this_13: 7563212829793722088
+      chat_command_v7_15_watch_this_14: 2090660487913332446
+      chat_command_v7_15_watch_this_15: -5820728832962737339
+      chat_command_v7_15_watch_this_2: -4186109906712207925
+      chat_command_v7_15_watch_this_3: 6579858504114262369
+      chat_command_v7_15_watch_this_4: -3187767041508786930
+      chat_command_v7_15_watch_this_5: -7750179756747259594
+      chat_command_v7_15_watch_this_6: 886638985888440206
+      chat_command_v7_15_watch_this_7: -9077307880613519826
+      chat_command_v7_15_watch_this_8: 3622816929078328915
+      chat_command_v7_15_watch_this_9: -5297371794436924605
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

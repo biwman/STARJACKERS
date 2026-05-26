@@ -12,12 +12,17 @@ public class ExtractionZone : MonoBehaviourPun
     public float evacuationAnimationDuration = 4f;
     const float RequestedPlayerEvacuationGraceDistance = 1.65f;
     const float CharlieSmartExtractionBonusWindow = 30f;
+    const float EvacuationEndScreenDelayBuffer = 0.35f;
 
     bool isActive;
     bool isBeingUsed;
     bool isTransitioning;
     bool isEvacuating;
     bool messageShowing;
+
+    public bool IsActive => isActive;
+    public bool IsTransitioning => isTransitioning;
+    public bool IsEvacuating => isEvacuating;
 
     SpriteRenderer sr;
     Coroutine blinkRoutine;
@@ -55,13 +60,20 @@ public class ExtractionZone : MonoBehaviourPun
             sr.color = color;
     }
 
-    public void TryUse(PhotonView playerView)
+    public bool TryUse(PhotonView playerView)
     {
         if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient)
-            return;
+            return false;
 
-        if (!isBeingUsed)
-            StartCoroutine(UseRoutine(playerView));
+        if (playerView == null || isBeingUsed)
+            return false;
+
+        PlayerHealth playerHealth = playerView.GetComponent<PlayerHealth>();
+        if (!GameTimer.IsActiveRoundPlayer(playerHealth) || !IsPlayerCloseEnoughForRequestedEvacuation(playerHealth))
+            return false;
+
+        StartCoroutine(UseRoutine(playerView));
+        return true;
     }
 
     IEnumerator UseRoutine(PhotonView playerView)
@@ -173,16 +185,21 @@ public class ExtractionZone : MonoBehaviourPun
             TryEvacuatePlayer(playerHealth, processedPlayers);
         }
 
-        photonView.RPC(nameof(ResetZone), RpcTarget.All);
-
         if (processedPlayers.Count <= 0)
+        {
+            isEvacuating = false;
+            if (requestedPlayerView == null)
+                photonView.RPC(nameof(ResetZone), RpcTarget.All);
             return;
+        }
+
+        photonView.RPC(nameof(BeginEvacuationState), RpcTarget.All);
 
         bool anyPlayerRemaining = false;
         for (int i = 0; i < playersBeforeEvacuation.Length; i++)
         {
             PlayerHealth player = playersBeforeEvacuation[i];
-            if (player == null || player.IsWreck || player.photonView == null || player.IsBotControlled || player.IsEvacuationAnimating)
+            if (!GameTimer.IsActiveRoundPlayer(player))
                 continue;
 
             if (!processedPlayers.Contains(player.photonView.ViewID))
@@ -192,24 +209,41 @@ public class ExtractionZone : MonoBehaviourPun
             }
         }
 
+        float endGameDelay = GetEvacuationEndGameDelay();
+
         if (anyPlayerRemaining)
+        {
+            StartCoroutine(ResetZoneAfterEvacuationAnimation(endGameDelay));
             return;
+        }
 
         GameTimer timer = FindAnyObjectByType<GameTimer>();
         if (timer != null)
-            GameTimer.SetExtractionPause(timer.GetCurrentRemainingTime(), evacuationAnimationDuration);
+            GameTimer.SetExtractionPause(timer.GetCurrentRemainingTime(), endGameDelay);
 
         GameManager manager = FindAnyObjectByType<GameManager>();
         if (manager != null)
-            StartCoroutine(EndGameAfterEvacuationAnimation(manager));
+            StartCoroutine(EndGameAfterEvacuationAnimation(manager, endGameDelay));
     }
 
-    IEnumerator EndGameAfterEvacuationAnimation(GameManager manager)
+    IEnumerator EndGameAfterEvacuationAnimation(GameManager manager, float delaySeconds)
     {
-        yield return new WaitForSeconds(evacuationAnimationDuration);
+        yield return new WaitForSeconds(Mathf.Max(0f, delaySeconds));
 
         if (manager != null)
             manager.EndGame("evacuation");
+    }
+
+    IEnumerator ResetZoneAfterEvacuationAnimation(float delaySeconds)
+    {
+        yield return new WaitForSeconds(Mathf.Max(0f, delaySeconds));
+        photonView.RPC(nameof(ResetZone), RpcTarget.All);
+    }
+
+    float GetEvacuationEndGameDelay()
+    {
+        float animationDuration = Mathf.Max(evacuationAnimationDuration, PlayerHealth.EvacuationAnimationDurationSeconds);
+        return animationDuration + EvacuationEndScreenDelayBuffer;
     }
 
     void TryEvacuateRequestedPlayer(PhotonView requestedPlayerView, HashSet<int> processedPlayers)
@@ -226,7 +260,7 @@ public class ExtractionZone : MonoBehaviourPun
 
     bool TryEvacuatePlayer(PlayerHealth playerHealth, HashSet<int> processedPlayers)
     {
-        if (playerHealth == null || playerHealth.IsWreck || playerHealth.IsBotControlled || playerHealth.IsEvacuationAnimating)
+        if (!GameTimer.IsActiveRoundPlayer(playerHealth))
             return false;
 
         PhotonView playerView = playerHealth.photonView;
@@ -307,6 +341,12 @@ public class ExtractionZone : MonoBehaviourPun
         Collider2D[] hits = new Collider2D[count];
         System.Array.Copy(buffer, hits, count);
         return hits;
+    }
+
+    [PunRPC]
+    void BeginEvacuationState()
+    {
+        isEvacuating = true;
     }
 
     [PunRPC]

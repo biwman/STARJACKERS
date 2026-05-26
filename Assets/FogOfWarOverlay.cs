@@ -16,8 +16,15 @@ public class FogOfWarOverlay : MonoBehaviour
     const float MinViewLength = 9f;
     const float ViewLengthMultiplier = 0.82f;
     const float FeatherWidth = 1.2f;
-    const int FogGridColumns = 136;
-    const int FogGridRows = 84;
+    const int FogGridColumns = 76;
+    const int FogGridRows = 48;
+    const float FogMeshRefreshInterval = 1f / 15f;
+    const float SceneLookupRefreshInterval = 0.35f;
+    const float HudCanvasRefreshInterval = 1f;
+    const float FogTargetMoveThresholdSqr = 0.0025f;
+    const float FogCameraMoveThresholdSqr = 0.0025f;
+    const float FogRotationThresholdDegrees = 0.3f;
+    const float FogOrthoSizeThreshold = 0.02f;
     static readonly Color32 SolidFogColor = new Color(0.045f, 0.052f, 0.07f, 0.97f);
     static readonly Color32 DeepFogColor = new Color(0.018f, 0.022f, 0.034f, 0.992f);
     static readonly Color32 ClearFogColor = new Color(0.18f, 0.24f, 0.32f, 0.005f);
@@ -27,6 +34,21 @@ public class FogOfWarOverlay : MonoBehaviour
 
     Canvas fogCanvas;
     FogOfWarGraphic fogGraphic;
+    Camera cachedCamera;
+    Transform cachedTarget;
+    float nextCameraLookupTime;
+    float nextTargetLookupTime;
+    float nextFogMeshRefreshTime;
+    float nextHudCanvasRefreshTime;
+    bool lastFogActive;
+    Camera lastFogCamera;
+    Transform lastFogTarget;
+    Vector3 lastFogCameraPosition;
+    Vector3 lastFogTargetPosition;
+    float lastFogCameraOrthographicSize;
+    float lastFogTargetRotationZ;
+    int lastFogScreenWidth;
+    int lastFogScreenHeight;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -69,9 +91,10 @@ public class FogOfWarOverlay : MonoBehaviour
 
     void Update()
     {
-        EnsureCanvas();
+        if (fogCanvas == null || fogGraphic == null)
+            EnsureCanvas();
 
-        Camera camera = Camera.main != null ? Camera.main : FindAnyObjectByType<Camera>();
+        Camera camera = ResolveCamera();
         bool active = IsFogActive() && camera != null;
         Transform target = active ? ResolveLocalPlayerTransform() : null;
 
@@ -82,10 +105,99 @@ public class FogOfWarOverlay : MonoBehaviour
         }
 
         if (fogGraphic != null)
-            fogGraphic.SetContext(active ? camera : null, active ? target : null, active);
+        {
+            bool forceRefresh = ShouldRefreshFogGraphic(active, camera, target);
+            fogGraphic.SetContext(active ? camera : null, active ? target : null, active, forceRefresh);
+        }
 
-        if (active)
+        if (active && Time.unscaledTime >= nextHudCanvasRefreshTime)
+        {
+            nextHudCanvasRefreshTime = Time.unscaledTime + HudCanvasRefreshInterval;
             KeepHudCanvasesAboveFog();
+        }
+    }
+
+    Camera ResolveCamera()
+    {
+        if (cachedCamera != null && cachedCamera.isActiveAndEnabled)
+            return cachedCamera;
+
+        cachedCamera = null;
+        if (Time.unscaledTime < nextCameraLookupTime)
+            return null;
+
+        nextCameraLookupTime = Time.unscaledTime + SceneLookupRefreshInterval;
+        cachedCamera = Camera.main != null ? Camera.main : FindAnyObjectByType<Camera>();
+        return cachedCamera;
+    }
+
+    bool ShouldRefreshFogGraphic(bool active, Camera camera, Transform target)
+    {
+        if (!active)
+        {
+            bool changed = lastFogActive;
+            lastFogActive = false;
+            lastFogCamera = null;
+            lastFogTarget = null;
+            return changed;
+        }
+
+        bool contextChanged = !lastFogActive || camera != lastFogCamera || target != lastFogTarget;
+        if (contextChanged)
+        {
+            lastFogActive = true;
+            nextFogMeshRefreshTime = Time.unscaledTime + FogMeshRefreshInterval;
+            CaptureFogViewState(camera, target);
+            return true;
+        }
+
+        if (Time.unscaledTime < nextFogMeshRefreshTime || !HasFogViewChanged(camera, target))
+            return false;
+
+        nextFogMeshRefreshTime = Time.unscaledTime + FogMeshRefreshInterval;
+        CaptureFogViewState(camera, target);
+        return true;
+    }
+
+    bool HasFogViewChanged(Camera camera, Transform target)
+    {
+        if (camera != lastFogCamera || target != lastFogTarget)
+            return true;
+
+        if (Screen.width != lastFogScreenWidth || Screen.height != lastFogScreenHeight)
+            return true;
+
+        if (camera != null)
+        {
+            if ((camera.transform.position - lastFogCameraPosition).sqrMagnitude > FogCameraMoveThresholdSqr)
+                return true;
+
+            if (Mathf.Abs(camera.orthographicSize - lastFogCameraOrthographicSize) > FogOrthoSizeThreshold)
+                return true;
+        }
+
+        if (target != null)
+        {
+            if ((target.position - lastFogTargetPosition).sqrMagnitude > FogTargetMoveThresholdSqr)
+                return true;
+
+            if (Mathf.Abs(Mathf.DeltaAngle(target.eulerAngles.z, lastFogTargetRotationZ)) > FogRotationThresholdDegrees)
+                return true;
+        }
+
+        return false;
+    }
+
+    void CaptureFogViewState(Camera camera, Transform target)
+    {
+        lastFogCamera = camera;
+        lastFogTarget = target;
+        lastFogCameraPosition = camera != null ? camera.transform.position : Vector3.zero;
+        lastFogCameraOrthographicSize = camera != null ? camera.orthographicSize : 0f;
+        lastFogTargetPosition = target != null ? target.position : Vector3.zero;
+        lastFogTargetRotationZ = target != null ? target.eulerAngles.z : 0f;
+        lastFogScreenWidth = Screen.width;
+        lastFogScreenHeight = Screen.height;
     }
 
     void OnDestroy()
@@ -194,14 +306,25 @@ public class FogOfWarOverlay : MonoBehaviour
 
     Transform ResolveLocalPlayerTransform()
     {
+        if (IsValidLocalTarget(cachedTarget))
+            return cachedTarget;
+
+        cachedTarget = null;
+        if (Time.unscaledTime < nextTargetLookupTime)
+            return null;
+
+        nextTargetLookupTime = Time.unscaledTime + SceneLookupRefreshInterval;
+
         if (PhotonNetwork.LocalPlayer != null &&
             PhotonNetwork.LocalPlayer.TagObject is GameObject taggedObject &&
             taggedObject != null &&
             taggedObject.scene.IsValid())
         {
-            PlayerHealth taggedHealth = taggedObject.GetComponent<PlayerHealth>();
-            if (taggedHealth == null || (!taggedHealth.IsWreck && !taggedHealth.IsBotControlled))
-                return taggedObject.transform;
+            cachedTarget = taggedObject.transform;
+            if (IsValidLocalTarget(cachedTarget))
+                return cachedTarget;
+
+            cachedTarget = null;
         }
 
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
@@ -216,25 +339,53 @@ public class FogOfWarOverlay : MonoBehaviour
             {
                 if (PhotonNetwork.LocalPlayer != null)
                     PhotonNetwork.LocalPlayer.TagObject = player.gameObject;
-                return player.transform;
+
+                cachedTarget = player.transform;
+                return cachedTarget;
             }
         }
 
         return null;
     }
 
+    bool IsValidLocalTarget(Transform candidate)
+    {
+        if (candidate == null || !candidate.gameObject.scene.IsValid())
+            return false;
+
+        PlayerHealth health = candidate.GetComponent<PlayerHealth>();
+        if (health == null)
+            return true;
+
+        return !health.IsWreck &&
+               !health.IsBotControlled &&
+               health.photonView != null &&
+               health.photonView.IsMine;
+    }
+
     sealed class FogOfWarGraphic : MaskableGraphic
     {
         Camera targetCamera;
         Transform target;
+        Transform rendererTarget;
+        SpriteRenderer cachedTargetRenderer;
         bool fogActive;
 
-        public void SetContext(Camera camera, Transform playerTarget, bool active)
+        public void SetContext(Camera camera, Transform playerTarget, bool active, bool forceRefresh)
         {
+            bool contextChanged = targetCamera != camera || target != playerTarget || fogActive != active;
+            if (target != playerTarget)
+            {
+                rendererTarget = null;
+                cachedTargetRenderer = null;
+            }
+
             targetCamera = camera;
             target = playerTarget;
             fogActive = active;
-            SetVerticesDirty();
+
+            if (contextChanged || forceRefresh)
+                SetVerticesDirty();
         }
 
         protected override void OnPopulateMesh(VertexHelper vh)
@@ -272,8 +423,7 @@ public class FogOfWarOverlay : MonoBehaviour
 
             Vector2 right = new Vector2(forward.y, -forward.x);
             Vector2 center = target.position;
-            Vector2[] cameraCorners = GetCameraWorldCorners(targetCamera, target.position.z);
-            float diagonal = Vector2.Distance(cameraCorners[0], cameraCorners[2]);
+            float diagonal = GetCameraWorldDiagonal(targetCamera, target.position.z);
             float revealLength = Mathf.Max(MinViewLength, diagonal * ViewLengthMultiplier);
             float shipRevealRadius = GetShipRevealRadius();
             float coneStart = shipRevealRadius * ConeStartRadiusFactor;
@@ -348,28 +498,28 @@ public class FogOfWarOverlay : MonoBehaviour
             if (target == null)
                 return MinShipRevealRadius;
 
-            SpriteRenderer renderer = target.GetComponent<SpriteRenderer>();
-            if (renderer == null)
-                renderer = target.GetComponentInChildren<SpriteRenderer>();
+            if (rendererTarget != target)
+            {
+                rendererTarget = target;
+                cachedTargetRenderer = target.GetComponent<SpriteRenderer>();
+                if (cachedTargetRenderer == null)
+                    cachedTargetRenderer = target.GetComponentInChildren<SpriteRenderer>();
+            }
 
-            if (renderer == null)
+            if (cachedTargetRenderer == null)
                 return MinShipRevealRadius;
 
-            Vector3 extents = renderer.bounds.extents;
+            Vector3 extents = cachedTargetRenderer.bounds.extents;
             float boundsRadius = Mathf.Sqrt((extents.x * extents.x) + (extents.y * extents.y));
             return Mathf.Max(MinShipRevealRadius, boundsRadius + ShipRevealPadding);
         }
 
-        static Vector2[] GetCameraWorldCorners(Camera camera, float targetZ)
+        static float GetCameraWorldDiagonal(Camera camera, float targetZ)
         {
             float depth = Mathf.Abs(camera.transform.position.z - targetZ);
-            return new[]
-            {
-                (Vector2)camera.ViewportToWorldPoint(new Vector3(0f, 0f, depth)),
-                (Vector2)camera.ViewportToWorldPoint(new Vector3(1f, 0f, depth)),
-                (Vector2)camera.ViewportToWorldPoint(new Vector3(1f, 1f, depth)),
-                (Vector2)camera.ViewportToWorldPoint(new Vector3(0f, 1f, depth))
-            };
+            Vector2 bottomLeft = camera.ViewportToWorldPoint(new Vector3(0f, 0f, depth));
+            Vector2 topRight = camera.ViewportToWorldPoint(new Vector3(1f, 1f, depth));
+            return Vector2.Distance(bottomLeft, topRight);
         }
 
         void AddLocalQuad(VertexHelper vh, float xMin, float yMin, float xMax, float yMax, Color32 bottomLeft, Color32 bottomRight, Color32 topRight, Color32 topLeft)

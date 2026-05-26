@@ -59,10 +59,14 @@ public static class WeaponAttackCatalog
     public const string SimpleGunId = "simple_gun";
     public const string PlasmaGunId = InventoryItemCatalog.PlasmaGunId;
     public const string TripleGunId = InventoryItemCatalog.TripleGunId;
+    public const string GatlingGunId = InventoryItemCatalog.GatlingGunId;
     public const string ArtilleryGunId = InventoryItemCatalog.ArtilleryGunId;
+    public const string RocketLauncherId = InventoryItemCatalog.RocketLauncherId;
+    public const string DoubleRocketLauncherId = InventoryItemCatalog.DoubleRocketLauncherId;
     public const string RailGunId = InventoryItemCatalog.RailGunId;
     public const string DoubleIonizerId = InventoryItemCatalog.DoubleIonizerId;
     public const string AstroCutterId = InventoryItemCatalog.AstroCutterId;
+    public const string PulseDisruptorId = InventoryItemCatalog.PulseDisruptorId;
 
     public const string ParameterTypeInt = "int";
     public const string ParameterTypeFloat = "float";
@@ -76,10 +80,14 @@ public static class WeaponAttackCatalog
         SimpleGunId,
         PlasmaGunId,
         TripleGunId,
+        GatlingGunId,
         ArtilleryGunId,
+        RocketLauncherId,
+        DoubleRocketLauncherId,
         RailGunId,
         DoubleIonizerId,
-        AstroCutterId
+        AstroCutterId,
+        PulseDisruptorId
     };
 
     static readonly WeaponAttackParameterDefinition[] EditableParameters =
@@ -107,17 +115,23 @@ public static class WeaponAttackCatalog
 
     static readonly Color PlasmaColor = new Color(0.15f, 1f, 0.28f, 1f);
     static readonly Color TripleColor = new Color(0.98f, 0.92f, 0.76f, 1f);
+    static readonly Color GatlingColor = new Color(1f, 0.78f, 0.34f, 1f);
     static readonly Color ArtilleryColor = new Color(1f, 0.54f, 0.12f, 1f);
+    static readonly Color RocketColor = new Color(1f, 0.78f, 0.36f, 1f);
     static readonly Color RailColor = new Color(1f, 0.22f, 0.04f, 1f);
     static readonly Color IonColor = new Color(0.18f, 0.72f, 1f, 1f);
     static readonly Color AstroCutterColor = new Color(0.86f, 0.62f, 1f, 1f);
+    static readonly Color PulseDisruptorColor = new Color(0.36f, 0.92f, 1f, 1f);
     static readonly Color SimpleMarkerColor = new Color(0.58f, 0.9f, 1f, 1f);
     static readonly Color PlasmaMarkerColor = new Color(0.28f, 1f, 0.52f, 1f);
     static readonly Color TripleMarkerColor = new Color(0.88f, 0.96f, 1f, 1f);
+    static readonly Color GatlingMarkerColor = new Color(1f, 0.72f, 0.28f, 1f);
     static readonly Color ArtilleryMarkerColor = new Color(1f, 0.66f, 0.2f, 1f);
+    static readonly Color RocketMarkerColor = new Color(1f, 0.74f, 0.24f, 1f);
     static readonly Color RailMarkerColor = new Color(1f, 0.42f, 0.12f, 1f);
     static readonly Color IonMarkerColor = new Color(0.2f, 0.86f, 1f, 1f);
     static readonly Color AstroCutterMarkerColor = new Color(1f, 0.84f, 0.28f, 1f);
+    static readonly Color PulseDisruptorMarkerColor = new Color(0.24f, 0.95f, 1f, 1f);
 
     public static IReadOnlyList<string> GetEditableWeaponIds()
     {
@@ -202,6 +216,18 @@ public static class WeaponAttackCatalog
             profile.HpDamage = Mathf.Max(profile.HpDamage, 7);
             profile.ShieldDamage = Mathf.Max(profile.ShieldDamage, 7);
         }
+        else if (string.Equals(profile.Id, GatlingGunId, StringComparison.Ordinal))
+        {
+            profile.Id = GatlingGunId + "_super";
+            profile.DisplayName = "GATLING SUPER";
+            profile.ProjectileCount = 18;
+            profile.ProjectileInterval = 0.075f;
+            profile.ProjectileSpeed = Mathf.Max(profile.ProjectileSpeed, 19f);
+            profile.SpreadAngle = Mathf.Max(profile.SpreadAngle, 5.5f);
+            profile.AttackCooldown = Mathf.Max(profile.AttackCooldown, 1.52f);
+            profile.HpDamage = Mathf.Max(profile.HpDamage, 5);
+            profile.ShieldDamage = Mathf.Max(profile.ShieldDamage, 5);
+        }
         else if (string.Equals(profile.Id, ArtilleryGunId, StringComparison.Ordinal))
         {
             profile.Id = ArtilleryGunId + "_super";
@@ -213,15 +239,52 @@ public static class WeaponAttackCatalog
             profile.HpDamage = Mathf.Max(profile.HpDamage, 24);
             profile.ShieldDamage = Mathf.Max(profile.ShieldDamage, 24);
         }
+        else if (string.Equals(profile.Id, RocketLauncherId, StringComparison.Ordinal))
+        {
+            profile.Id = RocketLauncherId + "_super";
+            profile.DisplayName = "ROCKET SUPER";
+            profile.ProjectileCount = 3;
+            profile.ProjectileInterval = 0.08f;
+            profile.SpreadAngle = Mathf.Max(profile.SpreadAngle, 10f);
+            profile.HpDamage = 55;
+            profile.ShieldDamage = 55;
+            profile.AreaDamageRadius = Mathf.Max(profile.AreaDamageRadius, 1.45f);
+        }
+        else if (string.Equals(profile.Id, DoubleRocketLauncherId, StringComparison.Ordinal))
+        {
+            profile.Id = DoubleRocketLauncherId + "_super";
+            profile.DisplayName = "DOUBLE ROCKET SUPER";
+            profile.ProjectileCount = 4;
+            profile.ProjectileInterval = 0f;
+            profile.SpreadAngle = 0f;
+            profile.HpDamage = 39;
+            profile.ShieldDamage = 39;
+            profile.AreaDamageRadius = Mathf.Max(profile.AreaDamageRadius, 1.16f);
+        }
         else if (string.Equals(profile.Id, AstroCutterId, StringComparison.Ordinal))
         {
             profile.Id = AstroCutterId + "_super";
             profile.DisplayName = "ASTRO CUTTER SUPER";
             profile.RangeMultiplier = Mathf.Max(profile.RangeMultiplier, 6.25f);
             profile.FlightTime = Mathf.Max(profile.FlightTime, 2.6f);
-            profile.HpDamage = Mathf.Max(profile.HpDamage, 5);
-            profile.ShieldDamage = Mathf.Max(profile.ShieldDamage, 5);
+            profile.HpDamage = Mathf.Max(profile.HpDamage, 6);
+            profile.ShieldDamage = Mathf.Max(profile.ShieldDamage, 3);
             profile.AttackCooldown = Mathf.Max(profile.AttackCooldown, 2.4f);
+        }
+        else if (string.Equals(profile.Id, PulseDisruptorId, StringComparison.Ordinal))
+        {
+            profile.Id = PulseDisruptorId + "_super";
+            profile.DisplayName = "PULSE DISRUPTOR SUPER";
+            profile.ProjectileCount = 1;
+            profile.ProjectileInterval = 0f;
+            profile.SpreadAngle = 0f;
+            profile.ProjectileSpeed = 0f;
+            profile.FlightTime = Mathf.Max(profile.FlightTime, 0.78f);
+            profile.ShieldDamage = Mathf.Max(profile.ShieldDamage, 78);
+            profile.HpDamage = 0;
+            profile.AreaDamageRadius = Mathf.Max(profile.AreaDamageRadius, 5.25f);
+            profile.ProjectileSize = Mathf.Max(profile.ProjectileSize, 2.65f);
+            profile.HitEffectId = "pulse_wave";
         }
         else
         {
@@ -255,10 +318,14 @@ public static class WeaponAttackCatalog
         return string.Equals(weaponId, SimpleGunId, StringComparison.Ordinal) ||
                string.Equals(weaponId, PlasmaGunId, StringComparison.Ordinal) ||
                string.Equals(weaponId, TripleGunId, StringComparison.Ordinal) ||
+               string.Equals(weaponId, GatlingGunId, StringComparison.Ordinal) ||
                string.Equals(weaponId, ArtilleryGunId, StringComparison.Ordinal) ||
+               string.Equals(weaponId, RocketLauncherId, StringComparison.Ordinal) ||
+               string.Equals(weaponId, DoubleRocketLauncherId, StringComparison.Ordinal) ||
                string.Equals(weaponId, RailGunId, StringComparison.Ordinal) ||
                string.Equals(weaponId, DoubleIonizerId, StringComparison.Ordinal) ||
-               string.Equals(weaponId, AstroCutterId, StringComparison.Ordinal);
+               string.Equals(weaponId, AstroCutterId, StringComparison.Ordinal) ||
+               string.Equals(weaponId, PulseDisruptorId, StringComparison.Ordinal);
     }
 
     public static string SerializeProfile(WeaponAttackProfile profile)
@@ -448,8 +515,17 @@ public static class WeaponAttackCatalog
         if (string.Equals(itemId, TripleGunId, StringComparison.Ordinal))
             return TripleGunId;
 
+        if (string.Equals(itemId, GatlingGunId, StringComparison.Ordinal))
+            return GatlingGunId;
+
         if (string.Equals(itemId, ArtilleryGunId, StringComparison.Ordinal))
             return ArtilleryGunId;
+
+        if (string.Equals(itemId, RocketLauncherId, StringComparison.Ordinal))
+            return RocketLauncherId;
+
+        if (string.Equals(itemId, DoubleRocketLauncherId, StringComparison.Ordinal))
+            return DoubleRocketLauncherId;
 
         if (string.Equals(itemId, RailGunId, StringComparison.Ordinal))
             return RailGunId;
@@ -459,6 +535,9 @@ public static class WeaponAttackCatalog
 
         if (string.Equals(itemId, AstroCutterId, StringComparison.Ordinal))
             return AstroCutterId;
+
+        if (string.Equals(itemId, PulseDisruptorId, StringComparison.Ordinal))
+            return PulseDisruptorId;
 
         return SimpleGunId;
     }
@@ -476,8 +555,17 @@ public static class WeaponAttackCatalog
         if (string.Equals(weaponId, TripleGunId, StringComparison.Ordinal))
             return CreateTripleGunNormal();
 
+        if (string.Equals(weaponId, GatlingGunId, StringComparison.Ordinal))
+            return CreateGatlingGunNormal();
+
         if (string.Equals(weaponId, ArtilleryGunId, StringComparison.Ordinal))
             return CreateArtilleryGunNormal();
+
+        if (string.Equals(weaponId, RocketLauncherId, StringComparison.Ordinal))
+            return CreateRocketLauncherNormal();
+
+        if (string.Equals(weaponId, DoubleRocketLauncherId, StringComparison.Ordinal))
+            return CreateDoubleRocketLauncherNormal();
 
         if (string.Equals(weaponId, RailGunId, StringComparison.Ordinal))
             return CreateRailGunNormal();
@@ -487,6 +575,9 @@ public static class WeaponAttackCatalog
 
         if (string.Equals(weaponId, AstroCutterId, StringComparison.Ordinal))
             return CreateAstroCutterNormal();
+
+        if (string.Equals(weaponId, PulseDisruptorId, StringComparison.Ordinal))
+            return CreatePulseDisruptorNormal();
 
         return CreateSimpleGunNormal();
     }
@@ -578,6 +669,35 @@ public static class WeaponAttackCatalog
         };
     }
 
+    static WeaponAttackProfile CreateGatlingGunNormal()
+    {
+        return new WeaponAttackProfile
+        {
+            Id = GatlingGunId,
+            DisplayName = "GATLING GUN",
+            MaxAmmo = 4,
+            RangeMultiplier = 17f,
+            ProjectileSize = 0.38f,
+            ProjectileSpeed = 17.5f,
+            HpDamage = 4,
+            ShieldDamage = 4,
+            ProjectileCount = 12,
+            SpreadAngle = 4.2f,
+            FlightTime = 4.2f,
+            ProjectileInterval = 0.123f,
+            AttackCooldown = 1.48f,
+            AmmoReloadTime = 3.2f,
+            StartDelay = 0f,
+            HitEffectId = "gatling",
+            ShotSoundId = "gatling",
+            Pierces = false,
+            AreaDamageRadius = 0f,
+            ProjectileColor = GatlingColor,
+            MarkerType = ComplexAttackMarkerType.Line,
+            MarkerColor = GatlingMarkerColor
+        };
+    }
+
     static WeaponAttackProfile CreateArtilleryGunNormal()
     {
         return new WeaponAttackProfile
@@ -604,6 +724,64 @@ public static class WeaponAttackCatalog
             ProjectileColor = ArtilleryColor,
             MarkerType = ComplexAttackMarkerType.Arc,
             MarkerColor = ArtilleryMarkerColor
+        };
+    }
+
+    static WeaponAttackProfile CreateRocketLauncherNormal()
+    {
+        return new WeaponAttackProfile
+        {
+            Id = RocketLauncherId,
+            DisplayName = "ROCKET LAUNCHER",
+            MaxAmmo = 3,
+            RangeMultiplier = 24f,
+            ProjectileSize = 0.7f,
+            ProjectileSpeed = 4.75f,
+            HpDamage = 55,
+            ShieldDamage = 55,
+            ProjectileCount = 1,
+            SpreadAngle = 0f,
+            FlightTime = 7.5f,
+            ProjectileInterval = 0f,
+            AttackCooldown = 0.85f,
+            AmmoReloadTime = 5.5f,
+            StartDelay = 0.03f,
+            HitEffectId = "rocket",
+            ShotSoundId = "rocket",
+            Pierces = false,
+            AreaDamageRadius = 1.35f,
+            ProjectileColor = RocketColor,
+            MarkerType = ComplexAttackMarkerType.Line,
+            MarkerColor = RocketMarkerColor
+        };
+    }
+
+    static WeaponAttackProfile CreateDoubleRocketLauncherNormal()
+    {
+        return new WeaponAttackProfile
+        {
+            Id = DoubleRocketLauncherId,
+            DisplayName = "DOUBLE ROCKET LAUNCHER",
+            MaxAmmo = 2,
+            RangeMultiplier = 24f,
+            ProjectileSize = 0.49f,
+            ProjectileSpeed = 6.18f,
+            HpDamage = 39,
+            ShieldDamage = 39,
+            ProjectileCount = 2,
+            SpreadAngle = 0f,
+            FlightTime = 7.5f,
+            ProjectileInterval = 0f,
+            AttackCooldown = 1.05f,
+            AmmoReloadTime = 6.8f,
+            StartDelay = 0.04f,
+            HitEffectId = "rocket",
+            ShotSoundId = "rocket",
+            Pierces = false,
+            AreaDamageRadius = 1.08f,
+            ProjectileColor = RocketColor,
+            MarkerType = ComplexAttackMarkerType.Line,
+            MarkerColor = RocketMarkerColor
         };
     }
 
@@ -675,8 +853,8 @@ public static class WeaponAttackCatalog
             RangeMultiplier = 5.25f,
             ProjectileSize = 0.92f,
             ProjectileSpeed = 0f,
-            HpDamage = 3,
-            ShieldDamage = 3,
+            HpDamage = 4,
+            ShieldDamage = 2,
             ProjectileCount = 1,
             SpreadAngle = 0f,
             FlightTime = 2f,
@@ -691,6 +869,35 @@ public static class WeaponAttackCatalog
             ProjectileColor = AstroCutterColor,
             MarkerType = ComplexAttackMarkerType.Line,
             MarkerColor = AstroCutterMarkerColor
+        };
+    }
+
+    static WeaponAttackProfile CreatePulseDisruptorNormal()
+    {
+        return new WeaponAttackProfile
+        {
+            Id = PulseDisruptorId,
+            DisplayName = "PULSE DISRUPTOR",
+            MaxAmmo = 4,
+            RangeMultiplier = 16f,
+            ProjectileSize = 2.25f,
+            ProjectileSpeed = 4.2f,
+            HpDamage = 8,
+            ShieldDamage = 60,
+            ProjectileCount = 1,
+            SpreadAngle = 0f,
+            FlightTime = 10f,
+            ProjectileInterval = 0f,
+            AttackCooldown = 0.78f,
+            AmmoReloadTime = 4.8f,
+            StartDelay = 0.05f,
+            HitEffectId = "pulse_disruptor",
+            ShotSoundId = "lazer2",
+            Pierces = false,
+            AreaDamageRadius = 2.35f,
+            ProjectileColor = PulseDisruptorColor,
+            MarkerType = ComplexAttackMarkerType.Line,
+            MarkerColor = PulseDisruptorMarkerColor
         };
     }
 

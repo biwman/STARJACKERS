@@ -1,9 +1,12 @@
 using Photon.Pun;
+using ExitGames.Client.Photon;
 using UnityEngine;
 
 public class EnemyBotManager : MonoBehaviour
 {
     const float ScanInterval = 0.2f;
+    const string SpawnStateStartTimeRoomKey = "enemyRuntime.spawnStateStartTime";
+    const string SpawnedCountRoomKeyPrefix = "enemyRuntime.spawned.";
 
     static EnemyBotManager instance;
 
@@ -69,6 +72,12 @@ public class EnemyBotManager : MonoBehaviour
             if (view == null || view.gameObject == null || !view.gameObject.name.StartsWith("Player"))
                 continue;
 
+            if (PlayerDeployableRuntime.IsInstantiationData(view.InstantiationData))
+            {
+                PlayerDeployableRuntime.EnsureAttached(view.gameObject);
+                continue;
+            }
+
             if (EnemyBot.IsBotInstantiationData(view.InstantiationData))
             {
                 EnemyBot bot = view.GetComponent<EnemyBot>();
@@ -118,6 +127,9 @@ public class EnemyBotManager : MonoBehaviour
             spawnedThisRound.Clear();
             lastHandledRespawnTick.Clear();
             ResetRescueShipSummonState();
+            if (!SeedSpawnStateFromRoomProperties(currentStartTime))
+                SeedSpawnStateFromActiveRound(currentStartTime);
+            EnsureSpawnStateRoomStart(currentStartTime);
         }
 
         for (int i = 0; i < EnemyBotCatalog.AllDefinitions.Count; i++)
@@ -141,7 +153,7 @@ public class EnemyBotManager : MonoBehaviour
         if (!RoomSettings.GetEnemyEnabled(definition.Kind))
         {
             DestroyExistingBots(definition.Kind);
-            spawnedThisRound[definition.Kind] = 0;
+            SetSpawnedCount(definition.Kind, 0);
             lastHandledRespawnTick.Remove(definition.Kind);
             return;
         }
@@ -160,11 +172,15 @@ public class EnemyBotManager : MonoBehaviour
 
         int desiredCount = RoomSettings.GetEnemyCount(definition.Kind);
         int spawnedCount = GetSpawnedCount(definition.Kind);
+        int spawnedTotal = spawnedCount;
 
         for (int i = spawnedCount; i < desiredCount; i++)
         {
-            SpawnEnemy(definition, i);
-            spawnedThisRound[definition.Kind] = i + 1;
+            if (!SpawnEnemy(definition, i))
+                break;
+
+            spawnedTotal++;
+            SetSpawnedCount(definition.Kind, spawnedTotal);
         }
 
         if (!RoomSettings.GetEnemyRespawnEnabled(definition.Kind))
@@ -187,12 +203,16 @@ public class EnemyBotManager : MonoBehaviour
             return;
 
         int spawnBase = GetSpawnedCount(definition.Kind);
+        int spawnedSuccessCount = 0;
         for (int i = 0; i < missingCount; i++)
         {
-            SpawnEnemy(definition, spawnBase + i);
+            if (!SpawnEnemy(definition, spawnBase + i))
+                break;
+
+            spawnedSuccessCount++;
         }
 
-        spawnedThisRound[definition.Kind] = spawnBase + missingCount;
+        SetSpawnedCount(definition.Kind, spawnBase + spawnedSuccessCount);
     }
 
     void HandleRescueShipSpawn(EnemyBotDefinition definition, double currentStartTime)
@@ -200,7 +220,7 @@ public class EnemyBotManager : MonoBehaviour
         if (!RoomSettings.GetEnemyEnabled(definition.Kind))
         {
             DestroyExistingBots(definition.Kind);
-            spawnedThisRound[definition.Kind] = 0;
+            SetSpawnedCount(definition.Kind, 0);
             lastHandledRespawnTick.Remove(definition.Kind);
             ResetRescueShipSummonState();
             return;
@@ -223,12 +243,16 @@ public class EnemyBotManager : MonoBehaviour
 
         int desiredCount = RoomSettings.GetEnemyCount(definition.Kind);
         int spawnedCount = GetSpawnedCount(definition.Kind);
+        int spawnedTotal = spawnedCount;
         bool hasSpawnFocus = TryGetRescueShipSpawnFocus(out Vector2 spawnFocus);
 
         for (int i = spawnedCount; i < desiredCount; i++)
         {
-            SpawnEnemy(definition, i, true, hasSpawnFocus, spawnFocus);
-            spawnedThisRound[definition.Kind] = i + 1;
+            if (!SpawnEnemy(definition, i, true, hasSpawnFocus, spawnFocus))
+                break;
+
+            spawnedTotal++;
+            SetSpawnedCount(definition.Kind, spawnedTotal);
         }
 
         if (!RoomSettings.GetEnemyRespawnEnabled(definition.Kind))
@@ -251,10 +275,16 @@ public class EnemyBotManager : MonoBehaviour
             return;
 
         int spawnBase = GetSpawnedCount(definition.Kind);
+        int spawnedSuccessCount = 0;
         for (int i = 0; i < missingCount; i++)
-            SpawnEnemy(definition, spawnBase + i, true, hasSpawnFocus, spawnFocus);
+        {
+            if (!SpawnEnemy(definition, spawnBase + i, true, hasSpawnFocus, spawnFocus))
+                break;
 
-        spawnedThisRound[definition.Kind] = spawnBase + missingCount;
+            spawnedSuccessCount++;
+        }
+
+        SetSpawnedCount(definition.Kind, spawnBase + spawnedSuccessCount);
     }
 
     void RegisterRescueShipSummonTrigger(EnemyBot damagedBot)
@@ -323,12 +353,19 @@ public class EnemyBotManager : MonoBehaviour
         return false;
     }
 
-    void SpawnEnemy(EnemyBotDefinition definition, int spawnOrdinal, bool forceOffscreen = false, bool hasEntryFocus = false, Vector2 entryFocusPosition = default)
+    bool SpawnEnemy(EnemyBotDefinition definition, int spawnOrdinal, bool forceOffscreen = false, bool hasEntryFocus = false, Vector2 entryFocusPosition = default)
     {
         Vector2 mapSize = RoomSettings.GetMapDimensions();
-        Vector2 spawn = forceOffscreen
-            ? GetOffscreenSpawnPosition(definition, mapSize, hasEntryFocus, entryFocusPosition)
-            : GetSafeSpawnPosition(definition, mapSize, spawnOrdinal);
+        Vector2 spawn;
+        if (forceOffscreen)
+        {
+            spawn = GetOffscreenSpawnPosition(definition, mapSize, hasEntryFocus, entryFocusPosition);
+        }
+        else if (!TryGetSafeSpawnPosition(definition, mapSize, spawnOrdinal, out spawn))
+        {
+            return false;
+        }
+
         GameObject botObject = PhotonNetwork.Instantiate("Player", spawn, Quaternion.identity, 0, new object[] { definition.InstantiationMarker });
         if (botObject != null)
         {
@@ -343,6 +380,8 @@ public class EnemyBotManager : MonoBehaviour
                 StartCoroutine(PlayRescueShipIncomingAfterBootstrap(bot.photonView.ViewID, spawn));
             }
         }
+
+        return botObject != null;
     }
 
     System.Collections.IEnumerator PlayRescueShipIncomingAfterBootstrap(int viewId, Vector2 spawn)
@@ -364,6 +403,167 @@ public class EnemyBotManager : MonoBehaviour
     int GetSpawnedCount(EnemyBotKind kind)
     {
         return spawnedThisRound.TryGetValue(kind, out int count) ? count : 0;
+    }
+
+    void SetSpawnedCount(EnemyBotKind kind, int count)
+    {
+        int clamped = Mathf.Max(0, count);
+        spawnedThisRound[kind] = clamped;
+
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null || lastHandledStartTime <= 0d)
+            return;
+
+        Hashtable props = new Hashtable
+        {
+            [SpawnStateStartTimeRoomKey] = lastHandledStartTime,
+            [GetSpawnedCountRoomKey(kind)] = clamped
+        };
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+    }
+
+    bool SeedSpawnStateFromRoomProperties(double currentStartTime)
+    {
+        if (PhotonNetwork.CurrentRoom == null || currentStartTime <= 0d)
+            return false;
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(SpawnStateStartTimeRoomKey, out object startValue) ||
+            !TryConvertToDouble(startValue, out double storedStartTime) ||
+            Mathf.Abs((float)(storedStartTime - currentStartTime)) > 0.001f)
+        {
+            return false;
+        }
+
+        bool seededAny = false;
+        for (int i = 0; i < EnemyBotCatalog.AllDefinitions.Count; i++)
+        {
+            EnemyBotDefinition definition = EnemyBotCatalog.AllDefinitions[i];
+            if (definition == null)
+                continue;
+
+            string key = GetSpawnedCountRoomKey(definition.Kind);
+            if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(key, out object countValue) &&
+                TryConvertToInt(countValue, out int count))
+            {
+                spawnedThisRound[definition.Kind] = Mathf.Max(0, count);
+                seededAny = true;
+            }
+        }
+
+        return seededAny;
+    }
+
+    void EnsureSpawnStateRoomStart(double currentStartTime)
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null || currentStartTime <= 0d)
+            return;
+
+        bool hasMatchingStart = PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(SpawnStateStartTimeRoomKey, out object startValue) &&
+                                TryConvertToDouble(startValue, out double storedStartTime) &&
+                                Mathf.Abs((float)(storedStartTime - currentStartTime)) <= 0.001f;
+        if (hasMatchingStart)
+            return;
+
+        Hashtable props = new Hashtable
+        {
+            [SpawnStateStartTimeRoomKey] = currentStartTime
+        };
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+    }
+
+    static string GetSpawnedCountRoomKey(EnemyBotKind kind)
+    {
+        return SpawnedCountRoomKeyPrefix + kind.ToString().ToLowerInvariant();
+    }
+
+    static bool TryConvertToInt(object value, out int result)
+    {
+        if (value is int intValue)
+        {
+            result = intValue;
+            return true;
+        }
+
+        if (value is short shortValue)
+        {
+            result = shortValue;
+            return true;
+        }
+
+        if (value is byte byteValue)
+        {
+            result = byteValue;
+            return true;
+        }
+
+        if (value is long longValue)
+        {
+            result = longValue > int.MaxValue ? int.MaxValue : longValue < 0L ? 0 : (int)longValue;
+            return true;
+        }
+
+        result = 0;
+        return false;
+    }
+
+    static bool TryConvertToDouble(object value, out double result)
+    {
+        if (value is double doubleValue)
+        {
+            result = doubleValue;
+            return true;
+        }
+
+        if (value is float floatValue)
+        {
+            result = floatValue;
+            return true;
+        }
+
+        if (value is int intValue)
+        {
+            result = intValue;
+            return true;
+        }
+
+        result = 0d;
+        return false;
+    }
+
+    void SeedSpawnStateFromActiveRound(double currentStartTime)
+    {
+        if (currentStartTime <= 0d)
+            return;
+
+        double elapsed = PhotonNetwork.Time - currentStartTime;
+        if (elapsed < 0.75d)
+            return;
+
+        for (int i = 0; i < EnemyBotCatalog.AllDefinitions.Count; i++)
+        {
+            EnemyBotDefinition definition = EnemyBotCatalog.AllDefinitions[i];
+            if (definition == null || !RoomSettings.GetEnemyEnabled(definition.Kind))
+                continue;
+
+            int activeCount = CountActiveNeutralBots(definition.Kind);
+            int spawnSecond = RoomSettings.GetEnemySpawnSecond(definition.Kind);
+            bool initialSpawnWindowPassed = elapsed >= spawnSecond + 0.75d;
+            int seededCount = activeCount;
+
+            if (activeCount > 0 && definition.Kind != EnemyBotKind.RescueShip && initialSpawnWindowPassed)
+                seededCount = Mathf.Max(seededCount, RoomSettings.GetEnemyCount(definition.Kind));
+
+            if (seededCount > 0)
+                SetSpawnedCount(definition.Kind, seededCount);
+
+            int respawnInterval = RoomSettings.GetEnemyRespawnIntervalSeconds(definition.Kind);
+            if (RoomSettings.GetEnemyRespawnEnabled(definition.Kind) &&
+                respawnInterval > 0 &&
+                elapsed >= respawnInterval &&
+                elapsed >= spawnSecond)
+            {
+                lastHandledRespawnTick[definition.Kind] = Mathf.FloorToInt((float)(elapsed / respawnInterval));
+            }
+        }
     }
 
     int CountActiveNeutralBots(EnemyBotKind kind)
@@ -401,14 +601,17 @@ public class EnemyBotManager : MonoBehaviour
         }
     }
 
-    Vector2 GetSafeSpawnPosition(EnemyBotDefinition definition, Vector2 mapSize, int spawnOrdinal)
+    bool TryGetSafeSpawnPosition(EnemyBotDefinition definition, Vector2 mapSize, int spawnOrdinal, out Vector2 spawn)
     {
         Vector2[] candidates = BuildSpawnCandidates(definition, mapSize, spawnOrdinal);
 
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         EnemyBot[] bots = FindObjectsByType<EnemyBot>(FindObjectsInactive.Exclude);
         float bestScore = float.MinValue;
+        float bestSafeScore = float.MinValue;
         Vector2 bestCandidate = candidates[0];
+        Vector2 bestSafeCandidate = candidates[0];
+        bool hasSafeCandidate = false;
 
         for (int i = 0; i < candidates.Length; i++)
         {
@@ -438,9 +641,67 @@ public class EnemyBotManager : MonoBehaviour
                 bestScore = nearestDistance;
                 bestCandidate = candidates[i];
             }
+
+            if (nearestDistance > bestSafeScore && IsSpawnCandidateSafe(definition, candidates[i], players, bots))
+            {
+                bestSafeScore = nearestDistance;
+                bestSafeCandidate = candidates[i];
+                hasSafeCandidate = true;
+            }
         }
 
-        return bestCandidate;
+        if (hasSafeCandidate)
+        {
+            spawn = bestSafeCandidate;
+            return true;
+        }
+
+        spawn = bestCandidate;
+        return definition == null || definition.Kind != EnemyBotKind.SpaceMine;
+    }
+
+    bool IsSpawnCandidateSafe(EnemyBotDefinition definition, Vector2 candidate, PlayerHealth[] players, EnemyBot[] bots)
+    {
+        float targetSize = definition != null ? Mathf.Max(0.4f, definition.TargetSize) : 1f;
+        float playerClearance = definition != null && definition.Kind == EnemyBotKind.SpaceMine && definition.Explosion != null
+            ? definition.Explosion.TriggerRadius + 2.4f
+            : Mathf.Max(3.2f, targetSize * 1.85f);
+
+        for (int i = 0; i < players.Length; i++)
+        {
+            PlayerHealth player = players[i];
+            if (player == null || player.IsBotControlled || player.IsWreck || player.IsEvacuationAnimating)
+                continue;
+
+            if (Vector2.Distance(candidate, player.transform.position) < playerClearance)
+                return false;
+        }
+
+        float botClearance = Mathf.Max(1.4f, targetSize * 1.2f);
+        for (int i = 0; i < bots.Length; i++)
+        {
+            EnemyBot existingBot = bots[i];
+            if (existingBot == null)
+                continue;
+
+            if (Vector2.Distance(candidate, existingBot.transform.position) < botClearance)
+                return false;
+        }
+
+        float overlapRadius = Mathf.Max(0.45f, targetSize * 0.34f);
+        Collider2D[] overlaps = Physics2D.OverlapCircleAll(candidate, overlapRadius);
+        for (int i = 0; i < overlaps.Length; i++)
+        {
+            Collider2D hit = overlaps[i];
+            if (hit == null || hit.isTrigger)
+                continue;
+
+            PlayerHealth player = hit.GetComponentInParent<PlayerHealth>();
+            if (player != null && !player.IsBotControlled && !player.IsWreck)
+                return false;
+        }
+
+        return true;
     }
 
     Vector2 GetOffscreenSpawnPosition(EnemyBotDefinition definition, Vector2 mapSize, bool hasEntryFocus, Vector2 entryFocusPosition)

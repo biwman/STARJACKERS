@@ -18,10 +18,17 @@ public class PlayerHealth : MonoBehaviourPun
     const int BatteryShieldPerTick = 5;
     const int BatteryTickCount = 5;
     const float BatteryTickInterval = 1f;
-    const float EvacuationAnimationDuration = 4f;
+    public const float EvacuationAnimationDurationSeconds = 4f;
+    const float EvacuationAnimationDuration = EvacuationAnimationDurationSeconds;
     const float MinimumEvacuationScale = 0.01f;
     const float AstronautSpawnClearanceRadius = 0.34f;
     const float SpawnInvulnerabilityDuration = 5f;
+    const float PhaseShieldInvulnerabilityDuration = 3f;
+    const float PhaseShieldHpThresholdRatio = 0.35f;
+    const float KineticDampenerDamageMultiplier = 0.65f;
+    const float StrongPlatingEnvironmentalDamageMultiplier = 0.65f;
+    const string EnvironmentalDamageSource = "environmental";
+    const string NebulaDamageSource = "nebula";
     public const string PilotDamageSourceRamming = "ramming";
 
     public int maxHP = 50;
@@ -32,6 +39,8 @@ public class PlayerHealth : MonoBehaviourPun
     Slider hpBar;
     bool isEvacuationAnimating;
     bool destroyRequested;
+    bool deathHandled;
+    bool astronautSpawnedAfterDestruction;
     bool spawnInvulnerabilityScheduled;
     bool hasPendingEvacuationSummary;
     bool jakeEmergencyRegenerationUsed;
@@ -39,6 +48,8 @@ public class PlayerHealth : MonoBehaviourPun
     int pendingEvacuationFinalScore;
     string pendingEvacuationOutcome = "extracted";
     float spawnInvulnerableUntil = -1f;
+    float equipmentInvulnerableUntil = -1f;
+    bool phaseShieldTriggered;
 
     public int CurrentHP => currentHP;
     public int CurrentShield => currentShield;
@@ -49,7 +60,10 @@ public class PlayerHealth : MonoBehaviourPun
     public bool IsBotControlled => GetComponent<EnemyBot>() != null;
     public bool IsAstronautControlled => GetComponent<AstronautSurvivor>() != null;
     public bool IsEvacuationAnimating => isEvacuationAnimating;
-    public bool IsSpawnInvulnerable => !IsWreck && !IsBotControlled && !IsAstronautControlled && Time.time < spawnInvulnerableUntil;
+    public bool IsSpawnInvulnerable => !IsWreck &&
+                                       !IsBotControlled &&
+                                       ((!IsAstronautControlled && Time.time < spawnInvulnerableUntil) ||
+                                        Time.time < equipmentInvulnerableUntil);
 
     public bool CanActivateBatteryChargeLocally()
     {
@@ -114,6 +128,11 @@ public class PlayerHealth : MonoBehaviourPun
             StartCoroutine(InitialSpawnInvulnerabilityRoutine());
         }
 
+        if (!IsAstronautControlled && !IsBotControlled && GetComponent<RoundChatCommandUI>() == null)
+        {
+            gameObject.AddComponent<RoundChatCommandUI>();
+        }
+
         if (photonView.IsMine && !IsBotControlled)
         {
             PhotonNetwork.LocalPlayer.TagObject = gameObject;
@@ -145,7 +164,7 @@ public class PlayerHealth : MonoBehaviourPun
             }
         }
 
-        GameVisualTheme.RequestRuntimeRefresh();
+        GameVisualTheme.ApplyPlayerVisual(this);
     }
 
     void Update()
@@ -213,8 +232,16 @@ public class PlayerHealth : MonoBehaviourPun
         if (TryForwardDamageToDeployable(shieldDmg, hpDmg, attackerViewID, impactX, impactY))
             return;
 
-        int effectiveDamage = currentShield > 0 ? Mathf.Max(0, shieldDmg) : Mathf.Max(0, hpDmg);
-        ApplyDamageInternal(effectiveDamage, attackerViewID, true, true, impactX, impactY);
+        ApplyDamageProfileInternal(shieldDmg, hpDmg, attackerViewID, true, impactX, impactY);
+    }
+
+    [PunRPC]
+    public void TakeShieldOnlyDamageAt(int shieldDmg, int attackerViewID, float impactX, float impactY)
+    {
+        if (TryForwardShieldOnlyDamageToDeployable(shieldDmg, attackerViewID, impactX, impactY))
+            return;
+
+        ApplyShieldOnlyDamageInternal(shieldDmg, attackerViewID, true, impactX, impactY);
     }
 
     [PunRPC]
@@ -224,6 +251,42 @@ public class PlayerHealth : MonoBehaviourPun
             return;
 
         ApplyDamageInternal(dmg, attackerViewID, true, true, impactX, impactY, damageSource);
+    }
+
+    [PunRPC]
+    public void ApplyGravityTetherPullRpc(int sourceViewId, float sourceX, float sourceY, float pullAcceleration, float maxSpeed, float duration)
+    {
+        if (!photonView.IsMine || IsWreck || IsBotControlled || isEvacuationAnimating)
+            return;
+
+        if (GetComponent<LureBeaconDecoy>() != null || GetComponent<PlayerDeployableBase>() != null)
+            return;
+
+        GravityTetherPullEffect effect = GetComponent<GravityTetherPullEffect>();
+        if (effect == null)
+            effect = gameObject.AddComponent<GravityTetherPullEffect>();
+
+        effect.Configure(sourceViewId, new Vector2(sourceX, sourceY), pullAcceleration, maxSpeed, duration);
+    }
+
+    [PunRPC]
+    public void ApplyAsteroidKnockbackRpc(float directionX, float directionY, float impulse)
+    {
+        if (PhotonNetwork.IsConnected && photonView != null && !photonView.IsMine)
+            return;
+
+        if (IsWreck || isEvacuationAnimating || GetComponent<LureBeaconDecoy>() != null || GetComponent<PlayerDeployableBase>() != null)
+            return;
+
+        Rigidbody2D body = GetComponent<Rigidbody2D>();
+        if (body == null || !body.simulated)
+            return;
+
+        Vector2 direction = new Vector2(directionX, directionY);
+        if (direction.sqrMagnitude < 0.0001f)
+            direction = Vector2.up;
+
+        body.AddForce(direction.normalized * Mathf.Clamp(impulse, 0f, 18f), ForceMode2D.Impulse);
     }
 
     void EnsureBotBootstrap()
@@ -241,7 +304,7 @@ public class PlayerHealth : MonoBehaviourPun
     [PunRPC]
     public void TakeEnvironmentalDamage(int dmg)
     {
-        ApplyDamageInternal(dmg, -1, false, false, 0f, 0f);
+        ApplyDamageInternal(dmg, -1, false, false, 0f, 0f, EnvironmentalDamageSource);
     }
 
     [PunRPC]
@@ -253,12 +316,104 @@ public class PlayerHealth : MonoBehaviourPun
             return;
         }
 
-        ApplyDamageInternal(dmg, -1, false, false, 0f, 0f, "nebula");
+        ApplyDamageInternal(dmg, -1, false, false, 0f, 0f, NebulaDamageSource);
     }
 
     void ApplyDamageInternal(int dmg, int attackerViewID, bool playImpactAudio, bool hasImpactPosition, float impactX, float impactY)
     {
         ApplyDamageInternal(dmg, attackerViewID, playImpactAudio, hasImpactPosition, impactX, impactY, string.Empty);
+    }
+
+    void ApplyDamageProfileInternal(int shieldDmg, int hpDmg, int attackerViewID, bool playImpactAudio, float impactX, float impactY)
+    {
+        if (IsDeployableDamageProxy())
+            return;
+
+        if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating)
+            return;
+
+        if (IsSpawnInvulnerable)
+            return;
+
+        EnemyBot launchProtectedBot = GetComponent<EnemyBot>();
+        if (launchProtectedBot != null && launchProtectedBot.IsPirateBaseLaunchProtected)
+            return;
+
+        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
+        if (repairDocking != null && repairDocking.IsDamageImmune)
+            return;
+
+        int previousHp = currentHP;
+        int previousShield = currentShield;
+        int rawShieldDamage = Mathf.Max(0, shieldDmg);
+        int rawHpDamage = Mathf.Max(0, hpDmg);
+        int adjustedShieldDamage = ApplyPilotDamageModifiers(rawShieldDamage, attackerViewID, string.Empty);
+        int adjustedHpDamage = ApplyPilotDamageModifiers(rawHpDamage, attackerViewID, string.Empty);
+        int absorbed = 0;
+        int hpDamageToApply = 0;
+
+        if (currentShield > 0)
+        {
+            if (adjustedShieldDamage > 0)
+            {
+                absorbed = Mathf.Min(currentShield, adjustedShieldDamage);
+                currentShield -= absorbed;
+
+                float overflowRatio = Mathf.Clamp01((adjustedShieldDamage - absorbed) / (float)adjustedShieldDamage);
+                hpDamageToApply = Mathf.RoundToInt(adjustedHpDamage * overflowRatio);
+            }
+        }
+        else
+        {
+            hpDamageToApply = adjustedHpDamage;
+        }
+
+        if (hpDamageToApply > 0)
+            currentHP = Mathf.Max(0, currentHP - hpDamageToApply);
+
+        TryTriggerPhaseShield(previousHp);
+
+        int hpDamage = Mathf.Max(0, previousHp - currentHP);
+        Vector2 impactPosition = Vector2.zero;
+        bool hasResolvedImpactPosition = false;
+        if (playImpactAudio && (absorbed > 0 || hpDamage > 0))
+        {
+            impactPosition = new Vector2(impactX, impactY);
+            hasResolvedImpactPosition = true;
+        }
+
+        if (currentHP != previousHp || currentShield != previousShield)
+            photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
+
+        TryStartJakeEmergencyRegeneration(previousHp);
+
+        if (playImpactAudio && absorbed > 0)
+        {
+            photonView.RPC(nameof(PlayShieldHitAudio), RpcTarget.All);
+            photonView.RPC(nameof(PlayShieldHitVisual), RpcTarget.All, impactPosition.x, impactPosition.y);
+        }
+
+        if (playImpactAudio && hpDamage > 0)
+        {
+            photonView.RPC(nameof(PlayHpHitAudio), RpcTarget.All);
+            if (hasResolvedImpactPosition)
+                photonView.RPC(nameof(PlayHpHitVisual), RpcTarget.All, impactPosition.x, impactPosition.y);
+        }
+
+        if (IsBotControlled)
+        {
+            EnemyBot damagedBot = GetComponent<EnemyBot>();
+            if (damagedBot != null)
+                damagedBot.NotifyDamageTaken(previousHp, currentHP, Mathf.Max(0, previousShield - currentShield), hpDamage, attackerViewID);
+        }
+
+        RoundXpTracker.RecordDamage(attackerViewID, photonView, absorbed, hpDamage);
+
+        if (previousHp > 0 && currentHP <= 0)
+            RoundXpTracker.RecordKill(attackerViewID, this);
+
+        if (currentHP <= 0)
+            HandleDeath(attackerViewID);
     }
 
     void ApplyDamageInternal(int dmg, int attackerViewID, bool playImpactAudio, bool hasImpactPosition, float impactX, float impactY, string damageSource)
@@ -295,6 +450,8 @@ public class PlayerHealth : MonoBehaviourPun
         {
             currentHP = Mathf.Max(0, currentHP - remainingDamage);
         }
+
+        TryTriggerPhaseShield(previousHp);
 
         int hpDamage = Mathf.Max(0, previousHp - currentHP);
         Vector2 impactPosition = Vector2.zero;
@@ -343,6 +500,50 @@ public class PlayerHealth : MonoBehaviourPun
         }
     }
 
+    void ApplyShieldOnlyDamageInternal(int dmg, int attackerViewID, bool playImpactAudio, float impactX, float impactY)
+    {
+        if (IsDeployableDamageProxy())
+            return;
+
+        if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating)
+            return;
+
+        if (IsSpawnInvulnerable)
+            return;
+
+        EnemyBot launchProtectedBot = GetComponent<EnemyBot>();
+        if (launchProtectedBot != null && launchProtectedBot.IsPirateBaseLaunchProtected)
+            return;
+
+        PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
+        if (repairDocking != null && repairDocking.IsDamageImmune)
+            return;
+
+        int shieldOnlyDamage = ApplyPilotDamageModifiers(Mathf.Max(0, dmg), attackerViewID, string.Empty);
+        if (shieldOnlyDamage <= 0 || currentShield <= 0)
+            return;
+
+        int previousShield = currentShield;
+        int absorbed = Mathf.Min(currentShield, shieldOnlyDamage);
+        currentShield -= absorbed;
+        photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
+
+        if (playImpactAudio && absorbed > 0)
+        {
+            photonView.RPC(nameof(PlayShieldHitAudio), RpcTarget.All);
+            photonView.RPC(nameof(PlayShieldHitVisual), RpcTarget.All, impactX, impactY);
+        }
+
+        if (IsBotControlled)
+        {
+            EnemyBot damagedBot = GetComponent<EnemyBot>();
+            if (damagedBot != null)
+                damagedBot.NotifyDamageTaken(currentHP, currentHP, Mathf.Max(0, previousShield - currentShield), 0, attackerViewID);
+        }
+
+        RoundXpTracker.RecordDamage(attackerViewID, photonView, absorbed, 0);
+    }
+
     bool TryForwardDamageToDeployable(int shieldDmg, int hpDmg, int attackerViewID, float impactX, float impactY)
     {
         if (!IsDeployableDamageProxy())
@@ -354,6 +555,21 @@ public class PlayerHealth : MonoBehaviourPun
 
         if (deployable != null)
             deployable.TakeDeployableDamageAt(shieldDmg, hpDmg, attackerViewID, impactX, impactY);
+
+        return true;
+    }
+
+    bool TryForwardShieldOnlyDamageToDeployable(int shieldDmg, int attackerViewID, float impactX, float impactY)
+    {
+        if (!IsDeployableDamageProxy())
+            return false;
+
+        PlayerDeployableBase deployable = GetComponent<PlayerDeployableBase>();
+        if (deployable == null)
+            deployable = PlayerDeployableRuntime.EnsureAttached(gameObject);
+
+        if (deployable != null)
+            deployable.TakeDeployableShieldOnlyDamageAt(shieldDmg, attackerViewID, impactX, impactY);
 
         return true;
     }
@@ -383,6 +599,18 @@ public class PlayerHealth : MonoBehaviourPun
             result = Mathf.Max(1, Mathf.RoundToInt(result * 0.5f));
         }
 
+        if (!IsBotControlled && !IsAstronautControlled && HasEquippedItem(InventoryItemCatalog.KineticDampenerId) &&
+            IsPhysicalImpactDamage(attackerViewID, damageSource))
+        {
+            result = Mathf.Max(1, Mathf.RoundToInt(result * KineticDampenerDamageMultiplier));
+        }
+
+        if (!IsBotControlled && !IsAstronautControlled && HasEquippedItem(InventoryItemCatalog.StrongPlatingId) &&
+            IsEnvironmentalDamageSource(damageSource))
+        {
+            result = Mathf.Max(1, Mathf.RoundToInt(result * StrongPlatingEnvironmentalDamageMultiplier));
+        }
+
         EnemyBot targetBot = IsBotControlled ? GetComponent<EnemyBot>() : null;
         if (targetBot != null && targetBot.Kind == EnemyBotKind.Mothership && IsAttackerPilot(attackerViewID, PilotCatalog.SirNowitzkyId))
             result = Mathf.Max(1, Mathf.RoundToInt(result * 1.15f));
@@ -392,6 +620,11 @@ public class PlayerHealth : MonoBehaviourPun
 
     bool IsDamageFromSpaceMine(int attackerViewID)
     {
+        return IsDamageFromEnemyKind(attackerViewID, EnemyBotKind.SpaceMine);
+    }
+
+    bool IsDamageFromEnemyKind(int attackerViewID, EnemyBotKind kind)
+    {
         if (attackerViewID <= 0)
             return false;
 
@@ -400,7 +633,70 @@ public class PlayerHealth : MonoBehaviourPun
             return false;
 
         EnemyBot bot = attackerView.GetComponent<EnemyBot>();
-        return bot != null && bot.Kind == EnemyBotKind.SpaceMine;
+        return bot != null && bot.Kind == kind;
+    }
+
+    bool IsPhysicalImpactDamage(int attackerViewID, string damageSource)
+    {
+        return string.Equals(damageSource, PilotDamageSourceRamming, System.StringComparison.Ordinal) ||
+               IsDamageFromSpaceMine(attackerViewID) ||
+               IsDamageFromEnemyKind(attackerViewID, EnemyBotKind.SpaceManta);
+    }
+
+    bool IsEnvironmentalDamageSource(string damageSource)
+    {
+        return string.Equals(damageSource, EnvironmentalDamageSource, System.StringComparison.Ordinal) ||
+               string.Equals(damageSource, NebulaDamageSource, System.StringComparison.Ordinal);
+    }
+
+    bool HasEquippedItem(string itemId)
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        return InventoryItemCatalog.HasEquippedItem(equipmentSlots, shipSkinIndex, itemId);
+    }
+
+    bool TryTriggerPhaseShield(int previousHp)
+    {
+        if (phaseShieldTriggered || IsBotControlled || IsAstronautControlled || IsWreck || maxHP <= 0)
+            return false;
+
+        if (!HasEquippedItem(InventoryItemCatalog.PhaseShieldId))
+            return false;
+
+        int threshold = Mathf.Max(1, Mathf.CeilToInt(maxHP * PhaseShieldHpThresholdRatio));
+        if (previousHp <= threshold || currentHP > threshold)
+            return false;
+
+        phaseShieldTriggered = true;
+        currentHP = Mathf.Max(1, currentHP);
+        BeginEquipmentInvulnerabilityAuthority(PhaseShieldInvulnerabilityDuration);
+        return true;
+    }
+
+    void BeginEquipmentInvulnerabilityAuthority(float duration)
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView == null || duration <= 0f)
+            return;
+
+        photonView.RPC(nameof(BeginEquipmentInvulnerabilityRpc), RpcTarget.All, duration);
+    }
+
+    public void BeginEquipmentInvulnerabilityLocal(float duration)
+    {
+        if (duration <= 0f || IsWreck || IsBotControlled)
+            return;
+
+        equipmentInvulnerableUntil = Mathf.Max(equipmentInvulnerableUntil, Time.time + duration);
+        if (RoomSettings.AreVisualEffectsEnabled())
+            SpawnInvulnerabilityVfx.Attach(this);
+    }
+
+    [PunRPC]
+    void BeginEquipmentInvulnerabilityRpc(float duration)
+    {
+        BeginEquipmentInvulnerabilityLocal(duration);
     }
 
     bool IsAttackerPilot(int attackerViewID, string pilotId)
@@ -422,6 +718,9 @@ public class PlayerHealth : MonoBehaviourPun
             return;
 
         int damage = Mathf.Max(0, dmg);
+        if (damage > 0 && !IsBotControlled && !IsAstronautControlled && HasEquippedItem(InventoryItemCatalog.StrongPlatingId))
+            damage = Mathf.Max(1, Mathf.RoundToInt(damage * StrongPlatingEnvironmentalDamageMultiplier));
+
         if (damage <= 0 || currentShield <= 0)
             return;
 
@@ -619,13 +918,19 @@ public class PlayerHealth : MonoBehaviourPun
 
     void HandleDeath(int attackerViewID)
     {
+        if (deathHandled)
+            return;
+
+        deathHandled = true;
+
         PlayerMovement localMovement = GetComponent<PlayerMovement>();
         if (localMovement != null)
             localMovement.StopEngineAudioImmediately();
 
         EnemyBot bot = IsBotControlled ? GetComponent<EnemyBot>() : null;
         bool useCustomBotDeath = bot != null && bot.HasCustomDeathExplosion();
-        if (!useCustomBotDeath)
+        bool useSpaceAnimalDeath = bot != null && EnemyBot.IsSpaceAnimalKind(bot.Kind);
+        if (!useCustomBotDeath && !useSpaceAnimalDeath)
             photonView.RPC(nameof(PlayDeathExplosion), RpcTarget.All);
 
         if (!IsBotControlled)
@@ -647,6 +952,12 @@ public class PlayerHealth : MonoBehaviourPun
                 return;
             }
 
+            if (useSpaceAnimalDeath && bot != null)
+            {
+                StartCoroutine(DestroySpaceAnimalEnemyAfterDeathFrame(bot.Kind));
+                return;
+            }
+
             photonView.RPC(nameof(BecomeEnemyWreck), RpcTarget.All, bot != null ? (int)bot.Kind : (int)EnemyBotKind.Drone);
             return;
         }
@@ -665,17 +976,148 @@ public class PlayerHealth : MonoBehaviourPun
 
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView.Owner, 0);
         string[] currentShipSlots = PlayerProfileService.GetPlayerShipInventorySlots(photonView.Owner);
-        bool inventoryLossEnabled = RoomSettings.IsInventoryLossEnabled();
+        int shipCapacity = PlayerProfileService.GetPlayerShipInventoryCapacity(photonView.Owner);
+        bool emergencySuitBeaconEquipped = HasEquippedItem(InventoryItemCatalog.EmergencySuitBeaconId);
+        bool escapePodEquipped = HasEquippedItem(InventoryItemCatalog.EscapePodId);
         bool equipmentLossEnabled = RoomSettings.IsEquipmentLossEnabled();
-        string[] wreckLootSlots = inventoryLossEnabled
-            ? PlayerProfileService.BuildLossWreckLoot(currentShipSlots, shipSkinIndex)
-            : new string[PlayerInventoryData.ShipSlotCount];
+        string[] wreckLootSlots = PlayerProfileService.BuildLossWreckLoot(currentShipSlots, shipSkinIndex, shipCapacity);
         string wreckLoot = PlayerProfileService.SerializeShipInventorySlots(wreckLootSlots);
+        string[] astronautCargoSlots = PlayerProfileService.BuildAstronautCargoSnapshot(currentShipSlots, shipSkinIndex, shipCapacity);
+        string astronautCargo = PlayerProfileService.SerializeShipInventorySlots(astronautCargoSlots);
         Vector3 astronautSpawnPosition = FindSafeAstronautSpawnPosition();
         RoundXpTracker.RecordPlayerShipDestroyed(photonView.Owner);
-        photonView.RPC(nameof(ApplyLocalShipLossForWreck), photonView.Owner, shipSkinIndex, inventoryLossEnabled, equipmentLossEnabled);
-        photonView.RPC(nameof(SpawnAstronautAfterDestruction), photonView.Owner, astronautSpawnPosition.x, astronautSpawnPosition.y, transform.eulerAngles.z);
+        string protectedEquipmentItemId = escapePodEquipped ? InventoryItemCatalog.EscapePodId : string.Empty;
+        photonView.RPC(nameof(ApplyLocalShipLossForWreck), photonView.Owner, shipSkinIndex, true, equipmentLossEnabled, astronautCargo, protectedEquipmentItemId);
+        photonView.RPC(nameof(SpawnAstronautAfterDestruction), photonView.Owner, astronautSpawnPosition.x, astronautSpawnPosition.y, transform.eulerAngles.z, emergencySuitBeaconEquipped, escapePodEquipped);
         photonView.RPC(nameof(BecomeWreck), RpcTarget.All, wreckLoot, shipSkinIndex);
+    }
+
+    IEnumerator DestroySpaceAnimalEnemyAfterDeathFrame(EnemyBotKind kind)
+    {
+        PlayerMovement movement = GetComponent<PlayerMovement>();
+        if (movement != null)
+        {
+            movement.StopEngineAudioImmediately();
+            movement.enabled = false;
+        }
+
+        PlayerShooting shooting = GetComponent<PlayerShooting>();
+        if (shooting != null)
+            shooting.enabled = false;
+
+        EnemyBot bot = GetComponent<EnemyBot>();
+        if (bot != null)
+        {
+            if (kind == EnemyBotKind.GravitySquid && bot.photonView != null)
+                bot.photonView.RPC(nameof(EnemyBot.StopGravitySquidTetherRpc), RpcTarget.All);
+
+            bot.enabled = false;
+        }
+
+        TreasureCollector collector = GetComponent<TreasureCollector>();
+        if (collector != null)
+            collector.enabled = false;
+
+        EngineThrusterVFX thruster = GetComponent<EngineThrusterVFX>();
+        if (thruster != null)
+            thruster.DisableAndClearTrails();
+
+        if (PhotonNetwork.IsMasterClient)
+            SpawnSpaceAnimalRemainsDrop();
+
+        float visualTargetSize = bot != null ? bot.VisualTargetSize : 2.4f;
+        photonView.RPC(
+            nameof(PlaySpaceAnimalDeathAnimationRpc),
+            RpcTarget.All,
+            (int)kind,
+            transform.position.x,
+            transform.position.y,
+            transform.position.z,
+            transform.eulerAngles.z,
+            visualTargetSize);
+
+        Collider2D[] colliders = GetComponents<Collider2D>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            if (colliders[i] != null)
+                colliders[i].enabled = false;
+        }
+
+        yield return new WaitForSeconds(0.08f);
+
+        if (PhotonNetwork.InRoom)
+            PhotonNetwork.Destroy(gameObject);
+        else
+            Destroy(gameObject);
+    }
+
+    void SpawnSpaceAnimalRemainsDrop()
+    {
+        Vector2 driftDirection = Random.insideUnitCircle.normalized;
+        if (driftDirection.sqrMagnitude < 0.001f)
+            driftDirection = Vector2.up;
+
+        GameObject drop = PhotonNetwork.Instantiate(
+            "TreasureNetwork",
+            transform.position,
+            Quaternion.identity,
+            0,
+            new object[] { InventoryItemCatalog.SpaceAnimalRemainsId });
+
+        if (drop == null)
+            return;
+
+        Rigidbody2D dropBody = drop.GetComponent<Rigidbody2D>();
+        if (dropBody != null)
+        {
+            dropBody.linearVelocity = driftDirection * Random.Range(0.42f, 0.82f);
+            dropBody.angularVelocity = Random.Range(-34f, 34f);
+        }
+    }
+
+    [PunRPC]
+    void PlaySpaceAnimalDeathAnimationRpc(int kindValue, float x, float y, float z, float rotationZ, float visualTargetSize)
+    {
+        SpaceAnimalDeathVfx.Play((EnemyBotKind)kindValue, new Vector3(x, y, z), rotationZ, visualTargetSize);
+
+        SpriteRenderer[] renderers = GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] != null)
+                renderers[i].enabled = false;
+        }
+    }
+
+    IEnumerator DestroyEnemyWithoutWreckAfterDeathFrame()
+    {
+        PlayerMovement movement = GetComponent<PlayerMovement>();
+        if (movement != null)
+        {
+            movement.StopEngineAudioImmediately();
+            movement.enabled = false;
+        }
+
+        PlayerShooting shooting = GetComponent<PlayerShooting>();
+        if (shooting != null)
+            shooting.enabled = false;
+
+        EnemyBot bot = GetComponent<EnemyBot>();
+        if (bot != null)
+            bot.enabled = false;
+
+        Collider2D[] colliders = GetComponents<Collider2D>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            if (colliders[i] != null)
+                colliders[i].enabled = false;
+        }
+
+        yield return null;
+
+        if (PhotonNetwork.InRoom)
+            PhotonNetwork.Destroy(gameObject);
+        else
+            Destroy(gameObject);
     }
 
     Vector3 FindSafeAstronautSpawnPosition()
@@ -779,7 +1221,7 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
-    public void NotifyFinalEvacuation(int finalScore, string outcome)
+    public async void NotifyFinalEvacuation(int finalScore, string outcome)
     {
         if (!photonView.IsMine)
             return;
@@ -788,6 +1230,18 @@ public class PlayerHealth : MonoBehaviourPun
         pendingEvacuationOutcome = string.IsNullOrWhiteSpace(outcome) ? "extracted" : outcome;
         hasPendingEvacuationSummary = true;
         NetworkManager.MarkCurrentRoundEndedForLocalPlayer(pendingEvacuationOutcome);
+        if (string.Equals(pendingEvacuationOutcome, "evacuated", System.StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                await PlayerProfileService.Instance.RestorePendingAstronautCargoAsync();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError("Failed to restore astronaut cargo: " + ex);
+            }
+        }
+
         TryRecordExtractionPilotProgress(pendingEvacuationOutcome);
     }
 
@@ -859,12 +1313,15 @@ public class PlayerHealth : MonoBehaviourPun
         if (!photonView.IsMine)
             return;
 
+        PlayerProfileService.Instance.DiscardPendingAstronautCargo();
         EarlyRoundExitUI.ShowEndRoundButton(finalScore, "dead");
     }
 
     IEnumerator EvacuationSequenceRoutine()
     {
         isEvacuationAnimating = true;
+        if (photonView.IsMine)
+            GameplayHudVisibility.SuppressForExtractionCinematic();
 
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null)
@@ -883,6 +1340,10 @@ public class PlayerHealth : MonoBehaviourPun
         TreasureCollector collector = GetComponent<TreasureCollector>();
         if (collector != null)
             collector.enabled = false;
+
+        LootingFriendController lootingFriend = GetComponent<LootingFriendController>();
+        if (lootingFriend != null)
+            lootingFriend.DeactivateForShipLoss();
 
         EngineThrusterVFX thruster = GetComponent<EngineThrusterVFX>();
         if (thruster != null)
@@ -936,18 +1397,24 @@ public class PlayerHealth : MonoBehaviourPun
     [PunRPC]
     public void ClearLocalShipInventoryForWreck(int shipSkinIndex)
     {
-        ApplyLocalShipLossForWreck(shipSkinIndex, true, false);
+        ApplyLocalShipLossForWreck(shipSkinIndex, true, false, string.Empty, string.Empty);
     }
 
     [PunRPC]
-    public async void ApplyLocalShipLossForWreck(int shipSkinIndex, bool loseShipInventory, bool loseEquipment)
+    public void ApplyLocalShipLossForWreck(int shipSkinIndex, bool loseShipInventory, bool loseEquipment, string serializedAstronautCargo)
+    {
+        ApplyLocalShipLossForWreck(shipSkinIndex, loseShipInventory, loseEquipment, serializedAstronautCargo, string.Empty);
+    }
+
+    [PunRPC]
+    public async void ApplyLocalShipLossForWreck(int shipSkinIndex, bool loseShipInventory, bool loseEquipment, string serializedAstronautCargo, string protectedEquipmentItemId)
     {
         if (!photonView.IsMine)
             return;
 
         try
         {
-            await PlayerProfileService.Instance.ApplyShipLossAsync(shipSkinIndex, loseShipInventory, loseEquipment);
+            await PlayerProfileService.Instance.ApplyShipLossAsync(shipSkinIndex, loseShipInventory, loseEquipment, serializedAstronautCargo, protectedEquipmentItemId);
         }
         catch (System.Exception ex)
         {
@@ -956,10 +1423,15 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
-    void SpawnAstronautAfterDestruction(float x, float y, float rotationZ)
+    void SpawnAstronautAfterDestruction(float x, float y, float rotationZ, bool emergencySuitBeaconEquipped, bool escapePodEquipped)
     {
         if (!photonView.IsMine)
             return;
+
+        if (astronautSpawnedAfterDestruction)
+            return;
+
+        astronautSpawnedAfterDestruction = true;
 
         PhotonNetwork.LocalPlayer.TagObject = null;
         GameObject astronaut = PhotonNetwork.Instantiate(
@@ -967,7 +1439,7 @@ public class PlayerHealth : MonoBehaviourPun
             new Vector3(x, y, 0f),
             Quaternion.Euler(0f, 0f, rotationZ),
             0,
-            new object[] { AstronautSurvivor.AstronautInstantiationMarker });
+            new object[] { AstronautSurvivor.AstronautInstantiationMarker, emergencySuitBeaconEquipped, escapePodEquipped });
 
         if (astronaut != null)
         {
@@ -1008,6 +1480,10 @@ public class PlayerHealth : MonoBehaviourPun
             collector.ForceCancelCollectionForDeath();
             collector.enabled = false;
         }
+
+        LootingFriendController lootingFriend = GetComponent<LootingFriendController>();
+        if (lootingFriend != null)
+            lootingFriend.DeactivateForShipLoss();
 
         HealthBarUI healthBarUi = GetComponent<HealthBarUI>();
         if (healthBarUi != null)
@@ -1082,7 +1558,7 @@ public class PlayerHealth : MonoBehaviourPun
             renderer.color = Color.white;
         }
 
-        GameVisualTheme.RequestRuntimeRefresh();
+        GameVisualTheme.ApplyPlayerVisual(this);
     }
 
     [PunRPC]
@@ -1168,7 +1644,7 @@ public class PlayerHealth : MonoBehaviourPun
             renderer.color = baseColor;
         }
 
-        GameVisualTheme.RequestRuntimeRefresh();
+        GameVisualTheme.ApplyPlayerVisual(this);
     }
 
     [PunRPC]
@@ -1326,6 +1802,7 @@ public class PlayerHealth : MonoBehaviourPun
         if (!photonView.IsMine)
             return;
 
+        PlayerProfileService.Instance.DiscardPendingAstronautCargo();
         ShowTimeUpMessage();
         StartCoroutine(DieAfterDelay());
     }
@@ -1456,6 +1933,74 @@ public class PlayerHealth : MonoBehaviourPun
         }
 
         return null;
+    }
+}
+
+public sealed class GravityTetherPullEffect : MonoBehaviour
+{
+    Rigidbody2D body;
+    PhotonView sourceView;
+    int sourceViewId;
+    Vector2 fallbackSourcePosition;
+    float pullAcceleration;
+    float maxSpeed;
+    float expiresAt;
+
+    public void Configure(int newSourceViewId, Vector2 sourcePosition, float acceleration, float speedLimit, float duration)
+    {
+        if (body == null)
+            body = GetComponent<Rigidbody2D>();
+
+        sourceViewId = newSourceViewId;
+        fallbackSourcePosition = sourcePosition;
+        pullAcceleration = Mathf.Max(0f, acceleration);
+        maxSpeed = Mathf.Max(0.1f, speedLimit);
+        expiresAt = Mathf.Max(expiresAt, Time.time + Mathf.Max(0.05f, duration));
+        ResolveSourceView();
+    }
+
+    void FixedUpdate()
+    {
+        if (Time.time > expiresAt)
+        {
+            Destroy(this);
+            return;
+        }
+
+        if (body == null)
+        {
+            body = GetComponent<Rigidbody2D>();
+            if (body == null)
+                return;
+        }
+
+        ResolveSourceView();
+        Vector2 sourcePosition = sourceView != null
+            ? (Vector2)sourceView.transform.position
+            : fallbackSourcePosition;
+
+        Vector2 toSource = sourcePosition - body.position;
+        float distance = toSource.magnitude;
+        if (distance < 0.12f)
+        {
+            body.linearVelocity *= 0.94f;
+            return;
+        }
+
+        float ramp = Mathf.Clamp01(distance / 7.5f);
+        float acceleration = pullAcceleration * Mathf.Lerp(0.72f, 1.35f, ramp);
+        body.linearVelocity += toSource.normalized * acceleration * Time.fixedDeltaTime;
+
+        if (body.linearVelocity.sqrMagnitude > maxSpeed * maxSpeed)
+            body.linearVelocity = body.linearVelocity.normalized * maxSpeed;
+    }
+
+    void ResolveSourceView()
+    {
+        if (sourceView != null && sourceView.ViewID == sourceViewId)
+            return;
+
+        sourceView = sourceViewId > 0 ? PhotonView.Find(sourceViewId) : null;
     }
 }
 
@@ -1599,8 +2144,13 @@ public sealed class LureBeaconDecoy : MonoBehaviourPun
     [PunRPC]
     public void TakeBeaconDamageProfileAt(int shieldDamage, int hpDamage, int attackerViewId, float impactX, float impactY)
     {
-        int effectiveDamage = currentShield > 0 ? Mathf.Max(0, shieldDamage) : Mathf.Max(0, hpDamage);
-        ApplyDamage(effectiveDamage, attackerViewId, new Vector2(impactX, impactY));
+        ApplyProfileDamage(Mathf.Max(0, shieldDamage), Mathf.Max(0, hpDamage), attackerViewId, new Vector2(impactX, impactY));
+    }
+
+    [PunRPC]
+    public void TakeBeaconShieldOnlyDamageAt(int shieldDamage, int attackerViewId, float impactX, float impactY)
+    {
+        ApplyShieldOnlyDamage(Mathf.Max(0, shieldDamage), attackerViewId, new Vector2(impactX, impactY));
     }
 
     void ApplyDamage(int damage, int attackerViewId, Vector2 impactPoint)
@@ -1627,6 +2177,53 @@ public sealed class LureBeaconDecoy : MonoBehaviourPun
 
         if (currentHp <= 0)
             DestroyOnMaster();
+    }
+
+    void ApplyProfileDamage(int shieldDamage, int hpDamage, int attackerViewId, Vector2 impactPoint)
+    {
+        if (!PhotonNetwork.IsMasterClient || !CanBeTargeted)
+            return;
+
+        int remainingDamage = 0;
+        int absorbed = 0;
+        if (currentShield > 0)
+        {
+            if (shieldDamage > 0)
+            {
+                absorbed = Mathf.Min(currentShield, shieldDamage);
+                currentShield -= absorbed;
+                float overflowRatio = Mathf.Clamp01((shieldDamage - absorbed) / (float)shieldDamage);
+                remainingDamage = Mathf.RoundToInt(hpDamage * overflowRatio);
+            }
+        }
+        else
+        {
+            remainingDamage = hpDamage;
+        }
+
+        if (remainingDamage > 0)
+            currentHp = Mathf.Max(0, currentHp - remainingDamage);
+
+        if (absorbed <= 0 && remainingDamage <= 0)
+            return;
+
+        if (absorbed > 0)
+            photonView.RPC(nameof(PlayShieldHitFeedback), RpcTarget.All, impactPoint.x, impactPoint.y);
+        else
+            photonView.RPC(nameof(PlayHpHitFeedback), RpcTarget.All, impactPoint.x, impactPoint.y);
+
+        if (currentHp <= 0)
+            DestroyOnMaster();
+    }
+
+    void ApplyShieldOnlyDamage(int damage, int attackerViewId, Vector2 impactPoint)
+    {
+        if (!PhotonNetwork.IsMasterClient || !CanBeTargeted || damage <= 0 || currentShield <= 0)
+            return;
+
+        int absorbed = Mathf.Min(currentShield, damage);
+        currentShield -= absorbed;
+        photonView.RPC(nameof(PlayShieldHitFeedback), RpcTarget.All, impactPoint.x, impactPoint.y);
     }
 
     [PunRPC]
@@ -2001,7 +2598,7 @@ public class ShieldBarUI : MonoBehaviourPun
                                PhotonNetwork.CurrentRoom != null &&
                                PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
                                value is bool started &&
-                               started;
+                               GameplayHudVisibility.IsGameplayHudVisible(started);
         if (isVisible == shouldBeVisible)
             return;
 
@@ -2091,10 +2688,22 @@ public class AstronautSurvivor : MonoBehaviourPun
 {
     public const string AstronautInstantiationMarker = "astronaut_survivor";
     const float AstronautTargetSize = 0.56f;
+    const float EscapePodTargetSize = 0.75f;
+    const int EscapePodHpBonus = 50;
+    const float EscapePodSpeedMultiplier = 3f;
+    const float EmergencySuitBeaconProtectionDuration = 3f;
+    const float EmergencySuitBeaconSpeedDuration = 5f;
+    const float EmergencySuitBeaconSpeedMultiplier = 1.35f;
 
     static Sprite cachedAstronautSprite;
+    static Sprite cachedEscapePodSprite;
     bool initialized;
+    bool isEscapePod;
     SpriteRenderer cachedRenderer;
+    Coroutine emergencySuitBeaconSpeedRoutine;
+
+    public bool IsEscapePodMode => isEscapePod;
+    public float VisualTargetSize => isEscapePod ? EscapePodTargetSize : AstronautTargetSize;
 
     public static bool IsAstronautInstantiationData(object[] data)
     {
@@ -2104,31 +2713,49 @@ public class AstronautSurvivor : MonoBehaviourPun
                marker == AstronautInstantiationMarker;
     }
 
+    public static bool IsEscapePodInstantiationData(object[] data)
+    {
+        return IsAstronautInstantiationData(data) && HasEscapePod(data);
+    }
+
+    public Sprite GetVisualSprite()
+    {
+        return isEscapePod ? LoadEscapePodSprite() : LoadAstronautSprite();
+    }
+
     public void InitializeFromPhotonData()
     {
         if (initialized)
             return;
 
         initialized = true;
+        object[] instantiationData = photonView != null ? photonView.InstantiationData : null;
+        bool hasEmergencySuitBeacon = HasEmergencySuitBeacon(instantiationData);
+        isEscapePod = HasEscapePod(instantiationData);
 
         SpriteRenderer renderer = GetComponent<SpriteRenderer>();
         cachedRenderer = renderer;
         if (renderer != null)
         {
-            Sprite astronautSprite = LoadAstronautSprite();
-            if (astronautSprite != null)
+            Sprite visualSprite = GetVisualSprite();
+            if (visualSprite != null)
             {
-                renderer.sprite = astronautSprite;
+                renderer.sprite = visualSprite;
                 renderer.color = Color.white;
-                FitRendererToTargetSize(renderer, AstronautTargetSize);
+                FitRendererToTargetSize(renderer, VisualTargetSize);
             }
         }
 
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null)
         {
-            movement.speed = Mathf.Max(1.2f, movement.speed / 3f);
+            float astronautSpeed = Mathf.Max(1.2f, movement.speed / 3f);
+            float survivorSpeed = isEscapePod ? astronautSpeed * EscapePodSpeedMultiplier : astronautSpeed;
+            movement.speed = survivorSpeed;
             movement.boosterDuration = 9999f;
+
+            if (hasEmergencySuitBeacon)
+                emergencySuitBeaconSpeedRoutine = StartCoroutine(EmergencySuitBeaconSpeedRoutine(movement, survivorSpeed));
         }
 
         PlayerShooting shooting = GetComponent<PlayerShooting>();
@@ -2159,7 +2786,12 @@ public class AstronautSurvivor : MonoBehaviourPun
         if (health != null)
         {
             int astronautHp = PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.JakeId) ? 60 : 20;
+            if (isEscapePod)
+                astronautHp += EscapePodHpBonus;
+
             health.ConfigureBaseStats(astronautHp, 0);
+            if (hasEmergencySuitBeacon)
+                health.BeginEquipmentInvulnerabilityLocal(EmergencySuitBeaconProtectionDuration);
         }
 
         Rigidbody2D body = GetComponent<Rigidbody2D>();
@@ -2174,13 +2806,44 @@ public class AstronautSurvivor : MonoBehaviourPun
         if (boxCollider != null && renderer != null)
         {
             Vector2 spriteSize = renderer.bounds.size;
-            SetWorldBoxSize(boxCollider, new Vector2(spriteSize.x * 0.42f, spriteSize.y * 0.58f));
+            Vector2 colliderFactor = isEscapePod ? new Vector2(0.52f, 0.68f) : new Vector2(0.42f, 0.58f);
+            SetWorldBoxSize(boxCollider, new Vector2(spriteSize.x * colliderFactor.x, spriteSize.y * colliderFactor.y));
         }
 
         CircleCollider2D triggerCollider = GetComponent<CircleCollider2D>();
         if (triggerCollider != null)
             triggerCollider.enabled = false;
 
+    }
+
+    static bool HasEmergencySuitBeacon(object[] data)
+    {
+        return data != null &&
+               data.Length > 1 &&
+               data[1] is bool enabled &&
+               enabled;
+    }
+
+    static bool HasEscapePod(object[] data)
+    {
+        return data != null &&
+               data.Length > 2 &&
+               data[2] is bool enabled &&
+               enabled;
+    }
+
+    IEnumerator EmergencySuitBeaconSpeedRoutine(PlayerMovement movement, float baseAstronautSpeed)
+    {
+        if (movement == null)
+            yield break;
+
+        movement.speed = Mathf.Max(movement.speed, baseAstronautSpeed * EmergencySuitBeaconSpeedMultiplier);
+        yield return new WaitForSeconds(EmergencySuitBeaconSpeedDuration);
+
+        if (movement != null)
+            movement.speed = baseAstronautSpeed;
+
+        emergencySuitBeaconSpeedRoutine = null;
     }
 
     void LateUpdate()
@@ -2211,6 +2874,45 @@ public class AstronautSurvivor : MonoBehaviourPun
             100f);
 
         return cachedAstronautSprite;
+    }
+
+    Sprite LoadEscapePodSprite()
+    {
+        if (cachedEscapePodSprite != null)
+            return cachedEscapePodSprite;
+
+        cachedEscapePodSprite = Resources.Load<Sprite>("Items/escape_pod");
+        if (cachedEscapePodSprite != null)
+            return cachedEscapePodSprite;
+
+        Texture2D resourceTexture = Resources.Load<Texture2D>("Items/escape_pod");
+        if (resourceTexture != null)
+        {
+            cachedEscapePodSprite = Sprite.Create(
+                resourceTexture,
+                new Rect(0f, 0f, resourceTexture.width, resourceTexture.height),
+                new Vector2(0.5f, 0.5f),
+                100f);
+            return cachedEscapePodSprite;
+        }
+
+        string filePath = System.IO.Path.Combine(Application.dataPath, "escape_pod.png");
+        if (!System.IO.File.Exists(filePath))
+            return null;
+
+        byte[] bytes = System.IO.File.ReadAllBytes(filePath);
+        Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+        texture.LoadImage(bytes, false);
+        texture.wrapMode = TextureWrapMode.Clamp;
+        texture.filterMode = FilterMode.Bilinear;
+
+        cachedEscapePodSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            100f);
+
+        return cachedEscapePodSprite;
     }
 
     void SetWorldBoxSize(BoxCollider2D collider2D, Vector2 worldSize)

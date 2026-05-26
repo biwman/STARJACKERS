@@ -173,6 +173,31 @@ MonoBehaviour:
   - SetLootingFriendCollectFxRpc
   - ClearSpaceTrapTargetRpc
   - PlaySpaceDrillDeliverySoundRpc
+  - BeginEvacuationState
+  - PlaySpaceMantaWarningRpc
+  - ConfirmTreasureCollectionReservationRpc
+  - ForceCancelCollectibleUseRpc
+  - RejectUseExtractionRpc
+  - RequestReleaseTreasureCollection
+  - RequestReserveTreasureCollection
+  - ApplyGravityTetherPullRpc
+  - PlayGravitySquidWarningRpc
+  - PlayHunterLanceLockRpc
+  - PlayHunterLanceFireRpc
+  - SpawnHunterLanceAimRpc
+  - SpawnHunterLanceShotRpc
+  - StartGravitySquidTetherRpc
+  - StopGravitySquidTetherRpc
+  - PlaySpaceAnimalDeathAnimationRpc
+  - BeginEquipmentInvulnerabilityRpc
+  - RequestFactoryContainerBatchDeposit
+  - RestoreRejectedFactoryContainersRpc
+  - PlayChatCommandRpc
+  - StartPulseDisruptorWaveRpc
+  - TakeBeaconShieldOnlyDamageAt
+  - TakeDeployableShieldOnlyDamageAt
+  - TakeShieldOnlyDamageAt
+  - ApplyAsteroidKnockbackRpc
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

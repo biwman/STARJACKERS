@@ -9,6 +9,7 @@ public class AudioManager : MonoBehaviour
 {
     const float SpatialMinDistance = 1.5f;
     const float SpatialMaxDistance = 18f;
+    const float ClickSoundCooldownSeconds = 0.055f;
 
     static AudioManager instance;
 
@@ -35,6 +36,7 @@ public class AudioManager : MonoBehaviour
     AudioClip magneticBeamClip;
     AudioClip shootSmallClip;
     AudioClip artilleryGunClip;
+    AudioClip gatlingGunClip;
     AudioClip lazer1Clip;
     AudioClip lazer2Clip;
     AudioClip repairBayLandingClip;
@@ -46,11 +48,21 @@ public class AudioManager : MonoBehaviour
     AudioClip astroCutterClip;
     AudioClip guidanceSystemClip;
     AudioClip spaceDrillDeliveryClip;
+    AudioClip spaceMantaWarningClip;
+    AudioClip gravitySquidWarningClip;
+    AudioClip gravitySquidTetherClip;
+    AudioClip hunterLanceLockClip;
+    AudioClip hunterLanceFireClip;
+    AudioClip rocketLaunchClip;
+    AudioClip rocketLockClip;
+    AudioClip rocketFlyLoopClip;
+    AudioClip rocketExplosionClip;
 
     AudioSource oneShotSource;
     AudioSource drillingLoopSource;
     AudioSource alarmLoopSource;
     Coroutine evacBuzzerRoutine;
+    float lastClickSoundTime = -100f;
     readonly HashSet<int> hookedButtons = new HashSet<int>();
 
     public static AudioManager Instance
@@ -74,6 +86,8 @@ public class AudioManager : MonoBehaviour
     public AudioClip AstroCutterClip => astroCutterClip != null ? astroCutterClip : lazer2Clip != null ? lazer2Clip : laserClip;
     public AudioClip GuidanceSystemClip => guidanceSystemClip != null ? guidanceSystemClip : beaconSignalClip != null ? beaconSignalClip : alarmClip;
     public AudioClip SpaceDrillDeliveryClip => spaceDrillDeliveryClip != null ? spaceDrillDeliveryClip : shieldChargeClip != null ? shieldChargeClip : clickClip;
+    public AudioClip GravitySquidTetherClip => gravitySquidTetherClip != null ? gravitySquidTetherClip : magneticBeamClip != null ? magneticBeamClip : shieldChargeClip;
+    public AudioClip RocketFlyLoopClip => rocketFlyLoopClip != null ? rocketFlyLoopClip : engineClip;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -151,6 +165,7 @@ public class AudioManager : MonoBehaviour
         magneticBeamClip = Resources.Load<AudioClip>("Audio/magnetic_beam_sound");
         shootSmallClip = Resources.Load<AudioClip>("Audio/shoot_small");
         artilleryGunClip = Resources.Load<AudioClip>("Audio/artillery_gun_sound");
+        gatlingGunClip = Resources.Load<AudioClip>("Audio/gatling_gun_sound");
         lazer1Clip = Resources.Load<AudioClip>("Audio/lazer1");
         lazer2Clip = Resources.Load<AudioClip>("Audio/lazer2");
         repairBayLandingClip = Resources.Load<AudioClip>("Audio/stacja_naprawcza_landing_sound");
@@ -162,6 +177,43 @@ public class AudioManager : MonoBehaviour
         astroCutterClip = Resources.Load<AudioClip>("Audio/astro_cutter_sound");
         guidanceSystemClip = Resources.Load<AudioClip>("Audio/guidance_system_sound");
         spaceDrillDeliveryClip = Resources.Load<AudioClip>("Audio/space_drill_delivery_sound");
+        spaceMantaWarningClip = Resources.Load<AudioClip>("Audio/space_manta_warning");
+        gravitySquidWarningClip = Resources.Load<AudioClip>("Audio/gravity_squid_warning");
+        gravitySquidTetherClip = Resources.Load<AudioClip>("Audio/gravity_squid_tether");
+        hunterLanceLockClip = Resources.Load<AudioClip>("Audio/hunter_lance_lock");
+        hunterLanceFireClip = Resources.Load<AudioClip>("Audio/hunter_lance_fire");
+        rocketLaunchClip = Resources.Load<AudioClip>("Audio/rocket_sound");
+        rocketLockClip = Resources.Load<AudioClip>("Audio/rocket_lock");
+        if (rocketLockClip == null)
+            rocketLockClip = CreateRocketLockConfirmationClip();
+        rocketFlyLoopClip = Resources.Load<AudioClip>("Audio/rocket_fly_loop");
+        rocketExplosionClip = Resources.Load<AudioClip>("Audio/rocket_boom_sound");
+    }
+
+    AudioClip CreateRocketLockConfirmationClip()
+    {
+        const int sampleRate = 44100;
+        const float duration = 0.18f;
+        int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+        float[] data = new float[sampleCount];
+        float phase = 0f;
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float time = i / (float)sampleRate;
+            float normalized = time / duration;
+            float frequency = time < 0.075f ? 940f : time < 0.13f ? 1320f : 1660f;
+            phase += (Mathf.PI * 2f * frequency) / sampleRate;
+            float attack = Mathf.Clamp01(time / 0.012f);
+            float release = Mathf.Clamp01((duration - time) / 0.04f);
+            float dip = time > 0.075f && time < 0.092f ? 0.28f : 1f;
+            float envelope = attack * release * dip * Mathf.Lerp(0.95f, 0.55f, normalized);
+            float tone = Mathf.Sin(phase) * 0.34f + Mathf.Sin(phase * 2.01f) * 0.055f;
+            data[i] = tone * envelope;
+        }
+
+        AudioClip clip = AudioClip.Create("GeneratedRocketLockConfirmed", sampleCount, 1, sampleRate, false);
+        clip.SetData(data, 0);
+        return clip;
     }
 
     void EnsureSources()
@@ -213,6 +265,10 @@ public class AudioManager : MonoBehaviour
 
     public void PlayClick()
     {
+        if (Time.unscaledTime - lastClickSoundTime < ClickSoundCooldownSeconds)
+            return;
+
+        lastClickSoundTime = Time.unscaledTime;
         PlayOneShot(clickClip, 0.8f);
     }
 
@@ -239,6 +295,11 @@ public class AudioManager : MonoBehaviour
     public void PlayArtilleryGunAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(artilleryGunClip != null ? artilleryGunClip : explosionClip, worldPosition, 0.72f);
+    }
+
+    public void PlayGatlingGunAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(gatlingGunClip != null ? gatlingGunClip : shootSmallClip != null ? shootSmallClip : laserClip, worldPosition, 0.74f);
     }
 
     public void PlayLazer1At(Vector3 worldPosition)
@@ -359,6 +420,41 @@ public class AudioManager : MonoBehaviour
     public void PlaySpaceDrillDeliveryAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(SpaceDrillDeliveryClip, worldPosition, 0.68f);
+    }
+
+    public void PlaySpaceMantaWarningAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(spaceMantaWarningClip != null ? spaceMantaWarningClip : beaconSignalClip != null ? beaconSignalClip : alarmClip, worldPosition, 0.9f);
+    }
+
+    public void PlayGravitySquidWarningAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(gravitySquidWarningClip != null ? gravitySquidWarningClip : beaconSignalClip != null ? beaconSignalClip : alarmClip, worldPosition, 0.92f);
+    }
+
+    public void PlayHunterLanceLockAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(hunterLanceLockClip != null ? hunterLanceLockClip : guidanceSystemClip != null ? guidanceSystemClip : alarmClip, worldPosition, 0.9f);
+    }
+
+    public void PlayHunterLanceFireAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(hunterLanceFireClip != null ? hunterLanceFireClip : lazer1Clip != null ? lazer1Clip : laserClip, worldPosition, 0.88f);
+    }
+
+    public void PlayRocketLaunchAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(rocketLaunchClip != null ? rocketLaunchClip : artilleryGunClip != null ? artilleryGunClip : shootSmallClip != null ? shootSmallClip : laserClip, worldPosition, 0.82f);
+    }
+
+    public void PlayRocketLockAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(rocketLockClip != null ? rocketLockClip : hunterLanceLockClip != null ? hunterLanceLockClip : beaconSignalClip != null ? beaconSignalClip : clickClip, worldPosition, 0.72f);
+    }
+
+    public void PlayRocketExplosionAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(rocketExplosionClip != null ? rocketExplosionClip : explosionClip, worldPosition, 0.86f);
     }
 
     public void PlayEvacBuzzerBurst()

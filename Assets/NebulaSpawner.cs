@@ -8,6 +8,8 @@ using UnityEngine;
 public class NebulaSpawner : MonoBehaviour
 {
     public const string FireNebulaLayoutKey = "fireNebulaLayout";
+    public const string CloudLayoutKey = "cloudLayout";
+    public const string CloudDirectionKey = "cloudDirection";
 
     const string EmptyLayoutSentinel = "__empty__";
     const string GameStartedKey = "gameStarted";
@@ -19,6 +21,7 @@ public class NebulaSpawner : MonoBehaviour
     const float MinDistanceFromExtraction = 4f;
     const float MinDistanceFromObstacle = 3.8f;
     const float MinDistanceFromPlayers = 3.6f;
+    const float MinCloudDistance = 3.2f;
 
     public int nebulaCount = 5;
 
@@ -68,10 +71,22 @@ public class NebulaSpawner : MonoBehaviour
 
         string normalLayout = GetRoomLayout(NebulaLayoutKey);
         string fireLayout = GetRoomLayout(FireNebulaLayoutKey);
+        string cloudLayout = GetRoomLayout(CloudLayoutKey);
+        string cloudDirection = GetRoomLayout(CloudDirectionKey);
 
-        if (PhotonNetwork.IsMasterClient && (string.IsNullOrWhiteSpace(normalLayout) || string.IsNullOrWhiteSpace(fireLayout)))
+        if (PhotonNetwork.IsMasterClient &&
+            (string.IsNullOrWhiteSpace(normalLayout) ||
+             string.IsNullOrWhiteSpace(fireLayout) ||
+             string.IsNullOrWhiteSpace(cloudLayout) ||
+             string.IsNullOrWhiteSpace(cloudDirection)))
         {
             ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable();
+
+            if (string.IsNullOrWhiteSpace(cloudDirection))
+            {
+                cloudDirection = BuildCloudDirection();
+                props[CloudDirectionKey] = cloudDirection;
+            }
 
             if (string.IsNullOrWhiteSpace(normalLayout))
             {
@@ -86,25 +101,37 @@ public class NebulaSpawner : MonoBehaviour
                 props[FireNebulaLayoutKey] = fireLayout;
             }
 
+            if (string.IsNullOrWhiteSpace(cloudLayout))
+            {
+                cloudLayout = BuildCloudLayout();
+                props[CloudLayoutKey] = cloudLayout;
+            }
+
             if (props.Count > 0)
                 PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         }
 
-        if (!string.IsNullOrWhiteSpace(normalLayout) && !string.IsNullOrWhiteSpace(fireLayout))
-            ApplyLayouts(normalLayout, fireLayout);
+        if (!string.IsNullOrWhiteSpace(normalLayout) &&
+            !string.IsNullOrWhiteSpace(fireLayout) &&
+            !string.IsNullOrWhiteSpace(cloudLayout) &&
+            !string.IsNullOrWhiteSpace(cloudDirection))
+        {
+            ApplyLayouts(normalLayout, fireLayout, cloudLayout, ParseDirection(cloudDirection));
+        }
     }
 
-    void ApplyLayouts(string normalLayout, string fireLayout)
+    void ApplyLayouts(string normalLayout, string fireLayout, string cloudLayout, Vector2 cloudDirection)
     {
         if (layoutApplied)
             return;
 
-        ApplyLayerLayout(normalLayout, NebulaFieldKind.Normal);
-        ApplyLayerLayout(fireLayout, NebulaFieldKind.Fire);
+        ApplyLayerLayout(normalLayout, NebulaFieldKind.Normal, Vector2.zero);
+        ApplyLayerLayout(fireLayout, NebulaFieldKind.Fire, Vector2.zero);
+        ApplyLayerLayout(cloudLayout, NebulaFieldKind.Cloud, cloudDirection);
         layoutApplied = true;
     }
 
-    void ApplyLayerLayout(string layout, NebulaFieldKind kind)
+    void ApplyLayerLayout(string layout, NebulaFieldKind kind, Vector2 cloudDirection)
     {
         if (string.IsNullOrWhiteSpace(layout) || layout == EmptyLayoutSentinel)
             return;
@@ -112,12 +139,21 @@ public class NebulaSpawner : MonoBehaviour
         List<Vector2> positions = ParseLayout(layout);
         for (int i = 0; i < positions.Count; i++)
         {
-            GameObject nebula = new GameObject(kind == NebulaFieldKind.Fire ? "FireNebula" : "Nebula");
+            GameObject nebula = new GameObject(kind == NebulaFieldKind.Fire ? "FireNebula" : kind == NebulaFieldKind.Cloud ? "Cloud" : "Nebula");
             nebula.transform.position = new Vector3(positions[i].x, positions[i].y, 0f);
             nebula.AddComponent<SpriteRenderer>();
             nebula.AddComponent<CircleCollider2D>();
+            if (kind == NebulaFieldKind.Cloud)
+            {
+                Rigidbody2D body = nebula.AddComponent<Rigidbody2D>();
+                body.bodyType = RigidbodyType2D.Kinematic;
+                body.gravityScale = 0f;
+            }
+
             NebulaField field = nebula.AddComponent<NebulaField>();
             field.ConfigureKind(kind);
+            if (kind == NebulaFieldKind.Cloud)
+                field.ConfigureCloudDrift(cloudDirection, i);
         }
     }
 
@@ -160,6 +196,45 @@ public class NebulaSpawner : MonoBehaviour
         if (positions.Count == 0)
             return EmptyLayoutSentinel;
 
+        return SerializeLayout(positions);
+    }
+
+    string BuildCloudLayout()
+    {
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        List<Vector2> positions = new List<Vector2>();
+        int targetCount = Mathf.Max(0, Mathf.RoundToInt(nebulaCount * GetDensityMultiplier(RoomSettings.CloudsDensityKey) * RoomSettings.GetMapAreaMultiplier()));
+        int attempts = 0;
+
+        while (positions.Count < targetCount && attempts < 400)
+        {
+            attempts++;
+
+            float x = Random.Range(-mapSize.x / 2f + Margin, mapSize.x / 2f - Margin);
+            float y = Random.Range(-mapSize.y / 2f + Margin, mapSize.y / 2f - Margin);
+            Vector2 candidate = new Vector2(x, y);
+
+            if (!IsFarEnough(candidate, positions, MinCloudDistance))
+                continue;
+
+            positions.Add(candidate);
+        }
+
+        if (positions.Count == 0)
+            return EmptyLayoutSentinel;
+
+        return SerializeLayout(positions);
+    }
+
+    string BuildCloudDirection()
+    {
+        float angle = Random.Range(0f, Mathf.PI * 2f);
+        Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+        return direction.x.ToString(CultureInfo.InvariantCulture) + "," + direction.y.ToString(CultureInfo.InvariantCulture);
+    }
+
+    string SerializeLayout(List<Vector2> positions)
+    {
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < positions.Count; i++)
         {
@@ -213,6 +288,15 @@ public class NebulaSpawner : MonoBehaviour
         return positions;
     }
 
+    Vector2 ParseDirection(string layout)
+    {
+        List<Vector2> values = ParseLayout(layout);
+        if (values.Count > 0 && values[0].sqrMagnitude > 0.0001f)
+            return values[0].normalized;
+
+        return Vector2.right;
+    }
+
     List<Vector2> GetCurrentPlayerPositions()
     {
         List<Vector2> positions = new List<Vector2>();
@@ -249,7 +333,9 @@ public class NebulaSpawner : MonoBehaviour
         {
             string normalized = densityKey == RoomSettings.FireNebulaDensityKey
                 ? RoomSettings.NormalizeFireNebulaDensity(density)
-                : density.Trim().ToLowerInvariant();
+                : densityKey == RoomSettings.CloudsDensityKey
+                    ? RoomSettings.NormalizeCloudsDensity(density)
+                    : density.Trim().ToLowerInvariant();
 
             switch (normalized)
             {
@@ -260,7 +346,7 @@ public class NebulaSpawner : MonoBehaviour
             }
         }
 
-        return densityKey == RoomSettings.FireNebulaDensityKey ? 0f : 0.5f;
+        return densityKey == RoomSettings.FireNebulaDensityKey || densityKey == RoomSettings.CloudsDensityKey ? 0f : 0.5f;
     }
 
     bool IsRoundStarted()

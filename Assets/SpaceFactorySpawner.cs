@@ -18,7 +18,7 @@ public sealed class SpaceFactorySpawner : MonoBehaviourPunCallbacks
     const string EmptyLayoutSentinel = "__empty__";
     const float Margin = 5.3f;
     const float MinDistanceBetweenFactories = 11f;
-    const float MinDistanceFromExtractionZones = 8.2f;
+    const float MinDistanceFromExtractionZones = 12.5f;
     const float MinDistanceFromRepairBays = 10f;
     const float MinDistanceFromObstacles = 7f;
     const float MinDistanceFromNebulas = 5.8f;
@@ -181,7 +181,7 @@ public sealed class SpaceFactorySpawner : MonoBehaviourPunCallbacks
                 repairBayPositions,
                 obstaclePositions,
                 nebulaPositions,
-                MinDistanceFromExtractionZones * 0.68f,
+                MinDistanceFromExtractionZones * 0.82f,
                 MinDistanceFromRepairBays * 0.62f,
                 MinDistanceFromObstacles * 0.58f,
                 MinDistanceFromNebulas * 0.55f,

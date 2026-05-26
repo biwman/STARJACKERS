@@ -38,9 +38,13 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     const float MapSelectionButtonY = -270f;
     const float MapSelectionButtonWidth = 330f;
     const float MapSelectionButtonHeight = 180f;
+    const float MapDeathLossBadgeWidth = 256f;
+    const float MapDeathLossBadgeHeight = 244f;
+    const float MapDeathLossBadgeIconWidth = 208f;
+    const float MapDeathLossBadgeIconHeight = 164f;
     const float EnemyNameColumnWidth = 180f;
     const float EnemyColumnWidth = 98f;
-    const float EnemyRowHeight = 62f;
+    const float EnemyRowHeight = 56f;
     const float FullScreenSideMargin = 34f;
     const float FullScreenTopMargin = 24f;
     const float FullScreenBottomMargin = 34f;
@@ -138,6 +142,36 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     static readonly string[] EndDisasterModeOptions = { RoomSettings.EndDisasterOff, RoomSettings.EndDisasterMeteor };
     static readonly int[] EndDisasterWarningSecondOptions = { 10, 15, 20, 25, 30, 35, 40 };
     static readonly string[] ShootingModelOptions = { RoomSettings.ShootingModelSimple, RoomSettings.ShootingModelComplex };
+    static readonly string[] ParallaxBackgroundOptions =
+    {
+        RoomSettings.ParallaxBackgroundKosmos3,
+        RoomSettings.ParallaxBackgroundKosmos6,
+        RoomSettings.ParallaxBackgroundKosmos8,
+        RoomSettings.ParallaxBackgroundKosmos9,
+        RoomSettings.ParallaxBackgroundKosmos10,
+        RoomSettings.ParallaxBackgroundKosmos11,
+        RoomSettings.ParallaxBackgroundKosmos12,
+        RoomSettings.ParallaxBackgroundKosmos13,
+        RoomSettings.ParallaxBackgroundKosmos14
+    };
+    static readonly string[] BackgroundObjectOptions =
+    {
+        RoomSettings.BackgroundObjectOff,
+        RoomSettings.BackgroundObject1,
+        RoomSettings.BackgroundObject2,
+        RoomSettings.BackgroundObject3,
+        RoomSettings.BackgroundObject4,
+        RoomSettings.BackgroundObject5,
+        RoomSettings.BackgroundObject6,
+        RoomSettings.BackgroundObject7,
+        RoomSettings.BackgroundObject8,
+        RoomSettings.BackgroundObject9,
+        RoomSettings.BackgroundObject10,
+        RoomSettings.BackgroundObject11,
+        RoomSettings.BackgroundObject12,
+        RoomSettings.BackgroundObject13
+    };
+    static readonly int[] CollectKeepAliveRangeBonusPercentOptions = Enumerable.Range(0, 21).Select(i => i * 10).ToArray();
 
     public Button readyButton;
     public TMP_Text readyText;
@@ -146,6 +180,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text mapSizeSettingText;
     public TMP_Text mapBackgroundSettingText;
     public TMP_Text visualEffectsSettingText;
+    public TMP_Text advancedBackgroundSettingText;
+    public TMP_Text parallaxBackgroundSettingText;
+    public TMP_Text backgroundObjectSettingText;
+    public TMP_Text gravityWellPhysicsSettingText;
     public TMP_Text startingVfxSettingText;
     public TMP_Text endDisasterSettingText;
     public TMP_Text endDisasterTimeSettingText;
@@ -163,6 +201,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text fireNebulaSettingText;
     public TMP_Text nebulaSizeSettingText;
     public TMP_Text fireNebulaSizeSettingText;
+    public TMP_Text advancedNebulaSettingText;
+    public TMP_Text cloudsSettingText;
+    public TMP_Text cloudsSizeSettingText;
     public TMP_Text extractionSettingText;
     public TMP_Text repairBaySettingText;
     public TMP_Text spaceFactorySettingText;
@@ -175,6 +216,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text equipmentLossSettingText;
     public TMP_Text crazyEnemiesEffectSettingText;
     public TMP_Text fogOfWarEffectSettingText;
+    public TMP_Text pirateBaseEffectSettingText;
+    public TMP_Text asteroidShowerEffectSettingText;
     public TMP_Text movingObjectsSettingText;
     public TMP_Text enemyBotsSettingText;
     public TMP_Text corsairSettingText;
@@ -186,7 +229,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text batteringSettingText;
     public TMP_Text shootingModelSettingText;
     public TMP_Text superAttackSettingText;
+    public TMP_Text advancedMovingJoystickSettingText;
     public TMP_Text advancedShootingJoystickSettingText;
+    public TMP_Text dynamicUseSettingText;
+    public TMP_Text collectKeepAliveRangeBonusSettingText;
     public TMP_Text hapticsSettingText;
     public TMP_Text fpsCounterSettingText;
     public TMP_Text gunSetupSettingText;
@@ -194,6 +240,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button mapSizeSettingButton;
     public Button mapBackgroundSettingButton;
     public Button visualEffectsSettingButton;
+    public Button advancedBackgroundSettingButton;
+    public Button parallaxBackgroundSettingButton;
+    public Button backgroundObjectSettingButton;
+    public Button gravityWellPhysicsSettingButton;
     public Button startingVfxSettingButton;
     public Button endDisasterSettingButton;
     public Button endDisasterTimeSettingButton;
@@ -211,6 +261,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button fireNebulaSettingButton;
     public Button nebulaSizeSettingButton;
     public Button fireNebulaSizeSettingButton;
+    public Button advancedNebulaSettingButton;
+    public Button cloudsSettingButton;
+    public Button cloudsSizeSettingButton;
     public Button extractionSettingButton;
     public Button repairBaySettingButton;
     public Button spaceFactorySettingButton;
@@ -223,6 +276,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button equipmentLossSettingButton;
     public Button crazyEnemiesEffectSettingButton;
     public Button fogOfWarEffectSettingButton;
+    public Button pirateBaseEffectSettingButton;
+    public Button asteroidShowerEffectSettingButton;
     public Button movingObjectsSettingButton;
     public Button bulletPushSettingButton;
     public Button obstacleWeightSettingButton;
@@ -230,7 +285,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button batteringSettingButton;
     public Button shootingModelSettingButton;
     public Button superAttackSettingButton;
+    public Button advancedMovingJoystickSettingButton;
     public Button advancedShootingJoystickSettingButton;
+    public Button dynamicUseSettingButton;
+    public Button collectKeepAliveRangeBonusSettingButton;
     public Button hapticsSettingButton;
     public Button fpsCounterSettingButton;
     public Button gunSetupSettingButton;
@@ -248,10 +306,13 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     readonly Dictionary<string, TMP_Text> enemyRowLabels = new Dictionary<string, TMP_Text>();
     readonly Dictionary<string, TMP_Text> enemyHeaderLabels = new Dictionary<string, TMP_Text>();
     readonly Dictionary<int, Sprite> mapBackgroundPreviewCache = new Dictionary<int, Sprite>();
+    readonly Dictionary<string, Sprite> mapSpecificPreviewCache = new Dictionary<string, Sprite>();
     readonly List<Button> fullscreenMapTileButtons = new List<Button>();
     ScrollRect leftSettingsScrollRect;
     RectTransform leftSettingsViewportRect;
     RectTransform leftSettingsContentRect;
+    ScrollRect enemyTableScrollRect;
+    RectTransform enemyTableViewportRect;
     RectTransform enemyTableRootRect;
     RectTransform weaponSettingsRootRect;
     GameObject mapSelectionOverlayObject;
@@ -261,6 +322,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     RectTransform mapSelectionContentRect;
     readonly List<Button> mapSelectionTileButtons = new List<Button>();
     bool leftSettingsScrollInitialized;
+    bool enemyTableScrollInitialized;
     LobbyScreen currentScreen = LobbyScreen.MapSelection;
     LobbyScreen previousMapScreenBeforeDeveloperSettings = LobbyScreen.MapSelection;
     string selectedMapId;
@@ -304,7 +366,16 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     Image mapDetailsPreviewImage;
     TMP_Text mapDetailsNameText;
     TMP_Text mapDetailsDescriptionText;
+    GameObject mapDetailsLossBadgeObject;
+    Image mapDetailsLossBadgeImage;
+    Image mapDetailsLossSkullImage;
+    TMP_Text mapDetailsLossSkullText;
+    TMP_Text mapDetailsLossLabelText;
+    Sprite mapDeathSkullBadgeSprite;
     GameObject developerSettingsRootObject;
+    bool legacyLobbyUiActive = true;
+    bool gameplayHudVisibilityInitialized;
+    bool lastGameplayHudVisible;
 
     CanvasGroup EnsureCanvasGroup()
     {
@@ -644,7 +715,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                 string mapId = map.Id;
                 tileButton.onClick.AddListener(() =>
                 {
-                    AudioManager.Instance?.PlayClick();
                     OnMapTileSelected(mapId);
                 });
                 fullscreenMapTileButtons.Add(tileButton);
@@ -693,14 +763,97 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             mapDetailsPreviewImage.raycastTarget = false;
 
             mapDetailsNameText = CreateStandaloneLabel(mapDetailsRootObject.transform, "MapDetailsName", "MAP", new Vector2(1048f, -170f), new Vector2(420f, 40f), 30f, TextAlignmentOptions.Left);
-            mapDetailsDescriptionText = CreateStandaloneLabel(mapDetailsRootObject.transform, "MapDetailsDescription", string.Empty, new Vector2(1048f, -234f), new Vector2(460f, 540f), 22f, TextAlignmentOptions.TopLeft);
+            mapDetailsDescriptionText = CreateStandaloneLabel(mapDetailsRootObject.transform, "MapDetailsDescription", string.Empty, new Vector2(1048f, -234f), new Vector2(460f, 540f), 27f, TextAlignmentOptions.TopLeft);
             mapDetailsDescriptionText.fontStyle = FontStyles.Normal;
             mapDetailsDescriptionText.textWrappingMode = TextWrappingModes.Normal;
-            mapDetailsDescriptionText.lineSpacing = 6f;
+            mapDetailsDescriptionText.lineSpacing = 8f;
         }
         else if (fullScreenRoot != null && mapDetailsRootObject.transform.parent != fullScreenRoot.transform)
         {
             mapDetailsRootObject.transform.SetParent(fullScreenRoot.transform, false);
+        }
+
+        EnsureMapDetailsLossBadge();
+        ConfigureMapDetailsTextStyles();
+    }
+
+    void EnsureMapDetailsLossBadge()
+    {
+        if (mapDetailsRootObject == null)
+            return;
+
+        mapDetailsLossBadgeObject = FindOrCreateChild(mapDetailsRootObject, "MapDetailsLossBadge", typeof(RectTransform), typeof(Image));
+        mapDetailsLossBadgeImage = mapDetailsLossBadgeObject.GetComponent<Image>();
+        if (mapDetailsLossBadgeImage != null)
+        {
+            mapDetailsLossBadgeImage.raycastTarget = false;
+            mapDetailsLossBadgeImage.color = new Color(0.02f, 0.03f, 0.04f, 0.82f);
+        }
+
+        Shadow badgeShadow = mapDetailsLossBadgeObject.GetComponent<Shadow>();
+        if (badgeShadow == null)
+            badgeShadow = mapDetailsLossBadgeObject.AddComponent<Shadow>();
+        badgeShadow.effectColor = new Color(0f, 0f, 0f, 0.6f);
+        badgeShadow.effectDistance = new Vector2(3f, -3f);
+
+        GameObject skullImageObject = FindOrCreateChild(mapDetailsLossBadgeObject, "LossSkullImage", typeof(RectTransform), typeof(Image));
+        mapDetailsLossSkullImage = skullImageObject.GetComponent<Image>();
+        if (mapDetailsLossSkullImage != null)
+        {
+            RectTransform skullImageRect = mapDetailsLossSkullImage.rectTransform;
+            skullImageRect.anchorMin = new Vector2(0.5f, 1f);
+            skullImageRect.anchorMax = new Vector2(0.5f, 1f);
+            skullImageRect.pivot = new Vector2(0.5f, 1f);
+            skullImageRect.anchoredPosition = new Vector2(0f, -10f);
+            skullImageRect.sizeDelta = new Vector2(MapDeathLossBadgeIconWidth, MapDeathLossBadgeIconHeight);
+            mapDetailsLossSkullImage.raycastTarget = false;
+            mapDetailsLossSkullImage.preserveAspect = true;
+            mapDetailsLossSkullImage.sprite = LoadMapDeathSkullBadgeSprite();
+        }
+
+        Transform skullTransform = mapDetailsLossBadgeObject.transform.Find("LossSkull");
+        mapDetailsLossSkullText = skullTransform != null
+            ? skullTransform.GetComponent<TMP_Text>()
+            : CreateStandaloneLabel(mapDetailsLossBadgeObject.transform, "LossSkull", "\u2620", new Vector2(0f, -12f), new Vector2(MapDeathLossBadgeWidth, 152f), 140f, TextAlignmentOptions.Center);
+
+        Transform labelTransform = mapDetailsLossBadgeObject.transform.Find("LossLabel");
+        mapDetailsLossLabelText = labelTransform != null
+            ? labelTransform.GetComponent<TMP_Text>()
+            : CreateStandaloneLabel(mapDetailsLossBadgeObject.transform, "LossLabel", string.Empty, new Vector2(0f, -180f), new Vector2(MapDeathLossBadgeWidth, 42f), 24f, TextAlignmentOptions.Center);
+
+        if (mapDetailsLossSkullText != null)
+        {
+            RectTransform skullTextRect = mapDetailsLossSkullText.rectTransform;
+            skullTextRect.anchoredPosition = new Vector2(0f, -12f);
+            skullTextRect.sizeDelta = new Vector2(MapDeathLossBadgeWidth, 152f);
+            mapDetailsLossSkullText.text = "\u2620";
+            mapDetailsLossSkullText.fontSize = 140f;
+            mapDetailsLossSkullText.fontStyle = FontStyles.Bold;
+            mapDetailsLossSkullText.textWrappingMode = TextWrappingModes.NoWrap;
+            mapDetailsLossSkullText.raycastTarget = false;
+            mapDetailsLossSkullText.gameObject.SetActive(mapDetailsLossSkullImage == null || mapDetailsLossSkullImage.sprite == null);
+        }
+
+        if (mapDetailsLossLabelText != null)
+        {
+            RectTransform labelRect = mapDetailsLossLabelText.rectTransform;
+            labelRect.anchoredPosition = new Vector2(0f, -180f);
+            labelRect.sizeDelta = new Vector2(MapDeathLossBadgeWidth, 42f);
+            mapDetailsLossLabelText.fontSize = 24f;
+            mapDetailsLossLabelText.fontStyle = FontStyles.Bold;
+            mapDetailsLossLabelText.textWrappingMode = TextWrappingModes.NoWrap;
+            mapDetailsLossLabelText.raycastTarget = false;
+        }
+    }
+
+    void ConfigureMapDetailsTextStyles()
+    {
+        if (mapDetailsDescriptionText != null)
+        {
+            mapDetailsDescriptionText.fontSize = 27f;
+            mapDetailsDescriptionText.fontStyle = FontStyles.Normal;
+            mapDetailsDescriptionText.textWrappingMode = TextWrappingModes.Normal;
+            mapDetailsDescriptionText.lineSpacing = 8f;
         }
     }
 
@@ -1046,6 +1199,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (leftSettingsViewportRect != null)
             leftSettingsViewportRect.gameObject.SetActive(false);
+        if (enemyTableViewportRect != null)
+            enemyTableViewportRect.gameObject.SetActive(false);
         if (enemyTableRootRect != null)
             enemyTableRootRect.gameObject.SetActive(false);
         if (weaponSettingsRootRect != null)
@@ -1159,6 +1314,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                 developerCheatButton.gameObject.SetActive(false);
             if (leftSettingsViewportRect != null)
                 leftSettingsViewportRect.gameObject.SetActive(false);
+            if (enemyTableViewportRect != null)
+                enemyTableViewportRect.gameObject.SetActive(false);
             if (enemyTableRootRect != null)
                 enemyTableRootRect.gameObject.SetActive(false);
             if (weaponSettingsRootRect != null)
@@ -1210,6 +1367,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (leftSettingsViewportRect != null)
             leftSettingsViewportRect.gameObject.SetActive(showDeveloperSettings);
+        if (enemyTableViewportRect != null)
+            enemyTableViewportRect.gameObject.SetActive(showDeveloperSettings);
         if (enemyTableRootRect != null)
             enemyTableRootRect.gameObject.SetActive(showDeveloperSettings);
         if (weaponSettingsRootRect != null)
@@ -1250,8 +1409,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         float tileWidth = Mathf.Min(MapTileWidth, (canvasWidth - FullScreenSideMargin * 2f - MapTileSpacingX * 2f) / 3f);
         float previewWidth = Mathf.Min(980f, canvasWidth * 0.56f);
         float previewHeight = Mathf.Min(720f, usableHeight);
-        float detailsStartX = FullScreenSideMargin + previewWidth + 34f;
+        float badgeGap = 18f;
+        float detailsStartX = FullScreenSideMargin + previewWidth + badgeGap + 28f;
         float detailsWidth = Mathf.Max(320f, canvasWidth - detailsStartX - FullScreenSideMargin);
+        float detailsBadgeTopOffset = Mathf.Clamp(previewHeight - MapDeathLossBadgeHeight - 16f, 330f, 430f);
 
         if (lobbyTopBarRootObject != null)
         {
@@ -1316,11 +1477,27 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                 nameRect.sizeDelta = new Vector2(detailsWidth, 40f);
             }
 
+            if (mapDetailsLossBadgeObject != null)
+            {
+                RectTransform badgeRect = mapDetailsLossBadgeObject.GetComponent<RectTransform>();
+                if (badgeRect != null)
+                {
+                    badgeRect.anchorMin = new Vector2(0f, 1f);
+                    badgeRect.anchorMax = new Vector2(0f, 1f);
+                    badgeRect.pivot = new Vector2(0f, 1f);
+                    float badgeX = detailsStartX + Mathf.Max(0f, (detailsWidth - MapDeathLossBadgeWidth) * 0.5f);
+                    badgeRect.anchoredPosition = new Vector2(badgeX, -contentTop - detailsBadgeTopOffset);
+                    badgeRect.sizeDelta = new Vector2(MapDeathLossBadgeWidth, MapDeathLossBadgeHeight);
+                }
+
+                mapDetailsLossBadgeObject.transform.SetAsLastSibling();
+            }
+
             if (mapDetailsDescriptionText != null)
             {
                 RectTransform descRect = mapDetailsDescriptionText.rectTransform;
                 descRect.anchoredPosition = new Vector2(detailsStartX, -contentTop - 64f);
-                descRect.sizeDelta = new Vector2(detailsWidth, Mathf.Max(300f, previewHeight - 80f));
+                descRect.sizeDelta = new Vector2(detailsWidth, Mathf.Max(240f, detailsBadgeTopOffset - 92f));
             }
         }
     }
@@ -1375,7 +1552,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             Image previewImage = tileButton.transform.Find("TilePreviewImage")?.GetComponent<Image>();
             if (previewImage != null)
             {
-                previewImage.sprite = LoadLobbyBackgroundSprite(map.MapBackgroundIndex);
+                previewImage.sprite = LoadMapPreviewSprite(map);
                 previewImage.color = Color.white;
             }
 
@@ -1466,7 +1643,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (mapDetailsPreviewImage != null)
         {
-            mapDetailsPreviewImage.sprite = LoadLobbyBackgroundSprite(selectedMap.MapBackgroundIndex);
+            mapDetailsPreviewImage.sprite = LoadMapPreviewSprite(selectedMap);
             mapDetailsPreviewImage.color = Color.white;
         }
 
@@ -1474,9 +1651,93 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             mapDetailsNameText.text = selectedMap.DisplayName;
         if (mapDetailsDescriptionText != null)
             mapDetailsDescriptionText.text = selectedMap.Description + BuildMapEffectsSummary();
+        RefreshMapDeathLossBadge(selectedMap);
 
         if (launchButton != null)
             launchButton.interactable = PhotonNetwork.IsMasterClient && PhotonNetwork.InRoom && RoomSettings.GetSessionState() == RoomSettings.SessionStateInLobby;
+    }
+
+    void RefreshMapDeathLossBadge(LobbyMapDefinition selectedMap)
+    {
+        if (selectedMap == null)
+            return;
+
+        EnsureMapDetailsLossBadge();
+
+        bool inventoryLoss = selectedMap.InventoryLossEnabled;
+        bool equipmentLoss = selectedMap.EquipmentLossEnabled;
+        if (PhotonNetwork.CurrentRoom != null && string.Equals(RoomSettings.GetSelectedLobbyMapId(), selectedMap.Id, System.StringComparison.Ordinal))
+        {
+            inventoryLoss = RoomSettings.IsInventoryLossEnabled();
+            equipmentLoss = RoomSettings.IsEquipmentLossEnabled();
+        }
+
+        Color skullColor;
+        string label;
+        if (equipmentLoss)
+        {
+            skullColor = new Color(1f, 0.18f, 0.12f, 1f);
+            label = inventoryLoss ? "FULL LOSS" : "EQUIP LOSS";
+        }
+        else if (inventoryLoss)
+        {
+            skullColor = new Color(1f, 0.82f, 0.12f, 1f);
+            label = "INV LOSS";
+        }
+        else
+        {
+            skullColor = new Color(0.24f, 1f, 0.46f, 1f);
+            label = "NO LOSS";
+        }
+
+        if (mapDetailsLossSkullText != null)
+        {
+            mapDetailsLossSkullText.text = "\u2620";
+            mapDetailsLossSkullText.color = skullColor;
+            mapDetailsLossSkullText.gameObject.SetActive(mapDetailsLossSkullImage == null || mapDetailsLossSkullImage.sprite == null);
+        }
+
+        if (mapDetailsLossSkullImage != null)
+        {
+            if (mapDetailsLossSkullImage.sprite == null)
+                mapDetailsLossSkullImage.sprite = LoadMapDeathSkullBadgeSprite();
+
+            mapDetailsLossSkullImage.color = skullColor;
+            mapDetailsLossSkullImage.gameObject.SetActive(mapDetailsLossSkullImage.sprite != null);
+        }
+
+        if (mapDetailsLossLabelText != null)
+        {
+            mapDetailsLossLabelText.text = label;
+            mapDetailsLossLabelText.color = skullColor;
+        }
+
+        if (mapDetailsLossBadgeImage != null)
+            mapDetailsLossBadgeImage.color = new Color(0.02f, 0.03f, 0.04f, 0.86f);
+
+        if (mapDetailsLossBadgeObject != null)
+            mapDetailsLossBadgeObject.SetActive(true);
+    }
+
+    Sprite LoadMapDeathSkullBadgeSprite()
+    {
+        if (mapDeathSkullBadgeSprite != null)
+            return mapDeathSkullBadgeSprite;
+
+        mapDeathSkullBadgeSprite = Resources.Load<Sprite>("UI/map_death_skull_badge");
+        if (mapDeathSkullBadgeSprite != null)
+            return mapDeathSkullBadgeSprite;
+
+        Texture2D texture = Resources.Load<Texture2D>("UI/map_death_skull_badge");
+        if (texture == null)
+            return null;
+
+        mapDeathSkullBadgeSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            100f);
+        return mapDeathSkullBadgeSprite;
     }
 
     string BuildMapEffectsSummary()
@@ -1496,6 +1757,20 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             RoomSettings.FogOfWarStartUtcMsKey,
             RoomSettings.FogOfWarActiveKey,
             "resources richness +1");
+        AddMapEffectSummary(
+            activeEffects,
+            "PIRATE BASE",
+            RoomSettings.PirateBaseModeKey,
+            RoomSettings.PirateBaseStartUtcMsKey,
+            RoomSettings.PirateBaseActiveKey,
+            "resources richness +1, Pirate Base enemy");
+        AddMapEffectSummary(
+            activeEffects,
+            "ASTEROID SHOWER",
+            RoomSettings.AsteroidShowerModeKey,
+            RoomSettings.AsteroidShowerStartUtcMsKey,
+            RoomSettings.AsteroidShowerActiveKey,
+            "resources richness +1, asteroid strikes");
 
         if (activeEffects.Count == 0)
             return string.Empty;
@@ -1516,6 +1791,18 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             IsMapEffectActive(RoomSettings.FogOfWarActiveKey))
         {
             labels.Add("FOG");
+        }
+
+        if (RoomSettings.GetMapEffectMode(RoomSettings.PirateBaseModeKey) != RoomSettings.MapEffectModeOff ||
+            IsMapEffectActive(RoomSettings.PirateBaseActiveKey))
+        {
+            labels.Add("PIRATE");
+        }
+
+        if (RoomSettings.GetMapEffectMode(RoomSettings.AsteroidShowerModeKey) != RoomSettings.MapEffectModeOff ||
+            IsMapEffectActive(RoomSettings.AsteroidShowerActiveKey))
+        {
+            labels.Add("ASTEROID");
         }
 
         return labels.Count > 0 ? "\nEFFECTS: " + string.Join(" + ", labels) : string.Empty;
@@ -1575,15 +1862,27 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             leftSettingsViewportRect.sizeDelta = new Vector2(660f, 840f);
         }
 
-        if (enemyTableRootRect != null)
+        RectTransform enemyLayoutRect = enemyTableViewportRect != null ? enemyTableViewportRect : enemyTableRootRect;
+        if (enemyLayoutRect != null)
         {
-            if (enemyTableRootRect.transform.parent != developerSettingsRootObject.transform)
-                enemyTableRootRect.transform.SetParent(developerSettingsRootObject.transform, false);
+            if (enemyLayoutRect.transform.parent != developerSettingsRootObject.transform)
+                enemyLayoutRect.transform.SetParent(developerSettingsRootObject.transform, false);
+            enemyLayoutRect.anchorMin = new Vector2(0f, 1f);
+            enemyLayoutRect.anchorMax = new Vector2(0f, 1f);
+            enemyLayoutRect.pivot = new Vector2(0f, 1f);
+            enemyLayoutRect.anchoredPosition = new Vector2(740f, -118f);
+            enemyLayoutRect.sizeDelta = new Vector2(1120f, 620f);
+        }
+
+        if (enemyTableRootRect != null && enemyTableViewportRect != null)
+        {
+            if (enemyTableRootRect.transform.parent != enemyTableViewportRect.transform)
+                enemyTableRootRect.transform.SetParent(enemyTableViewportRect, false);
             enemyTableRootRect.anchorMin = new Vector2(0f, 1f);
             enemyTableRootRect.anchorMax = new Vector2(0f, 1f);
             enemyTableRootRect.pivot = new Vector2(0f, 1f);
-            enemyTableRootRect.anchoredPosition = new Vector2(740f, -118f);
-            enemyTableRootRect.sizeDelta = new Vector2(1120f, 620f);
+            enemyTableRootRect.anchoredPosition = Vector2.zero;
+            enemyTableRootRect.sizeDelta = new Vector2(RightTableWidth, ResolveEnemyTableContentHeight());
         }
 
         if (weaponSettingsRootRect != null)
@@ -1644,6 +1943,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             cg.alpha = 0;
             cg.interactable = false;
             cg.blocksRaycasts = false;
+            SetLegacyLobbyUiActive(false);
         }
 
         if (readyText != null)
@@ -1670,6 +1970,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
             value is bool started && started)
         {
+            GameplayHudVisibility.ResetSuppression();
             HideLobby();
         }
 
@@ -1678,12 +1979,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void Update()
     {
-        CanvasGroup cg = EnsureCanvasGroup();
-        if (cg != null && cg.alpha > 0.01f && cg.blocksRaycasts)
-            SetGameplayHudVisible(false);
+        KeepGameplayHudHiddenWhileLobbyVisible();
     }
 
     void LateUpdate()
+    {
+        KeepGameplayHudHiddenWhileLobbyVisible();
+    }
+
+    void KeepGameplayHudHiddenWhileLobbyVisible()
     {
         CanvasGroup cg = EnsureCanvasGroup();
         if (cg != null && cg.alpha > 0.01f && cg.blocksRaycasts)
@@ -1709,6 +2013,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (started)
         {
+            GameplayHudVisibility.ResetSuppression();
             HideLobby();
         }
         else
@@ -1806,6 +2111,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             NetworkManager.RememberCurrentLobbySettings();
         }
 
+        if (propertiesThatChanged.ContainsKey(RoomSettings.ParallaxBackgroundKey) ||
+            propertiesThatChanged.ContainsKey(RoomSettings.BackgroundObjectKey))
+        {
+            GameVisualTheme.RequestRuntimeRefresh();
+        }
+
         if (!propertiesThatChanged.ContainsKey("gameStarted"))
             return;
 
@@ -1817,6 +2128,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (started)
         {
+            GameplayHudVisibility.ResetSuppression();
             HideLobby();
             if (!hasRecordedCurrentRound)
             {
@@ -1870,9 +2182,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     {
         PlayerMovement.gameStarted = true;
         PlayerShooting.gameStarted = true;
-        SetGameplayHudVisible(true);
+        SetGameplayHudVisible(true, true);
         HideMapSelectionOverlay();
         HideFullScreenLobbyFlow();
+        SetLegacyLobbyUiActive(false);
 
         CanvasGroup cg = EnsureCanvasGroup();
         cg.alpha = 0;
@@ -1882,7 +2195,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void ShowLobby()
     {
-        SetGameplayHudVisible(false);
+        SetLegacyLobbyUiActive(true);
+        SetGameplayHudVisible(false, true);
         EnsureLobbyRootFullScreen();
         EnsureFullScreenLobbyUiExists();
         if (fullScreenLobbyRootObject != null)
@@ -1902,8 +2216,27 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SwitchLobbyScreen(LobbyScreen.MapSelection);
     }
 
-    void SetGameplayHudVisible(bool visible)
+    void SetLegacyLobbyUiActive(bool active)
     {
+        if (legacyLobbyUiActive == active)
+            return;
+
+        legacyLobbyUiActive = active;
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            Transform child = transform.GetChild(i);
+            if (child != null)
+                child.gameObject.SetActive(active);
+        }
+    }
+
+    void SetGameplayHudVisible(bool visible, bool force = false)
+    {
+        if (!force && gameplayHudVisibilityInitialized && lastGameplayHudVisible == visible)
+            return;
+
+        gameplayHudVisibilityInitialized = true;
+        lastGameplayHudVisible = visible;
         CacheGameplayHudObjects();
         foreach (GameObject hudObject in gameplayHudObjectsByName.Values)
         {
@@ -1914,11 +2247,36 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void CacheGameplayHudObjects()
     {
+        bool needsScan = false;
         for (int i = 0; i < GameplayHudObjectNames.Length; i++)
         {
             string hudName = GameplayHudObjectNames[i];
             if (!gameplayHudObjectsByName.ContainsKey(hudName) || gameplayHudObjectsByName[hudName] == null)
-                gameplayHudObjectsByName[hudName] = FindSceneObjectByName(hudName);
+            {
+                gameplayHudObjectsByName[hudName] = null;
+                needsScan = true;
+            }
+        }
+
+        if (!needsScan)
+            return;
+
+        GameObject[] sceneObjects = Resources.FindObjectsOfTypeAll<GameObject>();
+        for (int i = 0; i < sceneObjects.Length; i++)
+        {
+            GameObject go = sceneObjects[i];
+            if (go == null || !go.scene.IsValid())
+                continue;
+
+            for (int nameIndex = 0; nameIndex < GameplayHudObjectNames.Length; nameIndex++)
+            {
+                string hudName = GameplayHudObjectNames[nameIndex];
+                if (go.name == hudName)
+                {
+                    gameplayHudObjectsByName[hudName] = go;
+                    break;
+                }
+            }
         }
     }
 
@@ -2010,6 +2368,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         mapSizeSettingButton = EnsureSettingButton(ref mapSizeSettingText, mapSizeSettingButton, "MapSizeSettingButton", "MapSizeSettingText", Vector2.zero, CycleMapSize);
         mapBackgroundSettingButton = EnsureSettingButton(ref mapBackgroundSettingText, mapBackgroundSettingButton, "MapBackgroundSettingButton", "MapBackgroundSettingText", Vector2.zero, CycleMapBackground);
         visualEffectsSettingButton = EnsureSettingButton(ref visualEffectsSettingText, visualEffectsSettingButton, "VisualEffectsSettingButton", "VisualEffectsSettingText", Vector2.zero, CycleVisualEffectsEnabled);
+        advancedBackgroundSettingButton = EnsureSettingButton(ref advancedBackgroundSettingText, advancedBackgroundSettingButton, "AdvancedBackgroundSettingButton", "AdvancedBackgroundSettingText", Vector2.zero, CycleAdvancedBackgroundEnabled);
+        parallaxBackgroundSettingButton = EnsureSettingButton(ref parallaxBackgroundSettingText, parallaxBackgroundSettingButton, "ParallaxBackgroundSettingButton", "ParallaxBackgroundSettingText", Vector2.zero, CycleParallaxBackground);
+        backgroundObjectSettingButton = EnsureSettingButton(ref backgroundObjectSettingText, backgroundObjectSettingButton, "BackgroundObjectSettingButton", "BackgroundObjectSettingText", Vector2.zero, CycleBackgroundObject);
+        gravityWellPhysicsSettingButton = EnsureSettingButton(ref gravityWellPhysicsSettingText, gravityWellPhysicsSettingButton, "GravityWellPhysicsSettingButton", "GravityWellPhysicsSettingText", Vector2.zero, CycleGravityWellPhysicsEnabled);
         startingVfxSettingButton = EnsureSettingButton(ref startingVfxSettingText, startingVfxSettingButton, "StartingVfxSettingButton", "StartingVfxSettingText", Vector2.zero, CycleStartingVfxEnabled);
         endDisasterSettingButton = EnsureSettingButton(ref endDisasterSettingText, endDisasterSettingButton, "EndDisasterSettingButton", "EndDisasterSettingText", Vector2.zero, CycleEndDisasterMode);
         endDisasterTimeSettingButton = EnsureSettingButton(ref endDisasterTimeSettingText, endDisasterTimeSettingButton, "EndDisasterTimeSettingButton", "EndDisasterTimeSettingText", Vector2.zero, CycleEndDisasterWarningSeconds);
@@ -2027,6 +2389,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         fireNebulaSettingButton = EnsureSettingButton(ref fireNebulaSettingText, fireNebulaSettingButton, "FireNebulaSettingButton", "FireNebulaSettingText", Vector2.zero, CycleFireNebulaDensity);
         nebulaSizeSettingButton = EnsureSettingButton(ref nebulaSizeSettingText, nebulaSizeSettingButton, "NebulaSizeSettingButton", "NebulaSizeSettingText", Vector2.zero, CycleNebulaSize);
         fireNebulaSizeSettingButton = EnsureSettingButton(ref fireNebulaSizeSettingText, fireNebulaSizeSettingButton, "FireNebulaSizeSettingButton", "FireNebulaSizeSettingText", Vector2.zero, CycleFireNebulaSize);
+        advancedNebulaSettingButton = EnsureSettingButton(ref advancedNebulaSettingText, advancedNebulaSettingButton, "AdvancedNebulaSettingButton", "AdvancedNebulaSettingText", Vector2.zero, CycleAdvancedNebulaEnabled);
+        cloudsSettingButton = EnsureSettingButton(ref cloudsSettingText, cloudsSettingButton, "CloudsSettingButton", "CloudsSettingText", Vector2.zero, CycleCloudsDensity);
+        cloudsSizeSettingButton = EnsureSettingButton(ref cloudsSizeSettingText, cloudsSizeSettingButton, "CloudsSizeSettingButton", "CloudsSizeSettingText", Vector2.zero, CycleCloudsSize);
         extractionSettingButton = EnsureSettingButton(ref extractionSettingText, extractionSettingButton, "ExtractionSettingButton", "ExtractionSettingText", Vector2.zero, CycleExtractionCount);
         repairBaySettingButton = EnsureSettingButton(ref repairBaySettingText, repairBaySettingButton, "RepairBaySettingButton", "RepairBaySettingText", Vector2.zero, CycleRepairBayCount);
         spaceFactorySettingButton = EnsureSettingButton(ref spaceFactorySettingText, spaceFactorySettingButton, "SpaceFactorySettingButton", "SpaceFactorySettingText", Vector2.zero, CycleSpaceFactoryCount);
@@ -2040,9 +2405,14 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         equipmentLossSettingButton = EnsureSettingButton(ref equipmentLossSettingText, equipmentLossSettingButton, "EquipmentLossSettingButton", "EquipmentLossSettingText", Vector2.zero, CycleEquipmentLossEnabled);
         crazyEnemiesEffectSettingButton = EnsureSettingButton(ref crazyEnemiesEffectSettingText, crazyEnemiesEffectSettingButton, "CrazyEnemiesEffectSettingButton", "CrazyEnemiesEffectSettingText", Vector2.zero, CycleCrazyEnemiesEffect);
         fogOfWarEffectSettingButton = EnsureSettingButton(ref fogOfWarEffectSettingText, fogOfWarEffectSettingButton, "FogOfWarEffectSettingButton", "FogOfWarEffectSettingText", Vector2.zero, CycleFogOfWarEffect);
+        pirateBaseEffectSettingButton = EnsureSettingButton(ref pirateBaseEffectSettingText, pirateBaseEffectSettingButton, "PirateBaseEffectSettingButton", "PirateBaseEffectSettingText", Vector2.zero, CyclePirateBaseEffect);
+        asteroidShowerEffectSettingButton = EnsureSettingButton(ref asteroidShowerEffectSettingText, asteroidShowerEffectSettingButton, "AsteroidShowerEffectSettingButton", "AsteroidShowerEffectSettingText", Vector2.zero, CycleAsteroidShowerEffect);
         shootingModelSettingButton = EnsureSettingButton(ref shootingModelSettingText, shootingModelSettingButton, "ShootingModelSettingButton", "ShootingModelSettingText", Vector2.zero, CycleShootingModel);
         superAttackSettingButton = EnsureSettingButton(ref superAttackSettingText, superAttackSettingButton, "SuperAttackSettingButton", "SuperAttackSettingText", Vector2.zero, CycleSuperAttackEnabled);
+        advancedMovingJoystickSettingButton = EnsureSettingButton(ref advancedMovingJoystickSettingText, advancedMovingJoystickSettingButton, "AdvancedMovingJoystickSettingButton", "AdvancedMovingJoystickSettingText", Vector2.zero, CycleAdvancedMovingJoystickEnabled);
         advancedShootingJoystickSettingButton = EnsureSettingButton(ref advancedShootingJoystickSettingText, advancedShootingJoystickSettingButton, "AdvancedShootingJoystickSettingButton", "AdvancedShootingJoystickSettingText", Vector2.zero, CycleAdvancedShootingJoystickEnabled);
+        dynamicUseSettingButton = EnsureSettingButton(ref dynamicUseSettingText, dynamicUseSettingButton, "DynamicUseSettingButton", "DynamicUseSettingText", Vector2.zero, CycleDynamicUseLabelEnabled);
+        collectKeepAliveRangeBonusSettingButton = EnsureSettingButton(ref collectKeepAliveRangeBonusSettingText, collectKeepAliveRangeBonusSettingButton, "CollectKeepAliveRangeBonusSettingButton", "CollectKeepAliveRangeBonusSettingText", Vector2.zero, CycleCollectKeepAliveRangeBonus);
         hapticsSettingButton = EnsureSettingButton(ref hapticsSettingText, hapticsSettingButton, "HapticsSettingButton", "HapticsSettingText", Vector2.zero, CycleHapticsEnabled);
         fpsCounterSettingButton = EnsureSettingButton(ref fpsCounterSettingText, fpsCounterSettingButton, "FpsCounterSettingButton", "FpsCounterSettingText", Vector2.zero, CycleFpsCounterEnabled);
         gunSetupSettingButton = EnsureSettingButton(ref gunSetupSettingText, gunSetupSettingButton, "GunSetupSettingButton", "GunSetupSettingText", Vector2.zero, OpenGunSetup);
@@ -2059,6 +2429,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(equipmentLossSettingButton, "ROUND RULES");
         AttachLeftSectionButton(crazyEnemiesEffectSettingButton, "ROUND RULES");
         AttachLeftSectionButton(fogOfWarEffectSettingButton, "ROUND RULES");
+        AttachLeftSectionButton(pirateBaseEffectSettingButton, "ROUND RULES");
+        AttachLeftSectionButton(asteroidShowerEffectSettingButton, "ROUND RULES");
 
         AttachLeftSectionButton(obstacleSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(obstacleDestroySettingButton, "ENVIRONMENT");
@@ -2074,15 +2446,22 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(fireNebulaSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(nebulaSizeSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(fireNebulaSizeSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(advancedNebulaSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(cloudsSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(cloudsSizeSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(extractionSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(repairBaySettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(spaceFactorySettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(movingObjectsSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(gravityWellPhysicsSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(obstacleWeightSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(treasureWeightSettingButton, "ENVIRONMENT");
 
         AttachLeftSectionButton(mapBackgroundSettingButton, "COSMETICS");
         AttachLeftSectionButton(visualEffectsSettingButton, "COSMETICS");
+        AttachLeftSectionButton(advancedBackgroundSettingButton, "COSMETICS");
+        AttachLeftSectionButton(parallaxBackgroundSettingButton, "COSMETICS");
+        AttachLeftSectionButton(backgroundObjectSettingButton, "COSMETICS");
         AttachLeftSectionButton(startingVfxSettingButton, "COSMETICS");
 
         AttachLeftSectionButton(boosterSettingButton, "FEELING");
@@ -2095,7 +2474,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(endDisasterTimeSettingButton, "FEELING");
         AttachLeftSectionButton(shootingModelSettingButton, "FEELING");
         AttachLeftSectionButton(superAttackSettingButton, "FEELING");
+        AttachLeftSectionButton(advancedMovingJoystickSettingButton, "FEELING");
         AttachLeftSectionButton(advancedShootingJoystickSettingButton, "FEELING");
+        AttachLeftSectionButton(dynamicUseSettingButton, "FEELING");
+        AttachLeftSectionButton(collectKeepAliveRangeBonusSettingButton, "FEELING");
         AttachLeftSectionButton(hapticsSettingButton, "FEELING");
 
         AttachLeftSectionButton(fpsCounterSettingButton, "DIAGNOSTICS");
@@ -2350,7 +2732,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             string mapId = map.Id;
             tileButton.onClick.AddListener(() =>
             {
-                AudioManager.Instance?.PlayClick();
                 OnMapTileSelected(mapId);
             });
             mapSelectionTileButtons.Add(tileButton);
@@ -2399,7 +2780,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         EnsureLobbyMapUiExists();
 
         LobbyMapDefinition selectedMap = LobbyMapCatalog.Get(RoomSettings.GetSelectedLobbyMapId());
-        Sprite previewSprite = LoadLobbyBackgroundSprite(selectedMap.MapBackgroundIndex);
+        Sprite previewSprite = LoadMapPreviewSprite(selectedMap);
 
         if (mapSelectionButton != null)
         {
@@ -2441,7 +2822,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             Image tileImage = tileButton.GetComponent<Image>();
             if (tileImage != null)
             {
-                tileImage.sprite = LoadLobbyBackgroundSprite(map.MapBackgroundIndex);
+                tileImage.sprite = LoadMapPreviewSprite(map);
                 tileImage.color = Color.white;
             }
 
@@ -2491,6 +2872,72 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         HideMapSelectionOverlay();
         RefreshHostSettingsUi();
         SwitchLobbyScreen(LobbyScreen.MapDetails);
+    }
+
+    Sprite LoadMapPreviewSprite(LobbyMapDefinition map)
+    {
+        if (map != null && string.Equals(map.Id, LobbyMapCatalog.GravityWellMapId, System.StringComparison.Ordinal))
+        {
+            const string previewPath = "UI/Maps/gravity_well_preview";
+            if (mapSpecificPreviewCache.TryGetValue(previewPath, out Sprite cachedSprite) && cachedSprite != null)
+                return cachedSprite;
+
+            Sprite sprite = Resources.Load<Sprite>(previewPath);
+            if (sprite == null)
+            {
+                Texture2D texture = Resources.Load<Texture2D>(previewPath);
+                if (texture != null)
+                    sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
+            }
+
+#if UNITY_EDITOR
+            if (sprite == null)
+                sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Resources/UI/Maps/gravity_well_preview.png");
+#endif
+
+            if (sprite != null)
+            {
+                mapSpecificPreviewCache[previewPath] = sprite;
+                return sprite;
+            }
+        }
+
+        Sprite parallaxSprite = LoadParallaxBackgroundSprite(LobbyMapCatalog.GetDefaultParallaxBackgroundId(map != null ? map.Id : RoomSettings.DefaultLobbyMapId));
+        if (parallaxSprite != null)
+            return parallaxSprite;
+
+        return LoadLobbyBackgroundSprite(map != null ? map.MapBackgroundIndex : RoomSettings.DefaultMapBackground);
+    }
+
+    Sprite LoadParallaxBackgroundSprite(string backgroundId)
+    {
+        string normalizedId = RoomSettings.NormalizeParallaxBackgroundId(backgroundId);
+        string resourcePath = "Visuals/Backgrounds/" + normalizedId + "_resource";
+        if (mapSpecificPreviewCache.TryGetValue(resourcePath, out Sprite cachedSprite) && cachedSprite != null)
+            return cachedSprite;
+
+        Sprite sprite = Resources.Load<Sprite>(resourcePath);
+        if (sprite == null)
+        {
+            Texture2D texture = Resources.Load<Texture2D>(resourcePath);
+            if (texture != null)
+                sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+#if UNITY_EDITOR
+        if (sprite == null)
+        {
+            sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Resources/Visuals/Backgrounds/" + normalizedId + "_resource.png");
+            if (sprite == null)
+                sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/" + normalizedId + ".png");
+        }
+#endif
+
+        if (sprite == null)
+            return null;
+
+        mapSpecificPreviewCache[resourcePath] = sprite;
+        return sprite;
     }
 
     Sprite LoadLobbyBackgroundSprite(int backgroundIndex)
@@ -2571,6 +3018,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             EnsureEnemySettingButton(definition, "time", GetEnemyCellPosition(7, rowY), () => CycleEnemySpawnSecond(definition.Kind));
             EnsureEnemySettingButton(definition, "respawnTime", GetEnemyCellPosition(8, rowY), () => CycleEnemyRespawnInterval(definition.Kind));
         }
+
+        UpdateEnemyTableContentHeight();
     }
 
     void EnsureEnemySettingButton(EnemyBotDefinition definition, string suffix, Vector2 anchoredPosition, UnityEngine.Events.UnityAction callback)
@@ -2687,26 +3136,66 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void EnsureEnemyTableUiExists()
     {
-        if (enemyTableRootRect != null && enemyTableRootRect.gameObject.scene.IsValid())
+        Transform desiredParent = developerSettingsRootObject != null ? developerSettingsRootObject.transform : transform;
+
+        if (enemyTableViewportRect == null || !enemyTableViewportRect.gameObject.scene.IsValid())
         {
-            if (developerSettingsRootObject != null && enemyTableRootRect.transform.parent != developerSettingsRootObject.transform)
-                enemyTableRootRect.transform.SetParent(developerSettingsRootObject.transform, false);
-        }
-        else
-        {
-            GameObject tableObject = FindOrCreateChild(developerSettingsRootObject != null ? developerSettingsRootObject : gameObject, "EnemySettingsTable", typeof(RectTransform), typeof(Image));
-            enemyTableRootRect = tableObject.GetComponent<RectTransform>();
+            GameObject viewportObject = FindOrCreateChild(developerSettingsRootObject != null ? developerSettingsRootObject : gameObject, "EnemySettingsViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
+            enemyTableViewportRect = viewportObject.GetComponent<RectTransform>();
         }
 
-        enemyTableRootRect.anchorMin = new Vector2(0.5f, 1f);
-        enemyTableRootRect.anchorMax = new Vector2(0.5f, 1f);
-        enemyTableRootRect.pivot = new Vector2(0.5f, 1f);
-        enemyTableRootRect.anchoredPosition = new Vector2(RightTableX, RightTableY);
-        enemyTableRootRect.sizeDelta = new Vector2(RightTableWidth, RightTableHeight);
+        if (enemyTableViewportRect.transform.parent != desiredParent)
+            enemyTableViewportRect.transform.SetParent(desiredParent, false);
+
+        enemyTableViewportRect.anchorMin = new Vector2(0.5f, 1f);
+        enemyTableViewportRect.anchorMax = new Vector2(0.5f, 1f);
+        enemyTableViewportRect.pivot = new Vector2(0.5f, 1f);
+        enemyTableViewportRect.anchoredPosition = new Vector2(RightTableX, RightTableY);
+        enemyTableViewportRect.sizeDelta = new Vector2(RightTableWidth, RightTableHeight);
+
+        Image viewportImage = enemyTableViewportRect.GetComponent<Image>();
+        if (viewportImage != null)
+        {
+            viewportImage.color = new Color(0f, 0f, 0f, 0f);
+            viewportImage.raycastTarget = true;
+        }
+
+        enemyTableScrollRect = enemyTableViewportRect.GetComponent<ScrollRect>();
+        enemyTableScrollRect.horizontal = false;
+        enemyTableScrollRect.vertical = true;
+        enemyTableScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        enemyTableScrollRect.scrollSensitivity = 36f;
+        enemyTableScrollRect.viewport = enemyTableViewportRect;
+
+        if (enemyTableRootRect == null || !enemyTableRootRect.gameObject.scene.IsValid())
+        {
+            Transform tableTransform = enemyTableViewportRect.transform.Find("EnemySettingsTable");
+            if (tableTransform == null && desiredParent != null)
+                tableTransform = desiredParent.Find("EnemySettingsTable");
+
+            GameObject tableObject = tableTransform != null
+                ? tableTransform.gameObject
+                : new GameObject("EnemySettingsTable", typeof(RectTransform), typeof(Image));
+
+            enemyTableRootRect = tableObject.GetComponent<RectTransform>();
+            if (enemyTableRootRect == null)
+                enemyTableRootRect = tableObject.AddComponent<RectTransform>();
+        }
+
+        if (enemyTableRootRect.transform.parent != enemyTableViewportRect.transform)
+            enemyTableRootRect.transform.SetParent(enemyTableViewportRect, false);
+
+        enemyTableRootRect.anchorMin = new Vector2(0f, 1f);
+        enemyTableRootRect.anchorMax = new Vector2(0f, 1f);
+        enemyTableRootRect.pivot = new Vector2(0f, 1f);
+        enemyTableRootRect.anchoredPosition = Vector2.zero;
+        enemyTableRootRect.sizeDelta = new Vector2(RightTableWidth, ResolveEnemyTableContentHeight());
 
         Image bg = enemyTableRootRect.GetComponent<Image>();
         bg.color = new Color(0f, 0f, 0f, 0f);
         bg.raycastTarget = false;
+
+        enemyTableScrollRect.content = enemyTableRootRect;
 
         EnsureTableHeaderLabel("EnemyTableTitle", "ENEMIES", new Vector2(24f, -18f), new Vector2(220f, 30f), 24f, TextAlignmentOptions.Left);
         EnsureTableHeaderLabel("EnemyHeader_ACTIVE", "ACTIVE", GetEnemyHeaderPosition(0), new Vector2(EnemyColumnWidth - 8f, 26f), 14f, TextAlignmentOptions.Center);
@@ -2718,6 +3207,26 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         EnsureTableHeaderLabel("EnemyHeader_SPEED", "SPEED", GetEnemyHeaderPosition(6), new Vector2(EnemyColumnWidth - 8f, 26f), 14f, TextAlignmentOptions.Center);
         EnsureTableHeaderLabel("EnemyHeader_FIRSTRESPAWN", "FIRST\nRESPAWN", GetEnemyHeaderPosition(7), new Vector2(EnemyColumnWidth - 8f, 38f), 12f, TextAlignmentOptions.Center);
         EnsureTableHeaderLabel("EnemyHeader_RESPAWNLOOP", "RESPAWN\nLOOP", GetEnemyHeaderPosition(8), new Vector2(EnemyColumnWidth - 8f, 38f), 12f, TextAlignmentOptions.Center);
+    }
+
+    float ResolveEnemyTableContentHeight()
+    {
+        float rowsHeight = 126f + EnemyBotCatalog.AllDefinitions.Count * EnemyRowHeight + 24f;
+        return Mathf.Max(RightTableHeight, rowsHeight);
+    }
+
+    void UpdateEnemyTableContentHeight()
+    {
+        if (enemyTableRootRect == null)
+            return;
+
+        enemyTableRootRect.sizeDelta = new Vector2(RightTableWidth, ResolveEnemyTableContentHeight());
+        if (enemyTableScrollRect != null && !enemyTableScrollInitialized)
+        {
+            Canvas.ForceUpdateCanvases();
+            enemyTableScrollRect.verticalNormalizedPosition = 1f;
+            enemyTableScrollInitialized = true;
+        }
     }
 
     Vector2 GetEnemyHeaderPosition(int columnIndex)
@@ -3041,6 +3550,33 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AdvancedBackgroundEnabledKey))
+        {
+            props[RoomSettings.AdvancedBackgroundEnabledKey] = RoomSettings.DefaultAdvancedBackgroundEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ParallaxBackgroundKey))
+        {
+            props[RoomSettings.ParallaxBackgroundKey] = LobbyMapCatalog.GetDefaultParallaxBackgroundId(RoomSettings.GetSelectedLobbyMapId());
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.BackgroundObjectKey))
+        {
+            props[RoomSettings.BackgroundObjectKey] = LobbyMapCatalog.GetDefaultBackgroundObjectId(RoomSettings.GetSelectedLobbyMapId());
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.GravityWellPhysicsEnabledKey))
+        {
+            props[RoomSettings.GravityWellPhysicsEnabledKey] = string.Equals(
+                RoomSettings.GetSelectedLobbyMapId(),
+                LobbyMapCatalog.GravityWellMapId,
+                System.StringComparison.Ordinal);
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.StartingVfxEnabledKey))
         {
             props[RoomSettings.StartingVfxEnabledKey] = RoomSettings.DefaultStartingVfxEnabled;
@@ -3107,6 +3643,42 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.PirateBaseModeKey))
+        {
+            props[RoomSettings.PirateBaseModeKey] = RoomSettings.DefaultMapEffectMode;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.PirateBaseStartUtcMsKey))
+        {
+            props[RoomSettings.PirateBaseStartUtcMsKey] = -1d;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.PirateBaseActiveKey))
+        {
+            props[RoomSettings.PirateBaseActiveKey] = false;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AsteroidShowerModeKey))
+        {
+            props[RoomSettings.AsteroidShowerModeKey] = RoomSettings.DefaultMapEffectMode;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AsteroidShowerStartUtcMsKey))
+        {
+            props[RoomSettings.AsteroidShowerStartUtcMsKey] = -1d;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AsteroidShowerActiveKey))
+        {
+            props[RoomSettings.AsteroidShowerActiveKey] = false;
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.SpaceJunkDensityKey))
         {
             props[RoomSettings.SpaceJunkDensityKey] = RoomSettings.DefaultSpaceJunkDensity;
@@ -3146,6 +3718,24 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.FireNebulaSizeKey))
         {
             props[RoomSettings.FireNebulaSizeKey] = RoomSettings.DefaultFireNebulaSize;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AdvancedNebulaEnabledKey))
+        {
+            props[RoomSettings.AdvancedNebulaEnabledKey] = RoomSettings.DefaultAdvancedNebulaEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.CloudsDensityKey))
+        {
+            props[RoomSettings.CloudsDensityKey] = RoomSettings.DefaultCloudsDensity;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.CloudsSizeKey))
+        {
+            props[RoomSettings.CloudsSizeKey] = RoomSettings.DefaultCloudsSize;
             changed = true;
         }
 
@@ -3333,9 +3923,27 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AdvancedMovingJoystickEnabledKey))
+        {
+            props[RoomSettings.AdvancedMovingJoystickEnabledKey] = RoomSettings.DefaultAdvancedMovingJoystickEnabled;
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AdvancedShootingJoystickEnabledKey))
         {
             props[RoomSettings.AdvancedShootingJoystickEnabledKey] = RoomSettings.DefaultAdvancedShootingJoystickEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.DynamicUseLabelEnabledKey))
+        {
+            props[RoomSettings.DynamicUseLabelEnabledKey] = RoomSettings.DefaultDynamicUseLabelEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.CollectKeepAliveRangeBonusPercentKey))
+        {
+            props[RoomSettings.CollectKeepAliveRangeBonusPercentKey] = RoomSettings.DefaultCollectKeepAliveRangeBonusPercent;
             changed = true;
         }
 
@@ -3529,6 +4137,71 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RefreshHostSettingsUi();
     }
 
+    void CycleAdvancedBackgroundEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.AdvancedBackgroundEnabledKey] = !RoomSettings.IsAdvancedBackgroundEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        GameVisualTheme.RequestRuntimeRefresh();
+        RefreshHostSettingsUi();
+    }
+
+    void CycleParallaxBackground()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        string current = RoomSettings.GetParallaxBackgroundId();
+        int index = System.Array.IndexOf(ParallaxBackgroundOptions, current);
+        if (index < 0)
+            index = System.Array.IndexOf(ParallaxBackgroundOptions, RoomSettings.DefaultParallaxBackground);
+        if (index < 0)
+            index = 0;
+
+        int nextIndex = (index + 1) % ParallaxBackgroundOptions.Length;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.ParallaxBackgroundKey] = ParallaxBackgroundOptions[nextIndex];
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        GameVisualTheme.RequestRuntimeRefresh();
+        RefreshHostSettingsUi();
+    }
+
+    void CycleBackgroundObject()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        string current = RoomSettings.GetBackgroundObjectId();
+        int index = System.Array.IndexOf(BackgroundObjectOptions, current);
+        if (index < 0)
+            index = System.Array.IndexOf(BackgroundObjectOptions, RoomSettings.DefaultBackgroundObject);
+        if (index < 0)
+            index = 0;
+
+        int nextIndex = (index + 1) % BackgroundObjectOptions.Length;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.BackgroundObjectKey] = BackgroundObjectOptions[nextIndex];
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        GameVisualTheme.RequestRuntimeRefresh();
+        RefreshHostSettingsUi();
+    }
+
+    void CycleGravityWellPhysicsEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.GravityWellPhysicsEnabledKey] = !RoomSettings.IsGravityWellPhysicsEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
     void CycleStartingVfxEnabled()
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
@@ -3576,6 +4249,16 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     void CycleFogOfWarEffect()
     {
         CycleMapEffect(RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, RoomSettings.FogOfWarActiveKey);
+    }
+
+    void CyclePirateBaseEffect()
+    {
+        CycleMapEffect(RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, RoomSettings.PirateBaseActiveKey);
+    }
+
+    void CycleAsteroidShowerEffect()
+    {
+        CycleMapEffect(RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, RoomSettings.AsteroidShowerActiveKey);
     }
 
     void CycleMapEffect(string modeKey, string startKey, string activeKey)
@@ -3670,6 +4353,27 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     void CycleFireNebulaSize()
     {
         CycleStringSetting(RoomSettings.FireNebulaSizeKey, NebulaSizeOptions, GetFireNebulaSize(), RoomSettings.DefaultFireNebulaSize);
+    }
+
+    void CycleAdvancedNebulaEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.AdvancedNebulaEnabledKey] = !RoomSettings.IsAdvancedNebulaEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
+    void CycleCloudsDensity()
+    {
+        CycleDensitySetting(RoomSettings.CloudsDensityKey, GetCloudsDensity());
+    }
+
+    void CycleCloudsSize()
+    {
+        CycleStringSetting(RoomSettings.CloudsSizeKey, NebulaSizeOptions, GetCloudsSize(), RoomSettings.DefaultCloudsSize);
     }
 
     void CycleExtractionCount()
@@ -4015,6 +4719,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RefreshHostSettingsUi();
     }
 
+    void CycleAdvancedMovingJoystickEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.AdvancedMovingJoystickEnabledKey] = !RoomSettings.IsAdvancedMovingJoystickEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
     void CycleAdvancedShootingJoystickEnabled()
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
@@ -4024,6 +4739,26 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         props[RoomSettings.AdvancedShootingJoystickEnabledKey] = !RoomSettings.IsAdvancedShootingJoystickEnabled();
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RefreshHostSettingsUi();
+    }
+
+    void CycleDynamicUseLabelEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.DynamicUseLabelEnabledKey] = !RoomSettings.IsDynamicUseLabelEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
+    void CycleCollectKeepAliveRangeBonus()
+    {
+        CycleIntSetting(
+            RoomSettings.CollectKeepAliveRangeBonusPercentKey,
+            CollectKeepAliveRangeBonusPercentOptions,
+            RoomSettings.GetCollectKeepAliveRangeBonusPercent(),
+            RoomSettings.DefaultCollectKeepAliveRangeBonusPercent);
     }
 
     void CycleHapticsEnabled()
@@ -4196,6 +4931,18 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (visualEffectsSettingText != null)
             visualEffectsSettingText.text = "VISUALS: " + (AreVisualEffectsEnabled() ? "ON" : "OFF");
 
+        if (advancedBackgroundSettingText != null)
+            advancedBackgroundSettingText.text = "ADVANCED BACKGROUND: " + (RoomSettings.IsAdvancedBackgroundEnabled() ? "YES" : "NO");
+
+        if (parallaxBackgroundSettingText != null)
+            parallaxBackgroundSettingText.text = "PARALLAX BACKGROUND: " + FormatParallaxBackground(GetParallaxBackground());
+
+        if (backgroundObjectSettingText != null)
+            backgroundObjectSettingText.text = "BACKGROUND OBJECT: " + FormatBackgroundObject(GetBackgroundObject());
+
+        if (gravityWellPhysicsSettingText != null)
+            gravityWellPhysicsSettingText.text = "GRAVITY FIELD: " + (RoomSettings.IsGravityWellPhysicsEnabled() ? "ON" : "OFF");
+
         if (startingVfxSettingText != null)
             startingVfxSettingText.text = "STARTING VFX: " + (AreStartingVfxEnabled() ? "ON" : "OFF");
 
@@ -4247,6 +4994,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (fireNebulaSizeSettingText != null)
             fireNebulaSizeSettingText.text = "FIRE NEBULA SIZE: " + FormatNebulaSize(GetFireNebulaSize());
 
+        if (advancedNebulaSettingText != null)
+            advancedNebulaSettingText.text = "ADVANCED NEBULA: " + (RoomSettings.IsAdvancedNebulaEnabled() ? "ON" : "OFF");
+
+        if (cloudsSettingText != null)
+            cloudsSettingText.text = "CLOUDS DENSITY: " + FormatDensity(GetCloudsDensity());
+
+        if (cloudsSizeSettingText != null)
+            cloudsSizeSettingText.text = "CLOUDS SIZE: " + FormatNebulaSize(GetCloudsSize());
+
         if (extractionSettingText != null)
             extractionSettingText.text = "EXTRACTION ZONES: " + GetExtractionCount();
 
@@ -4283,6 +5039,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (fogOfWarEffectSettingText != null)
             fogOfWarEffectSettingText.text = "FOG OF WAR: " + FormatMapEffectSetting(RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, RoomSettings.FogOfWarActiveKey) + " (+RICHNESS)";
 
+        if (pirateBaseEffectSettingText != null)
+            pirateBaseEffectSettingText.text = "PIRATE BASE: " + FormatMapEffectSetting(RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, RoomSettings.PirateBaseActiveKey) + " (+RICHNESS, BASE)";
+
+        if (asteroidShowerEffectSettingText != null)
+            asteroidShowerEffectSettingText.text = "ASTEROID SHOWER: " + FormatMapEffectSetting(RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, RoomSettings.AsteroidShowerActiveKey) + " (+RICHNESS)";
+
         if (movingObjectsSettingText != null)
             movingObjectsSettingText.text = "MOVING OBJECTS: " + FormatMovingObjectsMode(GetMovingObjectsMode());
 
@@ -4298,8 +5060,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (superAttackSettingText != null)
             superAttackSettingText.text = "SUPERATTACK: " + (RoomSettings.IsSuperAttackToggleEnabled() ? "ON" : "OFF");
 
+        if (advancedMovingJoystickSettingText != null)
+            advancedMovingJoystickSettingText.text = "ADVANCED MOVING JOYSTICK: " + (RoomSettings.IsAdvancedMovingJoystickEnabled() ? "ON" : "OFF");
+
         if (advancedShootingJoystickSettingText != null)
             advancedShootingJoystickSettingText.text = "ADVANCED SHOOTING JOYSTICK: " + (RoomSettings.IsAdvancedShootingJoystickEnabled() ? "ON" : "OFF");
+
+        if (dynamicUseSettingText != null)
+            dynamicUseSettingText.text = "DYNAMIC USE: " + (RoomSettings.IsDynamicUseLabelEnabled() ? "ON" : "OFF");
+
+        if (collectKeepAliveRangeBonusSettingText != null)
+            collectKeepAliveRangeBonusSettingText.text = "COLLECT RANGE BUFFER: " + RoomSettings.GetCollectKeepAliveRangeBonusPercent() + "%";
 
         if (hapticsSettingText != null)
             hapticsSettingText.text = "HAPTICS: " + (RoomSettings.AreHapticsEnabled() ? "ON" : "OFF");
@@ -4320,6 +5091,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(mapSizeSettingButton, isHost);
         SetSettingButtonState(mapBackgroundSettingButton, isHost);
         SetSettingButtonState(visualEffectsSettingButton, isHost);
+        SetSettingButtonState(advancedBackgroundSettingButton, isHost);
+        SetSettingButtonState(parallaxBackgroundSettingButton, isHost);
+        SetSettingButtonState(gravityWellPhysicsSettingButton, isHost);
         SetSettingButtonState(startingVfxSettingButton, isHost);
         SetSettingButtonState(endDisasterSettingButton, isHost);
         SetSettingButtonState(endDisasterTimeSettingButton, isHost);
@@ -4337,6 +5111,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(fireNebulaSettingButton, isHost);
         SetSettingButtonState(nebulaSizeSettingButton, isHost);
         SetSettingButtonState(fireNebulaSizeSettingButton, isHost);
+        SetSettingButtonState(advancedNebulaSettingButton, isHost);
+        SetSettingButtonState(cloudsSettingButton, isHost);
+        SetSettingButtonState(cloudsSizeSettingButton, isHost);
         SetSettingButtonState(extractionSettingButton, isHost);
         SetSettingButtonState(repairBaySettingButton, isHost);
         SetSettingButtonState(spaceFactorySettingButton, isHost);
@@ -4349,12 +5126,16 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(equipmentLossSettingButton, isHost);
         SetSettingButtonState(crazyEnemiesEffectSettingButton, isHost);
         SetSettingButtonState(fogOfWarEffectSettingButton, isHost);
+        SetSettingButtonState(pirateBaseEffectSettingButton, isHost);
+        SetSettingButtonState(asteroidShowerEffectSettingButton, isHost);
         SetSettingButtonState(movingObjectsSettingButton, isHost);
         SetSettingButtonState(bulletPushSettingButton, isHost);
         SetSettingButtonState(batteringSettingButton, isHost);
         SetSettingButtonState(shootingModelSettingButton, isHost);
         SetSettingButtonState(superAttackSettingButton, isHost);
+        SetSettingButtonState(advancedMovingJoystickSettingButton, isHost);
         SetSettingButtonState(advancedShootingJoystickSettingButton, isHost);
+        SetSettingButtonState(dynamicUseSettingButton, isHost);
         SetSettingButtonState(hapticsSettingButton, isHost);
         SetSettingButtonState(fpsCounterSettingButton, isHost);
         SetSettingButtonState(gunSetupSettingButton, isHost);
@@ -4747,6 +5528,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.MapBackgroundKey) ||
                changedProps.ContainsKey(RoomSettings.SelectedMapKey) ||
                changedProps.ContainsKey(RoomSettings.VisualEffectsEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.AdvancedBackgroundEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.ParallaxBackgroundKey) ||
+               changedProps.ContainsKey(RoomSettings.BackgroundObjectKey) ||
+               changedProps.ContainsKey(RoomSettings.GravityWellPhysicsEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.StartingVfxEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.EndDisasterModeKey) ||
                changedProps.ContainsKey(RoomSettings.EndDisasterWarningSecondsKey) ||
@@ -4763,6 +5548,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.FogOfWarModeKey) ||
                changedProps.ContainsKey(RoomSettings.FogOfWarStartUtcMsKey) ||
                changedProps.ContainsKey(RoomSettings.FogOfWarActiveKey) ||
+               changedProps.ContainsKey(RoomSettings.PirateBaseModeKey) ||
+               changedProps.ContainsKey(RoomSettings.PirateBaseStartUtcMsKey) ||
+               changedProps.ContainsKey(RoomSettings.PirateBaseActiveKey) ||
+               changedProps.ContainsKey(RoomSettings.AsteroidShowerModeKey) ||
+               changedProps.ContainsKey(RoomSettings.AsteroidShowerStartUtcMsKey) ||
+               changedProps.ContainsKey(RoomSettings.AsteroidShowerActiveKey) ||
                changedProps.ContainsKey(RoomSettings.SpaceJunkDensityKey) ||
                changedProps.ContainsKey(RoomSettings.ContainersDensityKey) ||
                changedProps.ContainsKey(RoomSettings.RandomLootWreckCountKey) ||
@@ -4770,6 +5561,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.FireNebulaDensityKey) ||
                changedProps.ContainsKey(RoomSettings.NebulaSizeKey) ||
                changedProps.ContainsKey(RoomSettings.FireNebulaSizeKey) ||
+               changedProps.ContainsKey(RoomSettings.AdvancedNebulaEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.CloudsDensityKey) ||
+               changedProps.ContainsKey(RoomSettings.CloudsSizeKey) ||
                changedProps.ContainsKey(RoomSettings.ExtractionCountKey) ||
                changedProps.ContainsKey(RoomSettings.RepairBayCountKey) ||
                changedProps.ContainsKey(RoomSettings.SpaceFactoryCountKey) ||
@@ -4786,7 +5580,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.BatteringDamageKey) ||
                changedProps.ContainsKey(RoomSettings.ShootingModelKey) ||
                changedProps.ContainsKey(RoomSettings.SuperAttackEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.AdvancedMovingJoystickEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.AdvancedShootingJoystickEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.DynamicUseLabelEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.CollectKeepAliveRangeBonusPercentKey) ||
                changedProps.ContainsKey(RoomSettings.HapticsEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.FpsCounterEnabledKey) ||
                ContainsGunSetupRoomSettingChange(changedProps) ||
@@ -4855,6 +5652,16 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return RoomSettings.GetMapBackgroundIndex();
     }
 
+    string GetParallaxBackground()
+    {
+        return RoomSettings.GetParallaxBackgroundId();
+    }
+
+    string GetBackgroundObject()
+    {
+        return RoomSettings.GetBackgroundObjectId();
+    }
+
     bool AreVisualEffectsEnabled()
     {
         return RoomSettings.AreVisualEffectsEnabled();
@@ -4918,6 +5725,16 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     string GetFireNebulaSize()
     {
         return RoomSettings.GetFireNebulaSize();
+    }
+
+    string GetCloudsDensity()
+    {
+        return RoomSettings.GetCloudsDensity();
+    }
+
+    string GetCloudsSize()
+    {
+        return RoomSettings.GetCloudsSize();
     }
 
     int GetExtractionCount()
@@ -5110,6 +5927,68 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     string FormatMapBackground(int backgroundIndex)
     {
         return "TLO " + Mathf.Clamp(backgroundIndex, 1, RoomSettings.MaxMapBackground);
+    }
+
+    string FormatParallaxBackground(string backgroundId)
+    {
+        switch (RoomSettings.NormalizeParallaxBackgroundId(backgroundId))
+        {
+            case RoomSettings.ParallaxBackgroundKosmos3:
+                return "KOSMOS 3";
+            case RoomSettings.ParallaxBackgroundKosmos6:
+                return "KOSMOS 6";
+            case RoomSettings.ParallaxBackgroundKosmos8:
+                return "KOSMOS 8";
+            case RoomSettings.ParallaxBackgroundKosmos9:
+                return "KOSMOS 9";
+            case RoomSettings.ParallaxBackgroundKosmos10:
+                return "KOSMOS 10";
+            case RoomSettings.ParallaxBackgroundKosmos11:
+                return "KOSMOS 11";
+            case RoomSettings.ParallaxBackgroundKosmos12:
+                return "KOSMOS 12";
+            case RoomSettings.ParallaxBackgroundKosmos13:
+                return "KOSMOS 13";
+            case RoomSettings.ParallaxBackgroundKosmos14:
+                return "KOSMOS 14";
+            default:
+                return FormatParallaxBackground(RoomSettings.DefaultParallaxBackground);
+        }
+    }
+
+    string FormatBackgroundObject(string objectId)
+    {
+        switch (RoomSettings.NormalizeBackgroundObjectId(objectId))
+        {
+            case RoomSettings.BackgroundObject1:
+                return "BACKGROUND OBJECT 1";
+            case RoomSettings.BackgroundObject2:
+                return "BACKGROUND OBJECT 2";
+            case RoomSettings.BackgroundObject3:
+                return "BACKGROUND OBJECT 3";
+            case RoomSettings.BackgroundObject4:
+                return "BACKGROUND OBJECT 4";
+            case RoomSettings.BackgroundObject5:
+                return "BACKGROUND OBJECT 5";
+            case RoomSettings.BackgroundObject6:
+                return "BACKGROUND OBJECT 6";
+            case RoomSettings.BackgroundObject7:
+                return "BACKGROUND OBJECT 7";
+            case RoomSettings.BackgroundObject8:
+                return "BACKGROUND OBJECT 8";
+            case RoomSettings.BackgroundObject9:
+                return "BACKGROUND OBJECT 9";
+            case RoomSettings.BackgroundObject10:
+                return "BACKGROUND OBJECT 10";
+            case RoomSettings.BackgroundObject11:
+                return "BACKGROUND OBJECT 11";
+            case RoomSettings.BackgroundObject12:
+                return "BACKGROUND OBJECT 12";
+            case RoomSettings.BackgroundObject13:
+                return "BACKGROUND OBJECT 13";
+            default:
+                return "OFF";
+        }
     }
 
     string FormatShootingModel(string model)

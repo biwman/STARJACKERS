@@ -17,6 +17,8 @@ public class AmmoUI : MonoBehaviourPun
     TextMeshProUGUI valueText;
     bool isVisible = true;
     RectTransform rootRect;
+    RectTransform reloadButtonRect;
+    RectTransform shootJoystickRect;
 
     void Start()
     {
@@ -138,28 +140,40 @@ public class AmmoUI : MonoBehaviourPun
         if (rootRect == null)
             return;
 
-        GameObject reloadButton = GameObject.Find("ReloadButton");
-        RectTransform reloadRect = reloadButton != null ? reloadButton.GetComponent<RectTransform>() : null;
-        GameObject shootJoystick = GameObject.Find("ShootJoystickBG");
-        RectTransform joystickRect = shootJoystick != null ? shootJoystick.GetComponent<RectTransform>() : null;
+        ResolveLayoutReferences();
 
-        if (reloadRect != null)
+        if (reloadButtonRect != null)
         {
-            rootRect.anchorMin = reloadRect.anchorMin;
-            rootRect.anchorMax = reloadRect.anchorMax;
+            rootRect.anchorMin = reloadButtonRect.anchorMin;
+            rootRect.anchorMax = reloadButtonRect.anchorMax;
             rootRect.pivot = new Vector2(0.5f, 0.5f);
-            rootRect.anchoredPosition = reloadRect.anchoredPosition + new Vector2(0f, 78f);
+            rootRect.anchoredPosition = reloadButtonRect.anchoredPosition + new Vector2(0f, 78f);
             rootRect.sizeDelta = new Vector2(210f, 42f);
             return;
         }
 
-        if (joystickRect != null)
+        if (shootJoystickRect != null)
         {
-            rootRect.anchorMin = joystickRect.anchorMin;
-            rootRect.anchorMax = joystickRect.anchorMax;
+            rootRect.anchorMin = shootJoystickRect.anchorMin;
+            rootRect.anchorMax = shootJoystickRect.anchorMax;
             rootRect.pivot = new Vector2(0.5f, 0.5f);
-            rootRect.anchoredPosition = joystickRect.anchoredPosition + new Vector2(0f, 296f);
+            rootRect.anchoredPosition = shootJoystickRect.anchoredPosition + new Vector2(0f, 296f);
             rootRect.sizeDelta = new Vector2(210f, 42f);
+        }
+    }
+
+    void ResolveLayoutReferences()
+    {
+        if (reloadButtonRect == null)
+        {
+            GameObject reloadButton = GameObject.Find("ReloadButton");
+            reloadButtonRect = reloadButton != null ? reloadButton.GetComponent<RectTransform>() : null;
+        }
+
+        if (shootJoystickRect == null)
+        {
+            GameObject shootJoystick = GameObject.Find("ShootJoystickBG");
+            shootJoystickRect = shootJoystick != null ? shootJoystick.GetComponent<RectTransform>() : null;
         }
     }
 
@@ -187,7 +201,7 @@ public class AmmoUI : MonoBehaviourPun
         if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
             value is bool started)
         {
-            return started;
+            return GameplayHudVisibility.IsGameplayHudVisible(started);
         }
 
         return false;

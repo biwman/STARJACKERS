@@ -548,7 +548,7 @@ public sealed class GuidanceSystemOverlay : MonoBehaviourPun
 
         activeUntil = Time.time + Mathf.Max(0.1f, duration);
         EnsureArrows();
-        SetVisible(true);
+        SetVisible(!GameplayHudVisibility.IsExtractionCinematicSuppressed);
         nextSoundTime = 0f;
     }
 
@@ -556,6 +556,12 @@ public sealed class GuidanceSystemOverlay : MonoBehaviourPun
     {
         if (photonView != null && !photonView.IsMine)
             return;
+
+        if (GameplayHudVisibility.IsExtractionCinematicSuppressed)
+        {
+            SetVisible(false);
+            return;
+        }
 
         if (Time.time >= activeUntil)
         {
@@ -908,24 +914,49 @@ public abstract class PlayerDeployableBase : MonoBehaviourPun
         if (!PhotonNetwork.IsMasterClient || !CanBeTargeted)
             return;
 
-        int damage = currentShield > 0 ? Mathf.Max(0, shieldDamage) : Mathf.Max(0, hpDamage);
-        if (damage <= 0)
-            return;
-
+        int rawShieldDamage = Mathf.Max(0, shieldDamage);
+        int rawHpDamage = Mathf.Max(0, hpDamage);
         int absorbed = 0;
+        int damage = 0;
         if (currentShield > 0)
         {
-            absorbed = Mathf.Min(currentShield, damage);
-            currentShield -= absorbed;
-            damage -= absorbed;
+            if (rawShieldDamage > 0)
+            {
+                absorbed = Mathf.Min(currentShield, rawShieldDamage);
+                currentShield -= absorbed;
+                float overflowRatio = Mathf.Clamp01((rawShieldDamage - absorbed) / (float)rawShieldDamage);
+                damage = Mathf.RoundToInt(rawHpDamage * overflowRatio);
+            }
+        }
+        else
+        {
+            damage = rawHpDamage;
         }
 
         if (damage > 0)
             currentHp = Mathf.Max(0, currentHp - damage);
 
+        if (absorbed <= 0 && damage <= 0)
+            return;
+
         photonView.RPC(nameof(PlayDeployableHitRpc), RpcTarget.All, absorbed > 0, impactX, impactY);
         if (currentHp <= 0)
             DestroyOnMaster();
+    }
+
+    [PunRPC]
+    public void TakeDeployableShieldOnlyDamageAt(int shieldDamage, int attackerViewId, float impactX, float impactY)
+    {
+        if (!PhotonNetwork.IsMasterClient || !CanBeTargeted)
+            return;
+
+        int damage = Mathf.Max(0, shieldDamage);
+        if (damage <= 0 || currentShield <= 0)
+            return;
+
+        int absorbed = Mathf.Min(currentShield, damage);
+        currentShield -= absorbed;
+        photonView.RPC(nameof(PlayDeployableHitRpc), RpcTarget.All, true, impactX, impactY);
     }
 
     public void PlayDeployableHitRpc(bool shieldHit, float x, float y)
@@ -1133,6 +1164,9 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
 
     void Update()
     {
+        if (!initialized && PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+
         if (!initialized || destroyed || !PhotonNetwork.IsMasterClient)
             return;
 
@@ -1189,7 +1223,8 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
             if (candidate.photonView.ViewID == ownerShipViewId || candidate.GetComponent<LureBeaconDecoy>() != null)
                 continue;
 
-            bool hostile = candidate.IsBotControlled || (ownerActorNumber > 0 && candidate.photonView.OwnerActorNr != ownerActorNumber);
+            EnemyBot enemyBot = candidate.GetComponent<EnemyBot>();
+            bool hostile = enemyBot != null || candidate.IsBotControlled || (ownerActorNumber > 0 && candidate.photonView.OwnerActorNr != ownerActorNumber);
             if (!hostile)
                 continue;
 
@@ -1517,7 +1552,7 @@ public sealed class SpaceDrillDeployable : PlayerDeployableBase
         bool stored = false;
         try
         {
-            stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+            stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
         }
         catch (Exception ex)
         {
@@ -2051,6 +2086,13 @@ public sealed class LootingFriendController : MonoBehaviourPun
 
     void Update()
     {
+        if (!CanLootingFriendRun())
+        {
+            SetVisualActive(false);
+            StopCollecting();
+            return;
+        }
+
         bool equipped = IsLootingFriendEquipped();
         SetVisualActive(equipped);
         if (!equipped)
@@ -2083,6 +2125,23 @@ public sealed class LootingFriendController : MonoBehaviourPun
             collectRoutine = StartCoroutine(CollectRoutine(target));
     }
 
+    public void DeactivateForShipLoss()
+    {
+        StopCollecting();
+        SetVisualActive(false);
+        enabled = false;
+    }
+
+    bool CanLootingFriendRun()
+    {
+        PlayerHealth health = GetComponent<PlayerHealth>();
+        return health != null &&
+               health.isActiveAndEnabled &&
+               !health.IsWreck &&
+               !health.IsEvacuationAnimating &&
+               !health.IsAstronautControlled;
+    }
+
     bool IsLootingFriendEquipped()
     {
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
@@ -2105,6 +2164,9 @@ public sealed class LootingFriendController : MonoBehaviourPun
 
     PhotonView FindAutoLootTarget()
     {
+        if (!CanLootingFriendRun())
+            return null;
+
         if (!PlayerProfileService.Instance.HasFreeShipInventorySlot())
             return null;
 
@@ -2174,11 +2236,20 @@ public sealed class LootingFriendController : MonoBehaviourPun
 
     IEnumerator CollectRoutine(PhotonView target)
     {
+        if (!CanLootingFriendRun())
+        {
+            collectRoutine = null;
+            yield break;
+        }
+
         int targetViewId = target != null ? target.ViewID : 0;
         photonView.RPC(nameof(SetLootingFriendCollectFxRpc), RpcTarget.All, targetViewId, true);
         float startedAt = Time.time;
         while (Time.time < startedAt + CollectDuration)
         {
+            if (!CanLootingFriendRun())
+                break;
+
             TreasureCollector collector = GetComponent<TreasureCollector>();
             if (collector != null && collector.IsCollectingAny)
                 break;
@@ -2228,7 +2299,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
 
     void RequestLoot(PhotonView target)
     {
-        if (target == null || photonView == null)
+        if (target == null || photonView == null || !CanLootingFriendRun())
             return;
 
         if (target.GetComponent<Treasure>() != null)
@@ -2242,7 +2313,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
     [PunRPC]
     void RequestLootingFriendTreasureRpc(int targetViewId)
     {
-        if (!PhotonNetwork.IsMasterClient || photonView.Owner == null)
+        if (!PhotonNetwork.IsMasterClient || photonView.Owner == null || !CanLootingFriendRun())
             return;
 
         PhotonView target = PhotonView.Find(targetViewId);
@@ -2259,7 +2330,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
     [PunRPC]
     void RequestLootingFriendWreckRpc(int targetViewId)
     {
-        if (!PhotonNetwork.IsMasterClient || photonView.Owner == null)
+        if (!PhotonNetwork.IsMasterClient || photonView.Owner == null || !CanLootingFriendRun())
             return;
 
         PhotonView target = PhotonView.Find(targetViewId);
@@ -2281,7 +2352,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
     [PunRPC]
     void RequestLootingFriendCrateRpc(int targetViewId)
     {
-        if (!PhotonNetwork.IsMasterClient || photonView.Owner == null)
+        if (!PhotonNetwork.IsMasterClient || photonView.Owner == null || !CanLootingFriendRun())
             return;
 
         PhotonView target = PhotonView.Find(targetViewId);
@@ -2299,10 +2370,17 @@ public sealed class LootingFriendController : MonoBehaviourPun
     [PunRPC]
     async void ReceiveLootingFriendItemRpc(int targetViewId, string itemId, bool treasure, int lootIndex)
     {
+        if (!CanLootingFriendRun())
+        {
+            if (photonView != null)
+                photonView.RPC(nameof(ResolveLootingFriendLootRpc), RpcTarget.MasterClient, targetViewId, itemId, treasure, lootIndex, false);
+            return;
+        }
+
         bool stored = false;
         try
         {
-            stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+            stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
         }
         catch (Exception ex)
         {
@@ -2316,7 +2394,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
     [PunRPC]
     void ResolveLootingFriendLootRpc(int targetViewId, string itemId, bool treasure, int lootIndex, bool stored)
     {
-        if (!PhotonNetwork.IsMasterClient || !stored)
+        if (!PhotonNetwork.IsMasterClient || !stored || !CanLootingFriendRun())
             return;
 
         SpaceTrapTarget.DetonateIfArmed(targetViewId, photonView != null ? photonView.ViewID : 0);
@@ -2340,10 +2418,17 @@ public sealed class LootingFriendController : MonoBehaviourPun
     [PunRPC]
     async void ReceiveLootingFriendCrateItemRpc(int targetViewId, string itemId)
     {
+        if (!CanLootingFriendRun())
+        {
+            if (photonView != null)
+                photonView.RPC(nameof(ResolveLootingFriendCrateLootRpc), RpcTarget.MasterClient, targetViewId, itemId, false);
+            return;
+        }
+
         bool stored = false;
         try
         {
-            stored = await PlayerProfileService.Instance.AddItemToShipAsync(itemId);
+            stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
         }
         catch (Exception ex)
         {
@@ -2357,7 +2442,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
     [PunRPC]
     void ResolveLootingFriendCrateLootRpc(int targetViewId, string itemId, bool stored)
     {
-        if (!PhotonNetwork.IsMasterClient || !stored)
+        if (!PhotonNetwork.IsMasterClient || !stored || !CanLootingFriendRun())
             return;
 
         SpaceTrapTarget.DetonateIfArmed(targetViewId, photonView != null ? photonView.ViewID : 0);

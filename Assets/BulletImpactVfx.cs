@@ -4,7 +4,9 @@ public sealed class BulletImpactVfx : MonoBehaviour
 {
     const float RailDuration = 0.22f;
     const float IonDuration = 0.36f;
+    const float GatlingDuration = 0.18f;
     const float ArtilleryDuration = 0.56f;
+    const float RocketDuration = 0.46f;
     const float DefaultDuration = 0.26f;
     const float EffectZ = -0.35f;
 
@@ -40,15 +42,28 @@ public sealed class BulletImpactVfx : MonoBehaviour
             return;
         }
 
-        if (string.Equals(effectId, "ion", System.StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(effectId, "ion", System.StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(effectId, "pulse_disruptor", System.StringComparison.OrdinalIgnoreCase))
         {
             ConfigureIon(direction, scale);
+            return;
+        }
+
+        if (string.Equals(effectId, "gatling", System.StringComparison.OrdinalIgnoreCase))
+        {
+            ConfigureGatling(direction, scale);
             return;
         }
 
         if (string.Equals(effectId, "artillery", System.StringComparison.OrdinalIgnoreCase))
         {
             ConfigureArtillery(direction, scale);
+            return;
+        }
+
+        if (string.Equals(effectId, "rocket", System.StringComparison.OrdinalIgnoreCase))
+        {
+            ConfigureRocket(direction, scale);
             return;
         }
 
@@ -94,6 +109,24 @@ public sealed class BulletImpactVfx : MonoBehaviour
         }
     }
 
+    void ConfigureGatling(Vector2 direction, float scale)
+    {
+        duration = GatlingDuration;
+        lines = new LineRenderer[3];
+        baseWidths = new float[lines.Length];
+        startColors = new Color[lines.Length];
+        endColors = new Color[lines.Length];
+
+        Vector2 tangent = new Vector2(-direction.y, direction.x);
+        AddLine(0, -direction * 0.02f * scale, -direction * 0.24f * scale, 0.022f * scale, new Color(1f, 0.96f, 0.58f, 0.8f), new Color(1f, 0.32f, 0.04f, 0f));
+        for (int i = 1; i < lines.Length; i++)
+        {
+            float side = i == 1 ? 1f : -1f;
+            Vector2 spark = (-direction * Random.Range(0.16f, 0.34f) + tangent * side * Random.Range(0.22f, 0.52f)).normalized;
+            AddLine(i, Vector2.zero, spark * Random.Range(0.12f, 0.26f) * scale, Random.Range(0.008f, 0.018f) * scale, new Color(1f, 0.74f, 0.26f, 0.62f), new Color(0.8f, 0.12f, 0.02f, 0f));
+        }
+    }
+
     void ConfigureDefault(Vector2 direction, float scale)
     {
         duration = DefaultDuration;
@@ -135,6 +168,33 @@ public sealed class BulletImpactVfx : MonoBehaviour
                 sparkWidth,
                 i % 3 == 0 ? new Color(1f, 0.95f, 0.62f, 0.9f) : new Color(1f, 0.68f, 0.18f, 0.84f),
                 new Color(0.82f, 0.14f, 0.03f, 0f));
+        }
+    }
+
+    void ConfigureRocket(Vector2 direction, float scale)
+    {
+        duration = RocketDuration;
+        expandPulse = true;
+        pulseRadius = 0.3f * scale;
+        lines = new LineRenderer[10];
+        baseWidths = new float[lines.Length];
+        startColors = new Color[lines.Length];
+        endColors = new Color[lines.Length];
+
+        AddCircle(0, pulseRadius, 0.052f * scale, new Color(1f, 0.82f, 0.26f, 0.76f));
+        AddCircle(1, pulseRadius * 0.48f, 0.13f * scale, new Color(1f, 0.96f, 0.66f, 0.88f));
+        Vector2 tangent = new Vector2(-direction.y, direction.x);
+        for (int i = 2; i < lines.Length; i++)
+        {
+            float side = i % 2 == 0 ? 1f : -1f;
+            Vector2 spark = (-direction * UnityEngine.Random.Range(-0.04f, 0.5f) + tangent * side * UnityEngine.Random.Range(0.16f, 0.96f)).normalized;
+            AddLine(
+                i,
+                -spark * UnityEngine.Random.Range(0.02f, 0.05f) * scale,
+                spark * UnityEngine.Random.Range(0.24f, 0.72f) * scale,
+                UnityEngine.Random.Range(0.016f, 0.04f) * scale,
+                i % 3 == 0 ? new Color(1f, 0.96f, 0.62f, 0.9f) : new Color(1f, 0.48f, 0.12f, 0.82f),
+                new Color(0.78f, 0.1f, 0.02f, 0f));
         }
     }
 

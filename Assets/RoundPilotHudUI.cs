@@ -198,7 +198,7 @@ public class RoundPilotHudUI : MonoBehaviourPun
         portraitRect.offsetMax = new Vector2(-5f, -5f);
 
         pilotPortraitImage = portraitObject.GetComponent<Image>();
-        pilotPortraitImage.color = Color.white;
+        pilotPortraitImage.color = pilotPortraitImage.sprite != null ? Color.white : new Color(1f, 1f, 1f, 0f);
         pilotPortraitImage.preserveAspect = true;
         pilotPortraitImage.raycastTarget = false;
 
@@ -308,7 +308,11 @@ public class RoundPilotHudUI : MonoBehaviourPun
             pilotPanelImage.enabled = visible;
 
         if (pilotPortraitImage != null)
-            pilotPortraitImage.enabled = visible;
+        {
+            bool hasPortrait = pilotPortraitImage.sprite != null;
+            pilotPortraitImage.enabled = visible && hasPortrait;
+            pilotPortraitImage.color = hasPortrait ? Color.white : new Color(1f, 1f, 1f, 0f);
+        }
 
         if (timerBadge != null)
             timerBadge.enabled = visible;
@@ -338,9 +342,19 @@ public class RoundPilotHudUI : MonoBehaviourPun
         if (!force && displayedPilotId == pilotId)
             return;
 
-        displayedPilotId = pilotId;
         PilotDefinition definition = PilotCatalog.GetDefinition(pilotId);
-        pilotPortraitImage.sprite = LoadPilotPortraitSprite(definition);
+        Sprite portrait = LoadPilotPortraitSprite(definition);
+        if (portrait == null)
+        {
+            displayedPilotId = string.Empty;
+            if (pilotPortraitImage.sprite == null)
+                pilotPortraitImage.color = new Color(1f, 1f, 1f, 0f);
+            return;
+        }
+
+        displayedPilotId = pilotId;
+        pilotPortraitImage.sprite = portrait;
+        pilotPortraitImage.color = Color.white;
     }
 
     string GetPilotId()
@@ -468,7 +482,7 @@ public class RoundPilotHudUI : MonoBehaviourPun
         if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
             value is bool started)
         {
-            return started;
+            return GameplayHudVisibility.IsGameplayHudVisible(started);
         }
 
         return false;
