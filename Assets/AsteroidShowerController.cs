@@ -16,6 +16,7 @@ public sealed class AsteroidShowerController : MonoBehaviour, IOnEventCallback
     static AsteroidShowerController instance;
 
     float nextStrikeTime = -1f;
+    bool prewarmedForActiveRound;
 
     public static void EnsureExists()
     {
@@ -67,7 +68,15 @@ public sealed class AsteroidShowerController : MonoBehaviour, IOnEventCallback
         if (!IsRoundActive())
         {
             nextStrikeTime = -1f;
+            prewarmedForActiveRound = false;
+            AsteroidShowerStrikeVfx.ClearAllActive();
             return;
+        }
+
+        if (!prewarmedForActiveRound)
+        {
+            AsteroidShowerStrikeVfx.Prewarm();
+            prewarmedForActiveRound = true;
         }
 
         if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient)
@@ -273,6 +282,9 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
     const float ShipKnockbackImpulse = 6.8f;
     const float AsteroidZ = -0.29f;
     const float MarkerZ = -0.3f;
+    const float InitialAsteroidViewportMultiplier = 1.35f;
+    const float InitialAsteroidMapFallbackMultiplier = 0.65f;
+    const float InitialAsteroidMinRadiusMultiplier = 2.65f;
     const int MarkerSegments = 64;
     const int MarkerSortingOrder = 7100;
     const int AsteroidSortingOrder = 7090;
@@ -297,16 +309,20 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
     };
 
     static Material lineMaterial;
+    static Sprite[] cachedObstacleSprites;
+    static readonly Dictionary<int, AsteroidShowerStrikeVfx> ActiveBySeed = new Dictionary<int, AsteroidShowerStrikeVfx>();
 
     Vector2 center;
     float radius;
     int spriteIndex;
     int seed;
     double startTime;
+    float localSpawnTime;
     float asteroidBaseWorldSize = 1f;
     float initialAsteroidWorldSize;
     float rotationSpeed;
     bool impactApplied;
+    bool markerHidden;
 
     SpriteRenderer asteroidRenderer;
     LineRenderer markerGlow;
@@ -315,11 +331,39 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
 
     public static int ObstacleSpriteCount => ObstacleSpriteResourcePaths.Length;
 
+    public static void Prewarm()
+    {
+        GetLineMaterial();
+        EnsureAsteroidSpriteCache();
+        SpaceMineExplosionVfx.Prewarm();
+    }
+
     public static void Spawn(Vector2 position, float configuredRadius, int configuredSpriteIndex, int configuredSeed, double configuredStartTime)
     {
+        EnsureAsteroidSpriteCache();
+
+        if (ActiveBySeed.TryGetValue(configuredSeed, out AsteroidShowerStrikeVfx existing) && existing != null)
+            return;
+
+        ActiveBySeed.Remove(configuredSeed);
         GameObject effect = new GameObject("AsteroidShowerStrikeVfx");
         AsteroidShowerStrikeVfx vfx = effect.AddComponent<AsteroidShowerStrikeVfx>();
         vfx.Initialize(position, configuredRadius, configuredSpriteIndex, configuredSeed, configuredStartTime);
+    }
+
+    public static void ClearAllActive()
+    {
+        if (ActiveBySeed.Count == 0)
+            return;
+
+        List<AsteroidShowerStrikeVfx> active = new List<AsteroidShowerStrikeVfx>(ActiveBySeed.Values);
+        ActiveBySeed.Clear();
+        for (int i = 0; i < active.Count; i++)
+        {
+            AsteroidShowerStrikeVfx vfx = active[i];
+            if (vfx != null)
+                Destroy(vfx.gameObject);
+        }
     }
 
     void Initialize(Vector2 position, float configuredRadius, int configuredSpriteIndex, int configuredSeed, double configuredStartTime)
@@ -329,28 +373,44 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
         spriteIndex = configuredSpriteIndex;
         seed = configuredSeed;
         startTime = configuredStartTime;
+        localSpawnTime = Time.time;
+        ActiveBySeed[seed] = this;
         transform.position = new Vector3(center.x, center.y, MarkerZ);
 
         CreateMarker();
         CreateAsteroid();
-        UpdateVisuals(GetElapsed());
+        float elapsed = GetElapsed();
+        if (elapsed >= ImpactTime)
+            HideMarker();
+
+        UpdateVisuals(elapsed);
     }
 
     void Update()
     {
         float elapsed = GetElapsed();
-        UpdateVisuals(elapsed);
 
         if (!impactApplied && elapsed >= ImpactTime)
         {
             impactApplied = true;
+            HideMarker();
             PlayImpact();
             if (CanApplyAuthorityImpact())
                 ApplyImpact();
         }
+        else if (elapsed >= ImpactTime)
+        {
+            HideMarker();
+        }
 
         if (elapsed >= TotalDuration)
+        {
+            HideMarker();
             Destroy(gameObject);
+            return;
+        }
+
+        UpdateVisuals(elapsed);
     }
 
     void CreateMarker()
@@ -375,10 +435,42 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
         if (asteroidRenderer.sprite != null)
             asteroidBaseWorldSize = Mathf.Max(0.01f, Mathf.Max(asteroidRenderer.sprite.bounds.size.x, asteroidRenderer.sprite.bounds.size.y));
 
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
-        initialAsteroidWorldSize = Mathf.Max(mapSize.x, mapSize.y) * 1.45f;
+        initialAsteroidWorldSize = ResolveInitialAsteroidWorldSize(radius);
         rotationSpeed = (Hash01(seed, 31) < 0.5f ? -1f : 1f) * Mathf.Lerp(24f, 58f, Hash01(seed, 73));
         asteroidObject.transform.localRotation = Quaternion.Euler(0f, 0f, Hash01(seed, 11) * 360f);
+    }
+
+    static float ResolveInitialAsteroidWorldSize(float impactRadius)
+    {
+        float minimumSize = Mathf.Max(0.25f, impactRadius) * InitialAsteroidMinRadiusMultiplier;
+        float cameraMaxSize = GetCameraViewportMaxWorldSize();
+        if (cameraMaxSize > 0.01f)
+            return Mathf.Max(minimumSize, cameraMaxSize * InitialAsteroidViewportMultiplier);
+
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        return Mathf.Max(minimumSize, Mathf.Max(mapSize.x, mapSize.y) * InitialAsteroidMapFallbackMultiplier);
+    }
+
+    static float GetCameraViewportMaxWorldSize()
+    {
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null)
+            return 0f;
+
+        if (mainCamera.orthographic)
+        {
+            float height = mainCamera.orthographicSize * 2f;
+            float width = height * mainCamera.aspect;
+            return Mathf.Max(width, height);
+        }
+
+        float distance = Mathf.Abs(mainCamera.transform.position.z - AsteroidZ);
+        if (distance <= 0.01f)
+            return 0f;
+
+        float perspectiveHeight = 2f * distance * Mathf.Tan(mainCamera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+        float perspectiveWidth = perspectiveHeight * mainCamera.aspect;
+        return Mathf.Max(perspectiveWidth, perspectiveHeight);
     }
 
     void UpdateVisuals(float elapsed)
@@ -391,11 +483,38 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
         Color core = new Color(1f, 0.96f, 0.82f, Mathf.Lerp(0.75f, 1f, pulse) * fadeOut);
         Color inner = new Color(warning.r, warning.g, warning.b, 0.86f * fadeOut);
 
-        UpdateRing(markerGlow, radius * Mathf.Lerp(0.9f, 1.13f, pulse), glow, 0.04f);
-        UpdateRing(markerCore, radius, core, 0.025f);
-        UpdateRing(markerInner, radius * Mathf.Lerp(0.43f, 0.58f, markerProgress), inner, 0.035f);
+        if (!markerHidden)
+        {
+            UpdateRing(markerGlow, radius * Mathf.Lerp(0.9f, 1.13f, pulse), glow, 0.04f);
+            UpdateRing(markerCore, radius, core, 0.025f);
+            UpdateRing(markerInner, radius * Mathf.Lerp(0.43f, 0.58f, markerProgress), inner, 0.035f);
+        }
 
         UpdateAsteroid(elapsed);
+    }
+
+    void HideMarker()
+    {
+        if (markerHidden)
+            return;
+
+        markerHidden = true;
+        if (markerGlow != null)
+            markerGlow.enabled = false;
+        if (markerCore != null)
+            markerCore.enabled = false;
+        if (markerInner != null)
+            markerInner.enabled = false;
+    }
+
+    void OnDestroy()
+    {
+        if (ActiveBySeed.TryGetValue(seed, out AsteroidShowerStrikeVfx active) && active == this)
+            ActiveBySeed.Remove(seed);
+
+        HideMarker();
+        if (asteroidRenderer != null)
+            asteroidRenderer.enabled = false;
     }
 
     void UpdateAsteroid(float elapsed)
@@ -559,26 +678,17 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
     float GetElapsed()
     {
         double now = PhotonNetwork.IsConnected ? PhotonNetwork.Time : Time.time;
-        return Mathf.Max(0f, (float)(now - startTime));
+        float synchronizedElapsed = Mathf.Max(0f, (float)(now - startTime));
+        float localElapsed = Mathf.Max(0f, Time.time - localSpawnTime);
+        return Mathf.Max(synchronizedElapsed, localElapsed);
     }
 
     LineRenderer CreateLine(string lineName, int sortingOrder, float width, bool loop)
     {
-        if (lineMaterial == null)
-        {
-            Shader shader = Shader.Find("Sprites/Default");
-            lineMaterial = new Material(shader)
-            {
-                name = "AsteroidShowerLineMaterial",
-                color = Color.white
-            };
-            lineMaterial.renderQueue = 5000;
-        }
-
         GameObject lineObject = new GameObject(lineName);
         lineObject.transform.SetParent(transform, false);
         LineRenderer line = lineObject.AddComponent<LineRenderer>();
-        line.material = lineMaterial;
+        line.material = GetLineMaterial();
         line.useWorldSpace = true;
         line.loop = loop;
         line.textureMode = LineTextureMode.Stretch;
@@ -593,6 +703,24 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
         line.endWidth = width;
         line.positionCount = MarkerSegments;
         return line;
+    }
+
+    static Material GetLineMaterial()
+    {
+        if (lineMaterial != null)
+            return lineMaterial;
+
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null)
+            shader = Shader.Find("Unlit/Color");
+
+        lineMaterial = new Material(shader)
+        {
+            name = "AsteroidShowerLineMaterial",
+            color = Color.white
+        };
+        lineMaterial.renderQueue = 5000;
+        return lineMaterial;
     }
 
     void UpdateRing(LineRenderer line, float ringRadius, Color color, float wobble)
@@ -618,16 +746,15 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
         if (ObstacleSpriteResourcePaths.Length == 0)
             return null;
 
-        int startIndex = Mathf.Abs(index) % ObstacleSpriteResourcePaths.Length;
+        EnsureAsteroidSpriteCache();
+
+        int startIndex = PositiveModulo(index, ObstacleSpriteResourcePaths.Length);
         for (int offset = 0; offset < ObstacleSpriteResourcePaths.Length; offset++)
         {
             int resolvedIndex = (startIndex + offset) % ObstacleSpriteResourcePaths.Length;
-            Sprite sprite = Resources.Load<Sprite>(ObstacleSpriteResourcePaths[resolvedIndex]);
-            if (sprite != null)
-                return sprite;
-
-            Sprite[] sprites = Resources.LoadAll<Sprite>(ObstacleSpriteResourcePaths[resolvedIndex]);
-            sprite = GetLargestSprite(sprites);
+            Sprite sprite = cachedObstacleSprites != null && resolvedIndex < cachedObstacleSprites.Length
+                ? cachedObstacleSprites[resolvedIndex]
+                : null;
             if (sprite != null)
                 return sprite;
         }
@@ -635,7 +762,41 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
         return null;
     }
 
-    Sprite GetLargestSprite(Sprite[] sprites)
+    static void EnsureAsteroidSpriteCache()
+    {
+        if (cachedObstacleSprites != null && cachedObstacleSprites.Length == ObstacleSpriteResourcePaths.Length)
+            return;
+
+        cachedObstacleSprites = new Sprite[ObstacleSpriteResourcePaths.Length];
+        for (int i = 0; i < ObstacleSpriteResourcePaths.Length; i++)
+        {
+            Sprite sprite = Resources.Load<Sprite>(ObstacleSpriteResourcePaths[i]);
+            if (sprite == null)
+                sprite = GetLargestSprite(Resources.LoadAll<Sprite>(ObstacleSpriteResourcePaths[i]));
+
+            cachedObstacleSprites[i] = sprite;
+            PrewarmSpriteTexture(sprite);
+        }
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
+    }
+
+    static int PositiveModulo(int value, int length)
+    {
+        if (length <= 0)
+            return 0;
+
+        int result = value % length;
+        return result < 0 ? result + length : result;
+    }
+
+    static Sprite GetLargestSprite(Sprite[] sprites)
     {
         if (sprites == null || sprites.Length == 0)
             return null;

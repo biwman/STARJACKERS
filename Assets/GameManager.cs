@@ -15,6 +15,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     const string CloudDirectionKey = NebulaSpawner.CloudDirectionKey;
     const string RepairBayLayoutKey = "repairBayLayout";
     const string SpaceFactoryLayoutKey = SpaceFactorySpawner.LayoutKey;
+    const string ScienceStationLayoutKey = ScienceStationSpawner.LayoutKey;
     const string MapSeedKey = "mapSeed";
     const string LoneShipModeStartTimeKey = "loneShipModeStartTime";
     const float RestartCleanupTimeout = 2.5f;
@@ -47,6 +48,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.RepairBayOccupancyStateKey] = string.Empty;
         props[RoomSettings.SpaceFactoryStateKey] = string.Empty;
         props[RoomSettings.SpaceFactoryOccupancyStateKey] = string.Empty;
+        props[RoomSettings.ScienceStationOccupancyStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.FinishedRoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
@@ -55,6 +57,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[CloudDirectionKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
         props[SpaceFactoryLayoutKey] = string.Empty;
+        props[ScienceStationLayoutKey] = string.Empty;
 
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RoundResultsTracker.ResetForCurrentRoom();
@@ -106,6 +109,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[CloudDirectionKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
         props[SpaceFactoryLayoutKey] = string.Empty;
+        props[ScienceStationLayoutKey] = string.Empty;
         props[MapSeedKey] = -1;
         props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateSummary;
         props[RoomSettings.RoundEndUtcMsKey] = -1d;
@@ -120,6 +124,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.RepairBayOccupancyStateKey] = string.Empty;
         props[RoomSettings.SpaceFactoryStateKey] = string.Empty;
         props[RoomSettings.SpaceFactoryOccupancyStateKey] = string.Empty;
+        props[RoomSettings.ScienceStationOccupancyStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = RoundResultsTracker.SerializeSnapshot(snapshot);
         props[RoomSettings.RoundEndReasonKey] = snapshot != null ? snapshot.endReason : endReason;
 
@@ -182,6 +187,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[CloudDirectionKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
         props[SpaceFactoryLayoutKey] = string.Empty;
+        props[ScienceStationLayoutKey] = string.Empty;
         props[MapSeedKey] = -1;
         props[RoomSettings.StartTimeKey] = -1d;
         props[RoomSettings.RoundEndUtcMsKey] = -1d;
@@ -197,6 +203,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.RepairBayOccupancyStateKey] = string.Empty;
         props[RoomSettings.SpaceFactoryStateKey] = string.Empty;
         props[RoomSettings.SpaceFactoryOccupancyStateKey] = string.Empty;
+        props[RoomSettings.ScienceStationOccupancyStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.FinishedRoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;

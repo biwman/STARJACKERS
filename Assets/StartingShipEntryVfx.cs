@@ -33,12 +33,6 @@ public sealed class StartingShipEntryVfx : MonoBehaviourPun
 
     void Start()
     {
-        if (!RoomSettings.AreStartingVfxEnabled())
-        {
-            enabled = false;
-            return;
-        }
-
         if (GetComponent<EnemyBot>() != null || GetComponent<AstronautSurvivor>() != null)
         {
             enabled = false;

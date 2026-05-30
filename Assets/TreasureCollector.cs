@@ -24,6 +24,23 @@ public class TreasureCollector : MonoBehaviourPun
     const float ExtractionUseSearchRadius = 2.1f;
     const float ExtractionUseKeepAliveDistance = 1.15f;
 
+    enum NovaPendingCollectibleKind
+    {
+        Treasure,
+        RandomLootWreck,
+        Wreck,
+        DroppedCargo
+    }
+
+    sealed class NovaPendingCollectible
+    {
+        public NovaPendingCollectibleKind Kind;
+        public int ViewId;
+        public int LootIndex;
+        public string ItemId;
+        public string BlueprintItemId;
+    }
+
     enum UseActionType
     {
         None,
@@ -73,6 +90,60 @@ public class TreasureCollector : MonoBehaviourPun
         ReservedWreckLoot.Clear();
         ReservedDroppedCargoLoot.Clear();
         ReservedRandomLootWrecks.Clear();
+    }
+
+    public bool TryNovaScavengerBurstOnMaster(float rangeMultiplier, float collectDelaySeconds, out string targetViewIds)
+    {
+        targetViewIds = string.Empty;
+        if (!PhotonNetwork.IsMasterClient || photonView == null || photonView.Owner == null)
+            return false;
+
+        float maxRange = Treasure.CollectRange * Mathf.Max(1f, rangeMultiplier);
+        Vector2 tipPosition = GetShipTipPosition();
+        Collider2D[] hits = Physics2D.OverlapCircleAll(tipPosition, maxRange + 0.85f);
+        HashSet<int> queuedViewIds = new HashSet<int>();
+        List<int> visualTargetIds = new List<int>();
+        List<NovaPendingCollectible> pendingCollectibles = new List<NovaPendingCollectible>();
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null)
+                continue;
+
+            Treasure treasure = hit.GetComponent<Treasure>() ?? hit.GetComponentInParent<Treasure>();
+            if (treasure != null)
+            {
+                if (TryQueueNovaTreasureOnMaster(treasure, tipPosition, maxRange, queuedViewIds, pendingCollectibles))
+                    visualTargetIds.Add(treasure.photonView.ViewID);
+
+                continue;
+            }
+
+            ShipWreck wreck = hit.GetComponent<ShipWreck>() ?? hit.GetComponentInParent<ShipWreck>();
+            if (wreck != null)
+            {
+                PhotonView wreckView = wreck.GetComponent<PhotonView>();
+                if (TryQueueNovaWreckOnMaster(wreck, tipPosition, maxRange, queuedViewIds, pendingCollectibles) && wreckView != null)
+                    visualTargetIds.Add(wreckView.ViewID);
+
+                continue;
+            }
+
+            DroppedCargoCrate crate = hit.GetComponent<DroppedCargoCrate>() ?? hit.GetComponentInParent<DroppedCargoCrate>();
+            if (crate != null)
+            {
+                PhotonView crateView = crate.GetComponent<PhotonView>();
+                if (TryQueueNovaDroppedCargoOnMaster(crate, tipPosition, maxRange, queuedViewIds, pendingCollectibles) && crateView != null)
+                    visualTargetIds.Add(crateView.ViewID);
+            }
+        }
+
+        targetViewIds = BuildViewIdCsv(visualTargetIds);
+        if (pendingCollectibles.Count > 0)
+            StartCoroutine(ResolveNovaScavengerBurstAfterDelay(pendingCollectibles, collectDelaySeconds));
+
+        return visualTargetIds.Count > 0;
     }
 
     void Start()
@@ -254,10 +325,11 @@ public class TreasureCollector : MonoBehaviourPun
         PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
         RepairBay repairBay = RepairBay.FindClosestUsable(transform.position);
         SpaceFactory spaceFactory = SpaceFactory.FindClosestUsable(transform.position);
-        if (repairDocking != null && (repairDocking.IsBusy || repairBay != null || spaceFactory != null))
+        ScienceStation scienceStation = ScienceStation.FindClosestUsable(transform.position);
+        if (repairDocking != null && (repairDocking.IsBusy || repairBay != null || spaceFactory != null || scienceStation != null))
         {
             CancelActiveCollection();
-            if (repairDocking.TryStartUse(repairBay, spaceFactory))
+            if (repairDocking.TryStartUse(repairBay, spaceFactory, scienceStation))
                 return;
         }
 
@@ -499,14 +571,7 @@ public class TreasureCollector : MonoBehaviourPun
         if (extractionZone == null)
             return float.MaxValue;
 
-        Collider2D zoneCollider = extractionZone.GetComponent<Collider2D>();
-        if (zoneCollider != null)
-        {
-            Vector2 closestPoint = zoneCollider.ClosestPoint(transform.position);
-            return Vector2.Distance(transform.position, closestPoint);
-        }
-
-        return Vector2.Distance(transform.position, extractionZone.transform.position);
+        return extractionZone.GetInteractionDistanceToPoint(transform.position);
     }
 
     void RequestTreasureCollectionReservation(Treasure treasure)
@@ -596,7 +661,7 @@ public class TreasureCollector : MonoBehaviourPun
 
         int collectXp = RoundXpTracker.RecordTreasureCollected(photonView.Owner, collectedItemId);
         AddScore(collectXp);
-        StoreCollectedItem(collectedItemId);
+        StoreCollectedItem(ResolveCovaxAsteroidCargoItem(collectedItemId), collectedItemId);
 
         treasureToCollect.isBeingCollected = false;
         FinishCollection();
@@ -923,7 +988,8 @@ public class TreasureCollector : MonoBehaviourPun
             PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
             RepairBay repairBay = RepairBay.FindClosestUsable(transform.position);
             SpaceFactory spaceFactory = SpaceFactory.FindClosestUsable(transform.position);
-            if (repairDocking != null && (repairDocking.IsBusy || repairBay != null || spaceFactory != null))
+            ScienceStation scienceStation = ScienceStation.FindClosestUsable(transform.position);
+            if (repairDocking != null && (repairDocking.IsBusy || repairBay != null || spaceFactory != null || scienceStation != null))
                 return UseActionType.Land;
         }
 
@@ -968,7 +1034,12 @@ public class TreasureCollector : MonoBehaviourPun
             return CanStoreTreasure(currentTreasure);
 
         if (currentDroppedCargo != null)
-            return PlayerProfileService.Instance.HasFreeShipInventorySlot(currentDroppedCargo.StoredItemId);
+        {
+            string storedItemId = InventoryItemCatalog.IsBlueprintScrapContainerItem(currentDroppedCargo.StoredItemId)
+                ? InventoryItemCatalog.BlueprintScrapId
+                : currentDroppedCargo.StoredItemId;
+            return PlayerProfileService.Instance.HasFreeShipInventorySlot(storedItemId);
+        }
 
         return PlayerProfileService.Instance.HasFreeShipInventorySlot();
     }
@@ -983,6 +1054,9 @@ public class TreasureCollector : MonoBehaviourPun
             return PlayerProfileService.Instance.HasFreeShipInventorySlot() ||
                    PlayerProfileService.PlayerHasFreeGadgetEquipmentSlot(PhotonNetwork.LocalPlayer);
         }
+
+        if (InventoryItemCatalog.IsBlueprintScrapContainerItem(treasure.itemId))
+            return PlayerProfileService.Instance.HasFreeShipInventorySlot(InventoryItemCatalog.BlueprintScrapId);
 
         return PlayerProfileService.Instance.HasFreeShipInventorySlot(treasure.itemId);
     }
@@ -1024,9 +1098,6 @@ public class TreasureCollector : MonoBehaviourPun
 
     string GetUseButtonLabel(UseActionType actionType)
     {
-        if (!RoomSettings.IsDynamicUseLabelEnabled())
-            return "USE";
-
         switch (actionType)
         {
             case UseActionType.Collect:
@@ -1537,6 +1608,341 @@ public class TreasureCollector : MonoBehaviourPun
         EnemyPirateBaseBehavior.NotifyCollectibleCollected(collectibleViewId, collectorViewId);
     }
 
+    bool TryQueueNovaTreasureOnMaster(Treasure treasure, Vector2 tipPosition, float maxRange, HashSet<int> queuedViewIds, List<NovaPendingCollectible> pendingCollectibles)
+    {
+        if (treasure == null || treasure.photonView == null || treasure.isBeingCollected)
+            return false;
+
+        int viewId = treasure.photonView.ViewID;
+        if (viewId <= 0 || queuedViewIds.Contains(viewId))
+            return false;
+
+        if (GetDistanceFromTipToCollider(treasure.GetComponent<Collider2D>(), treasure.transform.position, tipPosition) > maxRange)
+            return false;
+
+        if (InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
+            return TryQueueNovaRandomLootWreckOnMaster(treasure, queuedViewIds, pendingCollectibles);
+
+        if (ReservedTreasureCollections.TryGetValue(viewId, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
+            return false;
+
+        if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, treasure.itemId))
+            return false;
+
+        queuedViewIds.Add(viewId);
+        treasure.isBeingCollected = true;
+        ReservedTreasureCollections[viewId] = photonView.OwnerActorNr;
+        pendingCollectibles.Add(new NovaPendingCollectible
+        {
+            Kind = NovaPendingCollectibleKind.Treasure,
+            ViewId = viewId,
+            ItemId = treasure.itemId
+        });
+        return true;
+    }
+
+    bool TryQueueNovaRandomLootWreckOnMaster(Treasure treasure, HashSet<int> queuedViewIds, List<NovaPendingCollectible> pendingCollectibles)
+    {
+        if (treasure == null || treasure.photonView == null)
+            return false;
+
+        int viewId = treasure.photonView.ViewID;
+        if (viewId <= 0 || queuedViewIds.Contains(viewId))
+            return false;
+
+        if (ReservedRandomLootWrecks.TryGetValue(viewId, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
+            return false;
+
+        string rewardItemId = RollRandomLootWreckReward();
+        if (string.IsNullOrWhiteSpace(rewardItemId))
+            return false;
+
+        bool canStoreReward = PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, rewardItemId) ||
+                              (InventoryItemCatalog.GetCategory(rewardItemId) == InventoryItemCategory.Gadget &&
+                               PlayerProfileService.PlayerHasFreeGadgetEquipmentSlot(photonView.Owner));
+        if (!canStoreReward)
+            return false;
+
+        queuedViewIds.Add(viewId);
+        treasure.isBeingCollected = true;
+        ReservedRandomLootWrecks[viewId] = photonView.OwnerActorNr;
+        pendingCollectibles.Add(new NovaPendingCollectible
+        {
+            Kind = NovaPendingCollectibleKind.RandomLootWreck,
+            ViewId = viewId,
+            ItemId = rewardItemId
+        });
+        return true;
+    }
+
+    bool TryQueueNovaWreckOnMaster(ShipWreck wreck, Vector2 tipPosition, float maxRange, HashSet<int> queuedViewIds, List<NovaPendingCollectible> pendingCollectibles)
+    {
+        PhotonView wreckView = wreck != null ? wreck.GetComponent<PhotonView>() : null;
+        if (wreck == null || wreckView == null || !wreck.HasLoot || wreck.isBeingCollected)
+            return false;
+
+        int viewId = wreckView.ViewID;
+        if (viewId <= 0 || queuedViewIds.Contains(viewId))
+            return false;
+
+        if (GetDistanceFromTipToCollider(wreck.GetComponent<Collider2D>(), wreck.transform.position, tipPosition) > maxRange)
+            return false;
+
+        if (ReservedWreckLoot.TryGetValue(viewId, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
+            return false;
+
+        int lootIndex = wreck.GetFirstLootIndex();
+        string itemId = wreck.GetLootItemAt(lootIndex);
+        if (lootIndex < 0 || string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, itemId))
+            return false;
+
+        string blueprintItemId = string.Empty;
+        if (wreck.SourceShipSkinIndex < 0)
+            BlueprintCatalog.TryRollWreckBlueprintDrop(itemId, wreck.SourceEnemyKindValue, out blueprintItemId);
+
+        queuedViewIds.Add(viewId);
+        wreck.isBeingCollected = true;
+        ReservedWreckLoot[viewId] = photonView.OwnerActorNr;
+        pendingCollectibles.Add(new NovaPendingCollectible
+        {
+            Kind = NovaPendingCollectibleKind.Wreck,
+            ViewId = viewId,
+            LootIndex = lootIndex,
+            ItemId = itemId,
+            BlueprintItemId = blueprintItemId ?? string.Empty
+        });
+        return true;
+    }
+
+    bool TryQueueNovaDroppedCargoOnMaster(DroppedCargoCrate crate, Vector2 tipPosition, float maxRange, HashSet<int> queuedViewIds, List<NovaPendingCollectible> pendingCollectibles)
+    {
+        PhotonView crateView = crate != null ? crate.GetComponent<PhotonView>() : null;
+        if (crate == null || crateView == null || !crate.HasLoot || crate.isBeingCollected)
+            return false;
+
+        int viewId = crateView.ViewID;
+        if (viewId <= 0 || queuedViewIds.Contains(viewId))
+            return false;
+
+        if (GetDistanceFromTipToCollider(crate.GetComponent<Collider2D>(), crate.transform.position, tipPosition) > maxRange)
+            return false;
+
+        if (ReservedDroppedCargoLoot.TryGetValue(viewId, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
+            return false;
+
+        string itemId = crate.StoredItemId;
+        if (string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, itemId))
+            return false;
+
+        queuedViewIds.Add(viewId);
+        crate.isBeingCollected = true;
+        ReservedDroppedCargoLoot[viewId] = photonView.OwnerActorNr;
+        pendingCollectibles.Add(new NovaPendingCollectible
+        {
+            Kind = NovaPendingCollectibleKind.DroppedCargo,
+            ViewId = viewId,
+            ItemId = itemId
+        });
+        return true;
+    }
+
+    IEnumerator ResolveNovaScavengerBurstAfterDelay(List<NovaPendingCollectible> pendingCollectibles, float delaySeconds)
+    {
+        float delay = Mathf.Max(0f, delaySeconds);
+        if (delay > 0f)
+            yield return new WaitForSeconds(delay);
+
+        if (!PhotonNetwork.IsMasterClient || photonView == null || pendingCollectibles == null)
+            yield break;
+
+        if (photonView.Owner == null)
+        {
+            ReleaseNovaPendingReservations(pendingCollectibles);
+            yield break;
+        }
+
+        for (int i = 0; i < pendingCollectibles.Count; i++)
+            ResolveNovaPendingCollectible(pendingCollectibles[i]);
+    }
+
+    void ResolveNovaPendingCollectible(NovaPendingCollectible pending)
+    {
+        if (pending == null || pending.ViewId <= 0 || photonView == null)
+            return;
+
+        if (photonView.Owner == null)
+        {
+            ReleaseNovaPendingReservation(pending);
+            return;
+        }
+
+        switch (pending.Kind)
+        {
+            case NovaPendingCollectibleKind.Treasure:
+                ResolveNovaPendingTreasure(pending);
+                break;
+            case NovaPendingCollectibleKind.RandomLootWreck:
+                ResolveNovaPendingRandomLootWreck(pending);
+                break;
+            case NovaPendingCollectibleKind.Wreck:
+                ResolveNovaPendingWreck(pending);
+                break;
+            case NovaPendingCollectibleKind.DroppedCargo:
+                ResolveNovaPendingDroppedCargo(pending);
+                break;
+        }
+    }
+
+    void ReleaseNovaPendingReservations(List<NovaPendingCollectible> pendingCollectibles)
+    {
+        if (pendingCollectibles == null)
+            return;
+
+        for (int i = 0; i < pendingCollectibles.Count; i++)
+            ReleaseNovaPendingReservation(pendingCollectibles[i]);
+    }
+
+    void ReleaseNovaPendingReservation(NovaPendingCollectible pending)
+    {
+        if (pending == null || pending.ViewId <= 0)
+            return;
+
+        PhotonView targetView = PhotonView.Find(pending.ViewId);
+        switch (pending.Kind)
+        {
+            case NovaPendingCollectibleKind.Treasure:
+                ReleaseNovaTreasureReservation(pending.ViewId, targetView != null ? targetView.GetComponent<Treasure>() : null);
+                break;
+            case NovaPendingCollectibleKind.RandomLootWreck:
+                ReleaseNovaRandomLootWreckReservation(pending.ViewId, targetView != null ? targetView.GetComponent<Treasure>() : null);
+                break;
+            case NovaPendingCollectibleKind.Wreck:
+                ReleaseNovaWreckReservation(pending.ViewId, targetView != null ? targetView.GetComponent<ShipWreck>() : null);
+                break;
+            case NovaPendingCollectibleKind.DroppedCargo:
+                ReleaseNovaDroppedCargoReservation(pending.ViewId, targetView != null ? targetView.GetComponent<DroppedCargoCrate>() : null);
+                break;
+        }
+    }
+
+    void ResolveNovaPendingTreasure(NovaPendingCollectible pending)
+    {
+        if (!IsReservationOwnedByCurrentPlayer(ReservedTreasureCollections, pending.ViewId))
+            return;
+
+        PhotonView targetView = PhotonView.Find(pending.ViewId);
+        Treasure treasure = targetView != null ? targetView.GetComponent<Treasure>() : null;
+        if (treasure == null || string.IsNullOrWhiteSpace(pending.ItemId) ||
+            !string.Equals(treasure.itemId, pending.ItemId, System.StringComparison.Ordinal))
+        {
+            ReleaseNovaTreasureReservation(pending.ViewId, treasure);
+            return;
+        }
+
+        photonView.RPC(nameof(ReceiveNovaTreasureRpc), photonView.Owner, pending.ViewId, pending.ItemId);
+    }
+
+    void ResolveNovaPendingRandomLootWreck(NovaPendingCollectible pending)
+    {
+        if (!IsReservationOwnedByCurrentPlayer(ReservedRandomLootWrecks, pending.ViewId))
+            return;
+
+        PhotonView targetView = PhotonView.Find(pending.ViewId);
+        Treasure wreck = targetView != null ? targetView.GetComponent<Treasure>() : null;
+        if (wreck == null || string.IsNullOrWhiteSpace(pending.ItemId) || !InventoryItemCatalog.IsRandomLootWreckItem(wreck.itemId))
+        {
+            ReleaseNovaRandomLootWreckReservation(pending.ViewId, wreck);
+            return;
+        }
+
+        photonView.RPC(nameof(ReceivePendingRandomLootWreckRpc), photonView.Owner, pending.ViewId, pending.ItemId);
+    }
+
+    void ResolveNovaPendingWreck(NovaPendingCollectible pending)
+    {
+        if (!IsReservationOwnedByCurrentPlayer(ReservedWreckLoot, pending.ViewId))
+            return;
+
+        PhotonView targetView = PhotonView.Find(pending.ViewId);
+        ShipWreck wreck = targetView != null ? targetView.GetComponent<ShipWreck>() : null;
+        string currentItemId = wreck != null ? wreck.GetLootItemAt(pending.LootIndex) : string.Empty;
+        if (wreck == null || !wreck.HasLoot || string.IsNullOrWhiteSpace(pending.ItemId) ||
+            !string.Equals(currentItemId, pending.ItemId, System.StringComparison.Ordinal))
+        {
+            ReleaseNovaWreckReservation(pending.ViewId, wreck);
+            return;
+        }
+
+        photonView.RPC(nameof(ReceivePendingWreckLootRpc), photonView.Owner, pending.ViewId, pending.LootIndex, pending.ItemId, pending.BlueprintItemId ?? string.Empty);
+    }
+
+    void ResolveNovaPendingDroppedCargo(NovaPendingCollectible pending)
+    {
+        if (!IsReservationOwnedByCurrentPlayer(ReservedDroppedCargoLoot, pending.ViewId))
+            return;
+
+        PhotonView targetView = PhotonView.Find(pending.ViewId);
+        DroppedCargoCrate crate = targetView != null ? targetView.GetComponent<DroppedCargoCrate>() : null;
+        if (crate == null || !crate.HasLoot || string.IsNullOrWhiteSpace(pending.ItemId) ||
+            !string.Equals(crate.StoredItemId, pending.ItemId, System.StringComparison.Ordinal))
+        {
+            ReleaseNovaDroppedCargoReservation(pending.ViewId, crate);
+            return;
+        }
+
+        photonView.RPC(nameof(ReceivePendingDroppedCargoLootRpc), photonView.Owner, pending.ViewId, pending.ItemId);
+    }
+
+    bool IsReservationOwnedByCurrentPlayer(Dictionary<int, int> reservations, int viewId)
+    {
+        return photonView != null &&
+               reservations != null &&
+               reservations.TryGetValue(viewId, out int reservedActor) &&
+               reservedActor == photonView.OwnerActorNr;
+    }
+
+    void ReleaseNovaTreasureReservation(int viewId, Treasure treasure)
+    {
+        if (IsReservationOwnedByCurrentPlayer(ReservedTreasureCollections, viewId))
+            ReservedTreasureCollections.Remove(viewId);
+
+        if (treasure != null)
+            treasure.isBeingCollected = false;
+    }
+
+    void ReleaseNovaRandomLootWreckReservation(int viewId, Treasure wreck)
+    {
+        if (IsReservationOwnedByCurrentPlayer(ReservedRandomLootWrecks, viewId))
+            ReservedRandomLootWrecks.Remove(viewId);
+
+        if (wreck != null)
+            wreck.isBeingCollected = false;
+    }
+
+    void ReleaseNovaWreckReservation(int viewId, ShipWreck wreck)
+    {
+        if (IsReservationOwnedByCurrentPlayer(ReservedWreckLoot, viewId))
+            ReservedWreckLoot.Remove(viewId);
+
+        if (wreck != null)
+            wreck.isBeingCollected = false;
+    }
+
+    void ReleaseNovaDroppedCargoReservation(int viewId, DroppedCargoCrate crate)
+    {
+        if (IsReservationOwnedByCurrentPlayer(ReservedDroppedCargoLoot, viewId))
+            ReservedDroppedCargoLoot.Remove(viewId);
+
+        if (crate != null)
+            crate.isBeingCollected = false;
+    }
+
     [PunRPC]
     void RequestRandomLootWreck(int viewID)
     {
@@ -1579,7 +1985,7 @@ public class TreasureCollector : MonoBehaviourPun
             return;
 
         ShipWreck wreck = wreckView.GetComponent<ShipWreck>();
-        if (wreck == null || !wreck.HasLoot)
+        if (wreck == null || !wreck.HasLoot || (wreck.isBeingCollected && currentWreck != wreck))
             return;
 
         if (ReservedWreckLoot.TryGetValue(viewID, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
@@ -1593,8 +1999,12 @@ public class TreasureCollector : MonoBehaviourPun
         if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, itemId))
             return;
 
+        string blueprintItemId = string.Empty;
+        if (wreck.SourceShipSkinIndex < 0)
+            BlueprintCatalog.TryRollWreckBlueprintDrop(itemId, wreck.SourceEnemyKindValue, out blueprintItemId);
+
         ReservedWreckLoot[viewID] = photonView.OwnerActorNr;
-        photonView.RPC(nameof(ReceivePendingWreckLootRpc), photonView.Owner, viewID, lootIndex, itemId);
+        photonView.RPC(nameof(ReceivePendingWreckLootRpc), photonView.Owner, viewID, lootIndex, itemId, blueprintItemId ?? string.Empty);
     }
 
     [PunRPC]
@@ -1608,7 +2018,7 @@ public class TreasureCollector : MonoBehaviourPun
             return;
 
         DroppedCargoCrate crate = crateView.GetComponent<DroppedCargoCrate>();
-        if (crate == null || !crate.HasLoot)
+        if (crate == null || !crate.HasLoot || (crate.isBeingCollected && currentDroppedCargo != crate))
             return;
 
         if (ReservedDroppedCargoLoot.TryGetValue(viewID, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
@@ -1806,11 +2216,10 @@ public class TreasureCollector : MonoBehaviourPun
     {
         try
         {
-            bool stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
+            bool stored = await StoreItemToShipWithContainerDropsAsync(itemId);
             if (stored)
             {
                 AddScore(RoundXpTracker.RecordWreckLooted(photonView.Owner, false));
-                ShowPickupToast(itemId);
             }
         }
         catch (System.Exception ex)
@@ -1820,7 +2229,26 @@ public class TreasureCollector : MonoBehaviourPun
     }
 
     [PunRPC]
-    async void ReceivePendingWreckLootRpc(int wreckViewId, int lootIndex, string itemId)
+    async void ReceiveNovaTreasureRpc(int treasureViewId, string itemId)
+    {
+        bool stored = false;
+        try
+        {
+            stored = await StoreItemToShipWithContainerDropsAsync(itemId, itemId, true, true);
+            if (stored)
+                AddScore(RoundXpTracker.RecordTreasureCollected(photonView.Owner, itemId));
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to store Nova burst treasure item: " + ex);
+        }
+
+        if (photonView != null)
+            photonView.RPC(nameof(ResolveReservedNovaTreasure), RpcTarget.MasterClient, treasureViewId, itemId, stored);
+    }
+
+    [PunRPC]
+    async void ReceivePendingWreckLootRpc(int wreckViewId, int lootIndex, string itemId, string blueprintItemId)
     {
         bool playerWreck = false;
         PhotonView wreckView = PhotonView.Find(wreckViewId);
@@ -1830,14 +2258,32 @@ public class TreasureCollector : MonoBehaviourPun
             playerWreck = wreck != null && wreck.SourceShipSkinIndex >= 0;
         }
 
-        bool stored = false;
+        bool itemStored = false;
+        bool blueprintStored = false;
         try
         {
-            stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
-            if (stored)
+            bool hasBonusBlueprint = InventoryItemCatalog.IsBlueprintItem(blueprintItemId);
+            if (hasBonusBlueprint)
+            {
+                blueprintStored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(blueprintItemId);
+                if (blueprintStored)
+                    ShowPickupToast(blueprintItemId);
+            }
+
+            if (hasBonusBlueprint)
+            {
+                itemStored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
+                if (itemStored)
+                    ShowPickupToast(itemId);
+            }
+            else
+            {
+                itemStored = await StoreItemToShipWithContainerDropsAsync(itemId);
+            }
+
+            if (itemStored || blueprintStored)
             {
                 AddScore(RoundXpTracker.RecordWreckLooted(photonView.Owner, playerWreck));
-                ShowPickupToast(itemId);
             }
         }
         catch (System.Exception ex)
@@ -1846,7 +2292,7 @@ public class TreasureCollector : MonoBehaviourPun
         }
 
         if (photonView != null)
-            photonView.RPC(nameof(ResolveReservedWreckLoot), RpcTarget.MasterClient, wreckViewId, lootIndex, itemId, stored);
+            photonView.RPC(nameof(ResolveReservedWreckLoot), RpcTarget.MasterClient, wreckViewId, lootIndex, itemId, blueprintItemId ?? string.Empty, itemStored, blueprintStored);
     }
 
     [PunRPC]
@@ -1855,11 +2301,10 @@ public class TreasureCollector : MonoBehaviourPun
         bool stored = false;
         try
         {
-            stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
+            stored = await StoreItemToShipWithContainerDropsAsync(itemId);
             if (stored)
             {
                 AddScore(RoundXpTracker.RecordDroppedCargoLooted(photonView.Owner));
-                ShowPickupToast(itemId);
             }
         }
         catch (System.Exception ex)
@@ -1894,7 +2339,7 @@ public class TreasureCollector : MonoBehaviourPun
     }
 
     [PunRPC]
-    void ResolveReservedWreckLoot(int wreckViewId, int lootIndex, string itemId, bool stored)
+    void ResolveReservedWreckLoot(int wreckViewId, int lootIndex, string itemId, string blueprintItemId, bool itemStored, bool blueprintStored)
     {
         if (!PhotonNetwork.IsMasterClient)
             return;
@@ -1903,15 +2348,15 @@ public class TreasureCollector : MonoBehaviourPun
             return;
 
         ReservedWreckLoot.Remove(wreckViewId);
-        if (!stored)
-            return;
-
         PhotonView wreckView = PhotonView.Find(wreckViewId);
-        if (wreckView == null)
+        ShipWreck wreck = wreckView != null ? wreckView.GetComponent<ShipWreck>() : null;
+        if (wreck != null)
+            wreck.isBeingCollected = false;
+
+        if (!itemStored && !blueprintStored)
             return;
 
-        ShipWreck wreck = wreckView.GetComponent<ShipWreck>();
-        if (wreck == null || !wreck.HasLoot)
+        if (wreckView == null || wreck == null || !wreck.HasLoot)
             return;
 
         string currentItemId = wreck.GetLootItemAt(lootIndex);
@@ -1920,7 +2365,47 @@ public class TreasureCollector : MonoBehaviourPun
 
         SpaceTrapTarget.DetonateIfArmed(wreckViewId, photonView != null ? photonView.ViewID : 0);
         NotifyPirateBasesAboutCollectedTarget(wreckViewId);
+        if (blueprintStored && !itemStored)
+            DropOverflowWreckLoot(wreck, itemId);
+
         wreckView.RPC(nameof(ShipWreck.RemoveLootAtIndexRpc), RpcTarget.All, lootIndex);
+    }
+
+    [PunRPC]
+    void ResolveReservedNovaTreasure(int treasureViewId, string itemId, bool stored)
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        if (!ReservedTreasureCollections.TryGetValue(treasureViewId, out int reservedActor) || reservedActor != photonView.OwnerActorNr)
+            return;
+
+        ReservedTreasureCollections.Remove(treasureViewId);
+        PhotonView treasureView = PhotonView.Find(treasureViewId);
+        Treasure treasure = treasureView != null ? treasureView.GetComponent<Treasure>() : null;
+        if (treasure != null)
+            treasure.isBeingCollected = false;
+
+        if (!stored || treasureView == null || treasure == null || !string.Equals(treasure.itemId, itemId, System.StringComparison.Ordinal))
+            return;
+
+        SpaceTrapTarget.DetonateIfArmed(treasureViewId, photonView != null ? photonView.ViewID : 0);
+        NotifyPirateBasesAboutCollectedTarget(treasureViewId);
+        PhotonNetwork.Destroy(treasureView.gameObject);
+    }
+
+    void DropOverflowWreckLoot(ShipWreck wreck, string itemId)
+    {
+        if (wreck == null || string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        Vector2 driftDirection = Random.insideUnitCircle.normalized;
+        if (driftDirection.sqrMagnitude < 0.001f)
+            driftDirection = Vector2.up;
+
+        Vector3 dropPosition = wreck.transform.position + (Vector3)(driftDirection * 0.65f);
+        Vector2 driftVelocity = driftDirection * Random.Range(0.45f, 0.85f);
+        DroppedCargoManager.DropItemAtPosition(itemId, dropPosition, driftVelocity);
     }
 
     [PunRPC]
@@ -1933,15 +2418,15 @@ public class TreasureCollector : MonoBehaviourPun
             return;
 
         ReservedDroppedCargoLoot.Remove(crateViewId);
+        PhotonView crateView = PhotonView.Find(crateViewId);
+        DroppedCargoCrate crate = crateView != null ? crateView.GetComponent<DroppedCargoCrate>() : null;
+        if (crate != null)
+            crate.isBeingCollected = false;
+
         if (!stored)
             return;
 
-        PhotonView crateView = PhotonView.Find(crateViewId);
-        if (crateView == null)
-            return;
-
-        DroppedCargoCrate crate = crateView.GetComponent<DroppedCargoCrate>();
-        if (crate == null || !crate.HasLoot || !string.Equals(crate.StoredItemId, itemId, System.StringComparison.Ordinal))
+        if (crateView == null || crate == null || !crate.HasLoot || !string.Equals(crate.StoredItemId, itemId, System.StringComparison.Ordinal))
             return;
 
         SpaceTrapTarget.DetonateIfArmed(crateViewId, photonView != null ? photonView.ViewID : 0);
@@ -1960,15 +2445,15 @@ public class TreasureCollector : MonoBehaviourPun
             return;
 
         ReservedRandomLootWrecks.Remove(wreckViewId);
+        PhotonView wreckView = PhotonView.Find(wreckViewId);
+        Treasure wreck = wreckView != null ? wreckView.GetComponent<Treasure>() : null;
+        if (wreck != null)
+            wreck.isBeingCollected = false;
+
         if (!stored)
             return;
 
-        PhotonView wreckView = PhotonView.Find(wreckViewId);
-        if (wreckView == null)
-            return;
-
-        Treasure wreck = wreckView.GetComponent<Treasure>();
-        if (wreck == null || !InventoryItemCatalog.IsRandomLootWreckItem(wreck.itemId))
+        if (wreckView == null || wreck == null || !InventoryItemCatalog.IsRandomLootWreckItem(wreck.itemId))
             return;
 
         SpaceTrapTarget.DetonateIfArmed(wreckViewId, photonView != null ? photonView.ViewID : 0);
@@ -1976,22 +2461,11 @@ public class TreasureCollector : MonoBehaviourPun
         PhotonNetwork.Destroy(wreckView.gameObject);
     }
 
-    async void StoreCollectedItem(string itemId)
+    async void StoreCollectedItem(string itemId, string sourceItemId = null)
     {
         try
         {
-            bool stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
-            if (stored)
-            {
-                ShowPickupToast(itemId);
-
-                if (IsNovaSpaceJunkBonusActive(itemId))
-                {
-                    bool bonusStored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
-                    if (bonusStored)
-                        ShowPickupToast(itemId);
-                }
-            }
+            await StoreItemToShipWithContainerDropsAsync(itemId, sourceItemId ?? itemId, true, true);
         }
         catch (System.Exception ex)
         {
@@ -1999,10 +2473,103 @@ public class TreasureCollector : MonoBehaviourPun
         }
     }
 
+    async System.Threading.Tasks.Task<bool> StoreItemToShipWithContainerDropsAsync(
+        string itemId,
+        string sourceItemId = null,
+        bool recordAsteroidProgress = false,
+        bool allowNovaSpaceJunkBonus = false)
+    {
+        if (string.IsNullOrWhiteSpace(itemId) || !PlayerProfileService.HasInstance)
+            return false;
+
+        bool isBlueprintScrapContainer =
+            InventoryItemCatalog.IsBlueprintScrapContainerItem(itemId) ||
+            InventoryItemCatalog.IsBlueprintScrapContainerItem(sourceItemId);
+        if (isBlueprintScrapContainer)
+        {
+            bool stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(InventoryItemCatalog.BlueprintScrapId);
+            if (stored)
+            {
+                ShowPickupToast(InventoryItemCatalog.BlueprintScrapId);
+                if (BlueprintCatalog.RollBlueprintScrapContainerBonus())
+                {
+                    bool bonusStored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(InventoryItemCatalog.BlueprintScrapId);
+                    if (bonusStored)
+                        ShowPickupToast(InventoryItemCatalog.BlueprintScrapId);
+                }
+            }
+
+            return stored;
+        }
+
+        string storedItemId = BlueprintCatalog.ResolveContainerBlueprintDrop(itemId);
+        bool itemStored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(storedItemId);
+        if (!itemStored)
+            return false;
+
+        ShowPickupToast(storedItemId);
+
+        if (recordAsteroidProgress)
+            await RecordAsteroidSalvageProgressAsync(sourceItemId ?? itemId);
+
+        if (allowNovaSpaceJunkBonus && IsNovaSpaceJunkBonusActive(storedItemId))
+        {
+            bool bonusStored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(storedItemId);
+            if (bonusStored)
+                ShowPickupToast(storedItemId);
+        }
+
+        return true;
+    }
+
+    string ResolveCovaxAsteroidCargoItem(string itemId)
+    {
+        if (!InventoryItemCatalog.IsAsteroidResource(itemId))
+            return itemId;
+
+        if (!PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.CovaxId))
+            return itemId;
+
+        if (UnityEngine.Random.value >= 0.1f)
+            return itemId;
+
+        return InventoryItemCatalog.TryGetNextAsteroidRarityId(itemId, out string upgradedItemId)
+            ? upgradedItemId
+            : itemId;
+    }
+
+    async System.Threading.Tasks.Task RecordAsteroidSalvageProgressAsync(string itemId)
+    {
+        if (!InventoryItemCatalog.IsAsteroidResource(itemId) || !PlayerProfileService.HasInstance)
+            return;
+
+        await PlayerProfileService.Instance.RecordPilotAsteroidSalvageAsync();
+    }
+
     bool IsNovaSpaceJunkBonusActive(string itemId)
     {
         return PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.NovaId) &&
                PilotCatalog.IsSpaceJunkItem(itemId);
+    }
+
+    static string BuildViewIdCsv(List<int> viewIds)
+    {
+        if (viewIds == null || viewIds.Count == 0)
+            return string.Empty;
+
+        System.Text.StringBuilder builder = new System.Text.StringBuilder();
+        for (int i = 0; i < viewIds.Count; i++)
+        {
+            if (viewIds[i] <= 0)
+                continue;
+
+            if (builder.Length > 0)
+                builder.Append(',');
+
+            builder.Append(viewIds[i]);
+        }
+
+        return builder.ToString();
     }
 
     void SetupPickupToast()

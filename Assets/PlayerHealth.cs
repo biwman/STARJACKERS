@@ -122,6 +122,11 @@ public class PlayerHealth : MonoBehaviourPun
             gameObject.AddComponent<PlayerRepairDocking>();
         }
 
+        if (!IsAstronautControlled && !IsBotControlled && GetComponent<PilotActiveAbilityController>() == null)
+        {
+            gameObject.AddComponent<PilotActiveAbilityController>();
+        }
+
         if (!IsAstronautControlled && !IsBotControlled)
         {
             BeginSpawnInvulnerability(SpawnInvulnerabilityDuration);
@@ -267,6 +272,22 @@ public class PlayerHealth : MonoBehaviourPun
             effect = gameObject.AddComponent<GravityTetherPullEffect>();
 
         effect.Configure(sourceViewId, new Vector2(sourceX, sourceY), pullAcceleration, maxSpeed, duration);
+    }
+
+    [PunRPC]
+    public void ApplyElectromagneticShockRpc(float duration, float speedMultiplier, float fireIntervalMultiplier)
+    {
+        if (IsWreck || CurrentHP <= 0 || isEvacuationAnimating)
+            return;
+
+        if (IsAstronautControlled || GetComponent<LureBeaconDecoy>() != null || GetComponent<PlayerDeployableBase>() != null)
+            return;
+
+        EnemyBot bot = GetComponent<EnemyBot>();
+        if (bot != null && !bot.CanReceivePilotHostileEffect())
+            return;
+
+        ElectromagneticShockStatus.Apply(gameObject, duration, speedMultiplier, fireIntervalMultiplier);
     }
 
     [PunRPC]
@@ -615,6 +636,13 @@ public class PlayerHealth : MonoBehaviourPun
         if (targetBot != null && targetBot.Kind == EnemyBotKind.Mothership && IsAttackerPilot(attackerViewID, PilotCatalog.SirNowitzkyId))
             result = Mathf.Max(1, Mathf.RoundToInt(result * 1.15f));
 
+        PilotActiveAbilityController pilotAbility = GetComponent<PilotActiveAbilityController>();
+        if (pilotAbility != null && pilotAbility.IsJakeBarrierActive)
+            result = Mathf.Max(1, Mathf.RoundToInt(result * 0.5f));
+
+        if (photonView != null && PilotActiveAbilityController.IsRoburMarked(photonView.ViewID))
+            result = Mathf.Max(1, Mathf.RoundToInt(result * 1.5f));
+
         return result;
     }
 
@@ -832,12 +860,12 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
-    public void BeginEvacuationSequence()
+    public void BeginEvacuationSequence(float portalCenterX, float portalCenterY)
     {
         if (isEvacuationAnimating || IsWreck)
             return;
 
-        StartCoroutine(EvacuationSequenceRoutine());
+        StartCoroutine(EvacuationSequenceRoutine(new Vector2(portalCenterX, portalCenterY)));
     }
 
     [PunRPC]
@@ -1256,6 +1284,9 @@ public class PlayerHealth : MonoBehaviourPun
         if (cargoValue >= RoundXpBalance.RaiderCargoValueThreshold)
             await PlayerProfileService.Instance.UnlockPilotAsync(PilotCatalog.NovaId);
 
+        if (AshPilotRoundTracker.MeetsOverloadReturnRequirements(profile, out _))
+            await PlayerProfileService.Instance.RecordPilotAshOverloadReturnAsync();
+
         if (string.Equals(RoomSettings.GetSelectedLobbyMapId(), "pirate_bay", System.StringComparison.OrdinalIgnoreCase))
             await PlayerProfileService.Instance.RecordPilotPirateBayReturnAsync();
     }
@@ -1317,7 +1348,7 @@ public class PlayerHealth : MonoBehaviourPun
         EarlyRoundExitUI.ShowEndRoundButton(finalScore, "dead");
     }
 
-    IEnumerator EvacuationSequenceRoutine()
+    IEnumerator EvacuationSequenceRoutine(Vector2 portalCenter)
     {
         isEvacuationAnimating = true;
         if (photonView.IsMine)
@@ -1363,6 +1394,8 @@ public class PlayerHealth : MonoBehaviourPun
 
         AudioManager.Instance.PlayExtractionSequenceAt(transform.position);
 
+        Vector3 startPosition = transform.position;
+        Vector3 endPosition = new Vector3(portalCenter.x, portalCenter.y, startPosition.z);
         Vector3 startScale = transform.localScale;
         Vector3 endScale = new Vector3(
             Mathf.Sign(startScale.x) * MinimumEvacuationScale,
@@ -1379,10 +1412,12 @@ public class PlayerHealth : MonoBehaviourPun
             elapsed += Time.deltaTime;
             float progress = Mathf.Clamp01(elapsed / EvacuationAnimationDuration);
             float eased = Mathf.SmoothStep(0f, 1f, progress);
+            transform.position = Vector3.Lerp(startPosition, endPosition, eased);
             transform.localScale = Vector3.Lerp(startScale, endScale, eased);
             yield return null;
         }
 
+        transform.position = endPosition;
         transform.localScale = endScale;
 
         if (photonView.IsMine)
@@ -1497,14 +1532,6 @@ public class PlayerHealth : MonoBehaviourPun
         if (boosterBarUi != null)
             Destroy(boosterBarUi);
 
-        AmmoUI ammoUi = GetComponent<AmmoUI>();
-        if (ammoUi != null)
-            Destroy(ammoUi);
-
-        ReloadButtonUI reloadButtonUi = GetComponent<ReloadButtonUI>();
-        if (reloadButtonUi != null)
-            Destroy(reloadButtonUi);
-
         ComplexAmmoBarUI complexAmmoBarUi = GetComponent<ComplexAmmoBarUI>();
         if (complexAmmoBarUi != null)
             Destroy(complexAmmoBarUi);
@@ -1565,6 +1592,7 @@ public class PlayerHealth : MonoBehaviourPun
     void BecomeEnemyWreck(int kindValue)
     {
         IsWreck = true;
+        EnemyBotKind enemyKind = (EnemyBotKind)kindValue;
 
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null)
@@ -1580,11 +1608,28 @@ public class PlayerHealth : MonoBehaviourPun
         EnemyBot bot = GetComponent<EnemyBot>();
         if (bot != null)
         {
-            if ((EnemyBotKind)kindValue == EnemyBotKind.RescueShip && bot.photonView != null)
+            if (enemyKind == EnemyBotKind.RescueShip && bot.photonView != null)
                 bot.photonView.RPC(nameof(EnemyBot.StopRescueShipBeamRpc), RpcTarget.All);
 
-            if ((EnemyBotKind)kindValue == EnemyBotKind.Mothership)
+            if (enemyKind == EnemyBotKind.PirateBase)
+            {
+                bot.DropPirateBaseCargoOnDeath();
+                if (bot.photonView != null)
+                    bot.photonView.RPC(nameof(EnemyBot.StopPirateBaseCollectionBeamRpc), RpcTarget.All);
+            }
+
+            if (enemyKind == EnemyBotKind.ContainerShip)
+                bot.DropContainerShipCargoOnDeath();
+
+            if (enemyKind == EnemyBotKind.Mothership)
                 bot.ConvertMothershipTurretsToWreckVisuals();
+
+            if (enemyKind == EnemyBotKind.CosmicWorm)
+            {
+                CosmicWormVisualController.StopFor(bot);
+                if (photonView != null)
+                    CosmicWormSwallowVfx.StopEffect(photonView.ViewID);
+            }
 
             bot.enabled = false;
         }
@@ -1601,7 +1646,7 @@ public class PlayerHealth : MonoBehaviourPun
         for (int i = 0; i < colliders.Length; i++)
             colliders[i].enabled = true;
 
-        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition((EnemyBotKind)kindValue);
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(enemyKind);
         EnemyWreckProfile wreckProfile = definition != null ? definition.Wreck : null;
 
         Rigidbody2D body = GetComponent<Rigidbody2D>();
@@ -1628,7 +1673,7 @@ public class PlayerHealth : MonoBehaviourPun
 
         string rewardItemId = wreckProfile != null ? wreckProfile.RewardItemId : InventoryItemCatalog.DroidScrapId;
         string serializedLoot = PlayerProfileService.SerializeShipInventorySlots(new[] { rewardItemId });
-        wreck.InitializeFromLootJson(serializedLoot, -1);
+        wreck.InitializeFromLootJson(serializedLoot, -1, kindValue);
         wreck.SetDestroyWhenEmpty(wreckProfile == null || wreckProfile.DestroyWhenEmpty);
 
         Color baseColor = wreckProfile != null ? wreckProfile.BaseColor : new Color(0.2f, 0.23f, 0.26f, 0.94f);
@@ -1644,7 +1689,41 @@ public class PlayerHealth : MonoBehaviourPun
             renderer.color = baseColor;
         }
 
+        ConfigureEnemyWreckCollider(enemyKind, renderer);
         GameVisualTheme.ApplyPlayerVisual(this);
+    }
+
+    void ConfigureEnemyWreckCollider(EnemyBotKind enemyKind, SpriteRenderer renderer)
+    {
+        if (enemyKind != EnemyBotKind.CosmicWorm)
+            return;
+
+        BoxCollider2D boxCollider = GetComponent<BoxCollider2D>();
+        if (boxCollider != null)
+        {
+            Bounds bounds = renderer != null ? renderer.bounds : new Bounds(transform.position, new Vector3(2.6f, 1.8f, 0f));
+            Vector2 compactSize = new Vector2(
+                Mathf.Clamp(bounds.size.x * 0.22f, 1.7f, 2.9f),
+                Mathf.Clamp(bounds.size.y * 0.34f, 1.15f, 2.2f));
+            SetWorldBoxColliderSize(boxCollider, compactSize);
+            boxCollider.offset = Vector2.zero;
+            boxCollider.isTrigger = true;
+        }
+
+        CircleCollider2D circleCollider = GetComponent<CircleCollider2D>();
+        if (circleCollider != null)
+            circleCollider.enabled = false;
+    }
+
+    static void SetWorldBoxColliderSize(BoxCollider2D collider2D, Vector2 worldSize)
+    {
+        if (collider2D == null)
+            return;
+
+        Vector3 scale = collider2D.transform.lossyScale;
+        float safeX = Mathf.Abs(scale.x) > 0.0001f ? Mathf.Abs(scale.x) : 1f;
+        float safeY = Mathf.Abs(scale.y) > 0.0001f ? Mathf.Abs(scale.y) : 1f;
+        collider2D.size = new Vector2(worldSize.x / safeX, worldSize.y / safeY);
     }
 
     [PunRPC]
@@ -2765,14 +2844,6 @@ public class AstronautSurvivor : MonoBehaviourPun
         ShipInventoryHudUI cargoHud = GetComponent<ShipInventoryHudUI>();
         if (cargoHud != null)
             cargoHud.enabled = false;
-
-        AmmoUI ammoUi = GetComponent<AmmoUI>();
-        if (ammoUi != null)
-            ammoUi.enabled = false;
-
-        ReloadButtonUI reloadUi = GetComponent<ReloadButtonUI>();
-        if (reloadUi != null)
-            reloadUi.enabled = false;
 
         BoosterBarUI boosterUi = GetComponent<BoosterBarUI>();
         if (boosterUi != null)

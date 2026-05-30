@@ -42,6 +42,13 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
     readonly Color deepFire = new Color(0.9f, 0.16f, 0.03f, 1f);
     readonly Color smokeColor = new Color(0.28f, 0.24f, 0.2f, 1f);
 
+    public static void Prewarm()
+    {
+        GetLineMaterial();
+        PrewarmSpriteTexture(GetFireSprite());
+        PrewarmSpriteTexture(GetSmokeSprite());
+    }
+
     public static void Spawn(Vector3 position, float radius, SpriteRenderer referenceRenderer = null)
     {
         if (!RoomSettings.AreVisualEffectsEnabled())
@@ -364,6 +371,14 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
         return smokeSprite;
     }
 
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
+    }
+
     static Texture2D CreateRadialTexture(string textureName, bool fire)
     {
         Texture2D texture = new Texture2D(TextureSize, TextureSize, TextureFormat.RGBA32, false)
@@ -422,5 +437,160 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
         texture.SetPixels(pixels);
         texture.Apply(false, true);
         return texture;
+    }
+}
+
+public sealed class SpaceBombExplosionVfx : MonoBehaviour
+{
+    const float Lifetime = 1.28f;
+    const int RingCount = 3;
+    const int RayCount = 28;
+    const int CircleSegments = 128;
+    const float EffectZ = -0.44f;
+
+    static Material sharedMaterial;
+
+    readonly LineRenderer[] rings = new LineRenderer[RingCount];
+    readonly LineRenderer[] rays = new LineRenderer[RayCount];
+    Vector3 center;
+    float radius;
+    float age;
+
+    public static void Spawn(Vector3 position, float blastRadius)
+    {
+        if (!RoomSettings.AreVisualEffectsEnabled())
+            return;
+
+        SpaceMineExplosionVfx.Spawn(position, blastRadius);
+
+        GameObject effect = new GameObject("SpaceBombExplosionVfx");
+        SpaceBombExplosionVfx vfx = effect.AddComponent<SpaceBombExplosionVfx>();
+        vfx.Initialize(position, blastRadius);
+    }
+
+    void Initialize(Vector3 position, float blastRadius)
+    {
+        center = new Vector3(position.x, position.y, EffectZ);
+        transform.position = center;
+        radius = Mathf.Clamp(blastRadius, 3.5f, 8f);
+
+        for (int i = 0; i < rings.Length; i++)
+            rings[i] = CreateLine("SpaceBombShockRing" + i, 0.12f, true, CircleSegments, 6800 + i);
+
+        for (int i = 0; i < rays.Length; i++)
+            rays[i] = CreateLine("SpaceBombBlastRay" + i, 0.07f, false, 2, 6820 + i);
+
+        UpdateVisuals(0f);
+    }
+
+    void Update()
+    {
+        age += Time.deltaTime;
+        float t = Mathf.Clamp01(age / Lifetime);
+        UpdateVisuals(t);
+
+        if (age >= Lifetime)
+            Destroy(gameObject);
+    }
+
+    void UpdateVisuals(float t)
+    {
+        for (int i = 0; i < rings.Length; i++)
+        {
+            LineRenderer ring = rings[i];
+            if (ring == null)
+                continue;
+
+            float delay = i * 0.09f;
+            float localT = Mathf.Clamp01((t - delay) / Mathf.Max(0.001f, 1f - delay));
+            float eased = 1f - Mathf.Pow(1f - localT, 3f);
+            float ringRadius = Mathf.Lerp(radius * (0.18f + i * 0.08f), radius * (1.38f + i * 0.12f), eased);
+            float alpha = Mathf.Pow(1f - localT, 1.65f) * Mathf.Lerp(0.72f, 0.38f, i / (float)rings.Length);
+            float width = Mathf.Lerp(0.18f, 0.018f, localT) * Mathf.Lerp(1f, 0.72f, i / (float)rings.Length);
+
+            for (int point = 0; point < CircleSegments; point++)
+            {
+                float angle = (Mathf.PI * 2f * point) / CircleSegments;
+                float wobble = Mathf.Sin(angle * 9f + i * 1.7f + age * 4f) * radius * 0.012f;
+                ring.SetPosition(point, center + new Vector3(Mathf.Cos(angle) * (ringRadius + wobble), Mathf.Sin(angle) * (ringRadius + wobble), 0f));
+            }
+
+            Color color = Color.Lerp(new Color(1f, 0.9f, 0.42f, 1f), new Color(1f, 0.28f, 0.04f, 1f), localT);
+            color.a = alpha;
+            ring.startColor = color;
+            ring.endColor = color;
+            ring.widthMultiplier = width;
+            ring.startWidth = width;
+            ring.endWidth = width;
+        }
+
+        float rayT = Mathf.Clamp01(t / 0.72f);
+        float rayAlpha = Mathf.Pow(1f - rayT, 1.4f);
+        for (int i = 0; i < rays.Length; i++)
+        {
+            LineRenderer ray = rays[i];
+            if (ray == null)
+                continue;
+
+            float angle = ((Mathf.PI * 2f) / rays.Length) * i + Hash01(i, 4) * 0.18f;
+            Vector3 direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+            float startDistance = radius * Mathf.Lerp(0.08f, 0.32f, Hash01(i, 8)) * rayT;
+            float endDistance = radius * Mathf.Lerp(0.82f, 1.42f, Hash01(i, 12)) * (1f - Mathf.Pow(1f - rayT, 2.3f));
+            Vector3 start = center + direction * startDistance;
+            Vector3 end = center + direction * endDistance;
+            ray.SetPosition(0, start);
+            ray.SetPosition(1, end);
+
+            Color startColor = new Color(1f, 0.92f, 0.44f, rayAlpha * 0.82f);
+            Color endColor = new Color(1f, 0.2f, 0.02f, 0f);
+            ray.startColor = startColor;
+            ray.endColor = endColor;
+            ray.widthMultiplier = Mathf.Lerp(0.11f, 0.018f, rayT) * Mathf.Lerp(0.72f, 1.2f, Hash01(i, 16));
+        }
+    }
+
+    LineRenderer CreateLine(string objectName, float width, bool loop, int positionCount, int sortingOrder)
+    {
+        GameObject lineObject = new GameObject(objectName);
+        lineObject.transform.SetParent(transform, false);
+
+        LineRenderer line = lineObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.loop = loop;
+        line.positionCount = Mathf.Max(2, positionCount);
+        line.widthMultiplier = width;
+        line.startWidth = width;
+        line.endWidth = width;
+        line.numCapVertices = 8;
+        line.numCornerVertices = 6;
+        line.alignment = LineAlignment.View;
+        line.textureMode = LineTextureMode.Stretch;
+        line.material = GetMaterial();
+        line.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        line.sortingOrder = sortingOrder;
+        return line;
+    }
+
+    static Material GetMaterial()
+    {
+        if (sharedMaterial != null)
+            return sharedMaterial;
+
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null)
+            shader = Shader.Find("Unlit/Color");
+
+        sharedMaterial = new Material(shader)
+        {
+            name = "SpaceBombExplosionVfxLineMaterial",
+            color = Color.white
+        };
+        sharedMaterial.renderQueue = 5000;
+        return sharedMaterial;
+    }
+
+    static float Hash01(int index, int salt)
+    {
+        return Mathf.Repeat(Mathf.Sin((index * 127.1f) + (salt * 311.7f)) * 43758.5453f, 1f);
     }
 }

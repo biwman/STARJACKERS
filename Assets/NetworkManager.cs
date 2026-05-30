@@ -22,6 +22,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     const string ExtractionLayoutKey = "extractionLayout";
     const string RepairBayLayoutKey = "repairBayLayout";
     const string SpaceFactoryLayoutKey = SpaceFactorySpawner.LayoutKey;
+    const string ScienceStationLayoutKey = ScienceStationSpawner.LayoutKey;
     const string EmptyLayoutSentinel = "__empty__";
     const float PlayerSpawnClearanceRadius = 2.85f;
     const float PlayerSpawnLayoutClearance = 4.25f;
@@ -747,6 +748,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         ContainerSpawner.EnsureExists();
         RandomLootWreckSpawner.EnsureExists();
         SpaceFactorySpawner.EnsureExists();
+        ScienceStationSpawner.EnsureExists();
         FogOfWarOverlay.EnsureExists();
         AsteroidShowerController.EnsureExists();
         if (started)
@@ -924,6 +926,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.CloudsSizeKey] = RoomSettings.DefaultCloudsSize,
             [RoomSettings.RandomLootWreckCountKey] = RoomSettings.DefaultRandomLootWreckCount,
             [RoomSettings.SpaceFactoryCountKey] = RoomSettings.DefaultSpaceFactoryCount,
+            [RoomSettings.ScienceStationCountKey] = RoomSettings.DefaultScienceStationCount,
             [RoomSettings.StartTimeKey] = -1d,
             [RoomSettings.RoundEndUtcMsKey] = -1d,
             ["gameStarted"] = false,
@@ -931,14 +934,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.RepairBayOccupancyStateKey] = string.Empty,
             [RoomSettings.SpaceFactoryStateKey] = string.Empty,
             [RoomSettings.SpaceFactoryOccupancyStateKey] = string.Empty,
+            [RoomSettings.ScienceStationOccupancyStateKey] = string.Empty,
             [RoomSettings.RoundResultsKey] = string.Empty,
             [RoomSettings.FinishedRoundResultsKey] = string.Empty,
             [RoomSettings.RoundEndReasonKey] = string.Empty,
-            [RoomSettings.ShootingModelKey] = RoomSettings.DefaultShootingModel,
-            [RoomSettings.SuperAttackEnabledKey] = RoomSettings.DefaultSuperAttackEnabled,
             [RoomSettings.InventoryLossEnabledKey] = RoomSettings.DefaultInventoryLossEnabled,
             [RoomSettings.EquipmentLossEnabledKey] = RoomSettings.DefaultEquipmentLossEnabled,
-            [RoomSettings.AdvancedBackgroundEnabledKey] = RoomSettings.DefaultAdvancedBackgroundEnabled,
             [RoomSettings.ParallaxBackgroundKey] = RoomSettings.DefaultParallaxBackground,
             [RoomSettings.BackgroundObjectKey] = RoomSettings.DefaultBackgroundObject,
             [RoomSettings.HapticsEnabledKey] = RoomSettings.DefaultHapticsEnabled,
@@ -1033,6 +1034,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (!rememberedKeys.Contains(RoomSettings.SpaceFactoryCountKey))
             props[RoomSettings.SpaceFactoryCountKey] = map.SpaceFactoryCount;
 
+        if (!rememberedKeys.Contains(RoomSettings.ScienceStationCountKey))
+            props[RoomSettings.ScienceStationCountKey] = LobbyMapCatalog.GetDefaultScienceStationCount(map.Id);
+
         if (!rememberedKeys.Contains(RoomSettings.NebulaDensityKey))
             props[RoomSettings.NebulaDensityKey] = map.NebulaDensity;
 
@@ -1050,9 +1054,6 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         if (!rememberedKeys.Contains(RoomSettings.CloudsSizeKey))
             props[RoomSettings.CloudsSizeKey] = map.CloudsSize;
-
-        if (!rememberedKeys.Contains(RoomSettings.AdvancedBackgroundEnabledKey))
-            props[RoomSettings.AdvancedBackgroundEnabledKey] = RoomSettings.DefaultAdvancedBackgroundEnabled;
 
         if (!rememberedKeys.Contains(RoomSettings.ParallaxBackgroundKey))
             props[RoomSettings.ParallaxBackgroundKey] = LobbyMapCatalog.GetDefaultParallaxBackgroundId(map.Id);
@@ -1141,10 +1142,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.MapSizeKey:
             case RoomSettings.MapBackgroundKey:
             case RoomSettings.VisualEffectsEnabledKey:
-            case RoomSettings.AdvancedBackgroundEnabledKey:
             case RoomSettings.ParallaxBackgroundKey:
             case RoomSettings.BackgroundObjectKey:
-            case RoomSettings.StartingVfxEnabledKey:
             case RoomSettings.EndDisasterModeKey:
             case RoomSettings.EndDisasterWarningSecondsKey:
             case RoomSettings.ObstacleDensityKey:
@@ -1174,8 +1173,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.ExtractionCountKey:
             case RoomSettings.RepairBayCountKey:
             case RoomSettings.SpaceFactoryCountKey:
+            case RoomSettings.ScienceStationCountKey:
             case RoomSettings.BoosterSlowdownKey:
-            case RoomSettings.AmmoCountKey:
             case RoomSettings.BoosterRecoveryDelayKey:
             case RoomSettings.ShipDriftEnabledKey:
             case RoomSettings.LastShipTimerMultiplierKey:
@@ -1189,8 +1188,6 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.BulletPushMultiplierKey:
             case RoomSettings.ObstacleWeightFactorKey:
             case RoomSettings.TreasureWeightFactorKey:
-            case RoomSettings.ShootingModelKey:
-            case RoomSettings.SuperAttackEnabledKey:
             case RoomSettings.HapticsEnabledKey:
             case RoomSettings.FpsCounterEnabledKey:
                 return true;
@@ -1699,6 +1696,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         ContainerSpawner.EnsureExists();
         RandomLootWreckSpawner.EnsureExists();
         SpaceFactorySpawner.EnsureExists();
+        ScienceStationSpawner.EnsureExists();
         FogOfWarOverlay.EnsureExists();
         AsteroidShowerController.EnsureExists();
 
@@ -1917,7 +1915,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                hit.GetComponentInParent<MovingSpaceObject>() != null ||
                hit.GetComponentInParent<ExtractionZone>() != null ||
                hit.GetComponentInParent<RepairBay>() != null ||
-               hit.GetComponentInParent<SpaceFactory>() != null;
+               hit.GetComponentInParent<SpaceFactory>() != null ||
+               hit.GetComponentInParent<ScienceStation>() != null;
     }
 
     List<Vector2> GetSpawnBlockedLayoutPositions()
@@ -1927,6 +1926,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         AppendLayoutPositions(positions, ExtractionLayoutKey);
         AppendLayoutPositions(positions, RepairBayLayoutKey);
         AppendLayoutPositions(positions, SpaceFactoryLayoutKey);
+        AppendLayoutPositions(positions, ScienceStationLayoutKey);
         return positions;
     }
 
@@ -2273,6 +2273,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         ContainerSpawner.ResetForSessionTransition();
         RandomLootWreckSpawner.ResetForSessionTransition();
         SpaceFactorySpawner.ResetForSessionTransition();
+        ScienceStationSpawner.ResetForSessionTransition();
 
         HashSet<GameObject> queued = new HashSet<GameObject>();
         QueueDestroyFromComponents<PlayerHealth>(queued);
@@ -2286,6 +2287,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         QueueDestroyFromComponents<NebulaSpawner>(queued);
         QueueDestroyFromComponents<RepairBay>(queued);
         QueueDestroyFromComponents<SpaceFactory>(queued);
+        QueueDestroyFromComponents<ScienceStation>(queued);
         QueueDestroyFromComponents<EnemyBotManager>(queued);
         QueueDestroyFromComponents<DroppedCargoManager>(queued);
 

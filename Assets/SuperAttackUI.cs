@@ -119,7 +119,7 @@ public sealed class SuperAttackUI : MonoBehaviourPun
         if (rootObject == null || shooting == null)
             return;
 
-        bool visible = shooting.IsComplexShootingActive && RoomSettings.IsSuperAttackToggleEnabled() && IsGameplayHudVisible();
+        bool visible = shooting.IsComplexShootingActive && IsGameplayHudVisible();
         rootObject.SetActive(visible);
         if (!visible)
             return;

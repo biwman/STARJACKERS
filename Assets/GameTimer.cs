@@ -13,6 +13,7 @@ public class GameTimer : MonoBehaviourPun
     const string CloudDirectionKey = NebulaSpawner.CloudDirectionKey;
     const string RepairBayLayoutKey = "repairBayLayout";
     const string SpaceFactoryLayoutKey = SpaceFactorySpawner.LayoutKey;
+    const string ScienceStationLayoutKey = ScienceStationSpawner.LayoutKey;
     const string MapSeedKey = "mapSeed";
     const string LoneShipModeStartTimeKey = "loneShipModeStartTime";
     const float TimeUpEvacuationGraceSeconds = 4.4f;
@@ -35,6 +36,7 @@ public class GameTimer : MonoBehaviourPun
         ContainerSpawner.EnsureExists();
         RandomLootWreckSpawner.EnsureExists();
         SpaceFactorySpawner.EnsureExists();
+        ScienceStationSpawner.EnsureExists();
         FogOfWarOverlay.EnsureExists();
 
         GameObject obj = GameObject.Find("TimerText");
@@ -207,6 +209,7 @@ public class GameTimer : MonoBehaviourPun
         props[RoomSettings.RepairBayOccupancyStateKey] = string.Empty;
         props[RoomSettings.SpaceFactoryStateKey] = string.Empty;
         props[RoomSettings.SpaceFactoryOccupancyStateKey] = string.Empty;
+        props[RoomSettings.ScienceStationOccupancyStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.FinishedRoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
@@ -215,6 +218,7 @@ public class GameTimer : MonoBehaviourPun
         props[CloudDirectionKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
         props[SpaceFactoryLayoutKey] = string.Empty;
+        props[ScienceStationLayoutKey] = string.Empty;
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RoundResultsTracker.ResetForCurrentRoom();
     }

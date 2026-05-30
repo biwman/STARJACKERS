@@ -32,6 +32,8 @@ public class GameVisualTheme : MonoBehaviour
     const float PlayerPickupRadiusFactor = 0.8f;
     const float ObstacleTargetSize = 3.0f;
     const float ExtractionTargetSize = 4.3f;
+    const float CarrierExtractionTargetSize = 5.4f;
+    const float SpaceCityExtractionTargetSize = 5.4f;
     const float BackgroundTileWorldSize = 8f;
     const float DesktopRefreshInterval = 0.75f;
     const float RuntimeRefreshDelay = 0.08f;
@@ -54,9 +56,12 @@ public class GameVisualTheme : MonoBehaviour
     Sprite spaceJunkAsteroidSprite;
     Sprite spaceAnimalRemainsSprite;
     Sprite[] containerSprites;
+    Sprite[] blueprintScrapContainerSprites;
     Sprite[] randomLootWreckSprites;
     Sprite[] obstacleSprites;
-    Sprite extractionSprite;
+    Sprite portalExtractionSprite;
+    Sprite carrierExtractionSprite;
+    Sprite spaceCityExtractionSprite;
     Sprite backgroundSprite;
     float nextRefreshTime;
     bool runtimeThemeDirty;
@@ -65,9 +70,9 @@ public class GameVisualTheme : MonoBehaviour
     int lastRuntimeObstacleSizePercent = int.MinValue;
     string lastRuntimeMapSizeMode = string.Empty;
     string lastRuntimeSelectedMapId = string.Empty;
+    string lastRuntimeExtractionType = string.Empty;
     string lastRuntimeParallaxBackgroundId = string.Empty;
     string lastRuntimeBackgroundObjectId = string.Empty;
-    bool lastRuntimeAdvancedBackgroundEnabled;
 #if UNITY_EDITOR
     double nextEditorRefreshTime;
 #endif
@@ -264,9 +269,9 @@ public class GameVisualTheme : MonoBehaviour
         lastRuntimeMapSizeMode = RoomSettings.GetMapSizeMode();
         lastRuntimeObstacleSizePercent = RoomSettings.GetObstacleSizePercent();
         lastRuntimeSelectedMapId = RoomSettings.GetSelectedLobbyMapId();
+        lastRuntimeExtractionType = RoomSettings.GetExtractionType();
         lastRuntimeParallaxBackgroundId = RoomSettings.GetParallaxBackgroundId();
         lastRuntimeBackgroundObjectId = RoomSettings.GetBackgroundObjectId();
-        lastRuntimeAdvancedBackgroundEnabled = RoomSettings.IsAdvancedBackgroundEnabled();
     }
 
     void RefreshRuntimeSettingsIfNeeded()
@@ -275,20 +280,19 @@ public class GameVisualTheme : MonoBehaviour
         string mapSizeMode = RoomSettings.GetMapSizeMode();
         int obstacleSizePercent = RoomSettings.GetObstacleSizePercent();
         string selectedMapId = RoomSettings.GetSelectedLobbyMapId();
+        string extractionType = RoomSettings.GetExtractionType();
         string parallaxBackgroundId = RoomSettings.GetParallaxBackgroundId();
         string backgroundObjectId = RoomSettings.GetBackgroundObjectId();
-        bool advancedBackgroundEnabled = RoomSettings.IsAdvancedBackgroundEnabled();
-
         bool backgroundChanged = backgroundIndex != lastRuntimeBackgroundIndex;
         bool selectedMapChanged = !string.Equals(selectedMapId, lastRuntimeSelectedMapId, System.StringComparison.Ordinal);
+        bool extractionTypeChanged = !string.Equals(extractionType, lastRuntimeExtractionType, System.StringComparison.Ordinal);
         bool parallaxBackgroundChanged = !string.Equals(parallaxBackgroundId, lastRuntimeParallaxBackgroundId, System.StringComparison.Ordinal);
         bool backgroundObjectChanged = !string.Equals(backgroundObjectId, lastRuntimeBackgroundObjectId, System.StringComparison.Ordinal);
-        bool advancedBackgroundChanged = advancedBackgroundEnabled != lastRuntimeAdvancedBackgroundEnabled;
         if (!backgroundChanged &&
             !selectedMapChanged &&
+            !extractionTypeChanged &&
             !parallaxBackgroundChanged &&
             !backgroundObjectChanged &&
-            !advancedBackgroundChanged &&
             string.Equals(mapSizeMode, lastRuntimeMapSizeMode, System.StringComparison.Ordinal) &&
             obstacleSizePercent == lastRuntimeObstacleSizePercent)
         {
@@ -299,9 +303,9 @@ public class GameVisualTheme : MonoBehaviour
         lastRuntimeMapSizeMode = mapSizeMode;
         lastRuntimeObstacleSizePercent = obstacleSizePercent;
         lastRuntimeSelectedMapId = selectedMapId;
+        lastRuntimeExtractionType = extractionType;
         lastRuntimeParallaxBackgroundId = parallaxBackgroundId;
         lastRuntimeBackgroundObjectId = backgroundObjectId;
-        lastRuntimeAdvancedBackgroundEnabled = advancedBackgroundEnabled;
         MarkRuntimeThemeDirty(backgroundChanged || selectedMapChanged, 0f);
     }
 
@@ -365,15 +369,12 @@ public class GameVisualTheme : MonoBehaviour
         spaceJunkAsteroidSprite = LoadSpriteFromResourcesOrEditor("space_junk_asteroid", "Assets/Resources/space_junk_asteroid.png", "Assets/space_junk_asteroid.png");
         spaceAnimalRemainsSprite = LoadSpriteFromResourcesOrEditor("space_animal_remains_resource", "Assets/Resources/space_animal_remains_resource.png", "Assets/Resources/space_animal_remains_resource.png");
         containerSprites = LoadSpritesFromResourcesOrEditor("kontenery_9", "Assets/Resources/kontenery_9.png", "Assets/kontenery_9.png");
+        blueprintScrapContainerSprites = LoadSpritesFromResourcesOrEditor("Enemies/ContainerShip/containers_set2", "Assets/Resources/Enemies/ContainerShip/containers_set2.png", "Assets/containers_set2.png");
         randomLootWreckSprites = LoadRandomLootWreckSprites();
         obstacleSprites = snowFieldTheme ? LoadSnowObstacleSprites() : LoadDefaultObstacleSprites();
-        extractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/base1_resource", "Assets/Resources/Visuals/Bases/base1_resource.png", "Assets/baza1.png");
-        backgroundSprite = LoadBackgroundSprite(RoomSettings.GetMapBackgroundIndex());
-        backgroundSprite = LoadSpriteFromResourcesOrEditor("Visuals/Backgrounds/background5_resource", "Assets/Resources/Visuals/Backgrounds/background5_resource.png", "Assets/tło5.png");
-        if (backgroundSprite == null)
-        {
-            backgroundSprite = LoadSpriteFromProjectOrResources("tło5.png", "Visuals/Backgrounds/background5_resource");
-        }
+        portalExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/portal_nieaktywny_resource", "Assets/Resources/Visuals/Bases/portal_nieaktywny_resource.png", "Assets/portal_nieaktywny.png");
+        carrierExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/lotniskowiec_strefa_resource", "Assets/Resources/Visuals/Bases/lotniskowiec_strefa_resource.png", "Assets/lotniskowiec_strefa.png");
+        spaceCityExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/baza_strefa_resource", "Assets/Resources/Visuals/Bases/baza_strefa_resource.png", "Assets/baza_strefa.png");
         backgroundSprite = LoadBackgroundSprite(RoomSettings.GetMapBackgroundIndex());
     }
 
@@ -642,6 +643,7 @@ public class GameVisualTheme : MonoBehaviour
         {
             renderer.sprite = desiredSprite;
         }
+        renderer.color = GetTreasureTint(treasure);
         renderer.sortingLayerName = WorldSortingLayerName;
         renderer.sortingOrder = TreasureSortingOrder;
         FitSpriteToTargetSize(renderer, GetTreasureTargetSize(treasure));
@@ -669,6 +671,15 @@ public class GameVisualTheme : MonoBehaviour
             return treasureSprite;
         }
 
+        if (InventoryItemCatalog.IsBlueprintScrapContainerItem(treasure.itemId))
+        {
+            int variantIndex = InventoryItemCatalog.GetBlueprintScrapContainerVariantIndex(treasure.itemId);
+            if (blueprintScrapContainerSprites != null && variantIndex >= 0 && variantIndex < blueprintScrapContainerSprites.Length && blueprintScrapContainerSprites[variantIndex] != null)
+                return blueprintScrapContainerSprites[variantIndex];
+
+            return treasureSprite;
+        }
+
         if (InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
         {
             int variantIndex = InventoryItemCatalog.GetRandomLootWreckVariantIndex(treasure.itemId);
@@ -680,6 +691,8 @@ public class GameVisualTheme : MonoBehaviour
 
         switch (treasure.itemId)
         {
+            case InventoryItemCatalog.PlatinumChunkId:
+                return legendaryTreasureSprite != null ? legendaryTreasureSprite : treasureSprite;
             case InventoryItemCatalog.AsteroidGoldId:
                 return goldTreasureSprite != null ? goldTreasureSprite : treasureSprite;
             case InventoryItemCatalog.AsteroidRareId:
@@ -704,9 +717,17 @@ public class GameVisualTheme : MonoBehaviour
         }
     }
 
+    Color GetTreasureTint(Treasure treasure)
+    {
+        if (treasure != null && treasure.itemId == InventoryItemCatalog.PlatinumChunkId)
+            return new Color(0.82f, 0.94f, 1f, 1f);
+
+        return Color.white;
+    }
+
     float GetTreasureTargetSize(Treasure treasure)
     {
-        if (treasure != null && InventoryItemCatalog.IsContainerItem(treasure.itemId))
+        if (treasure != null && (InventoryItemCatalog.IsContainerItem(treasure.itemId) || InventoryItemCatalog.IsBlueprintScrapContainerItem(treasure.itemId)))
             return ContainerTargetSize;
 
         if (treasure != null && InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
@@ -714,6 +735,9 @@ public class GameVisualTheme : MonoBehaviour
 
         if (treasure != null && treasure.itemId == InventoryItemCatalog.SpaceAnimalRemainsId)
             return SpaceAnimalRemainsTargetSize;
+
+        if (treasure != null && treasure.itemId == InventoryItemCatalog.PlatinumChunkId)
+            return 1.28f;
 
         return TreasureTargetSize;
     }
@@ -806,8 +830,12 @@ public class GameVisualTheme : MonoBehaviour
 
     void ApplyExtractionZoneSprites()
     {
+        string extractionType = RoomSettings.GetExtractionType();
+        Sprite extractionSprite = GetExtractionZoneSprite(extractionType);
         if (extractionSprite == null)
             return;
+
+        float targetSize = GetExtractionZoneTargetSize(extractionType);
 
         ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
         foreach (ExtractionZone zone in zones)
@@ -819,17 +847,43 @@ public class GameVisualTheme : MonoBehaviour
             if (renderer == null)
                 continue;
 
-            CircleCollider2D triggerCollider = zone.GetComponent<CircleCollider2D>();
-            float triggerWorldRadius = GetWorldCircleRadius(triggerCollider);
-
             if (renderer.sprite != extractionSprite)
             {
                 renderer.sprite = extractionSprite;
             }
+            renderer.color = Color.white;
             renderer.sortingLayerName = WorldSortingLayerName;
             renderer.sortingOrder = ExtractionZoneSortingOrder;
-            FitSpriteToTargetSize(renderer, ExtractionTargetSize);
-            SetWorldCircleRadius(triggerCollider, triggerWorldRadius);
+            FitSpriteToTargetSize(renderer, targetSize);
+            zone.RefreshInteractionCollider();
+            if (Application.isPlaying)
+                zone.RefreshExtractionVisual();
+        }
+    }
+
+    Sprite GetExtractionZoneSprite(string extractionType)
+    {
+        switch (RoomSettings.NormalizeExtractionType(extractionType))
+        {
+            case RoomSettings.ExtractionTypeCarrier:
+                return carrierExtractionSprite != null ? carrierExtractionSprite : portalExtractionSprite;
+            case RoomSettings.ExtractionTypeSpaceCity:
+                return spaceCityExtractionSprite != null ? spaceCityExtractionSprite : portalExtractionSprite;
+        }
+
+        return portalExtractionSprite;
+    }
+
+    float GetExtractionZoneTargetSize(string extractionType)
+    {
+        switch (RoomSettings.NormalizeExtractionType(extractionType))
+        {
+            case RoomSettings.ExtractionTypeCarrier:
+                return CarrierExtractionTargetSize;
+            case RoomSettings.ExtractionTypeSpaceCity:
+                return SpaceCityExtractionTargetSize;
+            default:
+                return ExtractionTargetSize;
         }
     }
 
@@ -975,12 +1029,6 @@ public class GameVisualTheme : MonoBehaviour
         Sprite sprite = texture != null ? CreateSpriteFromTexture(texture) : null;
         if (sprite != null)
             return sprite;
-
-#if UNITY_EDITOR
-        sprite = LoadEditorSprite("Assets/tło" + clampedIndex + ".png");
-        if (sprite != null)
-            return sprite;
-#endif
 
         Texture2D fallbackTexture = Resources.Load<Texture2D>("Visuals/Backgrounds/background5_resource");
         return fallbackTexture != null ? CreateSpriteFromTexture(fallbackTexture) : LoadSpriteFromResources("Visuals/Backgrounds/background5_resource");

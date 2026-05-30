@@ -13,6 +13,46 @@ public class ExtractionZone : MonoBehaviourPun
     const float RequestedPlayerEvacuationGraceDistance = 1.65f;
     const float CharlieSmartExtractionBonusWindow = 30f;
     const float EvacuationEndScreenDelayBuffer = 0.35f;
+    const float PortalInteractionRadiusFactor = 0.82f;
+
+    static readonly Vector2[] CarrierInteractionShape =
+    {
+        new Vector2(0.04f, 0.47f),
+        new Vector2(0.15f, 0.60f),
+        new Vector2(0.43f, 0.68f),
+        new Vector2(0.55f, 0.80f),
+        new Vector2(0.67f, 0.78f),
+        new Vector2(0.77f, 0.65f),
+        new Vector2(0.94f, 0.56f),
+        new Vector2(0.98f, 0.43f),
+        new Vector2(0.93f, 0.28f),
+        new Vector2(0.79f, 0.18f),
+        new Vector2(0.61f, 0.15f),
+        new Vector2(0.48f, 0.06f),
+        new Vector2(0.32f, 0.16f),
+        new Vector2(0.11f, 0.32f)
+    };
+
+    static readonly Vector2[] SpaceCityInteractionShape =
+    {
+        new Vector2(0.03f, 0.35f),
+        new Vector2(0.10f, 0.25f),
+        new Vector2(0.22f, 0.17f),
+        new Vector2(0.36f, 0.10f),
+        new Vector2(0.51f, 0.08f),
+        new Vector2(0.64f, 0.14f),
+        new Vector2(0.75f, 0.19f),
+        new Vector2(0.88f, 0.22f),
+        new Vector2(0.97f, 0.32f),
+        new Vector2(0.98f, 0.47f),
+        new Vector2(0.92f, 0.58f),
+        new Vector2(0.78f, 0.65f),
+        new Vector2(0.63f, 0.82f),
+        new Vector2(0.47f, 0.80f),
+        new Vector2(0.34f, 0.66f),
+        new Vector2(0.18f, 0.57f),
+        new Vector2(0.07f, 0.49f)
+    };
 
     bool isActive;
     bool isBeingUsed;
@@ -25,6 +65,9 @@ public class ExtractionZone : MonoBehaviourPun
     public bool IsEvacuating => isEvacuating;
 
     SpriteRenderer sr;
+    ExtractionPortalVisual portalVisual;
+    ExtractionCarrierVisual carrierVisual;
+    ExtractionSpaceCityVisual spaceCityVisual;
     Coroutine blinkRoutine;
     Coroutine hideMessageRoutine;
     GameObject cachedMessageObject;
@@ -37,7 +80,9 @@ public class ExtractionZone : MonoBehaviourPun
             sr.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
             sr.sortingOrder = GameVisualTheme.ExtractionZoneSortingOrder;
         }
-        SetColor(Color.red);
+        SetColor(Color.white);
+        RefreshExtractionVisual();
+        RefreshInteractionCollider();
         cachedMessageObject = FindExtractionMessage();
         if (cachedMessageObject != null)
             cachedMessageObject.SetActive(false);
@@ -57,7 +102,174 @@ public class ExtractionZone : MonoBehaviourPun
     void SetColor(Color color)
     {
         if (sr != null)
-            sr.color = color;
+            sr.color = Color.white;
+    }
+
+    void EnsurePortalVisual()
+    {
+        if (portalVisual == null)
+            portalVisual = GetComponent<ExtractionPortalVisual>();
+
+        if (portalVisual == null)
+            portalVisual = gameObject.AddComponent<ExtractionPortalVisual>();
+
+        if (sr == null)
+            sr = GetComponent<SpriteRenderer>();
+
+        portalVisual.Initialize(sr);
+    }
+
+    void EnsureCarrierVisual()
+    {
+        if (carrierVisual == null)
+            carrierVisual = GetComponent<ExtractionCarrierVisual>();
+
+        if (carrierVisual == null)
+            carrierVisual = gameObject.AddComponent<ExtractionCarrierVisual>();
+
+        if (sr == null)
+            sr = GetComponent<SpriteRenderer>();
+
+        carrierVisual.Initialize(sr);
+    }
+
+    void EnsureSpaceCityVisual()
+    {
+        if (spaceCityVisual == null)
+            spaceCityVisual = GetComponent<ExtractionSpaceCityVisual>();
+
+        if (spaceCityVisual == null)
+            spaceCityVisual = gameObject.AddComponent<ExtractionSpaceCityVisual>();
+
+        if (sr == null)
+            sr = GetComponent<SpriteRenderer>();
+
+        spaceCityVisual.Initialize(sr);
+    }
+
+    void EnsureExtractionVisual()
+    {
+        if (sr == null)
+            sr = GetComponent<SpriteRenderer>();
+
+        if (IsCarrierExtraction())
+        {
+            if (portalVisual != null)
+                portalVisual.SetVisible(false);
+            if (spaceCityVisual != null)
+                spaceCityVisual.SetVisible(false);
+
+            EnsureCarrierVisual();
+            carrierVisual.SetVisible(true);
+            return;
+        }
+
+        if (IsSpaceCityExtraction())
+        {
+            if (portalVisual != null)
+                portalVisual.SetVisible(false);
+            if (carrierVisual != null)
+                carrierVisual.SetVisible(false);
+
+            EnsureSpaceCityVisual();
+            spaceCityVisual.SetVisible(true);
+            return;
+        }
+
+        if (carrierVisual != null)
+            carrierVisual.SetVisible(false);
+        if (spaceCityVisual != null)
+            spaceCityVisual.SetVisible(false);
+
+        EnsurePortalVisual();
+        portalVisual.SetVisible(true);
+    }
+
+    public void RefreshPortalVisual()
+    {
+        RefreshExtractionVisual();
+    }
+
+    public void RefreshExtractionVisual()
+    {
+        EnsureExtractionVisual();
+
+        if (IsCarrierExtraction())
+        {
+            if (isActive)
+                carrierVisual.SetActive();
+            else if (isTransitioning)
+                carrierVisual.SetTransitioning();
+            else
+                carrierVisual.SetInactive();
+
+            return;
+        }
+
+        if (IsSpaceCityExtraction())
+        {
+            if (isActive)
+                spaceCityVisual.SetActive();
+            else if (isTransitioning)
+                spaceCityVisual.SetTransitioning();
+            else
+                spaceCityVisual.SetInactive();
+
+            return;
+        }
+
+        if (isActive)
+            portalVisual.SetActive();
+        else if (isTransitioning)
+            portalVisual.SetTransitioning();
+        else
+            portalVisual.SetInactive();
+    }
+
+    public void RefreshInteractionCollider()
+    {
+        if (sr == null)
+            sr = GetComponent<SpriteRenderer>();
+
+        if (sr == null || sr.sprite == null)
+            return;
+
+        if (IsCarrierExtraction())
+        {
+            ConfigurePolygonInteractionCollider(CarrierInteractionShape);
+            return;
+        }
+
+        if (IsSpaceCityExtraction())
+        {
+            ConfigurePolygonInteractionCollider(SpaceCityInteractionShape);
+            return;
+        }
+
+        ConfigurePortalInteractionCollider();
+    }
+
+    public float GetInteractionDistanceToPoint(Vector2 worldPoint)
+    {
+        Collider2D[] zoneColliders = GetEnabledInteractionColliders();
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < zoneColliders.Length; i++)
+        {
+            Collider2D zoneCollider = zoneColliders[i];
+            if (zoneCollider == null)
+                continue;
+
+            if (zoneCollider.OverlapPoint(worldPoint))
+                return 0f;
+
+            Vector2 closestPoint = zoneCollider.ClosestPoint(worldPoint);
+            bestDistance = Mathf.Min(bestDistance, Vector2.Distance(worldPoint, closestPoint));
+        }
+
+        return bestDistance < float.MaxValue
+            ? bestDistance
+            : Vector2.Distance(transform.position, worldPoint);
     }
 
     public bool TryUse(PhotonView playerView)
@@ -113,9 +325,12 @@ public class ExtractionZone : MonoBehaviourPun
         StopEvacBuzzerLoop();
 
         if (blinkRoutine != null)
+        {
             StopCoroutine(blinkRoutine);
+            blinkRoutine = null;
+        }
 
-        blinkRoutine = StartCoroutine(BlinkActive());
+        RefreshExtractionVisual();
         StartCoroutine(ActiveTimer());
     }
 
@@ -277,8 +492,37 @@ public class ExtractionZone : MonoBehaviourPun
 
         playerView.RPC(nameof(PlayerHealth.OnEvacuated), playerView.Owner, 0);
         playerView.RPC(nameof(PlayerHealth.NotifyFinalEvacuation), playerView.Owner, finalScore, outcome);
-        playerView.RPC(nameof(PlayerHealth.BeginEvacuationSequence), RpcTarget.All);
+        Vector2 evacuationTarget = GetEvacuationTargetWorldPosition();
+        playerView.RPC(nameof(PlayerHealth.BeginEvacuationSequence), RpcTarget.All, evacuationTarget.x, evacuationTarget.y);
         return true;
+    }
+
+    Vector2 GetEvacuationTargetWorldPosition()
+    {
+        if (IsCarrierExtraction())
+        {
+            EnsureCarrierVisual();
+            return carrierVisual != null ? carrierVisual.GetEvacuationTargetWorldPosition() : transform.position;
+        }
+
+        if (IsSpaceCityExtraction())
+        {
+            EnsureSpaceCityVisual();
+            return spaceCityVisual != null ? spaceCityVisual.GetEvacuationTargetWorldPosition() : transform.position;
+        }
+
+        EnsurePortalVisual();
+        return portalVisual != null ? portalVisual.GetEvacuationTargetWorldPosition() : transform.position;
+    }
+
+    bool IsCarrierExtraction()
+    {
+        return string.Equals(RoomSettings.GetExtractionType(), RoomSettings.ExtractionTypeCarrier, System.StringComparison.Ordinal);
+    }
+
+    bool IsSpaceCityExtraction()
+    {
+        return string.Equals(RoomSettings.GetExtractionType(), RoomSettings.ExtractionTypeSpaceCity, System.StringComparison.Ordinal);
     }
 
     bool ShouldAwardCharlieLastSecondExtractionBonus(PlayerHealth playerHealth, string outcome)
@@ -302,29 +546,36 @@ public class ExtractionZone : MonoBehaviourPun
         if (playerHealth == null)
             return false;
 
-        Collider2D zoneCollider = GetComponent<Collider2D>();
+        Collider2D[] zoneColliders = GetEnabledInteractionColliders();
         Collider2D[] playerColliders = playerHealth.GetComponentsInChildren<Collider2D>();
-        if (zoneCollider != null && playerColliders != null && playerColliders.Length > 0)
+        if (zoneColliders.Length > 0 && playerColliders != null && playerColliders.Length > 0)
         {
-            for (int i = 0; i < playerColliders.Length; i++)
+            for (int z = 0; z < zoneColliders.Length; z++)
             {
-                Collider2D playerCollider = playerColliders[i];
-                if (playerCollider == null || !playerCollider.enabled)
+                Collider2D zoneCollider = zoneColliders[z];
+                if (zoneCollider == null)
                     continue;
 
-                ColliderDistance2D distance = zoneCollider.Distance(playerCollider);
-                if (distance.isOverlapped || distance.distance <= RequestedPlayerEvacuationGraceDistance)
-                    return true;
+                for (int i = 0; i < playerColliders.Length; i++)
+                {
+                    Collider2D playerCollider = playerColliders[i];
+                    if (playerCollider == null || !playerCollider.enabled)
+                        continue;
+
+                    ColliderDistance2D distance = zoneCollider.Distance(playerCollider);
+                    if (distance.isOverlapped || distance.distance <= RequestedPlayerEvacuationGraceDistance)
+                        return true;
+                }
             }
         }
 
-        return Vector2.Distance(transform.position, playerHealth.transform.position) <= RequestedPlayerEvacuationGraceDistance + 1.4f;
+        return GetInteractionDistanceToPoint(playerHealth.transform.position) <= RequestedPlayerEvacuationGraceDistance;
     }
 
     Collider2D[] GetPlayersInsideZone()
     {
-        Collider2D zoneCollider = GetComponent<Collider2D>();
-        if (zoneCollider == null)
+        Collider2D[] zoneColliders = GetEnabledInteractionColliders();
+        if (zoneColliders.Length == 0)
             return Physics2D.OverlapCircleAll(transform.position, 1.0f);
 
         ContactFilter2D filter = new ContactFilter2D
@@ -333,14 +584,98 @@ public class ExtractionZone : MonoBehaviourPun
             useTriggers = true
         };
 
+        List<Collider2D> hits = new List<Collider2D>();
         Collider2D[] buffer = new Collider2D[32];
-        int count = zoneCollider.Overlap(filter, buffer);
-        if (count <= 0)
+        for (int z = 0; z < zoneColliders.Length; z++)
+        {
+            Collider2D zoneCollider = zoneColliders[z];
+            if (zoneCollider == null)
+                continue;
+
+            int count = zoneCollider.Overlap(filter, buffer);
+            for (int i = 0; i < count; i++)
+            {
+                if (buffer[i] != null)
+                    hits.Add(buffer[i]);
+            }
+        }
+
+        if (hits.Count <= 0)
             return System.Array.Empty<Collider2D>();
 
-        Collider2D[] hits = new Collider2D[count];
-        System.Array.Copy(buffer, hits, count);
-        return hits;
+        return hits.ToArray();
+    }
+
+    void ConfigurePortalInteractionCollider()
+    {
+        Bounds bounds = sr.sprite.bounds;
+        CircleCollider2D circle = GetComponent<CircleCollider2D>();
+        if (circle == null)
+            circle = gameObject.AddComponent<CircleCollider2D>();
+
+        circle.enabled = true;
+        circle.isTrigger = true;
+        circle.offset = bounds.center;
+        circle.radius = Mathf.Max(0.1f, Mathf.Min(bounds.extents.x, bounds.extents.y) * PortalInteractionRadiusFactor);
+        DisableOtherInteractionColliders(circle);
+    }
+
+    void ConfigurePolygonInteractionCollider(Vector2[] normalizedShape)
+    {
+        if (normalizedShape == null || normalizedShape.Length < 3)
+            return;
+
+        PolygonCollider2D polygon = GetComponent<PolygonCollider2D>();
+        if (polygon == null)
+            polygon = gameObject.AddComponent<PolygonCollider2D>();
+
+        Bounds bounds = sr.sprite.bounds;
+        polygon.enabled = true;
+        polygon.isTrigger = true;
+        polygon.pathCount = 1;
+        polygon.SetPath(0, BuildLocalPath(bounds, normalizedShape));
+        DisableOtherInteractionColliders(polygon);
+    }
+
+    Vector2[] BuildLocalPath(Bounds bounds, Vector2[] normalizedShape)
+    {
+        Vector2[] path = new Vector2[normalizedShape.Length];
+        for (int i = 0; i < normalizedShape.Length; i++)
+        {
+            Vector2 point = normalizedShape[i];
+            path[i] = new Vector2(
+                bounds.min.x + bounds.size.x * point.x,
+                bounds.min.y + bounds.size.y * point.y);
+        }
+
+        return path;
+    }
+
+    void DisableOtherInteractionColliders(Collider2D activeCollider)
+    {
+        Collider2D[] colliders = GetComponents<Collider2D>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Collider2D collider2D = colliders[i];
+            if (collider2D == null || collider2D == activeCollider)
+                continue;
+
+            collider2D.enabled = false;
+        }
+    }
+
+    Collider2D[] GetEnabledInteractionColliders()
+    {
+        Collider2D[] colliders = GetComponents<Collider2D>();
+        List<Collider2D> enabledColliders = new List<Collider2D>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Collider2D collider2D = colliders[i];
+            if (collider2D != null && collider2D.enabled)
+                enabledColliders.Add(collider2D);
+        }
+
+        return enabledColliders.ToArray();
     }
 
     [PunRPC]
@@ -361,14 +696,18 @@ public class ExtractionZone : MonoBehaviourPun
         StopEvacBuzzerLoop();
 
         if (blinkRoutine != null)
+        {
             StopCoroutine(blinkRoutine);
+            blinkRoutine = null;
+        }
         if (hideMessageRoutine != null)
         {
             StopCoroutine(hideMessageRoutine);
             hideMessageRoutine = null;
         }
 
-        SetColor(Color.red);
+        SetColor(Color.white);
+        RefreshExtractionVisual();
     }
 
     [PunRPC]
@@ -443,9 +782,12 @@ public class ExtractionZone : MonoBehaviourPun
         isEvacuating = false;
 
         if (blinkRoutine != null)
+        {
             StopCoroutine(blinkRoutine);
+            blinkRoutine = null;
+        }
 
-        blinkRoutine = StartCoroutine(BlinkTransition());
+        RefreshExtractionVisual();
         AudioManager.Instance.PlayEvacBuzzerLoopForDuration(duration);
         ShowExtractionMessage();
     }

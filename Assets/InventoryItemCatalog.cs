@@ -9,6 +9,7 @@ public enum InventoryItemType
 {
     Resource,
     Equipment,
+    Blueprint,
     Consumable,
     Quest,
     Misc
@@ -23,6 +24,7 @@ public enum InventoryItemCategory
     Shield,
     Engine,
     Gadget,
+    Blueprint,
     QuestItem,
     Resource,
     Misc
@@ -191,14 +193,23 @@ public static class InventoryItemCatalog
     public const string SpaceJunkId = SpaceJunkStandardId;
     public const string ContainerIdPrefix = "container_";
     public const int ContainerVariantCount = 9;
+    public const string BlueprintScrapContainerIdPrefix = "blueprint_scrap_container_";
+    public const int BlueprintScrapContainerVariantCount = 9;
     public const string RandomLootWreckIdPrefix = "random_loot_wreck_";
     public const int RandomLootWreckVariantCount = 9;
+    public const string BlueprintIdPrefix = "blueprint_";
+    public const int BlueprintSellValueAstrons = 4000;
+    public const string BlueprintScrapId = "blueprint_scrap";
+    public const int BlueprintScrapSellValueAstrons = 200;
     public const string CashSuitcaseId = "cash_suitcase";
+    public const string PlatinumChunkId = "platinum_chunk";
     public const string DroidScrapId = "droid_scrap";
     public const string CorsairSalvageId = "corsair_salvage";
     public const string SpaceMineWreckId = "space_mine_wreck";
     public const string SpaceTruckWreckId = "space_truck_wreck";
+    public const string ContainerShipWreckId = "container_ship_wreck";
     public const string MothershipCoreId = "mothership_core";
+    public const string VoidMawCoreId = "void_maw_core";
     public const string NeutralFighterSalvageId = "neutral_fighter_salvage";
     public const string RadarShipSalvageId = "radar_ship_salvage";
     public const string HunterLanceCoreId = "hunter_lance_core";
@@ -216,11 +227,16 @@ public static class InventoryItemCatalog
     public const string DoubleIonizerId = "double_ionizer";
     public const string AstroCutterId = "astro_cutter";
     public const string PulseDisruptorId = "pulse_disruptor";
+    public const string PowerEngineId = "power_engine";
+    public const string IonEngineId = "ion_engine";
     public const string FusionEngineId = "fusion_engine";
+    public const string HybridEngineId = "hybrid_engine";
+    public const string DoubleEngineId = "double_engine";
     public const string FuelTankId = "fuel_tank";
     public const string SuperBoosterId = "super_booster";
     public const string AfterburnerStabilizerId = "afterburner_stabilizer";
     public const string GadgetMineId = "gadget_mine";
+    public const string SpaceBombId = "space_bomb";
     public const string BatteryId = "battery";
     public const string MagneticBeamId = "magnetic_beam";
     public const string TractorBeamId = "tractor_beam";
@@ -241,6 +257,7 @@ public static class InventoryItemCatalog
     public const string AlienTransmitterId = "alien_transmitter";
 
     static readonly Dictionary<string, InventoryItemDefinition> Definitions = BuildDefinitions();
+    static bool iconsPrewarmed;
 
     public static InventoryItemDefinition GetDefinition(string itemId)
     {
@@ -252,6 +269,62 @@ public static class InventoryItemCatalog
     }
 
     public static Sprite GetIcon(string itemId) => GetDefinition(itemId)?.GetIcon();
+
+    public static void PrewarmIcons()
+    {
+        if (iconsPrewarmed)
+            return;
+
+        iconsPrewarmed = true;
+        foreach (InventoryItemDefinition definition in Definitions.Values)
+            definition?.GetIcon();
+    }
+
+    public static string GetBlueprintItemId(string equipmentItemId)
+    {
+        if (string.IsNullOrWhiteSpace(equipmentItemId))
+            return string.Empty;
+
+        return BlueprintIdPrefix + equipmentItemId;
+    }
+
+    public static bool IsBlueprintItem(string itemId)
+    {
+        return !string.IsNullOrWhiteSpace(GetBlueprintTargetItemId(itemId));
+    }
+
+    public static string GetBlueprintTargetItemId(string blueprintItemId)
+    {
+        if (string.IsNullOrWhiteSpace(blueprintItemId) ||
+            !blueprintItemId.StartsWith(BlueprintIdPrefix, StringComparison.Ordinal) ||
+            blueprintItemId.Length <= BlueprintIdPrefix.Length)
+        {
+            return string.Empty;
+        }
+
+        string targetItemId = blueprintItemId.Substring(BlueprintIdPrefix.Length);
+        InventoryItemDefinition target = GetDefinition(targetItemId);
+        return target != null && target.ItemType == InventoryItemType.Equipment ? targetItemId : string.Empty;
+    }
+
+    public static string[] GetAllBlueprintItemIds()
+    {
+        List<string> itemIds = new List<string>();
+        foreach (InventoryItemDefinition definition in Definitions.Values)
+        {
+            if (definition == null ||
+                definition.ItemType != InventoryItemType.Blueprint ||
+                string.IsNullOrWhiteSpace(definition.Id))
+            {
+                continue;
+            }
+
+            itemIds.Add(definition.Id);
+        }
+
+        itemIds.Sort(StringComparer.Ordinal);
+        return itemIds.ToArray();
+    }
 
     public static bool CanEnterSafePocket(string itemId)
     {
@@ -292,6 +365,43 @@ public static class InventoryItemCatalog
         string[] itemIds = new string[ContainerVariantCount];
         for (int i = 0; i < itemIds.Length; i++)
             itemIds[i] = GetContainerItemId(i);
+
+        return itemIds;
+    }
+
+    public static string GetBlueprintScrapContainerItemId(int variantIndex)
+    {
+        int clampedIndex = Mathf.Clamp(variantIndex, 0, BlueprintScrapContainerVariantCount - 1);
+        return BlueprintScrapContainerIdPrefix + (clampedIndex + 1).ToString("00");
+    }
+
+    public static bool IsBlueprintScrapContainerItem(string itemId)
+    {
+        return GetBlueprintScrapContainerVariantIndex(itemId) >= 0;
+    }
+
+    public static int GetBlueprintScrapContainerVariantIndex(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId) ||
+            !itemId.StartsWith(BlueprintScrapContainerIdPrefix, StringComparison.Ordinal) ||
+            itemId.Length <= BlueprintScrapContainerIdPrefix.Length)
+        {
+            return -1;
+        }
+
+        string suffix = itemId.Substring(BlueprintScrapContainerIdPrefix.Length);
+        if (!int.TryParse(suffix, out int oneBasedIndex))
+            return -1;
+
+        int zeroBasedIndex = oneBasedIndex - 1;
+        return zeroBasedIndex >= 0 && zeroBasedIndex < BlueprintScrapContainerVariantCount ? zeroBasedIndex : -1;
+    }
+
+    public static string[] GetBlueprintScrapContainerItemIds()
+    {
+        string[] itemIds = new string[BlueprintScrapContainerVariantCount];
+        for (int i = 0; i < itemIds.Length; i++)
+            itemIds[i] = GetBlueprintScrapContainerItemId(i);
 
         return itemIds;
     }
@@ -401,6 +511,7 @@ public static class InventoryItemCatalog
             InventoryItemCategory.Shield => "Shield",
             InventoryItemCategory.Engine => "Engine",
             InventoryItemCategory.Gadget => "Gadget",
+            InventoryItemCategory.Blueprint => "Blueprint",
             InventoryItemCategory.QuestItem => "Quest Items",
             InventoryItemCategory.Resource => "Resource",
             _ => "Misc"
@@ -461,6 +572,33 @@ public static class InventoryItemCatalog
     {
         InventoryItemDefinition definition = GetDefinition(itemId);
         return definition != null ? definition.Rarity : InventoryItemRarity.Common;
+    }
+
+    public static bool IsAsteroidResource(string itemId)
+    {
+        return string.Equals(itemId, AsteroidResourceId, StringComparison.Ordinal) ||
+               string.Equals(itemId, AsteroidGoldId, StringComparison.Ordinal) ||
+               string.Equals(itemId, AsteroidRareId, StringComparison.Ordinal) ||
+               string.Equals(itemId, RichAsteroidId, StringComparison.Ordinal) ||
+               string.Equals(itemId, AsteroidEpicId, StringComparison.Ordinal) ||
+               string.Equals(itemId, AsteroidLegendaryId, StringComparison.Ordinal);
+    }
+
+    public static bool TryGetNextAsteroidRarityId(string itemId, out string upgradedItemId)
+    {
+        upgradedItemId = null;
+        if (string.Equals(itemId, AsteroidResourceId, StringComparison.Ordinal))
+            upgradedItemId = AsteroidGoldId;
+        else if (string.Equals(itemId, AsteroidGoldId, StringComparison.Ordinal))
+            upgradedItemId = AsteroidRareId;
+        else if (string.Equals(itemId, AsteroidRareId, StringComparison.Ordinal))
+            upgradedItemId = RichAsteroidId;
+        else if (string.Equals(itemId, RichAsteroidId, StringComparison.Ordinal))
+            upgradedItemId = AsteroidEpicId;
+        else if (string.Equals(itemId, AsteroidEpicId, StringComparison.Ordinal))
+            upgradedItemId = AsteroidLegendaryId;
+
+        return !string.IsNullOrWhiteSpace(upgradedItemId);
     }
 
     public static int GetSellValueAstrons(string itemId)
@@ -648,6 +786,36 @@ public static class InventoryItemCatalog
                 CanEnterSafePocket = false,
                 SalvageOutputs = new[] { AsteroidCommonId }
             },
+            [PlatinumChunkId] = new InventoryItemDefinition
+            {
+                Id = PlatinumChunkId,
+                DisplayName = "Platinum Chunk",
+                ShortLabel = "PLT",
+                Description = "A dense platinum-rich core hidden inside a fractured obstacle.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Treasure,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 9000,
+                IconResourcePath = "treasure_asteroid_gold_legendary_resource",
+                ProjectFileName = "treasure_asteroid_gold_legendary.png",
+                CanEnterSafePocket = false,
+                SalvageOutputs = new[] { AsteroidLegendaryId, AsteroidEpicId, RichAsteroidId }
+            },
+            [BlueprintScrapId] = new InventoryItemDefinition
+            {
+                Id = BlueprintScrapId,
+                DisplayName = "Blueprint Scrap",
+                ShortLabel = "BSC",
+                Description = "Recovered fragments of technical schematics. Miss Enigma accepts them in trade for selected blueprints.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Blueprint,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = BlueprintScrapSellValueAstrons,
+                IconResourcePath = "Items/blueprint_scrap",
+                IconSpriteName = "blueprint_scrap_0",
+                ProjectFileName = "Resources/Items/blueprint_scrap.png",
+                SalvageOutputs = Array.Empty<string>()
+            },
             [DroidScrapId] = new InventoryItemDefinition
             {
                 Id = DroidScrapId,
@@ -704,6 +872,20 @@ public static class InventoryItemCatalog
                 ProjectFileName = "space_truck_wrak.png",
                 SalvageOutputs = new[] { AsteroidGoldId, AsteroidGoldId }
             },
+            [ContainerShipWreckId] = new InventoryItemDefinition
+            {
+                Id = ContainerShipWreckId,
+                DisplayName = "Container Hauler Wreck",
+                ShortLabel = "HUL",
+                Description = "Heavy salvage recovered from a destroyed container hauler.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1050,
+                IconResourcePath = "Enemies/ContainerShip/container_ship_wreck",
+                ProjectFileName = "Resources/Enemies/ContainerShip/container_ship_wreck.png",
+                SalvageOutputs = new[] { AsteroidGoldId, SpaceJunkStandardId }
+            },
             [MothershipCoreId] = new InventoryItemDefinition
             {
                 Id = MothershipCoreId,
@@ -718,15 +900,30 @@ public static class InventoryItemCatalog
                 ProjectFileName = "mother_ship_wrak.png",
                 SalvageOutputs = new[] { AsteroidRareId, AsteroidRareId }
             },
+            [VoidMawCoreId] = new InventoryItemDefinition
+            {
+                Id = VoidMawCoreId,
+                DisplayName = "Void Maw Core",
+                ShortLabel = "MAW",
+                Description = "A living stellar organ from the Cosmic Worm. Miss Enigma will want to see it.",
+                ItemType = InventoryItemType.Quest,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 12000,
+                IconResourcePath = "Enemies/CosmicWorm/cosmic_worm_resource",
+                ProjectFileName = "Resources/Enemies/CosmicWorm/cosmic_worm_resource.png",
+                CanEnterSafePocket = false,
+                SalvageOutputs = Array.Empty<string>()
+            },
             [NeutralFighterSalvageId] = new InventoryItemDefinition
             {
                 Id = NeutralFighterSalvageId,
                 DisplayName = "Neutral Fighter Salvage",
                 ShortLabel = "NFS",
-                Description = "Uncommon salvage recovered from a destroyed Neutral Fighter.",
+                Description = "Common salvage recovered from a destroyed Neutral Fighter.",
                 ItemType = InventoryItemType.Resource,
                 Category = InventoryItemCategory.Wreck,
-                Rarity = InventoryItemRarity.Uncommon,
+                Rarity = InventoryItemRarity.Common,
                 SellValueAstrons = 600,
                 IconResourcePath = "neutral_fighter_wreck_resource",
                 ProjectFileName = "neutral_fighter_wreck.png",
@@ -737,10 +934,10 @@ public static class InventoryItemCatalog
                 Id = RadarShipSalvageId,
                 DisplayName = "Radar Ship Salvage",
                 ShortLabel = "RDS",
-                Description = "Heavy salvage recovered from a destroyed Radar Ship spotter platform.",
+                Description = "Very rare heavy salvage recovered from a destroyed Radar Ship spotter platform.",
                 ItemType = InventoryItemType.Resource,
                 Category = InventoryItemCategory.Wreck,
-                Rarity = InventoryItemRarity.Rare,
+                Rarity = InventoryItemRarity.VeryRare,
                 SellValueAstrons = 1800,
                 IconResourcePath = "radar_ship_wreck_resource",
                 ProjectFileName = "radar_ship_wreck.png",
@@ -965,6 +1162,36 @@ public static class InventoryItemCatalog
                 ProjectFileName = "Resources/Items/pulse_disruptor.png",
                 SalvageOutputs = new[] { DoubleIonizerId, AsteroidRareId }
             },
+            [PowerEngineId] = new InventoryItemDefinition
+            {
+                Id = PowerEngineId,
+                DisplayName = "Power Engine",
+                ShortLabel = "PWR",
+                Description = "A rugged engine upgrade that raises cruise speed and maximum boost output.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Engine,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 900,
+                ShopBuyValueAstronsOverride = 3400,
+                IconResourcePath = "Items/power_engine",
+                ProjectFileName = "Resources/Items/power_engine.png",
+                SalvageOutputs = new[] { DroidScrapId, AsteroidGoldId }
+            },
+            [IonEngineId] = new InventoryItemDefinition
+            {
+                Id = IonEngineId,
+                DisplayName = "Ion Engine",
+                ShortLabel = "ION",
+                Description = "A responsive ion drive that improves booster recovery, turning, and light cruise speed.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Engine,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1200,
+                ShopBuyValueAstronsOverride = 4800,
+                IconResourcePath = "Items/ion_engine",
+                ProjectFileName = "Resources/Items/ion_engine.png",
+                SalvageOutputs = new[] { SpaceMineWreckId, AsteroidRareId }
+            },
             [FusionEngineId] = new InventoryItemDefinition
             {
                 Id = FusionEngineId,
@@ -974,11 +1201,41 @@ public static class InventoryItemCatalog
                 ItemType = InventoryItemType.Equipment,
                 Category = InventoryItemCategory.Engine,
                 Rarity = InventoryItemRarity.Epic,
-                SellValueAstrons = 900,
-                ShopBuyValueAstronsOverride = 3900,
+                SellValueAstrons = 1700,
+                ShopBuyValueAstronsOverride = 6200,
                 IconResourcePath = "fusion_engine_icon_resource",
                 ProjectFileName = "fusion_ engine.png",
-                SalvageOutputs = new[] { AsteroidRareId }
+                SalvageOutputs = new[] { PowerEngineId, AsteroidRareId }
+            },
+            [HybridEngineId] = new InventoryItemDefinition
+            {
+                Id = HybridEngineId,
+                DisplayName = "Hybrid Engine",
+                ShortLabel = "HYB",
+                Description = "A balanced engine pack that improves speed, booster endurance, and recovery.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Engine,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 2100,
+                ShopBuyValueAstronsOverride = 7800,
+                IconResourcePath = "Items/hybrid_engine",
+                ProjectFileName = "Resources/Items/hybrid_engine.png",
+                SalvageOutputs = new[] { FuelTankId, AsteroidRareId }
+            },
+            [DoubleEngineId] = new InventoryItemDefinition
+            {
+                Id = DoubleEngineId,
+                DisplayName = "Double Engine",
+                ShortLabel = "DBL",
+                Description = "A twin-drive engine built for extreme speed and boost output at the cost of endurance and handling.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Engine,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 3000,
+                ShopBuyValueAstronsOverride = 12000,
+                IconResourcePath = "Items/double_engine",
+                ProjectFileName = "Resources/Items/double_engine.png",
+                SalvageOutputs = new[] { FusionEngineId, SpaceTruckWreckId, AsteroidRareId }
             },
             [FuelTankId] = new InventoryItemDefinition
             {
@@ -1036,6 +1293,21 @@ public static class InventoryItemCatalog
                 IconResourcePath = "space_mine_resource",
                 ProjectFileName = "space mine.png",
                 SalvageOutputs = new[] { SpaceMineWreckId, SpaceMineWreckId }
+            },
+            [SpaceBombId] = new InventoryItemDefinition
+            {
+                Id = SpaceBombId,
+                DisplayName = "Space Bomb",
+                ShortLabel = "BOM",
+                Description = "A single-use heavy bomb that drops behind the ship, arms its engine, then flies forward and detonates in a huge blast on impact.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 2600,
+                ShopBuyValueAstronsOverride = 9800,
+                IconResourcePath = "Items/space_bomb_gadget",
+                ProjectFileName = "Resources/Items/space_bomb_gadget.png",
+                SalvageOutputs = new[] { SpaceMineWreckId, AsteroidRareId, SpaceJunkStandardId }
             },
             [BatteryId] = new InventoryItemDefinition
             {
@@ -1299,8 +1571,48 @@ public static class InventoryItemCatalog
             }
         };
 
+        AddBlueprintDefinitions(definitions);
         AddContainerDefinitions(definitions);
+        AddBlueprintScrapContainerDefinitions(definitions);
         return definitions;
+    }
+
+    static void AddBlueprintDefinitions(Dictionary<string, InventoryItemDefinition> definitions)
+    {
+        if (definitions == null)
+            return;
+
+        List<InventoryItemDefinition> equipmentDefinitions = new List<InventoryItemDefinition>();
+        foreach (InventoryItemDefinition definition in definitions.Values)
+        {
+            if (definition != null &&
+                definition.ItemType == InventoryItemType.Equipment &&
+                !string.IsNullOrWhiteSpace(definition.Id))
+            {
+                equipmentDefinitions.Add(definition);
+            }
+        }
+
+        for (int i = 0; i < equipmentDefinitions.Count; i++)
+        {
+            InventoryItemDefinition equipment = equipmentDefinitions[i];
+            string blueprintId = GetBlueprintItemId(equipment.Id);
+            definitions[blueprintId] = new InventoryItemDefinition
+            {
+                Id = blueprintId,
+                DisplayName = equipment.DisplayName + " Blueprint",
+                ShortLabel = "BPR",
+                Description = "Use this blueprint to permanently unlock crafting for " + equipment.DisplayName + ".",
+                ItemType = InventoryItemType.Blueprint,
+                Category = InventoryItemCategory.Blueprint,
+                Rarity = equipment.Rarity,
+                SellValueAstrons = BlueprintSellValueAstrons,
+                ShopBuyValueAstronsOverride = 0,
+                IconResourcePath = "Items/Blueprints/" + equipment.Id + "_blueprint",
+                ProjectFileName = "Resources/Items/Blueprints/" + equipment.Id + "_blueprint.png",
+                SalvageOutputs = Array.Empty<string>()
+            };
+        }
     }
 
     static void AddContainerDefinitions(Dictionary<string, InventoryItemDefinition> definitions)
@@ -1325,6 +1637,32 @@ public static class InventoryItemCatalog
                 IconSpriteName = "kontenery_9_" + i,
                 ProjectFileName = "Resources/kontenery_9.png",
                 SalvageOutputs = new[] { AsteroidUncommonId }
+            };
+        }
+    }
+
+    static void AddBlueprintScrapContainerDefinitions(Dictionary<string, InventoryItemDefinition> definitions)
+    {
+        if (definitions == null)
+            return;
+
+        for (int i = 0; i < BlueprintScrapContainerVariantCount; i++)
+        {
+            string itemId = GetBlueprintScrapContainerItemId(i);
+            definitions[itemId] = new InventoryItemDefinition
+            {
+                Id = itemId,
+                DisplayName = "Blueprint Container",
+                ShortLabel = "BCT",
+                Description = "A sealed technical cargo container. Opening it yields blueprint scrap.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Blueprint,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = BlueprintScrapSellValueAstrons,
+                IconResourcePath = "Enemies/ContainerShip/containers_set2",
+                IconSpriteName = "containers_set2_" + i,
+                ProjectFileName = "Resources/Enemies/ContainerShip/containers_set2.png",
+                SalvageOutputs = new[] { BlueprintScrapId }
             };
         }
     }

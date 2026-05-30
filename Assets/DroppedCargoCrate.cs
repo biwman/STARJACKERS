@@ -401,6 +401,12 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
             spriteRenderer.color = new Color(0.45f, 0.45f, 0.45f, 0.72f);
     }
 
+    [PunRPC]
+    public void SetBeingCollectedRpc(bool value)
+    {
+        isBeingCollected = value;
+    }
+
     void RequestImpulseFromClient(Vector2 impulse)
     {
         if (!PhotonNetwork.IsConnected)

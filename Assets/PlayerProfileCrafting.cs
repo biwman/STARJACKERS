@@ -217,13 +217,39 @@ public static class PlayerProfileCraftingCatalog
         },
         new PlayerProfileCraftingRecipe
         {
-            Id = "fusion_engine_from_droid_wreck",
+            Id = "power_engine_from_droid_parts",
             Inputs = new[]
             {
                 InventoryItemCatalog.DroidScrapId,
-                InventoryItemCatalog.AsteroidRareId,
-                InventoryItemCatalog.AsteroidResourceId,
+                InventoryItemCatalog.SpaceJunkStandardId,
+                InventoryItemCatalog.AsteroidGoldId,
                 InventoryItemCatalog.AsteroidResourceId
+            },
+            OutputItemId = InventoryItemCatalog.PowerEngineId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "ion_engine_from_mine_parts",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.SpaceJunkStandardId
+            },
+            OutputItemId = InventoryItemCatalog.IonEngineId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "fusion_engine_from_droid_wreck",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.PowerEngineId,
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.AsteroidRareId
             },
             OutputItemId = InventoryItemCatalog.FusionEngineId,
             OutputCount = 1
@@ -239,6 +265,32 @@ public static class PlayerProfileCraftingCatalog
                 InventoryItemCatalog.AsteroidResourceId
             },
             OutputItemId = InventoryItemCatalog.FuelTankId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "hybrid_engine_from_power_tank",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.PowerEngineId,
+                InventoryItemCatalog.FuelTankId,
+                InventoryItemCatalog.SpaceJunkStandardId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.HybridEngineId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "double_engine_from_fusion_power",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.FusionEngineId,
+                InventoryItemCatalog.PowerEngineId,
+                InventoryItemCatalog.SpaceTruckWreckId,
+                InventoryItemCatalog.AsteroidEpicId
+            },
+            OutputItemId = InventoryItemCatalog.DoubleEngineId,
             OutputCount = 1
         },
         new PlayerProfileCraftingRecipe
@@ -399,6 +451,19 @@ public static class PlayerProfileCraftingCatalog
         },
         new PlayerProfileCraftingRecipe
         {
+            Id = "space_bomb_from_trap_launcher",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceTrapId,
+                InventoryItemCatalog.RocketLauncherId,
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.RichAsteroidId
+            },
+            OutputItemId = InventoryItemCatalog.SpaceBombId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
             Id = "emergency_suit_beacon_from_common_parts",
             Inputs = new[]
             {
@@ -503,6 +568,34 @@ public static class PlayerProfileCraftingCatalog
     };
 
     public static IReadOnlyList<PlayerProfileCraftingRecipe> GetAllRecipes() => Recipes;
+
+    public static string GetRequiredBlueprintItemId(PlayerProfileCraftingRecipe recipe)
+    {
+        if (recipe == null || string.IsNullOrWhiteSpace(recipe.OutputItemId))
+            return string.Empty;
+
+        return InventoryItemCatalog.GetItemType(recipe.OutputItemId) == InventoryItemType.Equipment
+            ? InventoryItemCatalog.GetBlueprintItemId(recipe.OutputItemId)
+            : string.Empty;
+    }
+
+    public static bool IsRecipeUnlocked(PlayerProfileCraftingRecipe recipe, string[] unlockedBlueprintIds)
+    {
+        string requiredBlueprintId = GetRequiredBlueprintItemId(recipe);
+        if (string.IsNullOrWhiteSpace(requiredBlueprintId))
+            return true;
+
+        if (unlockedBlueprintIds == null)
+            return false;
+
+        for (int i = 0; i < unlockedBlueprintIds.Length; i++)
+        {
+            if (string.Equals(unlockedBlueprintIds[i], requiredBlueprintId, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
 
     public static int GetCraftingInputSellValueForOutput(string outputItemId)
     {

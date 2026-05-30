@@ -66,7 +66,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         "CollectButton",
         "ShipInventoryButton",
         "ShipInventoryPanel",
-        "ReloadButton",
         "ComplexAmmoBar",
         "SuperAttackJoystickBG",
         "WeaponSwitchButton",
@@ -75,6 +74,30 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         "Shield_Bar",
         "Booster_Bar",
         "ScoreText"
+    };
+
+    static readonly string[] DeprecatedLobbySettingObjectNames =
+    {
+        "AdvancedBackgroundSettingButton",
+        "AdvancedBackgroundSettingText",
+        "StartingVfxSettingButton",
+        "StartingVfxSettingText",
+        "AmmoSettingButton",
+        "AmmoSettingText",
+        "ShootingModelSettingButton",
+        "ShootingModelSettingText",
+        "SuperAttackSettingButton",
+        "SuperAttackSettingText",
+        "AdvancedMovingJoystickSettingButton",
+        "AdvancedMovingJoystickSettingText",
+        "AdvancedShootingJoystickSettingButton",
+        "AdvancedShootingJoystickSettingText",
+        "DynamicUseSettingButton",
+        "DynamicUseSettingText",
+        "MaxInputBoostSettingButton",
+        "MaxInputBoostSettingText",
+        "readyButton",
+        "ReadyText"
     };
 
     static readonly float[] RoundDurationOptions = { 60f, 90f, 120f, 150f, 180f, 210f, 240f, 270f, 300f, 330f, 360f };
@@ -117,11 +140,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     static readonly int[] ObstacleHpOptions = { 50, 100, 150, 200, 250, 300, 350, 400, 450, 500 };
     static readonly int[] ObstacleSizePercentOptions = { 50, 100, 150, 200, 250, 300, 350, 400, 450, 500 };
     static readonly int[] ExtractionCountOptions = { 1, 2, 3, 4 };
+    static readonly string[] ExtractionTypeOptions = { RoomSettings.ExtractionTypePortal, RoomSettings.ExtractionTypeCarrier, RoomSettings.ExtractionTypeSpaceCity };
     static readonly int[] RepairBayCountOptions = { 0, 1, 2 };
     static readonly int[] SpaceFactoryCountOptions = { 0, 1, 2 };
+    static readonly int[] ScienceStationCountOptions = { 0, 1 };
     static readonly int[] RandomLootWreckCountOptions = { 0, 1, 2, 3, 4, 5 };
     static readonly int[] BoosterSlowdownOptions = { 30, 40, 50, 60, 70, 80, 90, 100 };
-    static readonly int[] AmmoCountOptions = { 5, 10, 15, 20, 25, 30 };
     static readonly int[] BoosterRecoveryDelayOptions = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
     static readonly float[] LastShipTimerMultiplierOptions = { 1f, 1.5f, 2f, 3f, 4f, 5f };
     static readonly string[] MovingObjectsModeOptions = { RoomSettings.MovingObjectsModeOn, RoomSettings.MovingObjectsModeOff, RoomSettings.MovingObjectsModeOnlyRotate };
@@ -141,7 +165,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     static readonly int[] BatteringDamageOptions = { 0, 10, 20, 30, 40, 50 };
     static readonly string[] EndDisasterModeOptions = { RoomSettings.EndDisasterOff, RoomSettings.EndDisasterMeteor };
     static readonly int[] EndDisasterWarningSecondOptions = { 10, 15, 20, 25, 30, 35, 40 };
-    static readonly string[] ShootingModelOptions = { RoomSettings.ShootingModelSimple, RoomSettings.ShootingModelComplex };
     static readonly string[] ParallaxBackgroundOptions =
     {
         RoomSettings.ParallaxBackgroundKosmos3,
@@ -197,6 +220,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text spaceJunkSettingText;
     public TMP_Text containersSettingText;
     public TMP_Text randomLootWreckSettingText;
+    public TMP_Text hiddenTreasureSettingText;
     public TMP_Text nebulaSettingText;
     public TMP_Text fireNebulaSettingText;
     public TMP_Text nebulaSizeSettingText;
@@ -205,8 +229,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text cloudsSettingText;
     public TMP_Text cloudsSizeSettingText;
     public TMP_Text extractionSettingText;
+    public TMP_Text extractionTypeSettingText;
     public TMP_Text repairBaySettingText;
     public TMP_Text spaceFactorySettingText;
+    public TMP_Text scienceStationSettingText;
     public TMP_Text boosterSettingText;
     public TMP_Text ammoSettingText;
     public TMP_Text boosterDelaySettingText;
@@ -214,6 +240,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text deathTimerSettingText;
     public TMP_Text inventoryLossSettingText;
     public TMP_Text equipmentLossSettingText;
+    public TMP_Text cosmicWormSettingText;
     public TMP_Text crazyEnemiesEffectSettingText;
     public TMP_Text fogOfWarEffectSettingText;
     public TMP_Text pirateBaseEffectSettingText;
@@ -257,6 +284,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button spaceJunkSettingButton;
     public Button containersSettingButton;
     public Button randomLootWreckSettingButton;
+    public Button hiddenTreasureSettingButton;
     public Button nebulaSettingButton;
     public Button fireNebulaSettingButton;
     public Button nebulaSizeSettingButton;
@@ -265,8 +293,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button cloudsSettingButton;
     public Button cloudsSizeSettingButton;
     public Button extractionSettingButton;
+    public Button extractionTypeSettingButton;
     public Button repairBaySettingButton;
     public Button spaceFactorySettingButton;
+    public Button scienceStationSettingButton;
     public Button boosterSettingButton;
     public Button ammoSettingButton;
     public Button boosterDelaySettingButton;
@@ -274,6 +304,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button deathTimerSettingButton;
     public Button inventoryLossSettingButton;
     public Button equipmentLossSettingButton;
+    public Button cosmicWormSettingButton;
     public Button crazyEnemiesEffectSettingButton;
     public Button fogOfWarEffectSettingButton;
     public Button pirateBaseEffectSettingButton;
@@ -354,6 +385,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     TMP_Text developerCheatStatusText;
     Button developerCheatAddMoneyButton;
     Button developerCheatAddXpButton;
+    Button developerCheatUnlockBlueprintsButton;
+    Button developerCheatLockBlueprintsButton;
     Button developerCheatResetAccountButton;
     Button developerCheatCloseButton;
     GameObject developerCheatResetConfirmObject;
@@ -1011,7 +1044,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         panelRect.anchorMax = new Vector2(0.5f, 0.5f);
         panelRect.pivot = new Vector2(0.5f, 0.5f);
         panelRect.anchoredPosition = new Vector2(0f, 6f);
-        panelRect.sizeDelta = new Vector2(620f, 560f);
+        panelRect.sizeDelta = new Vector2(620f, 700f);
 
         Image panelImage = panel.GetComponent<Image>();
         panelImage.color = new Color(0.11f, 0.1f, 0.14f, 0.98f);
@@ -1044,18 +1077,20 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         developerCheatXpText.fontStyle = FontStyles.Normal;
         developerCheatXpText.color = new Color(0.74f, 0.92f, 1f, 1f);
 
-        developerCheatAddMoneyButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddMoneyButton", "ADD MONEY", new Vector2(0f, -244f), new Vector2(260f, 58f), new Color(0.5f, 0.22f, 0.18f, 1f), new Color(0.7f, 0.3f, 0.22f, 1f), OnDeveloperCheatAddMoneyClicked);
-        developerCheatAddXpButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddXpButton", "ADD XP", new Vector2(0f, -314f), new Vector2(260f, 58f), new Color(0.16f, 0.38f, 0.5f, 1f), new Color(0.22f, 0.52f, 0.7f, 1f), OnDeveloperCheatAddXpClicked);
-        developerCheatResetAccountButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatResetAccountButton", "RESET ACCOUNT", new Vector2(0f, -384f), new Vector2(260f, 58f), new Color(0.52f, 0.14f, 0.18f, 1f), new Color(0.72f, 0.2f, 0.25f, 1f), OnDeveloperCheatResetAccountClicked);
+        developerCheatAddMoneyButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddMoneyButton", "ADD MONEY", new Vector2(0f, -238f), new Vector2(260f, 54f), new Color(0.5f, 0.22f, 0.18f, 1f), new Color(0.7f, 0.3f, 0.22f, 1f), OnDeveloperCheatAddMoneyClicked);
+        developerCheatAddXpButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddXpButton", "ADD XP", new Vector2(0f, -300f), new Vector2(260f, 54f), new Color(0.16f, 0.38f, 0.5f, 1f), new Color(0.22f, 0.52f, 0.7f, 1f), OnDeveloperCheatAddXpClicked);
+        developerCheatUnlockBlueprintsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatUnlockBlueprintsButton", "UNLOCK ALL BLUEPRINTS", new Vector2(0f, -362f), new Vector2(340f, 54f), new Color(0.12f, 0.42f, 0.46f, 1f), new Color(0.18f, 0.58f, 0.64f, 1f), OnDeveloperCheatUnlockBlueprintsClicked);
+        developerCheatLockBlueprintsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatLockBlueprintsButton", "LOCK ALL BLUEPRINTS", new Vector2(0f, -424f), new Vector2(340f, 54f), new Color(0.42f, 0.23f, 0.13f, 1f), new Color(0.58f, 0.34f, 0.18f, 1f), OnDeveloperCheatLockBlueprintsClicked);
+        developerCheatResetAccountButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatResetAccountButton", "RESET ACCOUNT", new Vector2(0f, -492f), new Vector2(260f, 54f), new Color(0.52f, 0.14f, 0.18f, 1f), new Color(0.72f, 0.2f, 0.25f, 1f), OnDeveloperCheatResetAccountClicked);
 
-        developerCheatStatusText = CreateStandaloneLabel(panel.transform, "CheatStatusText", string.Empty, new Vector2(60f, -456f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
+        developerCheatStatusText = CreateStandaloneLabel(panel.transform, "CheatStatusText", string.Empty, new Vector2(60f, -564f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
         developerCheatStatusText.rectTransform.anchorMin = new Vector2(0.5f, 1f);
         developerCheatStatusText.rectTransform.anchorMax = new Vector2(0.5f, 1f);
         developerCheatStatusText.rectTransform.pivot = new Vector2(0.5f, 1f);
         developerCheatStatusText.fontStyle = FontStyles.Normal;
         developerCheatStatusText.color = new Color(0.74f, 0.86f, 0.94f, 0.96f);
 
-        developerCheatCloseButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatCloseButton", "CLOSE", new Vector2(0f, -494f), new Vector2(220f, 52f), new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f), HideDeveloperCheatOverlay);
+        developerCheatCloseButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatCloseButton", "CLOSE", new Vector2(0f, -614f), new Vector2(220f, 52f), new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f), HideDeveloperCheatOverlay);
 
         CreateDeveloperCheatResetConfirm(overlayObject.transform);
 
@@ -1093,7 +1128,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         title.rectTransform.anchorMax = new Vector2(0.5f, 1f);
         title.rectTransform.pivot = new Vector2(0.5f, 1f);
 
-        TMP_Text body = CreateStandaloneLabel(panel.transform, "LobbyDeveloperCheatResetText", "This will reset XP, level, Astrons, inventory, equipment and unlocked pilots. Continue?", new Vector2(40f, -102f), new Vector2(560f, 96f), 20f, TextAlignmentOptions.Center);
+        TMP_Text body = CreateStandaloneLabel(panel.transform, "LobbyDeveloperCheatResetText", "This will reset XP, level, Astrons, inventory, equipment, blueprints and unlocked pilots. Continue?", new Vector2(40f, -102f), new Vector2(560f, 96f), 20f, TextAlignmentOptions.Center);
         body.rectTransform.anchorMin = new Vector2(0.5f, 1f);
         body.rectTransform.anchorMax = new Vector2(0.5f, 1f);
         body.rectTransform.pivot = new Vector2(0.5f, 1f);
@@ -1235,6 +1270,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             developerCheatAddMoneyButton.interactable = !busy;
         if (developerCheatAddXpButton != null)
             developerCheatAddXpButton.interactable = !busy;
+        if (developerCheatUnlockBlueprintsButton != null)
+            developerCheatUnlockBlueprintsButton.interactable = !busy;
+        if (developerCheatLockBlueprintsButton != null)
+            developerCheatLockBlueprintsButton.interactable = !busy;
         if (developerCheatResetAccountButton != null)
             developerCheatResetAccountButton.interactable = !busy;
         if (developerCheatResetConfirmYesButton != null)
@@ -1920,6 +1959,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         rect.sizeDelta = new Vector2(width, 60f);
     }
 
+    void Awake()
+    {
+        SetGameplayHudVisible(false, true);
+    }
+
     void Start()
     {
         PlayerMovement.gameStarted = false;
@@ -2225,8 +2269,16 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         for (int i = 0; i < transform.childCount; i++)
         {
             Transform child = transform.GetChild(i);
-            if (child != null)
-                child.gameObject.SetActive(active);
+            if (child == null)
+                continue;
+
+            if (active && IsDeprecatedLobbySettingObjectName(child.name))
+            {
+                child.gameObject.SetActive(false);
+                continue;
+            }
+
+            child.gameObject.SetActive(active);
         }
     }
 
@@ -2304,6 +2356,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             textObject.SetActive(false);
     }
 
+    bool IsDeprecatedLobbySettingObjectName(string objectName)
+    {
+        for (int i = 0; i < DeprecatedLobbySettingObjectNames.Length; i++)
+        {
+            if (objectName == DeprecatedLobbySettingObjectNames[i])
+                return true;
+        }
+
+        return false;
+    }
+
     void ApplyHudVisibility(GameObject hudObject, bool visible)
     {
         if (hudObject == null)
@@ -2368,11 +2431,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         mapSizeSettingButton = EnsureSettingButton(ref mapSizeSettingText, mapSizeSettingButton, "MapSizeSettingButton", "MapSizeSettingText", Vector2.zero, CycleMapSize);
         mapBackgroundSettingButton = EnsureSettingButton(ref mapBackgroundSettingText, mapBackgroundSettingButton, "MapBackgroundSettingButton", "MapBackgroundSettingText", Vector2.zero, CycleMapBackground);
         visualEffectsSettingButton = EnsureSettingButton(ref visualEffectsSettingText, visualEffectsSettingButton, "VisualEffectsSettingButton", "VisualEffectsSettingText", Vector2.zero, CycleVisualEffectsEnabled);
-        advancedBackgroundSettingButton = EnsureSettingButton(ref advancedBackgroundSettingText, advancedBackgroundSettingButton, "AdvancedBackgroundSettingButton", "AdvancedBackgroundSettingText", Vector2.zero, CycleAdvancedBackgroundEnabled);
+        HideDeprecatedSettingButton("AdvancedBackgroundSettingButton", "AdvancedBackgroundSettingText");
         parallaxBackgroundSettingButton = EnsureSettingButton(ref parallaxBackgroundSettingText, parallaxBackgroundSettingButton, "ParallaxBackgroundSettingButton", "ParallaxBackgroundSettingText", Vector2.zero, CycleParallaxBackground);
         backgroundObjectSettingButton = EnsureSettingButton(ref backgroundObjectSettingText, backgroundObjectSettingButton, "BackgroundObjectSettingButton", "BackgroundObjectSettingText", Vector2.zero, CycleBackgroundObject);
         gravityWellPhysicsSettingButton = EnsureSettingButton(ref gravityWellPhysicsSettingText, gravityWellPhysicsSettingButton, "GravityWellPhysicsSettingButton", "GravityWellPhysicsSettingText", Vector2.zero, CycleGravityWellPhysicsEnabled);
-        startingVfxSettingButton = EnsureSettingButton(ref startingVfxSettingText, startingVfxSettingButton, "StartingVfxSettingButton", "StartingVfxSettingText", Vector2.zero, CycleStartingVfxEnabled);
+        HideDeprecatedSettingButton("StartingVfxSettingButton", "StartingVfxSettingText");
         endDisasterSettingButton = EnsureSettingButton(ref endDisasterSettingText, endDisasterSettingButton, "EndDisasterSettingButton", "EndDisasterSettingText", Vector2.zero, CycleEndDisasterMode);
         endDisasterTimeSettingButton = EnsureSettingButton(ref endDisasterTimeSettingText, endDisasterTimeSettingButton, "EndDisasterTimeSettingButton", "EndDisasterTimeSettingText", Vector2.zero, CycleEndDisasterWarningSeconds);
         obstacleSettingButton = EnsureSettingButton(ref obstacleSettingText, obstacleSettingButton, "ObstacleSettingButton", "ObstacleSettingText", Vector2.zero, CycleObstacleDensity);
@@ -2385,6 +2448,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         spaceJunkSettingButton = EnsureSettingButton(ref spaceJunkSettingText, spaceJunkSettingButton, "SpaceJunkSettingButton", "SpaceJunkSettingText", Vector2.zero, CycleSpaceJunkDensity);
         containersSettingButton = EnsureSettingButton(ref containersSettingText, containersSettingButton, "ContainersSettingButton", "ContainersSettingText", Vector2.zero, CycleContainersDensity);
         randomLootWreckSettingButton = EnsureSettingButton(ref randomLootWreckSettingText, randomLootWreckSettingButton, "RandomLootWreckSettingButton", "RandomLootWreckSettingText", Vector2.zero, CycleRandomLootWreckCount);
+        hiddenTreasureSettingButton = EnsureSettingButton(ref hiddenTreasureSettingText, hiddenTreasureSettingButton, "HiddenTreasureSettingButton", "HiddenTreasureSettingText", Vector2.zero, CycleHiddenTreasureEnabled);
         nebulaSettingButton = EnsureSettingButton(ref nebulaSettingText, nebulaSettingButton, "NebulaSettingButton", "NebulaSettingText", Vector2.zero, CycleNebulaDensity);
         fireNebulaSettingButton = EnsureSettingButton(ref fireNebulaSettingText, fireNebulaSettingButton, "FireNebulaSettingButton", "FireNebulaSettingText", Vector2.zero, CycleFireNebulaDensity);
         nebulaSizeSettingButton = EnsureSettingButton(ref nebulaSizeSettingText, nebulaSizeSettingButton, "NebulaSizeSettingButton", "NebulaSizeSettingText", Vector2.zero, CycleNebulaSize);
@@ -2393,25 +2457,28 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         cloudsSettingButton = EnsureSettingButton(ref cloudsSettingText, cloudsSettingButton, "CloudsSettingButton", "CloudsSettingText", Vector2.zero, CycleCloudsDensity);
         cloudsSizeSettingButton = EnsureSettingButton(ref cloudsSizeSettingText, cloudsSizeSettingButton, "CloudsSizeSettingButton", "CloudsSizeSettingText", Vector2.zero, CycleCloudsSize);
         extractionSettingButton = EnsureSettingButton(ref extractionSettingText, extractionSettingButton, "ExtractionSettingButton", "ExtractionSettingText", Vector2.zero, CycleExtractionCount);
+        extractionTypeSettingButton = EnsureSettingButton(ref extractionTypeSettingText, extractionTypeSettingButton, "ExtractionTypeSettingButton", "ExtractionTypeSettingText", Vector2.zero, CycleExtractionType);
         repairBaySettingButton = EnsureSettingButton(ref repairBaySettingText, repairBaySettingButton, "RepairBaySettingButton", "RepairBaySettingText", Vector2.zero, CycleRepairBayCount);
         spaceFactorySettingButton = EnsureSettingButton(ref spaceFactorySettingText, spaceFactorySettingButton, "SpaceFactorySettingButton", "SpaceFactorySettingText", Vector2.zero, CycleSpaceFactoryCount);
+        scienceStationSettingButton = EnsureSettingButton(ref scienceStationSettingText, scienceStationSettingButton, "ScienceStationSettingButton", "ScienceStationSettingText", Vector2.zero, CycleScienceStationCount);
         boosterSettingButton = EnsureSettingButton(ref boosterSettingText, boosterSettingButton, "BoosterSettingButton", "BoosterSettingText", Vector2.zero, CycleBoosterSlowdown);
-        ammoSettingButton = EnsureSettingButton(ref ammoSettingText, ammoSettingButton, "AmmoSettingButton", "AmmoSettingText", Vector2.zero, CycleAmmoCount);
+        HideDeprecatedSettingButton("AmmoSettingButton", "AmmoSettingText");
         boosterDelaySettingButton = EnsureSettingButton(ref boosterDelaySettingText, boosterDelaySettingButton, "BoosterDelaySettingButton", "BoosterDelaySettingText", Vector2.zero, CycleBoosterRecoveryDelay);
         HideDeprecatedSettingButton("MaxInputBoostSettingButton", "MaxInputBoostSettingText");
         shipDriftSettingButton = EnsureSettingButton(ref shipDriftSettingText, shipDriftSettingButton, "ShipDriftSettingButton", "ShipDriftSettingText", Vector2.zero, CycleShipDriftEnabled);
         deathTimerSettingButton = EnsureSettingButton(ref deathTimerSettingText, deathTimerSettingButton, "DeathTimerSettingButton", "DeathTimerSettingText", Vector2.zero, CycleLastShipTimerMultiplier);
         inventoryLossSettingButton = EnsureSettingButton(ref inventoryLossSettingText, inventoryLossSettingButton, "InventoryLossSettingButton", "InventoryLossSettingText", Vector2.zero, CycleInventoryLossEnabled);
         equipmentLossSettingButton = EnsureSettingButton(ref equipmentLossSettingText, equipmentLossSettingButton, "EquipmentLossSettingButton", "EquipmentLossSettingText", Vector2.zero, CycleEquipmentLossEnabled);
+        cosmicWormSettingButton = EnsureSettingButton(ref cosmicWormSettingText, cosmicWormSettingButton, "CosmicWormSettingButton", "CosmicWormSettingText", Vector2.zero, CycleCosmicWormEnabled);
         crazyEnemiesEffectSettingButton = EnsureSettingButton(ref crazyEnemiesEffectSettingText, crazyEnemiesEffectSettingButton, "CrazyEnemiesEffectSettingButton", "CrazyEnemiesEffectSettingText", Vector2.zero, CycleCrazyEnemiesEffect);
         fogOfWarEffectSettingButton = EnsureSettingButton(ref fogOfWarEffectSettingText, fogOfWarEffectSettingButton, "FogOfWarEffectSettingButton", "FogOfWarEffectSettingText", Vector2.zero, CycleFogOfWarEffect);
         pirateBaseEffectSettingButton = EnsureSettingButton(ref pirateBaseEffectSettingText, pirateBaseEffectSettingButton, "PirateBaseEffectSettingButton", "PirateBaseEffectSettingText", Vector2.zero, CyclePirateBaseEffect);
         asteroidShowerEffectSettingButton = EnsureSettingButton(ref asteroidShowerEffectSettingText, asteroidShowerEffectSettingButton, "AsteroidShowerEffectSettingButton", "AsteroidShowerEffectSettingText", Vector2.zero, CycleAsteroidShowerEffect);
-        shootingModelSettingButton = EnsureSettingButton(ref shootingModelSettingText, shootingModelSettingButton, "ShootingModelSettingButton", "ShootingModelSettingText", Vector2.zero, CycleShootingModel);
-        superAttackSettingButton = EnsureSettingButton(ref superAttackSettingText, superAttackSettingButton, "SuperAttackSettingButton", "SuperAttackSettingText", Vector2.zero, CycleSuperAttackEnabled);
-        advancedMovingJoystickSettingButton = EnsureSettingButton(ref advancedMovingJoystickSettingText, advancedMovingJoystickSettingButton, "AdvancedMovingJoystickSettingButton", "AdvancedMovingJoystickSettingText", Vector2.zero, CycleAdvancedMovingJoystickEnabled);
-        advancedShootingJoystickSettingButton = EnsureSettingButton(ref advancedShootingJoystickSettingText, advancedShootingJoystickSettingButton, "AdvancedShootingJoystickSettingButton", "AdvancedShootingJoystickSettingText", Vector2.zero, CycleAdvancedShootingJoystickEnabled);
-        dynamicUseSettingButton = EnsureSettingButton(ref dynamicUseSettingText, dynamicUseSettingButton, "DynamicUseSettingButton", "DynamicUseSettingText", Vector2.zero, CycleDynamicUseLabelEnabled);
+        HideDeprecatedSettingButton("ShootingModelSettingButton", "ShootingModelSettingText");
+        HideDeprecatedSettingButton("SuperAttackSettingButton", "SuperAttackSettingText");
+        HideDeprecatedSettingButton("AdvancedMovingJoystickSettingButton", "AdvancedMovingJoystickSettingText");
+        HideDeprecatedSettingButton("AdvancedShootingJoystickSettingButton", "AdvancedShootingJoystickSettingText");
+        HideDeprecatedSettingButton("DynamicUseSettingButton", "DynamicUseSettingText");
         collectKeepAliveRangeBonusSettingButton = EnsureSettingButton(ref collectKeepAliveRangeBonusSettingText, collectKeepAliveRangeBonusSettingButton, "CollectKeepAliveRangeBonusSettingButton", "CollectKeepAliveRangeBonusSettingText", Vector2.zero, CycleCollectKeepAliveRangeBonus);
         hapticsSettingButton = EnsureSettingButton(ref hapticsSettingText, hapticsSettingButton, "HapticsSettingButton", "HapticsSettingText", Vector2.zero, CycleHapticsEnabled);
         fpsCounterSettingButton = EnsureSettingButton(ref fpsCounterSettingText, fpsCounterSettingButton, "FpsCounterSettingButton", "FpsCounterSettingText", Vector2.zero, CycleFpsCounterEnabled);
@@ -2427,6 +2494,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(deathTimerSettingButton, "ROUND RULES");
         AttachLeftSectionButton(inventoryLossSettingButton, "ROUND RULES");
         AttachLeftSectionButton(equipmentLossSettingButton, "ROUND RULES");
+        AttachLeftSectionButton(cosmicWormSettingButton, "ROUND RULES");
         AttachLeftSectionButton(crazyEnemiesEffectSettingButton, "ROUND RULES");
         AttachLeftSectionButton(fogOfWarEffectSettingButton, "ROUND RULES");
         AttachLeftSectionButton(pirateBaseEffectSettingButton, "ROUND RULES");
@@ -2442,6 +2510,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(spaceJunkSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(containersSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(randomLootWreckSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(hiddenTreasureSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(nebulaSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(fireNebulaSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(nebulaSizeSettingButton, "ENVIRONMENT");
@@ -2450,8 +2519,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(cloudsSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(cloudsSizeSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(extractionSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(extractionTypeSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(repairBaySettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(spaceFactorySettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(scienceStationSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(movingObjectsSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(gravityWellPhysicsSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(obstacleWeightSettingButton, "ENVIRONMENT");
@@ -2459,24 +2530,16 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         AttachLeftSectionButton(mapBackgroundSettingButton, "COSMETICS");
         AttachLeftSectionButton(visualEffectsSettingButton, "COSMETICS");
-        AttachLeftSectionButton(advancedBackgroundSettingButton, "COSMETICS");
         AttachLeftSectionButton(parallaxBackgroundSettingButton, "COSMETICS");
         AttachLeftSectionButton(backgroundObjectSettingButton, "COSMETICS");
-        AttachLeftSectionButton(startingVfxSettingButton, "COSMETICS");
 
         AttachLeftSectionButton(boosterSettingButton, "FEELING");
-        AttachLeftSectionButton(ammoSettingButton, "FEELING");
         AttachLeftSectionButton(boosterDelaySettingButton, "FEELING");
         AttachLeftSectionButton(shipDriftSettingButton, "FEELING");
         AttachLeftSectionButton(bulletPushSettingButton, "FEELING");
         AttachLeftSectionButton(batteringSettingButton, "FEELING");
         AttachLeftSectionButton(endDisasterSettingButton, "FEELING");
         AttachLeftSectionButton(endDisasterTimeSettingButton, "FEELING");
-        AttachLeftSectionButton(shootingModelSettingButton, "FEELING");
-        AttachLeftSectionButton(superAttackSettingButton, "FEELING");
-        AttachLeftSectionButton(advancedMovingJoystickSettingButton, "FEELING");
-        AttachLeftSectionButton(advancedShootingJoystickSettingButton, "FEELING");
-        AttachLeftSectionButton(dynamicUseSettingButton, "FEELING");
         AttachLeftSectionButton(collectKeepAliveRangeBonusSettingButton, "FEELING");
         AttachLeftSectionButton(hapticsSettingButton, "FEELING");
 
@@ -2928,8 +2991,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (sprite == null)
         {
             sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Resources/Visuals/Backgrounds/" + normalizedId + "_resource.png");
-            if (sprite == null)
-                sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/" + normalizedId + ".png");
         }
 #endif
 
@@ -2959,8 +3020,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (sprite == null)
         {
             sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Resources/Visuals/Backgrounds/background" + clampedIndex + "_resource.png");
-            if (sprite == null)
-                sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/tło" + clampedIndex + ".png");
         }
 #endif
 
@@ -3005,7 +3064,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         for (int i = 0; i < EnemyBotCatalog.AllDefinitions.Count; i++)
         {
             EnemyBotDefinition definition = EnemyBotCatalog.AllDefinitions[i];
-            float rowY = -112f - (i * EnemyRowHeight);
+            if (definition == null || !definition.ShowInEnemySettings)
+                continue;
+
+            float rowY = -112f - (GetVisibleEnemyDefinitionIndex(definition) * EnemyRowHeight);
             EnsureEnemyRowLabel(definition, new Vector2(26f, rowY));
 
             EnsureEnemySettingButton(definition, "enabled", GetEnemyCellPosition(0, rowY), () => CycleEnemyEnabled(definition.Kind));
@@ -3211,8 +3273,39 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     float ResolveEnemyTableContentHeight()
     {
-        float rowsHeight = 126f + EnemyBotCatalog.AllDefinitions.Count * EnemyRowHeight + 24f;
+        float rowsHeight = 126f + GetVisibleEnemyDefinitionCount() * EnemyRowHeight + 24f;
         return Mathf.Max(RightTableHeight, rowsHeight);
+    }
+
+    int GetVisibleEnemyDefinitionCount()
+    {
+        int count = 0;
+        for (int i = 0; i < EnemyBotCatalog.AllDefinitions.Count; i++)
+        {
+            EnemyBotDefinition definition = EnemyBotCatalog.AllDefinitions[i];
+            if (definition != null && definition.ShowInEnemySettings)
+                count++;
+        }
+
+        return count;
+    }
+
+    int GetVisibleEnemyDefinitionIndex(EnemyBotDefinition target)
+    {
+        int index = 0;
+        for (int i = 0; i < EnemyBotCatalog.AllDefinitions.Count; i++)
+        {
+            EnemyBotDefinition definition = EnemyBotCatalog.AllDefinitions[i];
+            if (definition == null || !definition.ShowInEnemySettings)
+                continue;
+
+            if (definition == target)
+                return index;
+
+            index++;
+        }
+
+        return index;
     }
 
     void UpdateEnemyTableContentHeight()
@@ -3550,12 +3643,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
-        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AdvancedBackgroundEnabledKey))
-        {
-            props[RoomSettings.AdvancedBackgroundEnabledKey] = RoomSettings.DefaultAdvancedBackgroundEnabled;
-            changed = true;
-        }
-
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ParallaxBackgroundKey))
         {
             props[RoomSettings.ParallaxBackgroundKey] = LobbyMapCatalog.GetDefaultParallaxBackgroundId(RoomSettings.GetSelectedLobbyMapId());
@@ -3574,12 +3661,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                 RoomSettings.GetSelectedLobbyMapId(),
                 LobbyMapCatalog.GravityWellMapId,
                 System.StringComparison.Ordinal);
-            changed = true;
-        }
-
-        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.StartingVfxEnabledKey))
-        {
-            props[RoomSettings.StartingVfxEnabledKey] = RoomSettings.DefaultStartingVfxEnabled;
             changed = true;
         }
 
@@ -3697,6 +3778,21 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.HiddenTreasureEnabledKey))
+        {
+            props[RoomSettings.HiddenTreasureEnabledKey] = string.Equals(
+                RoomSettings.GetSelectedLobbyMapId(),
+                LobbyMapCatalog.GravityWellMapId,
+                System.StringComparison.Ordinal);
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.CosmicWormEnabledKey))
+        {
+            props[RoomSettings.CosmicWormEnabledKey] = RoomSettings.DefaultCosmicWormEnabled;
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.NebulaDensityKey))
         {
             props[RoomSettings.NebulaDensityKey] = "medium";
@@ -3745,6 +3841,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ExtractionTypeKey))
+        {
+            props[RoomSettings.ExtractionTypeKey] = LobbyMapCatalog.GetDefaultExtractionType(RoomSettings.GetSelectedLobbyMapId());
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.RepairBayCountKey))
         {
             props[RoomSettings.RepairBayCountKey] = RoomSettings.DefaultRepairBayCount;
@@ -3757,15 +3859,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
-        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.BoosterSlowdownKey))
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ScienceStationCountKey))
         {
-            props[RoomSettings.BoosterSlowdownKey] = RoomSettings.DefaultBoosterSlowdownPercent;
+            props[RoomSettings.ScienceStationCountKey] = LobbyMapCatalog.GetDefaultScienceStationCount(RoomSettings.GetSelectedLobbyMapId());
             changed = true;
         }
 
-        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AmmoCountKey))
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.BoosterSlowdownKey))
         {
-            props[RoomSettings.AmmoCountKey] = RoomSettings.DefaultAmmoCount;
+            props[RoomSettings.BoosterSlowdownKey] = RoomSettings.DefaultBoosterSlowdownPercent;
             changed = true;
         }
 
@@ -3908,36 +4010,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.BatteringDamageKey))
         {
             props[RoomSettings.BatteringDamageKey] = RoomSettings.DefaultBatteringDamage;
-            changed = true;
-        }
-
-        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ShootingModelKey))
-        {
-            props[RoomSettings.ShootingModelKey] = RoomSettings.DefaultShootingModel;
-            changed = true;
-        }
-
-        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.SuperAttackEnabledKey))
-        {
-            props[RoomSettings.SuperAttackEnabledKey] = RoomSettings.DefaultSuperAttackEnabled;
-            changed = true;
-        }
-
-        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AdvancedMovingJoystickEnabledKey))
-        {
-            props[RoomSettings.AdvancedMovingJoystickEnabledKey] = RoomSettings.DefaultAdvancedMovingJoystickEnabled;
-            changed = true;
-        }
-
-        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AdvancedShootingJoystickEnabledKey))
-        {
-            props[RoomSettings.AdvancedShootingJoystickEnabledKey] = RoomSettings.DefaultAdvancedShootingJoystickEnabled;
-            changed = true;
-        }
-
-        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.DynamicUseLabelEnabledKey))
-        {
-            props[RoomSettings.DynamicUseLabelEnabledKey] = RoomSettings.DefaultDynamicUseLabelEnabled;
             changed = true;
         }
 
@@ -4137,18 +4209,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RefreshHostSettingsUi();
     }
 
-    void CycleAdvancedBackgroundEnabled()
-    {
-        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
-            return;
-
-        Hashtable props = new Hashtable();
-        props[RoomSettings.AdvancedBackgroundEnabledKey] = !RoomSettings.IsAdvancedBackgroundEnabled();
-        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
-        GameVisualTheme.RequestRuntimeRefresh();
-        RefreshHostSettingsUi();
-    }
-
     void CycleParallaxBackground()
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
@@ -4198,17 +4258,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         Hashtable props = new Hashtable();
         props[RoomSettings.GravityWellPhysicsEnabledKey] = !RoomSettings.IsGravityWellPhysicsEnabled();
-        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
-        RefreshHostSettingsUi();
-    }
-
-    void CycleStartingVfxEnabled()
-    {
-        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
-            return;
-
-        Hashtable props = new Hashtable();
-        props[RoomSettings.StartingVfxEnabledKey] = !AreStartingVfxEnabled();
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RefreshHostSettingsUi();
     }
@@ -4335,6 +4384,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             RoomSettings.DefaultRandomLootWreckCount);
     }
 
+    void CycleHiddenTreasureEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.HiddenTreasureEnabledKey] = !RoomSettings.IsHiddenTreasureEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
     void CycleNebulaDensity()
     {
         CycleDensitySetting(RoomSettings.NebulaDensityKey, GetNebulaDensity());
@@ -4394,6 +4454,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RefreshHostSettingsUi();
     }
 
+    void CycleExtractionType()
+    {
+        CycleStringSetting(
+            RoomSettings.ExtractionTypeKey,
+            ExtractionTypeOptions,
+            GetExtractionType(),
+            RoomSettings.DefaultExtractionType);
+    }
+
     void CycleRepairBayCount()
     {
         CycleIntSetting(
@@ -4412,6 +4481,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             RoomSettings.DefaultSpaceFactoryCount);
     }
 
+    void CycleScienceStationCount()
+    {
+        CycleIntSetting(
+            RoomSettings.ScienceStationCountKey,
+            ScienceStationCountOptions,
+            GetScienceStationCount(),
+            RoomSettings.DefaultScienceStationCount);
+    }
+
     void CycleBoosterSlowdown()
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
@@ -4426,24 +4504,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         Hashtable props = new Hashtable();
         props[RoomSettings.BoosterSlowdownKey] = BoosterSlowdownOptions[nextIndex];
-        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
-        RefreshHostSettingsUi();
-    }
-
-    void CycleAmmoCount()
-    {
-        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
-            return;
-
-        int current = GetAmmoCount();
-        int index = System.Array.IndexOf(AmmoCountOptions, current);
-        if (index < 0)
-            index = 1;
-
-        int nextIndex = (index + 1) % AmmoCountOptions.Length;
-
-        Hashtable props = new Hashtable();
-        props[RoomSettings.AmmoCountKey] = AmmoCountOptions[nextIndex];
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RefreshHostSettingsUi();
     }
@@ -4487,6 +4547,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         Hashtable props = new Hashtable();
         props[RoomSettings.EquipmentLossEnabledKey] = !RoomSettings.IsEquipmentLossEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
+    void CycleCosmicWormEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.CosmicWormEnabledKey] = !RoomSettings.IsCosmicWormEnabled();
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RefreshHostSettingsUi();
     }
@@ -4691,65 +4762,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             RoomSettings.DefaultBatteringDamage);
     }
 
-    void CycleShootingModel()
-    {
-        CycleStringSetting(
-            RoomSettings.ShootingModelKey,
-            ShootingModelOptions,
-            GetShootingModel(),
-            RoomSettings.DefaultShootingModel);
-    }
-
     void OpenGunSetup()
     {
         if (!PhotonNetwork.InRoom || RoomSettings.GetSessionState() != RoomSettings.SessionStateInLobby)
             return;
 
         GunSetupOverlayUI.Show();
-    }
-
-    void CycleSuperAttackEnabled()
-    {
-        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
-            return;
-
-        Hashtable props = new Hashtable();
-        props[RoomSettings.SuperAttackEnabledKey] = !RoomSettings.IsSuperAttackToggleEnabled();
-        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
-        RefreshHostSettingsUi();
-    }
-
-    void CycleAdvancedMovingJoystickEnabled()
-    {
-        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
-            return;
-
-        Hashtable props = new Hashtable();
-        props[RoomSettings.AdvancedMovingJoystickEnabledKey] = !RoomSettings.IsAdvancedMovingJoystickEnabled();
-        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
-        RefreshHostSettingsUi();
-    }
-
-    void CycleAdvancedShootingJoystickEnabled()
-    {
-        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
-            return;
-
-        Hashtable props = new Hashtable();
-        props[RoomSettings.AdvancedShootingJoystickEnabledKey] = !RoomSettings.IsAdvancedShootingJoystickEnabled();
-        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
-        RefreshHostSettingsUi();
-    }
-
-    void CycleDynamicUseLabelEnabled()
-    {
-        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
-            return;
-
-        Hashtable props = new Hashtable();
-        props[RoomSettings.DynamicUseLabelEnabledKey] = !RoomSettings.IsDynamicUseLabelEnabled();
-        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
-        RefreshHostSettingsUi();
     }
 
     void CycleCollectKeepAliveRangeBonus()
@@ -4931,9 +4949,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (visualEffectsSettingText != null)
             visualEffectsSettingText.text = "VISUALS: " + (AreVisualEffectsEnabled() ? "ON" : "OFF");
 
-        if (advancedBackgroundSettingText != null)
-            advancedBackgroundSettingText.text = "ADVANCED BACKGROUND: " + (RoomSettings.IsAdvancedBackgroundEnabled() ? "YES" : "NO");
-
         if (parallaxBackgroundSettingText != null)
             parallaxBackgroundSettingText.text = "PARALLAX BACKGROUND: " + FormatParallaxBackground(GetParallaxBackground());
 
@@ -4942,9 +4957,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (gravityWellPhysicsSettingText != null)
             gravityWellPhysicsSettingText.text = "GRAVITY FIELD: " + (RoomSettings.IsGravityWellPhysicsEnabled() ? "ON" : "OFF");
-
-        if (startingVfxSettingText != null)
-            startingVfxSettingText.text = "STARTING VFX: " + (AreStartingVfxEnabled() ? "ON" : "OFF");
 
         if (endDisasterSettingText != null)
             endDisasterSettingText.text = "END DISASTER: " + FormatEndDisasterMode(GetEndDisasterMode());
@@ -4982,6 +4994,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (randomLootWreckSettingText != null)
             randomLootWreckSettingText.text = "RANDOM WRECKS: " + FormatRandomLootWreckCount(GetRandomLootWreckCount());
 
+        if (hiddenTreasureSettingText != null)
+            hiddenTreasureSettingText.text = "HIDDEN TREASURE: " + (RoomSettings.IsHiddenTreasureEnabled() ? "ON" : "OFF");
+
         if (nebulaSettingText != null)
             nebulaSettingText.text = "NEBULA DENSITY: " + FormatDensity(GetNebulaDensity());
 
@@ -5006,17 +5021,20 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (extractionSettingText != null)
             extractionSettingText.text = "EXTRACTION ZONES: " + GetExtractionCount();
 
+        if (extractionTypeSettingText != null)
+            extractionTypeSettingText.text = "EXTRACTION TYPE: " + FormatExtractionType(GetExtractionType());
+
         if (repairBaySettingText != null)
             repairBaySettingText.text = "REPAIR BAY: " + GetRepairBayCount();
 
         if (spaceFactorySettingText != null)
             spaceFactorySettingText.text = "SPACE FACTORY: " + GetSpaceFactoryCount();
 
+        if (scienceStationSettingText != null)
+            scienceStationSettingText.text = "SCIENCE STATION: " + (GetScienceStationCount() > 0 ? "ON" : "OFF");
+
         if (boosterSettingText != null)
             boosterSettingText.text = "EMPTY BOOSTER SLOWDOWN: " + GetBoosterSlowdownPercent() + "%";
-
-        if (ammoSettingText != null)
-            ammoSettingText.text = "AMMO: " + GetAmmoCount();
 
         if (boosterDelaySettingText != null)
             boosterDelaySettingText.text = "BOOST COOLDOWN: " + GetBoosterRecoveryDelay() + "s";
@@ -5032,6 +5050,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (equipmentLossSettingText != null)
             equipmentLossSettingText.text = "EQUIPMENT LOSS: " + (RoomSettings.IsEquipmentLossEnabled() ? "YES" : "NO");
+
+        if (cosmicWormSettingText != null)
+            cosmicWormSettingText.text = "COSMIC WORM: " + (RoomSettings.IsCosmicWormEnabled() ? "ON" : "OFF");
 
         if (crazyEnemiesEffectSettingText != null)
             crazyEnemiesEffectSettingText.text = "CRAZY ENEMIES: " + FormatMapEffectSetting(RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, RoomSettings.CrazyEnemiesActiveKey) + " (+DENSITY)";
@@ -5053,21 +5074,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (batteringSettingText != null)
             batteringSettingText.text = "BATTERING: " + FormatBatteringDamage(GetBatteringDamage());
-
-        if (shootingModelSettingText != null)
-            shootingModelSettingText.text = "SHOOTING MODEL: " + FormatShootingModel(GetShootingModel());
-
-        if (superAttackSettingText != null)
-            superAttackSettingText.text = "SUPERATTACK: " + (RoomSettings.IsSuperAttackToggleEnabled() ? "ON" : "OFF");
-
-        if (advancedMovingJoystickSettingText != null)
-            advancedMovingJoystickSettingText.text = "ADVANCED MOVING JOYSTICK: " + (RoomSettings.IsAdvancedMovingJoystickEnabled() ? "ON" : "OFF");
-
-        if (advancedShootingJoystickSettingText != null)
-            advancedShootingJoystickSettingText.text = "ADVANCED SHOOTING JOYSTICK: " + (RoomSettings.IsAdvancedShootingJoystickEnabled() ? "ON" : "OFF");
-
-        if (dynamicUseSettingText != null)
-            dynamicUseSettingText.text = "DYNAMIC USE: " + (RoomSettings.IsDynamicUseLabelEnabled() ? "ON" : "OFF");
 
         if (collectKeepAliveRangeBonusSettingText != null)
             collectKeepAliveRangeBonusSettingText.text = "COLLECT RANGE BUFFER: " + RoomSettings.GetCollectKeepAliveRangeBonusPercent() + "%";
@@ -5091,10 +5097,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(mapSizeSettingButton, isHost);
         SetSettingButtonState(mapBackgroundSettingButton, isHost);
         SetSettingButtonState(visualEffectsSettingButton, isHost);
-        SetSettingButtonState(advancedBackgroundSettingButton, isHost);
         SetSettingButtonState(parallaxBackgroundSettingButton, isHost);
         SetSettingButtonState(gravityWellPhysicsSettingButton, isHost);
-        SetSettingButtonState(startingVfxSettingButton, isHost);
         SetSettingButtonState(endDisasterSettingButton, isHost);
         SetSettingButtonState(endDisasterTimeSettingButton, isHost);
         SetSettingButtonState(obstacleSettingButton, isHost);
@@ -5107,6 +5111,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(spaceJunkSettingButton, isHost);
         SetSettingButtonState(containersSettingButton, isHost);
         SetSettingButtonState(randomLootWreckSettingButton, isHost);
+        SetSettingButtonState(hiddenTreasureSettingButton, isHost);
         SetSettingButtonState(nebulaSettingButton, isHost);
         SetSettingButtonState(fireNebulaSettingButton, isHost);
         SetSettingButtonState(nebulaSizeSettingButton, isHost);
@@ -5115,15 +5120,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(cloudsSettingButton, isHost);
         SetSettingButtonState(cloudsSizeSettingButton, isHost);
         SetSettingButtonState(extractionSettingButton, isHost);
+        SetSettingButtonState(extractionTypeSettingButton, isHost);
         SetSettingButtonState(repairBaySettingButton, isHost);
         SetSettingButtonState(spaceFactorySettingButton, isHost);
+        SetSettingButtonState(scienceStationSettingButton, isHost);
         SetSettingButtonState(boosterSettingButton, isHost);
-        SetSettingButtonState(ammoSettingButton, isHost);
         SetSettingButtonState(boosterDelaySettingButton, isHost);
         SetSettingButtonState(shipDriftSettingButton, isHost);
         SetSettingButtonState(deathTimerSettingButton, isHost);
         SetSettingButtonState(inventoryLossSettingButton, isHost);
         SetSettingButtonState(equipmentLossSettingButton, isHost);
+        SetSettingButtonState(cosmicWormSettingButton, isHost);
         SetSettingButtonState(crazyEnemiesEffectSettingButton, isHost);
         SetSettingButtonState(fogOfWarEffectSettingButton, isHost);
         SetSettingButtonState(pirateBaseEffectSettingButton, isHost);
@@ -5131,11 +5138,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(movingObjectsSettingButton, isHost);
         SetSettingButtonState(bulletPushSettingButton, isHost);
         SetSettingButtonState(batteringSettingButton, isHost);
-        SetSettingButtonState(shootingModelSettingButton, isHost);
-        SetSettingButtonState(superAttackSettingButton, isHost);
-        SetSettingButtonState(advancedMovingJoystickSettingButton, isHost);
-        SetSettingButtonState(advancedShootingJoystickSettingButton, isHost);
-        SetSettingButtonState(dynamicUseSettingButton, isHost);
         SetSettingButtonState(hapticsSettingButton, isHost);
         SetSettingButtonState(fpsCounterSettingButton, isHost);
         SetSettingButtonState(gunSetupSettingButton, isHost);
@@ -5386,6 +5388,50 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         }
     }
 
+    async void OnDeveloperCheatUnlockBlueprintsClicked()
+    {
+        if (PlayerProfileService.Instance == null || developerCheatOverlayObject == null)
+            return;
+
+        try
+        {
+            RefreshDeveloperCheatOverlay("Unlocking blueprints...", true);
+            await PlayerProfileService.Instance.UnlockAllBlueprintsAsync();
+            RefreshDeveloperCheatOverlay("All blueprints unlocked.");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Developer cheat unlock blueprints failed: " + ex);
+            RefreshDeveloperCheatOverlay("Could not unlock blueprints.");
+        }
+        finally
+        {
+            RefreshDeveloperCheatOverlay();
+        }
+    }
+
+    async void OnDeveloperCheatLockBlueprintsClicked()
+    {
+        if (PlayerProfileService.Instance == null || developerCheatOverlayObject == null)
+            return;
+
+        try
+        {
+            RefreshDeveloperCheatOverlay("Locking blueprints...", true);
+            await PlayerProfileService.Instance.LockAllBlueprintsAsync();
+            RefreshDeveloperCheatOverlay("All blueprints locked.");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Developer cheat lock blueprints failed: " + ex);
+            RefreshDeveloperCheatOverlay("Could not lock blueprints.");
+        }
+        finally
+        {
+            RefreshDeveloperCheatOverlay();
+        }
+    }
+
     void OnDeveloperCheatResetAccountClicked()
     {
         if (developerCheatResetConfirmObject == null)
@@ -5528,11 +5574,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.MapBackgroundKey) ||
                changedProps.ContainsKey(RoomSettings.SelectedMapKey) ||
                changedProps.ContainsKey(RoomSettings.VisualEffectsEnabledKey) ||
-               changedProps.ContainsKey(RoomSettings.AdvancedBackgroundEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.ParallaxBackgroundKey) ||
                changedProps.ContainsKey(RoomSettings.BackgroundObjectKey) ||
                changedProps.ContainsKey(RoomSettings.GravityWellPhysicsEnabledKey) ||
-               changedProps.ContainsKey(RoomSettings.StartingVfxEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.EndDisasterModeKey) ||
                changedProps.ContainsKey(RoomSettings.EndDisasterWarningSecondsKey) ||
                changedProps.ContainsKey(RoomSettings.ObstacleDensityKey) ||
@@ -5557,6 +5601,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.SpaceJunkDensityKey) ||
                changedProps.ContainsKey(RoomSettings.ContainersDensityKey) ||
                changedProps.ContainsKey(RoomSettings.RandomLootWreckCountKey) ||
+               changedProps.ContainsKey(RoomSettings.HiddenTreasureEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.NebulaDensityKey) ||
                changedProps.ContainsKey(RoomSettings.FireNebulaDensityKey) ||
                changedProps.ContainsKey(RoomSettings.NebulaSizeKey) ||
@@ -5565,24 +5610,21 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.CloudsDensityKey) ||
                changedProps.ContainsKey(RoomSettings.CloudsSizeKey) ||
                changedProps.ContainsKey(RoomSettings.ExtractionCountKey) ||
+               changedProps.ContainsKey(RoomSettings.ExtractionTypeKey) ||
                changedProps.ContainsKey(RoomSettings.RepairBayCountKey) ||
                changedProps.ContainsKey(RoomSettings.SpaceFactoryCountKey) ||
+               changedProps.ContainsKey(RoomSettings.ScienceStationCountKey) ||
                changedProps.ContainsKey(RoomSettings.BoosterSlowdownKey) ||
-               changedProps.ContainsKey(RoomSettings.AmmoCountKey) ||
                changedProps.ContainsKey(RoomSettings.BoosterRecoveryDelayKey) ||
                changedProps.ContainsKey(RoomSettings.ShipDriftEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.LastShipTimerMultiplierKey) ||
                changedProps.ContainsKey(RoomSettings.InventoryLossEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.EquipmentLossEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.CosmicWormEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.MovingObjectsEnabledKey) ||
                ContainsEnemyRoomSettingChange(changedProps) ||
                changedProps.ContainsKey(RoomSettings.BulletPushMultiplierKey) ||
                changedProps.ContainsKey(RoomSettings.BatteringDamageKey) ||
-               changedProps.ContainsKey(RoomSettings.ShootingModelKey) ||
-               changedProps.ContainsKey(RoomSettings.SuperAttackEnabledKey) ||
-               changedProps.ContainsKey(RoomSettings.AdvancedMovingJoystickEnabledKey) ||
-               changedProps.ContainsKey(RoomSettings.AdvancedShootingJoystickEnabledKey) ||
-               changedProps.ContainsKey(RoomSettings.DynamicUseLabelEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.CollectKeepAliveRangeBonusPercentKey) ||
                changedProps.ContainsKey(RoomSettings.HapticsEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.FpsCounterEnabledKey) ||
@@ -5667,11 +5709,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return RoomSettings.AreVisualEffectsEnabled();
     }
 
-    bool AreStartingVfxEnabled()
-    {
-        return RoomSettings.AreStartingVfxEnabled();
-    }
-
     string GetEndDisasterMode()
     {
         return RoomSettings.GetEndDisasterMode();
@@ -5742,6 +5779,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return RoomSettings.GetExtractionCount();
     }
 
+    string GetExtractionType()
+    {
+        return RoomSettings.GetExtractionType();
+    }
+
     int GetRepairBayCount()
     {
         return RoomSettings.GetRepairBayCount();
@@ -5752,14 +5794,14 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return RoomSettings.GetSpaceFactoryCount();
     }
 
+    int GetScienceStationCount()
+    {
+        return RoomSettings.GetScienceStationCount();
+    }
+
     int GetBoosterSlowdownPercent()
     {
         return RoomSettings.GetBoosterSlowdownPercent();
-    }
-
-    int GetAmmoCount()
-    {
-        return RoomSettings.GetAmmoCount();
     }
 
     int GetBoosterRecoveryDelay()
@@ -5815,11 +5857,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     int GetBatteringDamage()
     {
         return RoomSettings.GetBatteringDamage();
-    }
-
-    string GetShootingModel()
-    {
-        return RoomSettings.GetShootingModel();
     }
 
     int GetObstacleWeightFactor()
@@ -5911,6 +5948,19 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return count <= 0 ? "OFF" : Mathf.Clamp(count, 1, 5).ToString();
     }
 
+    string FormatExtractionType(string extractionType)
+    {
+        switch (RoomSettings.NormalizeExtractionType(extractionType))
+        {
+            case RoomSettings.ExtractionTypeCarrier:
+                return "CARRIER";
+            case RoomSettings.ExtractionTypeSpaceCity:
+                return "SPACE CITY";
+            default:
+                return "PORTAL";
+        }
+    }
+
     string FormatMapSize(string mapSize)
     {
         switch (mapSize)
@@ -5989,11 +6039,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             default:
                 return "OFF";
         }
-    }
-
-    string FormatShootingModel(string model)
-    {
-        return RoomSettings.NormalizeShootingModel(model).ToUpperInvariant();
     }
 
     string GetDisplayName(Player player)

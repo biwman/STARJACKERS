@@ -72,6 +72,27 @@ public class DroppedCargoManager : MonoBehaviourPunCallbacks
         Vector2 driftDirection = Quaternion.Euler(0f, 0f, spreadAngle) * behindDirection;
         Vector2 driftVelocity = driftDirection.normalized * Mathf.Lerp(0.45f, 0.85f, Mathf.PerlinNoise(0.63f, spreadSeed * 0.0013f));
 
+        SpawnDroppedCargoCrate(itemId, dropPosition, driftVelocity);
+    }
+
+    public static void DropItemAtPosition(string itemId, Vector3 dropPosition, Vector2 driftVelocity)
+    {
+        if (string.IsNullOrWhiteSpace(itemId) || !PhotonNetwork.InRoom)
+            return;
+
+        EnsureExists();
+
+        if (driftVelocity.sqrMagnitude < 0.0001f)
+            driftVelocity = Random.insideUnitCircle.normalized * 0.55f;
+
+        if (driftVelocity.sqrMagnitude < 0.0001f)
+            driftVelocity = Vector2.down * 0.55f;
+
+        SpawnDroppedCargoCrate(itemId, dropPosition, Vector2.ClampMagnitude(driftVelocity, 1.25f));
+    }
+
+    static void SpawnDroppedCargoCrate(string itemId, Vector3 dropPosition, Vector2 driftVelocity)
+    {
         GameObject crateObject = PhotonNetwork.Instantiate(
             "DroppedCargoCrate",
             dropPosition,

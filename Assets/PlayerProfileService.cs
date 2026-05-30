@@ -24,9 +24,13 @@ public class PlayerProfileService : MonoBehaviour
     const string CloudInventoryKey = "profile_inventory";
     const string CloudSelectedPilotKey = "profile_selected_pilot";
     const string CloudUnlockedPilotsKey = "profile_unlocked_pilots";
+    const string CloudUnlockedBlueprintsKey = "profile_unlocked_blueprints";
+    const string CloudMissEnigmaPurchasedBlueprintsKey = "profile_miss_enigma_purchased_blueprints";
     const string CloudPilotDroneKillsKey = "profile_pilot_drone_kills";
     const string CloudPilotSoldItemsAstronsKey = "profile_pilot_sold_items_astrons";
     const string CloudPilotPirateBayReturnsKey = "profile_pilot_pirate_bay_returns";
+    const string CloudPilotAsteroidSalvageCountKey = "profile_pilot_asteroid_salvage_count";
+    const string CloudPilotAshOverloadReturnsKey = "profile_pilot_ash_overload_returns";
     const string CloudProjectsKey = "profile_projects";
 
     static PlayerProfileService instance;
@@ -162,9 +166,13 @@ public class PlayerProfileService : MonoBehaviour
             CloudInventoryKey,
             CloudSelectedPilotKey,
             CloudUnlockedPilotsKey,
+            CloudUnlockedBlueprintsKey,
+            CloudMissEnigmaPurchasedBlueprintsKey,
             CloudPilotDroneKillsKey,
             CloudPilotSoldItemsAstronsKey,
             CloudPilotPirateBayReturnsKey,
+            CloudPilotAsteroidSalvageCountKey,
+            CloudPilotAshOverloadReturnsKey,
             CloudProjectsKey
         };
         Dictionary<string, Item> data = await RunCloudOperationWithRetryAsync(
@@ -179,9 +187,13 @@ public class PlayerProfileService : MonoBehaviour
         PlayerInventoryData inventory = PlayerInventoryData.Default();
         string selectedPilotId = PilotCatalog.JakeId;
         string[] unlockedPilotIds = PilotCatalog.GetDefaultUnlockedPilotIds();
+        string[] unlockedBlueprintIds = Array.Empty<string>();
+        string[] missEnigmaPurchasedBlueprintIds = Array.Empty<string>();
         int pilotDroneKills = 0;
         int pilotSoldItemsAstrons = 0;
         int pilotPirateBayReturns = 0;
+        int pilotAsteroidSalvageCount = 0;
+        int pilotAshOverloadReturns = 0;
         PlayerProjectProgressData projectProgress = ProjectCatalog.NormalizeProgress(null);
 
         if (data != null)
@@ -210,6 +222,12 @@ public class PlayerProfileService : MonoBehaviour
             if (data.TryGetValue(CloudUnlockedPilotsKey, out Item unlockedPilotsItem) && unlockedPilotsItem?.Value != null)
                 unlockedPilotIds = DeserializePilotUnlocks(unlockedPilotsItem.Value.GetAsString());
 
+            if (data.TryGetValue(CloudUnlockedBlueprintsKey, out Item unlockedBlueprintsItem) && unlockedBlueprintsItem?.Value != null)
+                unlockedBlueprintIds = DeserializeBlueprintUnlocks(unlockedBlueprintsItem.Value.GetAsString());
+
+            if (data.TryGetValue(CloudMissEnigmaPurchasedBlueprintsKey, out Item missEnigmaPurchasedBlueprintsItem) && missEnigmaPurchasedBlueprintsItem?.Value != null)
+                missEnigmaPurchasedBlueprintIds = DeserializeMissEnigmaBlueprintPurchases(missEnigmaPurchasedBlueprintsItem.Value.GetAsString());
+
             if (data.TryGetValue(CloudPilotDroneKillsKey, out Item droneKillsItem) && droneKillsItem?.Value != null)
                 pilotDroneKills = Mathf.Max(0, droneKillsItem.Value.GetAs<int>());
 
@@ -218,6 +236,12 @@ public class PlayerProfileService : MonoBehaviour
 
             if (data.TryGetValue(CloudPilotPirateBayReturnsKey, out Item pirateBayReturnsItem) && pirateBayReturnsItem?.Value != null)
                 pilotPirateBayReturns = Mathf.Max(0, pirateBayReturnsItem.Value.GetAs<int>());
+
+            if (data.TryGetValue(CloudPilotAsteroidSalvageCountKey, out Item asteroidSalvageItem) && asteroidSalvageItem?.Value != null)
+                pilotAsteroidSalvageCount = Mathf.Max(0, asteroidSalvageItem.Value.GetAs<int>());
+
+            if (data.TryGetValue(CloudPilotAshOverloadReturnsKey, out Item ashOverloadReturnsItem) && ashOverloadReturnsItem?.Value != null)
+                pilotAshOverloadReturns = Mathf.Max(0, ashOverloadReturnsItem.Value.GetAs<int>());
 
             if (data.TryGetValue(CloudProjectsKey, out Item projectsItem) && projectsItem?.Value != null)
                 projectProgress = DeserializeProjectProgress(projectsItem.Value.GetAsString());
@@ -236,13 +260,19 @@ public class PlayerProfileService : MonoBehaviour
             Inventory = inventory,
             SelectedPilotId = selectedPilotId,
             UnlockedPilotIds = PilotCatalog.NormalizeUnlockedPilotIds(unlockedPilotIds),
+            UnlockedBlueprintIds = NormalizeUnlockedBlueprintIds(unlockedBlueprintIds),
+            MissEnigmaPurchasedBlueprintIds = NormalizeMissEnigmaBlueprintPurchases(missEnigmaPurchasedBlueprintIds),
             PilotDroneKills = pilotDroneKills,
             PilotSoldItemsAstrons = pilotSoldItemsAstrons,
             PilotPirateBayReturns = pilotPirateBayReturns,
+            PilotAsteroidSalvageCount = pilotAsteroidSalvageCount,
+            PilotAshOverloadReturns = pilotAshOverloadReturns,
             ProjectProgress = ProjectCatalog.NormalizeProgress(projectProgress)
         };
 
         EnsurePilotDefaults();
+        EnsureBlueprintUnlocks();
+        EnsureMissEnigmaBlueprintPurchases();
         EnsureProjectProgress();
 
         ApplyProfileToPhoton();
@@ -285,13 +315,19 @@ public class PlayerProfileService : MonoBehaviour
             Inventory = CurrentProfile != null && CurrentProfile.Inventory != null ? CurrentProfile.Inventory.Clone() : PlayerInventoryData.Default(),
             SelectedPilotId = CurrentProfile != null ? PilotCatalog.NormalizePilotId(CurrentProfile.SelectedPilotId) : PilotCatalog.JakeId,
             UnlockedPilotIds = CurrentProfile != null ? PilotCatalog.NormalizeUnlockedPilotIds(CurrentProfile.UnlockedPilotIds) : PilotCatalog.GetDefaultUnlockedPilotIds(),
+            UnlockedBlueprintIds = CurrentProfile != null ? NormalizeUnlockedBlueprintIds(CurrentProfile.UnlockedBlueprintIds) : Array.Empty<string>(),
+            MissEnigmaPurchasedBlueprintIds = CurrentProfile != null ? NormalizeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds) : Array.Empty<string>(),
             PilotDroneKills = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotDroneKills) : 0,
             PilotSoldItemsAstrons = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotSoldItemsAstrons) : 0,
             PilotPirateBayReturns = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotPirateBayReturns) : 0,
+            PilotAsteroidSalvageCount = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotAsteroidSalvageCount) : 0,
+            PilotAshOverloadReturns = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotAshOverloadReturns) : 0,
             ProjectProgress = CurrentProfile != null ? ProjectCatalog.NormalizeProgress(CurrentProfile.ProjectProgress) : ProjectCatalog.NormalizeProgress(null)
         };
 
         EnsurePilotDefaults();
+        EnsureBlueprintUnlocks();
+        EnsureMissEnigmaBlueprintPurchases();
         EnsureProjectProgress();
         ApplyProfileToPhoton();
         NotifyProfileChanged();
@@ -306,6 +342,8 @@ public class PlayerProfileService : MonoBehaviour
             IsBusy = true;
             EnsureInventory();
             EnsurePilotDefaults();
+            EnsureBlueprintUnlocks();
+            EnsureMissEnigmaBlueprintPurchases();
             EnsureProjectProgress();
 
             var data = new Dictionary<string, object>
@@ -318,9 +356,13 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
                 [CloudSelectedPilotKey] = CurrentProfile.SelectedPilotId,
                 [CloudUnlockedPilotsKey] = SerializePilotUnlocks(CurrentProfile.UnlockedPilotIds),
+                [CloudUnlockedBlueprintsKey] = SerializeBlueprintUnlocks(CurrentProfile.UnlockedBlueprintIds),
+                [CloudMissEnigmaPurchasedBlueprintsKey] = SerializeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds),
                 [CloudPilotDroneKillsKey] = CurrentProfile.PilotDroneKills,
                 [CloudPilotSoldItemsAstronsKey] = CurrentProfile.PilotSoldItemsAstrons,
                 [CloudPilotPirateBayReturnsKey] = CurrentProfile.PilotPirateBayReturns,
+                [CloudPilotAsteroidSalvageCountKey] = CurrentProfile.PilotAsteroidSalvageCount,
+                [CloudPilotAshOverloadReturnsKey] = CurrentProfile.PilotAshOverloadReturns,
                 [CloudProjectsKey] = SerializeProjectProgress(CurrentProfile.ProjectProgress)
             };
 
@@ -347,6 +389,8 @@ public class PlayerProfileService : MonoBehaviour
 
         EnsureInventory();
         EnsurePilotDefaults();
+        EnsureBlueprintUnlocks();
+        EnsureMissEnigmaBlueprintPurchases();
 
         var props = new ExitGames.Client.Photon.Hashtable
         {
@@ -484,15 +528,21 @@ public class PlayerProfileService : MonoBehaviour
                 Inventory = PlayerInventoryData.Default(),
                 SelectedPilotId = PilotCatalog.JakeId,
                 UnlockedPilotIds = PilotCatalog.GetDefaultUnlockedPilotIds(),
+                UnlockedBlueprintIds = Array.Empty<string>(),
+                MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
                 PilotDroneKills = 0,
                 PilotSoldItemsAstrons = 0,
                 PilotPirateBayReturns = 0,
+                PilotAsteroidSalvageCount = 0,
+                PilotAshOverloadReturns = 0,
                 ProjectProgress = ProjectCatalog.NormalizeProgress(null)
             };
 
             awardedMatchTokens.Clear();
             EnsureInventory();
             EnsurePilotDefaults();
+            EnsureBlueprintUnlocks();
+            EnsureMissEnigmaBlueprintPurchases();
             EnsureProjectProgress();
 
             var data = new Dictionary<string, object>
@@ -505,9 +555,13 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
                 [CloudSelectedPilotKey] = CurrentProfile.SelectedPilotId,
                 [CloudUnlockedPilotsKey] = SerializePilotUnlocks(CurrentProfile.UnlockedPilotIds),
+                [CloudUnlockedBlueprintsKey] = SerializeBlueprintUnlocks(CurrentProfile.UnlockedBlueprintIds),
+                [CloudMissEnigmaPurchasedBlueprintsKey] = SerializeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds),
                 [CloudPilotDroneKillsKey] = CurrentProfile.PilotDroneKills,
                 [CloudPilotSoldItemsAstronsKey] = CurrentProfile.PilotSoldItemsAstrons,
                 [CloudPilotPirateBayReturnsKey] = CurrentProfile.PilotPirateBayReturns,
+                [CloudPilotAsteroidSalvageCountKey] = CurrentProfile.PilotAsteroidSalvageCount,
+                [CloudPilotAshOverloadReturnsKey] = CurrentProfile.PilotAshOverloadReturns,
                 [CloudProjectsKey] = SerializeProjectProgress(CurrentProfile.ProjectProgress)
             };
 
@@ -564,7 +618,7 @@ public class PlayerProfileService : MonoBehaviour
         if (loseEquipment)
         {
             StagePendingProtectedEquipment(protectedEquipmentItemId, CurrentProfile.Inventory.EquipmentSlots, shipSkinIndex);
-            CurrentProfile.Inventory.EquipmentSlots = new string[PlayerInventoryData.EquipmentSlotCount];
+            CurrentProfile.Inventory.EquipmentSlots = BuildPostLossEquipmentInventory(CurrentProfile.Inventory.EquipmentSlots, shipSkinIndex, ShouldPreserveEngineEquipmentOnLoss());
             changed = true;
         }
         else
@@ -841,17 +895,174 @@ public class PlayerProfileService : MonoBehaviour
         return true;
     }
 
+    public bool IsBlueprintUnlocked(string blueprintItemId)
+    {
+        EnsureBlueprintUnlocks();
+        if (!InventoryItemCatalog.IsBlueprintItem(blueprintItemId))
+            return false;
+
+        for (int i = 0; i < CurrentProfile.UnlockedBlueprintIds.Length; i++)
+        {
+            if (string.Equals(CurrentProfile.UnlockedBlueprintIds[i], blueprintItemId, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
+    public bool IsBlueprintUnlockedForItem(string itemId)
+    {
+        string blueprintItemId = InventoryItemCatalog.GetBlueprintItemId(itemId);
+        return IsBlueprintUnlocked(blueprintItemId);
+    }
+
+    public bool CanAffordItemTrade(string[] costItemIds)
+    {
+        EnsureInventory();
+
+        Dictionary<string, int> counts = BuildItemCounts(CurrentProfile.Inventory);
+        return HasRequiredItems(counts, costItemIds);
+    }
+
+    public bool IsMissEnigmaBlueprintPurchased(string blueprintItemId)
+    {
+        EnsureMissEnigmaBlueprintPurchases();
+        if (BlueprintCatalog.GetMissEnigmaOffer(blueprintItemId) == null)
+            return false;
+
+        for (int i = 0; i < CurrentProfile.MissEnigmaPurchasedBlueprintIds.Length; i++)
+        {
+            if (string.Equals(CurrentProfile.MissEnigmaPurchasedBlueprintIds[i], blueprintItemId, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
+    public async Task<bool> TryPurchaseMissEnigmaBlueprintAsync(string blueprintItemId)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+        EnsureMissEnigmaBlueprintPurchases();
+
+        BlueprintTradeOffer offer = BlueprintCatalog.GetMissEnigmaOffer(blueprintItemId);
+        if (offer == null || IsMissEnigmaBlueprintPurchased(blueprintItemId) || !CanAffordItemTrade(offer.CostItemIds))
+            return false;
+
+        PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
+        if (!RemoveRequiredItems(workingInventory, offer.CostItemIds))
+            return false;
+
+        bool stored = workingInventory.TryAddToPlayer(blueprintItemId);
+        if (!stored)
+            stored = workingInventory.TryAddToShip(blueprintItemId, GetEffectiveShipInventoryCapacity(CurrentProfile.ShipSkinIndex, workingInventory.EquipmentSlots), CurrentProfile.ShipSkinIndex);
+
+        if (!stored)
+            return false;
+
+        HashSet<string> purchased = new HashSet<string>(CurrentProfile.MissEnigmaPurchasedBlueprintIds, StringComparer.Ordinal)
+        {
+            blueprintItemId
+        };
+        string[] purchasedIds = new string[purchased.Count];
+        purchased.CopyTo(purchasedIds);
+        Array.Sort(purchasedIds, StringComparer.Ordinal);
+
+        CurrentProfile.Inventory = workingInventory;
+        CurrentProfile.MissEnigmaPurchasedBlueprintIds = NormalizeMissEnigmaBlueprintPurchases(purchasedIds);
+        await SaveInventoryAndMissEnigmaBlueprintPurchasesAsync();
+        return true;
+    }
+
+    public async Task<bool> TryTradeItemsForItemAsync(string outputItemId, string[] costItemIds)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        if (InventoryItemCatalog.GetDefinition(outputItemId) == null || !CanAffordItemTrade(costItemIds))
+            return false;
+
+        PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
+        if (!RemoveRequiredItems(workingInventory, costItemIds))
+            return false;
+
+        bool stored = workingInventory.TryAddToPlayer(outputItemId);
+        if (!stored)
+            stored = workingInventory.TryAddToShip(outputItemId, GetEffectiveShipInventoryCapacity(CurrentProfile.ShipSkinIndex, workingInventory.EquipmentSlots), CurrentProfile.ShipSkinIndex);
+
+        if (!stored)
+            return false;
+
+        CurrentProfile.Inventory = workingInventory;
+        await SaveInventoryOnlyAsync();
+        return true;
+    }
+
+    public async Task<bool> UseBlueprintItemAsync(bool fromShipInventory, int sourceIndex)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+        EnsureBlueprintUnlocks();
+
+        PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
+        string blueprintItemId = fromShipInventory
+            ? workingInventory.RemoveFromShip(sourceIndex)
+            : workingInventory.RemoveFromPlayer(sourceIndex);
+
+        if (!InventoryItemCatalog.IsBlueprintItem(blueprintItemId))
+            return false;
+
+        if (IsBlueprintUnlocked(blueprintItemId))
+            return false;
+
+        HashSet<string> unlocked = new HashSet<string>(CurrentProfile.UnlockedBlueprintIds, StringComparer.Ordinal)
+        {
+            blueprintItemId
+        };
+        string[] unlockedIds = new string[unlocked.Count];
+        unlocked.CopyTo(unlockedIds);
+        Array.Sort(unlockedIds, StringComparer.Ordinal);
+
+        CurrentProfile.Inventory = workingInventory;
+        CurrentProfile.UnlockedBlueprintIds = NormalizeUnlockedBlueprintIds(unlockedIds);
+        await SaveInventoryAndBlueprintsAsync();
+        return true;
+    }
+
+    public async Task UnlockAllBlueprintsAsync()
+    {
+        await EnsureInitializedAsync();
+        EnsureBlueprintUnlocks();
+
+        CurrentProfile.UnlockedBlueprintIds = NormalizeUnlockedBlueprintIds(InventoryItemCatalog.GetAllBlueprintItemIds());
+        await SaveBlueprintsAsync();
+    }
+
+    public async Task LockAllBlueprintsAsync()
+    {
+        await EnsureInitializedAsync();
+        EnsureBlueprintUnlocks();
+
+        CurrentProfile.UnlockedBlueprintIds = Array.Empty<string>();
+        await SaveBlueprintsAsync();
+    }
+
     public async Task<bool> SalvageInventoryItemAsync(bool fromShipInventory, int sourceIndex)
     {
         await EnsureInitializedAsync();
         EnsureInventory();
+        EnsureBlueprintUnlocks();
 
         PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
         string sourceItemPreview = fromShipInventory
             ? GetSlotItem(workingInventory.ShipSlots, sourceIndex)
             : GetSlotItem(workingInventory.PlayerSlots, sourceIndex);
 
-        string[] salvageOutputs = InventoryItemCatalog.GetSalvageOutputs(sourceItemPreview);
+        string[] salvageOutputs = InventoryItemCatalog.IsBlueprintItem(sourceItemPreview)
+            ? IsBlueprintUnlocked(sourceItemPreview)
+                ? new[] { InventoryItemCatalog.BlueprintScrapId }
+                : Array.Empty<string>()
+            : InventoryItemCatalog.GetSalvageOutputs(sourceItemPreview);
         if (string.IsNullOrWhiteSpace(sourceItemPreview) || salvageOutputs == null || salvageOutputs.Length == 0)
             return false;
 
@@ -1408,6 +1619,80 @@ public class PlayerProfileService : MonoBehaviour
         return CurrentProfile.PilotPirateBayReturns;
     }
 
+    public async Task<int> RecordPilotAsteroidSalvageAsync(int amount = 1)
+    {
+        await EnsureInitializedAsync();
+        EnsurePilotDefaults();
+
+        int increment = Mathf.Max(1, amount);
+        int previousCount = Mathf.Max(0, CurrentProfile.PilotAsteroidSalvageCount);
+        long updatedCount = (long)previousCount + increment;
+        CurrentProfile.PilotAsteroidSalvageCount = updatedCount > int.MaxValue ? int.MaxValue : (int)updatedCount;
+
+        try
+        {
+            IsBusy = true;
+            var data = new Dictionary<string, object>
+            {
+                [CloudPilotAsteroidSalvageCountKey] = CurrentProfile.PilotAsteroidSalvageCount
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                "save pilot asteroid salvage");
+            NotifyProfileChanged();
+        }
+        catch (Exception ex)
+        {
+            CurrentProfile.PilotAsteroidSalvageCount = previousCount;
+            Debug.LogError("PlayerProfileService pilot asteroid salvage save failed: " + ex);
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        return CurrentProfile.PilotAsteroidSalvageCount;
+    }
+
+    public async Task<int> RecordPilotAshOverloadReturnAsync(int amount = 1)
+    {
+        await EnsureInitializedAsync();
+        EnsurePilotDefaults();
+
+        int increment = Mathf.Max(1, amount);
+        int previousReturns = Mathf.Max(0, CurrentProfile.PilotAshOverloadReturns);
+        long updatedReturns = (long)previousReturns + increment;
+        CurrentProfile.PilotAshOverloadReturns = updatedReturns > int.MaxValue ? int.MaxValue : (int)updatedReturns;
+
+        try
+        {
+            IsBusy = true;
+            var data = new Dictionary<string, object>
+            {
+                [CloudPilotAshOverloadReturnsKey] = CurrentProfile.PilotAshOverloadReturns
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                "save pilot Ash overload returns");
+            NotifyProfileChanged();
+        }
+        catch (Exception ex)
+        {
+            CurrentProfile.PilotAshOverloadReturns = previousReturns;
+            Debug.LogError("PlayerProfileService pilot Ash overload return save failed: " + ex);
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        return CurrentProfile.PilotAshOverloadReturns;
+    }
+
     public async Task<string> RemoveShipItemAtAsync(int index)
     {
         await EnsureInitializedAsync();
@@ -1488,6 +1773,30 @@ public class PlayerProfileService : MonoBehaviour
             MarkInventoryChangedDeferred();
 
         return removedItems.ToArray();
+    }
+
+    public async Task<string> RemoveFirstShipItemDeferredSaveAsync(string matchItemId)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        if (string.IsNullOrWhiteSpace(matchItemId))
+            return null;
+
+        int capacity = GetActiveShipInventoryCapacity();
+        CurrentProfile.Inventory.Normalize();
+        for (int i = 0; i < CurrentProfile.Inventory.ShipSlots.Length && i < capacity; i++)
+        {
+            string itemId = CurrentProfile.Inventory.ShipSlots[i];
+            if (!string.Equals(itemId, matchItemId, StringComparison.Ordinal))
+                continue;
+
+            CurrentProfile.Inventory.ShipSlots[i] = null;
+            MarkInventoryChangedDeferred();
+            return itemId;
+        }
+
+        return null;
     }
 
     public async Task<int> AddItemsToShipDeferredSaveAsync(string[] itemIds)
@@ -1646,7 +1955,9 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudUnlockedPilotsKey] = SerializePilotUnlocks(CurrentProfile.UnlockedPilotIds),
                 [CloudPilotDroneKillsKey] = CurrentProfile.PilotDroneKills,
                 [CloudPilotSoldItemsAstronsKey] = CurrentProfile.PilotSoldItemsAstrons,
-                [CloudPilotPirateBayReturnsKey] = CurrentProfile.PilotPirateBayReturns
+                [CloudPilotPirateBayReturnsKey] = CurrentProfile.PilotPirateBayReturns,
+                [CloudPilotAsteroidSalvageCountKey] = CurrentProfile.PilotAsteroidSalvageCount,
+                [CloudPilotAshOverloadReturnsKey] = CurrentProfile.PilotAshOverloadReturns
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -1690,6 +2001,98 @@ public class PlayerProfileService : MonoBehaviour
         catch (Exception ex)
         {
             Debug.LogError("PlayerProfileService sell save failed: " + ex);
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    async Task SaveInventoryAndBlueprintsAsync()
+    {
+        try
+        {
+            IsBusy = true;
+            EnsureInventory();
+            EnsureBlueprintUnlocks();
+
+            var data = new Dictionary<string, object>
+            {
+                [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
+                [CloudUnlockedBlueprintsKey] = SerializeBlueprintUnlocks(CurrentProfile.UnlockedBlueprintIds)
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                "save inventory and blueprints");
+            InventoryRevision++;
+            ApplyInventoryToPhoton();
+            NotifyProfileChanged();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("PlayerProfileService blueprint use save failed: " + ex);
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    async Task SaveInventoryAndMissEnigmaBlueprintPurchasesAsync()
+    {
+        try
+        {
+            IsBusy = true;
+            EnsureInventory();
+            EnsureMissEnigmaBlueprintPurchases();
+
+            var data = new Dictionary<string, object>
+            {
+                [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
+                [CloudMissEnigmaPurchasedBlueprintsKey] = SerializeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds)
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                "save inventory and Miss Enigma blueprint purchases");
+            InventoryRevision++;
+            ApplyInventoryToPhoton();
+            NotifyProfileChanged();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("PlayerProfileService Miss Enigma blueprint purchase save failed: " + ex);
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    async Task SaveBlueprintsAsync()
+    {
+        try
+        {
+            IsBusy = true;
+            EnsureBlueprintUnlocks();
+
+            var data = new Dictionary<string, object>
+            {
+                [CloudUnlockedBlueprintsKey] = SerializeBlueprintUnlocks(CurrentProfile.UnlockedBlueprintIds)
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                "save blueprints");
+            NotifyProfileChanged();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("PlayerProfileService blueprint save failed: " + ex);
             throw;
         }
         finally
@@ -1808,6 +2211,103 @@ public class PlayerProfileService : MonoBehaviour
         }
 
         return remaining;
+    }
+
+    Dictionary<string, int> BuildItemCounts(PlayerInventoryData inventory)
+    {
+        Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (inventory == null)
+            return counts;
+
+        inventory.Normalize();
+        CountItems(inventory.PlayerSlots, inventory.PlayerSlots.Length, counts);
+        CountItems(inventory.ShipSlots, GetActiveShipInventoryCapacity(), counts);
+        return counts;
+    }
+
+    void CountItems(string[] slots, int limit, Dictionary<string, int> counts)
+    {
+        if (slots == null || counts == null)
+            return;
+
+        int safeLimit = Mathf.Clamp(limit, 0, slots.Length);
+        for (int i = 0; i < safeLimit; i++)
+        {
+            string itemId = slots[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            counts.TryGetValue(itemId, out int currentCount);
+            counts[itemId] = currentCount + 1;
+        }
+    }
+
+    bool HasRequiredItems(Dictionary<string, int> counts, string[] costItemIds)
+    {
+        if (costItemIds == null || costItemIds.Length == 0)
+            return true;
+
+        Dictionary<string, int> remaining = counts != null
+            ? new Dictionary<string, int>(counts, StringComparer.Ordinal)
+            : new Dictionary<string, int>(StringComparer.Ordinal);
+        for (int i = 0; i < costItemIds.Length; i++)
+        {
+            string itemId = costItemIds[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            if (!remaining.TryGetValue(itemId, out int currentCount) || currentCount <= 0)
+                return false;
+
+            remaining[itemId] = currentCount - 1;
+        }
+
+        return true;
+    }
+
+    bool RemoveRequiredItems(PlayerInventoryData inventory, string[] costItemIds)
+    {
+        if (inventory == null)
+            return false;
+
+        inventory.Normalize();
+        if (!HasRequiredItems(BuildItemCounts(inventory), costItemIds))
+            return false;
+
+        for (int i = 0; i < costItemIds.Length; i++)
+        {
+            string itemId = costItemIds[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            if (RemoveFirstMatchingItem(inventory.PlayerSlots, inventory.PlayerSlots.Length, itemId))
+                continue;
+
+            if (RemoveFirstMatchingItem(inventory.ShipSlots, GetActiveShipInventoryCapacity(), itemId))
+                continue;
+
+            return false;
+        }
+
+        return true;
+    }
+
+    bool RemoveFirstMatchingItem(string[] slots, int limit, string itemId)
+    {
+        if (slots == null || string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        int safeLimit = Mathf.Clamp(limit, 0, slots.Length);
+        for (int i = 0; i < safeLimit; i++)
+        {
+            if (!string.Equals(slots[i], itemId, StringComparison.Ordinal))
+                continue;
+
+            slots[i] = null;
+            return true;
+        }
+
+        return false;
     }
 
     bool TryApplyProjectReward(ProjectRewardDefinition reward, out string failure)
@@ -2006,6 +2506,24 @@ public class PlayerProfileService : MonoBehaviour
         return normalized;
     }
 
+    static string[] BuildPostLossEquipmentInventory(string[] sourceSlots, int shipSkinIndex, bool preserveEngineSlots)
+    {
+        string[] normalized = NormalizeEquipmentSlots(sourceSlots);
+        for (int i = 0; i < normalized.Length; i++)
+        {
+            bool keepEngineSlot =
+                preserveEngineSlots &&
+                ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex) &&
+                InventoryItemCatalog.GetEquipmentSlotCategory(i) == InventoryItemCategory.Engine &&
+                InventoryItemCatalog.IsCompatibleWithEquipmentSlot(normalized[i], i);
+
+            if (!keepEngineSlot)
+                normalized[i] = null;
+        }
+
+        return normalized;
+    }
+
     public static bool PlayerHasFreeShipInventorySlot(Photon.Realtime.Player player, string itemId)
     {
         string[] slots = GetPlayerShipInventorySlots(player);
@@ -2149,6 +2667,12 @@ public class PlayerProfileService : MonoBehaviour
         return false;
     }
 
+    bool ShouldPreserveEngineEquipmentOnLoss()
+    {
+        string pilotId = CurrentProfile != null ? CurrentProfile.SelectedPilotId : PilotCatalog.JakeId;
+        return string.Equals(PilotCatalog.NormalizePilotId(pilotId), PilotCatalog.CovaxId, StringComparison.Ordinal);
+    }
+
     bool TryRestoreEquipmentToSlot(string itemId, int slotIndex, int shipSkinIndex)
     {
         if (string.IsNullOrWhiteSpace(itemId) ||
@@ -2226,9 +2750,13 @@ public class PlayerProfileService : MonoBehaviour
             Inventory = PlayerInventoryData.Default(),
             SelectedPilotId = PilotCatalog.JakeId,
             UnlockedPilotIds = PilotCatalog.GetDefaultUnlockedPilotIds(),
+            UnlockedBlueprintIds = Array.Empty<string>(),
+            MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
             PilotDroneKills = 0,
             PilotSoldItemsAstrons = 0,
             PilotPirateBayReturns = 0,
+            PilotAsteroidSalvageCount = 0,
+            PilotAshOverloadReturns = 0,
             ProjectProgress = ProjectCatalog.NormalizeProgress(null)
         };
     }
@@ -2323,9 +2851,27 @@ public class PlayerProfileService : MonoBehaviour
         CurrentProfile.PilotDroneKills = Mathf.Max(0, CurrentProfile.PilotDroneKills);
         CurrentProfile.PilotSoldItemsAstrons = Mathf.Max(0, CurrentProfile.PilotSoldItemsAstrons);
         CurrentProfile.PilotPirateBayReturns = Mathf.Max(0, CurrentProfile.PilotPirateBayReturns);
+        CurrentProfile.PilotAsteroidSalvageCount = Mathf.Max(0, CurrentProfile.PilotAsteroidSalvageCount);
+        CurrentProfile.PilotAshOverloadReturns = Mathf.Max(0, CurrentProfile.PilotAshOverloadReturns);
         CurrentProfile.SelectedPilotId = PilotCatalog.NormalizePilotId(CurrentProfile.SelectedPilotId);
         if (!PilotCatalog.IsPilotUnlocked(CurrentProfile, CurrentProfile.SelectedPilotId))
             CurrentProfile.SelectedPilotId = PilotCatalog.JakeId;
+    }
+
+    void EnsureBlueprintUnlocks()
+    {
+        if (CurrentProfile == null)
+            CurrentProfile = PlayerProfileData.Default();
+
+        CurrentProfile.UnlockedBlueprintIds = NormalizeUnlockedBlueprintIds(CurrentProfile.UnlockedBlueprintIds);
+    }
+
+    void EnsureMissEnigmaBlueprintPurchases()
+    {
+        if (CurrentProfile == null)
+            CurrentProfile = PlayerProfileData.Default();
+
+        CurrentProfile.MissEnigmaPurchasedBlueprintIds = NormalizeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds);
     }
 
     void EnsureProjectProgress()
@@ -2334,6 +2880,44 @@ public class PlayerProfileService : MonoBehaviour
             CurrentProfile = PlayerProfileData.Default();
 
         CurrentProfile.ProjectProgress = ProjectCatalog.NormalizeProgress(CurrentProfile.ProjectProgress);
+    }
+
+    public static string[] NormalizeUnlockedBlueprintIds(string[] blueprintIds)
+    {
+        if (blueprintIds == null || blueprintIds.Length == 0)
+            return Array.Empty<string>();
+
+        HashSet<string> normalized = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < blueprintIds.Length; i++)
+        {
+            string blueprintId = blueprintIds[i];
+            if (InventoryItemCatalog.IsBlueprintItem(blueprintId))
+                normalized.Add(blueprintId);
+        }
+
+        string[] result = new string[normalized.Count];
+        normalized.CopyTo(result);
+        Array.Sort(result, StringComparer.Ordinal);
+        return result;
+    }
+
+    static string[] NormalizeMissEnigmaBlueprintPurchases(string[] blueprintIds)
+    {
+        if (blueprintIds == null || blueprintIds.Length == 0)
+            return Array.Empty<string>();
+
+        HashSet<string> normalized = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < blueprintIds.Length; i++)
+        {
+            string blueprintId = blueprintIds[i];
+            if (BlueprintCatalog.GetMissEnigmaOffer(blueprintId) != null)
+                normalized.Add(blueprintId);
+        }
+
+        string[] result = new string[normalized.Count];
+        normalized.CopyTo(result);
+        Array.Sort(result, StringComparer.Ordinal);
+        return result;
     }
 
     int GetActiveShipSkinIndex()
@@ -2504,6 +3088,58 @@ public class PlayerProfileService : MonoBehaviour
         }
     }
 
+    string SerializeBlueprintUnlocks(string[] blueprintIds)
+    {
+        BlueprintUnlockSnapshot snapshot = new BlueprintUnlockSnapshot
+        {
+            blueprintIds = NormalizeUnlockedBlueprintIds(blueprintIds)
+        };
+        return JsonUtility.ToJson(snapshot);
+    }
+
+    string[] DeserializeBlueprintUnlocks(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return Array.Empty<string>();
+
+        try
+        {
+            BlueprintUnlockSnapshot snapshot = JsonUtility.FromJson<BlueprintUnlockSnapshot>(json);
+            return NormalizeUnlockedBlueprintIds(snapshot != null ? snapshot.blueprintIds : null);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("Failed to deserialize blueprint unlocks: " + ex.Message);
+            return Array.Empty<string>();
+        }
+    }
+
+    string SerializeMissEnigmaBlueprintPurchases(string[] blueprintIds)
+    {
+        BlueprintPurchaseSnapshot snapshot = new BlueprintPurchaseSnapshot
+        {
+            blueprintIds = NormalizeMissEnigmaBlueprintPurchases(blueprintIds)
+        };
+        return JsonUtility.ToJson(snapshot);
+    }
+
+    string[] DeserializeMissEnigmaBlueprintPurchases(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return Array.Empty<string>();
+
+        try
+        {
+            BlueprintPurchaseSnapshot snapshot = JsonUtility.FromJson<BlueprintPurchaseSnapshot>(json);
+            return NormalizeMissEnigmaBlueprintPurchases(snapshot != null ? snapshot.blueprintIds : null);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("Failed to deserialize Miss Enigma blueprint purchases: " + ex.Message);
+            return Array.Empty<string>();
+        }
+    }
+
     static string[] NormalizeShipSlots(string[] source)
     {
         string[] normalized = new string[PlayerInventoryData.ShipSlotCount];
@@ -2558,9 +3194,13 @@ public class PlayerProfileData
     public PlayerInventoryData Inventory;
     public string SelectedPilotId;
     public string[] UnlockedPilotIds;
+    public string[] UnlockedBlueprintIds;
+    public string[] MissEnigmaPurchasedBlueprintIds;
     public int PilotDroneKills;
     public int PilotSoldItemsAstrons;
     public int PilotPirateBayReturns;
+    public int PilotAsteroidSalvageCount;
+    public int PilotAshOverloadReturns;
     public PlayerProjectProgressData ProjectProgress;
 
     public static PlayerProfileData Default()
@@ -2575,9 +3215,13 @@ public class PlayerProfileData
             Inventory = PlayerInventoryData.Default(),
             SelectedPilotId = PilotCatalog.JakeId,
             UnlockedPilotIds = PilotCatalog.GetDefaultUnlockedPilotIds(),
+            UnlockedBlueprintIds = Array.Empty<string>(),
+            MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
             PilotDroneKills = 0,
             PilotSoldItemsAstrons = 0,
             PilotPirateBayReturns = 0,
+            PilotAsteroidSalvageCount = 0,
+            PilotAshOverloadReturns = 0,
             ProjectProgress = ProjectCatalog.NormalizeProgress(null)
         };
     }
@@ -2587,6 +3231,18 @@ public class PlayerProfileData
 public class PilotUnlockSnapshot
 {
     public string[] pilotIds;
+}
+
+[Serializable]
+public class BlueprintUnlockSnapshot
+{
+    public string[] blueprintIds;
+}
+
+[Serializable]
+public class BlueprintPurchaseSnapshot
+{
+    public string[] blueprintIds;
 }
 
 [Serializable]

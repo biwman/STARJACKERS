@@ -76,8 +76,13 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
 
     void Update()
     {
+        bool extractionCinematic = GameplayHudVisibility.IsExtractionCinematicSuppressed;
+
         if (!IsRoundStarted() || !RoomSettings.IsEndDisasterMeteorEnabled())
         {
+            if (TryHoldMeteorForExtractionCinematic(extractionCinematic))
+                return;
+
             HideMeteor();
             return;
         }
@@ -87,6 +92,9 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
 
         if (timer == null)
         {
+            if (TryHoldMeteorForExtractionCinematic(extractionCinematic))
+                return;
+
             HideMeteor();
             return;
         }
@@ -95,6 +103,9 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
         float remaining = timer.GetCurrentRemainingTime();
         if (remaining > warningSeconds)
         {
+            if (TryHoldMeteorForExtractionCinematic(extractionCinematic))
+                return;
+
             HideMeteor();
             return;
         }
@@ -113,8 +124,18 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
         color.a = Mathf.Lerp(0.78f, 0.96f, progress);
         spriteRenderer.color = color;
         spriteRenderer.enabled = true;
-        UpdateMeteorAlarm(progress);
-        UpdateWarningMessage(progress);
+
+        if (extractionCinematic)
+        {
+            StopMeteorAlarm();
+            HideWarningMessage();
+        }
+        else
+        {
+            UpdateMeteorAlarm(progress);
+            UpdateWarningMessage(progress);
+        }
+
         meteorVisible = true;
     }
 
@@ -147,6 +168,19 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
         StopMeteorAlarm();
         HideWarningMessage();
         meteorVisible = false;
+    }
+
+    bool TryHoldMeteorForExtractionCinematic(bool extractionCinematic)
+    {
+        if (!extractionCinematic || !meteorVisible || spriteRenderer == null || spriteRenderer.sprite == null)
+            return false;
+
+        transform.position = new Vector3(0f, 0f, EffectZ);
+        transform.Rotate(0f, 0f, rotationSpeed * Time.deltaTime, Space.Self);
+        spriteRenderer.enabled = true;
+        StopMeteorAlarm();
+        HideWarningMessage();
+        return true;
     }
 
     void UpdateMeteorAlarm(float progress)

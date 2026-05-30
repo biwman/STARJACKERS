@@ -727,6 +727,29 @@ public static class LobbyMapCatalog
         }
     }
 
+    public static string GetDefaultExtractionType(string mapId)
+    {
+        switch (mapId)
+        {
+            case JustSpaceMapId:
+            case NoobHavenMapId:
+                return RoomSettings.ExtractionTypeSpaceCity;
+            case AncientSpaceMapId:
+            case DeepSpaceMapId:
+            case TheThreatMapId:
+                return RoomSettings.ExtractionTypeCarrier;
+        }
+
+        return RoomSettings.DefaultExtractionType;
+    }
+
+    public static int GetDefaultScienceStationCount(string mapId)
+    {
+        return string.Equals(mapId, DeepSpaceMapId, System.StringComparison.Ordinal)
+            ? 1
+            : RoomSettings.DefaultScienceStationCount;
+    }
+
     public static void ApplyToProperties(LobbyMapDefinition map, Hashtable props)
     {
         if (map == null || props == null)
@@ -755,17 +778,20 @@ public static class LobbyMapCatalog
         props[RoomSettings.CloudsDensityKey] = map.CloudsDensity;
         props[RoomSettings.CloudsSizeKey] = map.CloudsSize;
         props[RoomSettings.ExtractionCountKey] = map.ExtractionZoneCount;
+        props[RoomSettings.ExtractionTypeKey] = GetDefaultExtractionType(map.Id);
         props[RoomSettings.RepairBayCountKey] = map.RepairBayCount;
         props[RoomSettings.SpaceFactoryCountKey] = map.SpaceFactoryCount;
+        props[RoomSettings.ScienceStationCountKey] = GetDefaultScienceStationCount(map.Id);
         props[RoomSettings.MovingObjectsEnabledKey] = map.MovingObjectsEnabled;
         props[RoomSettings.ObstacleWeightFactorKey] = map.ObstacleMassFactor;
         props[RoomSettings.TreasureWeightFactorKey] = map.TreasureMassFactor;
         props[RoomSettings.MapBackgroundKey] = map.MapBackgroundIndex;
         props[RoomSettings.VisualEffectsEnabledKey] = map.VisualEffectsEnabled;
-        props[RoomSettings.AdvancedBackgroundEnabledKey] = RoomSettings.DefaultAdvancedBackgroundEnabled;
         props[RoomSettings.ParallaxBackgroundKey] = GetDefaultParallaxBackgroundId(map.Id);
         props[RoomSettings.BackgroundObjectKey] = GetDefaultBackgroundObjectId(map.Id);
         props[RoomSettings.GravityWellPhysicsEnabledKey] = map.Id == GravityWellMapId;
+        props[RoomSettings.HiddenTreasureEnabledKey] = map.Id == GravityWellMapId;
+        props[RoomSettings.CosmicWormEnabledKey] = RoomSettings.DefaultCosmicWormEnabled;
 
         props[RoomSettings.EndDisasterModeKey] = RoomSettings.EndDisasterMeteor;
         props[RoomSettings.EndDisasterWarningSecondsKey] = RoomSettings.DefaultEndDisasterWarningSeconds;

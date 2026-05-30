@@ -15,9 +15,13 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
     const string MapSeedKey = "mapSeed";
     const string ObstacleLayoutKey = "obstacleLayout";
     const string ExtractionLayoutKey = "extractionLayout";
+    const string HiddenTreasureCarrierKey = "hiddenTreasure.carrier";
+    const string HiddenTreasureRevealedKey = "hiddenTreasure.revealed";
     const float BaseMinDistanceFromExtraction = 3.5f;
     const float ChildSpawnPadding = 0.18f;
     const float ChildSpawnGrowth = 0.18f;
+    const float PlatinumChunkSpawnSpeed = 1.35f;
+    const float PlatinumChunkSpawnOffset = 0.72f;
 
     static ObstacleSpawner instance;
 
@@ -34,6 +38,8 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
     public float minObstacleDistance = 3.25f;
 
     bool layoutApplied = false;
+    string hiddenTreasureCarrierId = string.Empty;
+    bool hiddenTreasureRevealed;
     int ResolvedObstacleCount => Mathf.Max(0, Mathf.RoundToInt(obstacleCount * GetDensityMultiplier() * RoomSettings.GetMapAreaMultiplier()));
 
     void Awake()
@@ -64,6 +70,8 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
             return;
 
         RebuildDynamicObstacleSequenceFromScene();
+        RestoreHiddenTreasureStateFromRoom();
+        InitializeHiddenTreasureCarrierForRound(true);
     }
 
     IEnumerator SendRuntimeStateToPlayerNextFrame(int actorNumber)
@@ -98,6 +106,10 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
             ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable();
             props[MapSeedKey] = mapSeed;
             props[ObstacleLayoutKey] = layout;
+            props[HiddenTreasureCarrierKey] = string.Empty;
+            props[HiddenTreasureRevealedKey] = false;
+            hiddenTreasureCarrierId = string.Empty;
+            hiddenTreasureRevealed = false;
             PhotonNetwork.CurrentRoom.SetCustomProperties(props);
 
             ApplyLayoutIfNeeded(layout);
@@ -135,6 +147,10 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
         ApplyObstacleLayout(layout);
         layoutApplied = true;
+        if (PhotonNetwork.IsMasterClient)
+            InitializeHiddenTreasureCarrierForRound(false);
+        else
+            RestoreHiddenTreasureStateFromRoom();
     }
 
     string BuildObstacleLayout(int seed)
@@ -223,6 +239,97 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         RebuildDynamicObstacleSequenceFromScene();
     }
 
+    void InitializeHiddenTreasureCarrierForRound(bool allowExistingRoomState)
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        if (!RoomSettings.IsHiddenTreasureEnabled())
+        {
+            SetHiddenTreasureRoomState(string.Empty, false);
+            return;
+        }
+
+        if (allowExistingRoomState)
+            RestoreHiddenTreasureStateFromRoom();
+
+        if (hiddenTreasureRevealed || !string.IsNullOrWhiteSpace(hiddenTreasureCarrierId))
+            return;
+
+        ObstacleChunk[] chunks = FindObjectsByType<ObstacleChunk>(FindObjectsInactive.Exclude);
+        List<ObstacleChunk> candidates = new List<ObstacleChunk>();
+        for (int i = 0; i < chunks.Length; i++)
+        {
+            ObstacleChunk chunk = chunks[i];
+            if (CanCarryHiddenTreasure(chunk))
+                candidates.Add(chunk);
+        }
+
+        if (candidates.Count == 0)
+            return;
+
+        candidates.Sort((left, right) => string.CompareOrdinal(left != null ? left.StableId : string.Empty, right != null ? right.StableId : string.Empty));
+        int index = Mathf.Abs(mapSeed) % candidates.Count;
+        SetHiddenTreasureRoomState(candidates[index].StableId, false);
+    }
+
+    bool CanCarryHiddenTreasure(ObstacleChunk chunk)
+    {
+        if (chunk == null || string.IsNullOrWhiteSpace(chunk.StableId) || chunk.SplitCount != 0 || !chunk.CanSplit)
+            return false;
+
+        ObstacleChunk.RuntimeState state = chunk.CaptureRuntimeState();
+        float childSizeFactor = state.SizeFactor * 0.5f;
+        int childHp = Mathf.Max(1, Mathf.RoundToInt(state.MaxHealth * 0.5f));
+        return childHp > 1 &&
+               childSizeFactor >= ObstacleChunk.MinimumSizeFactor &&
+               state.SplitCount + 1 < RoomSettings.GetObstacleMaxSplitCount() &&
+               childSizeFactor > (ObstacleChunk.MinimumSizeFactor * 2f) + 0.0001f;
+    }
+
+    void RestoreHiddenTreasureStateFromRoom()
+    {
+        hiddenTreasureCarrierId = string.Empty;
+        hiddenTreasureRevealed = false;
+
+        if (PhotonNetwork.CurrentRoom == null)
+            return;
+
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(HiddenTreasureCarrierKey, out object carrierValue) &&
+            carrierValue is string carrierId)
+        {
+            hiddenTreasureCarrierId = carrierId;
+        }
+
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(HiddenTreasureRevealedKey, out object revealedValue) &&
+            revealedValue is bool revealed)
+        {
+            hiddenTreasureRevealed = revealed;
+        }
+    }
+
+    void SetHiddenTreasureRoomState(string carrierId, bool revealed)
+    {
+        hiddenTreasureCarrierId = carrierId ?? string.Empty;
+        hiddenTreasureRevealed = revealed;
+
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        ExitGames.Client.Photon.Hashtable props = new ExitGames.Client.Photon.Hashtable();
+        props[HiddenTreasureCarrierKey] = hiddenTreasureCarrierId;
+        props[HiddenTreasureRevealedKey] = hiddenTreasureRevealed;
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+    }
+
+    bool IsHiddenTreasureCarrier(string stableId)
+    {
+        if (hiddenTreasureRevealed || string.IsNullOrWhiteSpace(stableId))
+            return false;
+
+        return string.Equals(hiddenTreasureCarrierId, stableId, System.StringComparison.Ordinal);
+    }
+
     ObstacleChunk.RuntimeState CreateInitialRuntimeState(int obstacleIndex, Vector2 position)
     {
         string stableId = "obstacle_" + obstacleIndex;
@@ -291,6 +398,8 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
         string sourceStableId = source.StableId;
         ObstacleChunk.RuntimeState sourceState = source.CaptureRuntimeState();
+        InitializeHiddenTreasureCarrierForRound(true);
+        bool sourceCarriedHiddenTreasure = IsHiddenTreasureCarrier(sourceStableId);
         bool createdChildren = TryCreateSplitChildren(
             source,
             sourceState,
@@ -299,6 +408,9 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
         if (createdChildren)
             SpawnAsteroidSplitVfx(source);
+
+        if (sourceCarriedHiddenTreasure)
+            ResolveHiddenTreasureCarrierDestroyed(sourceState, createdChildren, childAState, childBState);
 
         if (source != null && source.gameObject != null)
             DestroyObstacleImmediately(source.gameObject);
@@ -322,6 +434,149 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
             string snapshot = CaptureRuntimeStateSnapshotInternal();
             ApplyRuntimeStateSnapshotInternal(snapshot);
         }
+    }
+
+    void ResolveHiddenTreasureCarrierDestroyed(
+        ObstacleChunk.RuntimeState sourceState,
+        bool createdChildren,
+        ObstacleChunk.RuntimeState childAState,
+        ObstacleChunk.RuntimeState childBState)
+    {
+        if (!RoomSettings.IsHiddenTreasureEnabled() || hiddenTreasureRevealed)
+            return;
+
+        if (sourceState.SplitCount <= 0 && createdChildren)
+        {
+            ObstacleChunk.RuntimeState nextCarrier = PickHiddenTreasureChild(sourceState.StableId, childAState, childBState);
+            SetHiddenTreasureRoomState(nextCarrier.StableId, false);
+            return;
+        }
+
+        SpawnPlatinumChunkFragment(sourceState, createdChildren, childAState, childBState);
+        SetHiddenTreasureRoomState(string.Empty, true);
+    }
+
+    ObstacleChunk.RuntimeState PickHiddenTreasureChild(string sourceStableId, ObstacleChunk.RuntimeState childAState, ObstacleChunk.RuntimeState childBState)
+    {
+        uint hash = ComputeStableHash(sourceStableId);
+        return (hash & 1u) == 0u ? childAState : childBState;
+    }
+
+    void SpawnPlatinumChunkFragment(
+        ObstacleChunk.RuntimeState sourceState,
+        bool createdChildren,
+        ObstacleChunk.RuntimeState childAState,
+        ObstacleChunk.RuntimeState childBState)
+    {
+        Vector2 spawnPosition = ResolvePlatinumChunkSpawnPosition(sourceState, createdChildren, childAState, childBState);
+        Vector2 driftDirection = ResolvePlatinumChunkDriftDirection(sourceState, createdChildren, childAState, childBState);
+        Vector2 spawnVelocity = driftDirection * PlatinumChunkSpawnSpeed;
+        float angularVelocity = Mathf.Lerp(22f, 48f, Hash01(sourceState.StableId, 3)) * (Hash01(sourceState.StableId, 4) < 0.5f ? -1f : 1f);
+
+        GameObject treasureObject = null;
+        if (PhotonNetwork.InRoom)
+        {
+            treasureObject = PhotonNetwork.Instantiate(
+                "TreasureNetwork",
+                new Vector3(spawnPosition.x, spawnPosition.y, 0f),
+                Quaternion.Euler(0f, 0f, sourceState.Rotation),
+                0,
+                new object[] { InventoryItemCatalog.PlatinumChunkId });
+        }
+
+        if (treasureObject == null)
+            return;
+
+        ApplyInitialTreasureDrift(treasureObject, spawnVelocity, angularVelocity);
+        StartCoroutine(ApplyTreasureDriftNextFrame(treasureObject, spawnPosition, spawnVelocity, angularVelocity));
+    }
+
+    Vector2 ResolvePlatinumChunkSpawnPosition(
+        ObstacleChunk.RuntimeState sourceState,
+        bool createdChildren,
+        ObstacleChunk.RuntimeState childAState,
+        ObstacleChunk.RuntimeState childBState)
+    {
+        Vector2 center = sourceState.Position;
+        Vector2 offsetDirection = ResolvePlatinumChunkDriftDirection(sourceState, createdChildren, childAState, childBState);
+        if (createdChildren)
+        {
+            center = (childAState.Position + childBState.Position) * 0.5f;
+            Vector2 childAxis = childAState.Position - childBState.Position;
+            if (childAxis.sqrMagnitude > 0.0001f)
+                offsetDirection = new Vector2(-childAxis.y, childAxis.x).normalized;
+        }
+
+        if (Hash01(sourceState.StableId, 5) < 0.5f)
+            offsetDirection = -offsetDirection;
+
+        float sourceRadius = Mathf.Max(0.35f, ObstacleChunk.DefaultTargetWorldSize * RoomSettings.GetObstacleSizeMultiplier() * sourceState.SizeFactor * 0.22f);
+        return ClampToMapBounds(center + offsetDirection * (sourceRadius + PlatinumChunkSpawnOffset), 0.45f);
+    }
+
+    Vector2 ResolvePlatinumChunkDriftDirection(
+        ObstacleChunk.RuntimeState sourceState,
+        bool createdChildren,
+        ObstacleChunk.RuntimeState childAState,
+        ObstacleChunk.RuntimeState childBState)
+    {
+        if (sourceState.Velocity.sqrMagnitude > 0.0001f)
+            return sourceState.Velocity.normalized;
+
+        if (createdChildren)
+        {
+            Vector2 childAxis = childAState.Position - childBState.Position;
+            if (childAxis.sqrMagnitude > 0.0001f)
+                return new Vector2(-childAxis.y, childAxis.x).normalized;
+        }
+
+        float angle = Hash01(sourceState.StableId, 6) * Mathf.PI * 2f;
+        return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+    }
+
+    Vector2 ClampToMapBounds(Vector2 position, float padding)
+    {
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = mapSize.x * 0.5f;
+        float halfY = mapSize.y * 0.5f;
+        return new Vector2(
+            Mathf.Clamp(position.x, -halfX + padding, halfX - padding),
+            Mathf.Clamp(position.y, -halfY + padding, halfY - padding));
+    }
+
+    void ApplyInitialTreasureDrift(GameObject treasureObject, Vector2 velocity, float angularVelocity)
+    {
+        if (treasureObject == null)
+            return;
+
+        Rigidbody2D body = treasureObject.GetComponent<Rigidbody2D>();
+        if (body == null)
+            body = treasureObject.AddComponent<Rigidbody2D>();
+
+        body.gravityScale = 0f;
+        body.linearVelocity = RoomSettings.ShouldMovingObjectsTranslate() ? velocity : Vector2.zero;
+        body.angularVelocity = RoomSettings.ShouldMovingObjectsRotate() ? angularVelocity : 0f;
+    }
+
+    IEnumerator ApplyTreasureDriftNextFrame(GameObject treasureObject, Vector2 position, Vector2 velocity, float angularVelocity)
+    {
+        yield return null;
+
+        if (treasureObject == null)
+            yield break;
+
+        MovingSpaceObject movingObject = treasureObject.GetComponent<MovingSpaceObject>();
+        if (movingObject != null)
+        {
+            movingObject.SetMotionState(
+                position,
+                RoomSettings.ShouldMovingObjectsTranslate() ? velocity : Vector2.zero,
+                treasureObject.transform.eulerAngles.z,
+                RoomSettings.ShouldMovingObjectsRotate() ? angularVelocity : 0f,
+                true);
+        }
+
+        GameVisualTheme.ApplyTreasureVisual(treasureObject.GetComponent<Treasure>());
     }
 
     bool TryCreateSplitChildren(
@@ -490,6 +745,36 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
     string AllocateDynamicObstacleId()
     {
         return "obstacle_dynamic_" + dynamicObstacleSequence++;
+    }
+
+    static float Hash01(string value, int salt)
+    {
+        unchecked
+        {
+            uint hash = ComputeStableHash((value ?? string.Empty) + "#" + salt.ToString(CultureInfo.InvariantCulture));
+            return (hash & 0x00FFFFFFu) / 16777215f;
+        }
+    }
+
+    static uint ComputeStableHash(string value)
+    {
+        unchecked
+        {
+            uint hash = 2166136261u;
+            if (!string.IsNullOrEmpty(value))
+            {
+                for (int i = 0; i < value.Length; i++)
+                {
+                    char c = value[i];
+                    hash ^= (byte)(c & 0xFF);
+                    hash *= 16777619u;
+                    hash ^= (byte)(c >> 8);
+                    hash *= 16777619u;
+                }
+            }
+
+            return hash;
+        }
     }
 
     public static string CaptureRuntimeStateSnapshot()

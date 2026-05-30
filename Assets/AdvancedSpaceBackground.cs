@@ -114,9 +114,6 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
 
     static AdvancedBackgroundStyle ResolveStyleForCurrentSettings()
     {
-        if (!RoomSettings.IsAdvancedBackgroundEnabled())
-            return AdvancedBackgroundStyle.None;
-
         string mapId = RoomSettings.GetSelectedLobbyMapId();
         if (string.Equals(mapId, LobbyMapCatalog.GravityWellMapId, StringComparison.Ordinal))
             return AdvancedBackgroundStyle.GravityWell;

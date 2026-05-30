@@ -6,10 +6,14 @@ using UnityEngine;
 public class Bullet : MonoBehaviourPun
 {
     static readonly List<Collider2D> ActiveBulletColliders = new List<Collider2D>();
+    static readonly Collider2D[] AreaDamageHits = new Collider2D[96];
     const string RocketProjectileResourcePath = "Items/rakieta";
+    const string PilotBreachProjectileMarker = "sir_breach";
     const float RocketProjectileBaseWorldLength = 0.58f;
     const float PulseDisruptorMinimumDamageMultiplier = 0.35f;
+    const int PilotBreachTraceCount = 3;
     static Sprite cachedRocketProjectileSprite;
+    static Material sharedProjectileLineMaterial;
 
     public int damage = 10;
     public int ownerViewID;
@@ -31,6 +35,7 @@ public class Bullet : MonoBehaviourPun
     string hitEffectId = string.Empty;
     bool isArcProjectile;
     bool isRocketProjectile;
+    bool pilotBreachProjectile;
     bool canDamageOwnerInArea;
     int homingTargetViewId;
     float homingTurnRateDegrees = 145f;
@@ -47,11 +52,21 @@ public class Bullet : MonoBehaviourPun
     LineRenderer[] pirateFighterStreakLines;
     LineRenderer[] autoTurretBoltLines;
     LineRenderer[] gatlingTracerLines;
+    LineRenderer[] pilotBreachTraceLines;
     LineRenderer rocketTrailLine;
     SpriteRenderer rocketProjectileRenderer;
     SpriteRenderer projectileGlowRenderer;
+    SpriteRenderer pilotBreachGlowRenderer;
     AudioSource rocketLoopSource;
     float rocketProjectileWorldLength = RocketProjectileBaseWorldLength;
+    Rigidbody2D cachedRigidbody;
+    Collider2D cachedCollider;
+
+    void Awake()
+    {
+        cachedRigidbody = GetComponent<Rigidbody2D>();
+        cachedCollider = GetComponent<Collider2D>();
+    }
 
     void Start()
     {
@@ -68,7 +83,7 @@ public class Bullet : MonoBehaviourPun
             gameObject.AddComponent<HideInNebulaTarget>();
         }
 
-        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        Rigidbody2D rb = cachedRigidbody;
         if (rb != null)
         {
             rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
@@ -178,7 +193,7 @@ public class Bullet : MonoBehaviourPun
         LureBeaconDecoy beacon = collision.gameObject.GetComponentInParent<LureBeaconDecoy>();
         if (beacon != null && !CanDamageBeacon(beacon))
         {
-            Collider2D bulletCollider = GetComponent<Collider2D>();
+            Collider2D bulletCollider = cachedCollider;
             if (bulletCollider != null && collision.collider != null)
                 Physics2D.IgnoreCollision(bulletCollider, collision.collider);
 
@@ -242,10 +257,10 @@ public class Bullet : MonoBehaviourPun
         arcImpactTriggered = true;
         transform.position = new Vector3(arcTargetPosition.x, arcTargetPosition.y, transform.position.z);
 
-        Collider2D[] hits = Physics2D.OverlapCircleAll(arcTargetPosition, Mathf.Max(0.2f, areaDamageRadius));
-        for (int i = 0; i < hits.Length; i++)
+        int hitCount = OverlapCircleNonAlloc(arcTargetPosition, Mathf.Max(0.2f, areaDamageRadius), AreaDamageHits);
+        for (int i = 0; i < hitCount; i++)
         {
-            Collider2D hit = hits[i];
+            Collider2D hit = AreaDamageHits[i];
             if (hit == null)
                 continue;
 
@@ -296,7 +311,7 @@ public class Bullet : MonoBehaviourPun
             return;
 
         damagedViewIds.Add(hp.photonView.ViewID);
-        float damageMultiplier = ResolveImpactDamageMultiplier();
+        float damageMultiplier = ResolveImpactDamageMultiplier() * ResolvePilotBreachTargetMultiplier(hp);
         if (useDamageProfile)
         {
             hp.photonView.RPC("TakeDamageProfileAt", RpcTarget.MasterClient, ScaleDamage(shieldDamage, damageMultiplier), ScaleDamage(hpDamage, damageMultiplier), ownerViewID, impactPoint.x, impactPoint.y);
@@ -317,10 +332,11 @@ public class Bullet : MonoBehaviourPun
         if (areaDamageRadius <= 0.01f)
             return;
 
-        Collider2D[] hits = Physics2D.OverlapCircleAll(center, areaDamageRadius);
-        for (int i = 0; i < hits.Length; i++)
+        int hitCount = OverlapCircleNonAlloc(center, areaDamageRadius, AreaDamageHits);
+        for (int i = 0; i < hitCount; i++)
         {
-            PlayerDeployableBase deployable = hits[i] != null ? hits[i].GetComponentInParent<PlayerDeployableBase>() : null;
+            Collider2D hit = AreaDamageHits[i];
+            PlayerDeployableBase deployable = hit != null ? hit.GetComponentInParent<PlayerDeployableBase>() : null;
             if (deployable != null)
             {
                 ApplyDamageToDeployable(deployable, deployable.transform.position, false);
@@ -328,10 +344,10 @@ public class Bullet : MonoBehaviourPun
                 continue;
             }
 
-            PlayerHealth hp = hits[i] != null ? hits[i].GetComponentInParent<PlayerHealth>() : null;
+            PlayerHealth hp = hit != null ? hit.GetComponentInParent<PlayerHealth>() : null;
             if (hp == null || hp.GetComponent<LureBeaconDecoy>() != null || hp == directHit || hp.photonView == null || (hp.photonView.ViewID == ownerViewID && !canDamageOwnerInArea))
             {
-                LureBeaconDecoy beacon = hits[i] != null ? hits[i].GetComponentInParent<LureBeaconDecoy>() : null;
+                LureBeaconDecoy beacon = hit != null ? hit.GetComponentInParent<LureBeaconDecoy>() : null;
                 if (beacon != null && CanDamageBeacon(beacon))
                 {
                     ApplyDamageToBeacon(beacon, beacon.transform.position, false);
@@ -412,7 +428,18 @@ public class Bullet : MonoBehaviourPun
         if (baseDamage <= 0)
             return 0;
 
-        return Mathf.Max(1, Mathf.RoundToInt(baseDamage * Mathf.Clamp01(multiplier)));
+        return Mathf.Max(1, Mathf.RoundToInt(baseDamage * Mathf.Max(0f, multiplier)));
+    }
+
+    float ResolvePilotBreachTargetMultiplier(PlayerHealth hp)
+    {
+        if (!pilotBreachProjectile || hp == null)
+            return 1f;
+
+        EnemyBot bot = hp.GetComponent<EnemyBot>();
+        return bot != null && (bot.Kind == EnemyBotKind.Mothership || bot.Kind == EnemyBotKind.PirateBase)
+            ? 2f
+            : 1f;
     }
 
     float ResolveProjectileOwnLength()
@@ -453,10 +480,14 @@ public class Bullet : MonoBehaviourPun
     int GetPilotObstacleDamage(int baseDamage)
     {
         PhotonView ownerView = ownerViewID > 0 ? PhotonView.Find(ownerViewID) : null;
+        float multiplier = 1f;
         if (ownerView != null && PilotCatalog.IsSelectedPilot(ownerView.Owner, PilotCatalog.SirNowitzkyId))
-            return Mathf.CeilToInt(baseDamage * 1.5f);
+            multiplier *= 1.5f;
 
-        return baseDamage;
+        if (pilotBreachProjectile)
+            multiplier *= 2f;
+
+        return Mathf.CeilToInt(baseDamage * multiplier);
     }
 
     void NotifyOwnerComplexHit()
@@ -472,7 +503,7 @@ public class Bullet : MonoBehaviourPun
         if (collision == null)
             return;
 
-        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        Rigidbody2D rb = cachedRigidbody;
         Vector2 bulletVelocity = rb != null ? rb.linearVelocity : Vector2.zero;
         if (bulletVelocity.sqrMagnitude < 0.0001f)
             return;
@@ -530,7 +561,7 @@ public class Bullet : MonoBehaviourPun
 
     void UpdateRocketGuidance()
     {
-        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        Rigidbody2D rb = cachedRigidbody;
         if (rb == null)
             return;
 
@@ -619,7 +650,7 @@ public class Bullet : MonoBehaviourPun
     {
         StopRocketLoopAudio();
 
-        Collider2D collider2D = GetComponent<Collider2D>();
+        Collider2D collider2D = cachedCollider;
         if (collider2D != null)
         {
             ActiveBulletColliders.Remove(collider2D);
@@ -677,6 +708,9 @@ public class Bullet : MonoBehaviourPun
             rocketSpeed = data[21] is float configuredRocketSpeed ? Mathf.Max(0.5f, configuredRocketSpeed) : rocketSpeed;
             canDamageOwnerInArea = data[22] is bool configuredOwnerDamage && configuredOwnerDamage;
         }
+
+        if (data.Length > 0)
+            pilotBreachProjectile = string.Equals(data[data.Length - 1] as string, PilotBreachProjectileMarker, System.StringComparison.Ordinal);
     }
 
     void ApplyVisualConfig()
@@ -719,6 +753,9 @@ public class Bullet : MonoBehaviourPun
             {
                 EnsurePlasmaGlow(spriteRenderer);
             }
+
+            if (pilotBreachProjectile)
+                EnsurePilotBreachProjectileVisual(spriteRenderer);
         }
     }
 
@@ -822,7 +859,7 @@ public class Bullet : MonoBehaviourPun
         rocketTrailLine.alignment = LineAlignment.View;
         rocketTrailLine.numCapVertices = 3;
         rocketTrailLine.numCornerVertices = 2;
-        rocketTrailLine.material = new Material(Shader.Find("Sprites/Default"));
+        rocketTrailLine.sharedMaterial = GetProjectileLineMaterial();
         rocketTrailLine.startColor = new Color(1f, 0.9f, 0.42f, 0.95f);
         rocketTrailLine.endColor = new Color(1f, 0.18f, 0.02f, 0f);
         rocketTrailLine.widthMultiplier = 0.14f * Mathf.Max(0.7f, visualScaleMultiplier);
@@ -916,6 +953,75 @@ public class Bullet : MonoBehaviourPun
         projectileGlowRenderer = glowRenderer;
     }
 
+    void EnsurePilotBreachProjectileVisual(SpriteRenderer coreRenderer)
+    {
+        if (!pilotBreachProjectile || pilotBreachTraceLines != null)
+            return;
+
+        SpriteRenderer referenceRenderer = rocketProjectileRenderer != null ? rocketProjectileRenderer : coreRenderer;
+        EnsurePilotBreachGlow(referenceRenderer);
+
+        pilotBreachTraceLines = new LineRenderer[PilotBreachTraceCount];
+        for (int i = 0; i < pilotBreachTraceLines.Length; i++)
+        {
+            GameObject lineObject = new GameObject("PilotBreachTrace_" + i);
+            lineObject.transform.SetParent(transform, false);
+
+            LineRenderer line = lineObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 2;
+            line.textureMode = LineTextureMode.Stretch;
+            line.alignment = LineAlignment.View;
+            line.numCapVertices = 4;
+            line.numCornerVertices = 2;
+            line.sharedMaterial = GetProjectileLineMaterial();
+            line.startColor = new Color(1f, 0.98f, 0.72f, i == 1 ? 0.98f : 0.62f);
+            line.endColor = new Color(1f, 0.44f, 0.08f, i == 1 ? 0.18f : 0.04f);
+            line.widthMultiplier = 0.06f * Mathf.Max(0.8f, visualScaleMultiplier);
+
+            if (referenceRenderer != null)
+            {
+                line.sortingLayerID = referenceRenderer.sortingLayerID;
+                line.sortingOrder = referenceRenderer.sortingOrder + 6;
+            }
+            else
+            {
+                line.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+                line.sortingOrder = GameVisualTheme.PlayerSortingOrder + 6;
+            }
+
+            pilotBreachTraceLines[i] = line;
+        }
+
+        UpdatePilotBreachProjectileVisual();
+    }
+
+    void EnsurePilotBreachGlow(SpriteRenderer referenceRenderer)
+    {
+        if (referenceRenderer == null || referenceRenderer.sprite == null)
+            return;
+
+        Transform existing = referenceRenderer.transform.Find("PilotBreachGlow");
+        if (existing != null)
+        {
+            pilotBreachGlowRenderer = existing.GetComponent<SpriteRenderer>();
+            return;
+        }
+
+        GameObject glowObject = new GameObject("PilotBreachGlow");
+        glowObject.transform.SetParent(referenceRenderer.transform, false);
+        glowObject.transform.localPosition = Vector3.zero;
+        glowObject.transform.localRotation = Quaternion.identity;
+        glowObject.transform.localScale = Vector3.one * 1.34f;
+
+        SpriteRenderer glowRenderer = glowObject.AddComponent<SpriteRenderer>();
+        glowRenderer.sprite = referenceRenderer.sprite;
+        glowRenderer.color = new Color(1f, 0.92f, 0.36f, 0.36f);
+        glowRenderer.sortingLayerID = referenceRenderer.sortingLayerID;
+        glowRenderer.sortingOrder = referenceRenderer.sortingOrder + 5;
+        pilotBreachGlowRenderer = glowRenderer;
+    }
+
     void EnsureRailProjectileVisual(SpriteRenderer coreRenderer)
     {
         if (railSegments != null && railSegments.Length > 0)
@@ -934,7 +1040,7 @@ public class Bullet : MonoBehaviourPun
             line.alignment = LineAlignment.View;
             line.numCapVertices = 2;
             line.numCornerVertices = 2;
-            line.material = new Material(Shader.Find("Sprites/Default"));
+            line.sharedMaterial = GetProjectileLineMaterial();
             line.startColor = i == 1 ? new Color(1f, 0.88f, 0.46f, 0.98f) : new Color(1f, 0.24f, 0.04f, 0.72f);
             line.endColor = i == 1 ? new Color(1f, 0.36f, 0.04f, 0.92f) : new Color(1f, 0.08f, 0.02f, 0.28f);
             line.widthMultiplier = (i == 1 ? 0.055f : 0.035f) * Mathf.Max(0.75f, visualScaleMultiplier);
@@ -970,6 +1076,9 @@ public class Bullet : MonoBehaviourPun
 
         if (IsRocketProjectile())
             UpdateRocketProjectileVisual();
+
+        if (pilotBreachProjectile)
+            UpdatePilotBreachProjectileVisual();
     }
 
     void UpdateRocketProjectileVisual()
@@ -1028,7 +1137,7 @@ public class Bullet : MonoBehaviourPun
             line.alignment = LineAlignment.View;
             line.numCapVertices = 3;
             line.numCornerVertices = 2;
-            line.material = new Material(Shader.Find("Sprites/Default"));
+            line.sharedMaterial = GetProjectileLineMaterial();
             line.startColor = i == 0 ? new Color(0.84f, 0.98f, 1f, 0.96f) : new Color(0.18f, 0.72f, 1f, 0.56f);
             line.endColor = i == 0 ? new Color(0.16f, 0.74f, 1f, 0.92f) : new Color(0.08f, 0.25f, 1f, 0.18f);
             line.widthMultiplier = (i == 0 ? 0.075f : i == 1 ? 0.145f : 0.04f) * Mathf.Max(0.8f, visualScaleMultiplier);
@@ -1090,7 +1199,7 @@ public class Bullet : MonoBehaviourPun
             line.alignment = LineAlignment.View;
             line.numCapVertices = 2;
             line.numCornerVertices = 1;
-            line.material = new Material(Shader.Find("Sprites/Default"));
+            line.sharedMaterial = GetProjectileLineMaterial();
             line.startColor = ResolvePirateFighterBoltStartColor(i, redProjectile);
             line.endColor = ResolvePirateFighterBoltEndColor(i, redProjectile);
             line.widthMultiplier = (i == 0 ? 0.052f : 0.12f) * Mathf.Max(0.8f, visualScaleMultiplier);
@@ -1174,7 +1283,7 @@ public class Bullet : MonoBehaviourPun
             line.alignment = LineAlignment.View;
             line.numCapVertices = 3;
             line.numCornerVertices = 2;
-            line.material = new Material(Shader.Find("Sprites/Default"));
+            line.sharedMaterial = GetProjectileLineMaterial();
             line.startColor = i == 0
                 ? new Color(1f, 0.98f, 0.62f, 0.95f)
                 : new Color(1f, 0.32f, 0.04f, 0.42f);
@@ -1242,7 +1351,7 @@ public class Bullet : MonoBehaviourPun
             line.alignment = LineAlignment.View;
             line.numCapVertices = 2;
             line.numCornerVertices = 1;
-            line.material = new Material(Shader.Find("Sprites/Default"));
+            line.sharedMaterial = GetProjectileLineMaterial();
             line.startColor = i == 0
                 ? new Color(1f, 0.98f, 0.68f, 0.94f)
                 : new Color(1f, 0.46f, 0.08f, 0.34f);
@@ -1285,14 +1394,95 @@ public class Bullet : MonoBehaviourPun
         }
     }
 
+    void UpdatePilotBreachProjectileVisual()
+    {
+        if (pilotBreachTraceLines == null || pilotBreachTraceLines.Length == 0)
+            return;
+
+        Vector2 direction = GetTravelDirection();
+        Vector2 tangent = new Vector2(-direction.y, direction.x);
+        Vector3 center = transform.position;
+        float length = ResolvePilotBreachVisualLength();
+        float scale = Mathf.Max(0.8f, visualScaleMultiplier);
+        float pulse = Mathf.Sin(Time.time * 24f + (photonView != null ? photonView.ViewID * 0.11f : 0f)) * 0.5f + 0.5f;
+
+        for (int i = 0; i < pilotBreachTraceLines.Length; i++)
+        {
+            LineRenderer line = pilotBreachTraceLines[i];
+            if (line == null)
+                continue;
+
+            float lane = i - 1;
+            float lanePulse = Mathf.Sin(Time.time * 18f + i * 1.7f) * 0.5f + 0.5f;
+            float sideOffset = lane * Mathf.Lerp(0.055f, 0.105f, lanePulse) * scale;
+            float head = i == 1 ? 0.48f : 0.34f;
+            float tail = i == 1 ? 0.72f : 0.58f;
+            Vector3 start = center + (Vector3)(direction * length * head) + (Vector3)(tangent * sideOffset);
+            Vector3 end = center - (Vector3)(direction * length * tail) + (Vector3)(tangent * sideOffset * 0.35f);
+            line.SetPosition(0, start);
+            line.SetPosition(1, end);
+
+            float alpha = Mathf.Lerp(i == 1 ? 0.72f : 0.42f, i == 1 ? 1f : 0.72f, pulse);
+            line.startColor = new Color(1f, 0.98f, 0.72f, alpha);
+            line.endColor = new Color(1f, 0.42f, 0.04f, alpha * 0.16f);
+            line.widthMultiplier = (i == 1 ? 0.105f : 0.055f) * scale * Mathf.Lerp(0.84f, 1.2f, pulse);
+        }
+
+        if (pilotBreachGlowRenderer != null)
+        {
+            pilotBreachGlowRenderer.color = new Color(1f, 0.94f, 0.42f, Mathf.Lerp(0.28f, 0.48f, pulse));
+            pilotBreachGlowRenderer.transform.localScale = Vector3.one * Mathf.Lerp(1.22f, 1.46f, pulse);
+        }
+    }
+
+    float ResolvePilotBreachVisualLength()
+    {
+        if (IsRocketProjectile())
+            return Mathf.Max(0.72f, rocketProjectileWorldLength * 1.25f);
+
+        if (IsRailProjectile())
+            return 0.95f * Mathf.Max(0.85f, visualScaleMultiplier);
+
+        if (IsIonProjectile())
+            return 0.76f * Mathf.Max(0.85f, visualScaleMultiplier);
+
+        return 0.58f * Mathf.Max(0.9f, visualScaleMultiplier);
+    }
+
     Vector2 GetTravelDirection()
     {
-        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        Rigidbody2D rb = cachedRigidbody;
         if (rb != null && rb.linearVelocity.sqrMagnitude > 0.001f)
             return rb.linearVelocity.normalized;
 
         Vector2 up = transform.up;
         return up.sqrMagnitude > 0.001f ? up.normalized : Vector2.up;
+    }
+
+    static int OverlapCircleNonAlloc(Vector2 center, float radius, Collider2D[] results)
+    {
+        ContactFilter2D filter = new ContactFilter2D
+        {
+            useLayerMask = false,
+            useTriggers = true
+        };
+        return Physics2D.OverlapCircle(center, radius, filter, results);
+    }
+
+    static Material GetProjectileLineMaterial()
+    {
+        if (sharedProjectileLineMaterial != null)
+            return sharedProjectileLineMaterial;
+
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null)
+            return null;
+
+        sharedProjectileLineMaterial = new Material(shader)
+        {
+            name = "BulletProjectileLineMaterial"
+        };
+        return sharedProjectileLineMaterial;
     }
 
     [PunRPC]

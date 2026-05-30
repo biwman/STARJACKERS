@@ -21,6 +21,7 @@ public class PlayerShooting : MonoBehaviourPun
     const float SuperChargeOnComplexHit = 0.08f;
     const float GadgetMinePlacementCooldown = 0.9f;
     const int GadgetMineDefaultCharges = 4;
+    const int SpaceBombDefaultCharges = 1;
     const int BatteryDefaultCharges = 3;
     const int MagneticBeamDefaultCharges = 3;
     const int TractorBeamDefaultCharges = 4;
@@ -55,7 +56,14 @@ public class PlayerShooting : MonoBehaviourPun
     const float DoubleRocketUnguidedMinDivergenceAngle = 2.5f;
     const float DoubleRocketUnguidedMaxDivergenceAngle = 7.5f;
     const float DoubleRocketSuperChargeMultiplier = 0.7f;
+    const float AshCapacitorAmmoReloadMultiplier = 0.9f;
+    const float AshEmergencyAmmoReloadMultiplier = 0.75f;
     const float PulseDisruptorWaveTickInterval = 0.035f;
+    const string PilotBreachProjectileMarker = "sir_breach";
+    static readonly Collider2D[] PulseDisruptorHits = new Collider2D[128];
+    static readonly Collider2D[] SpawnClearanceHits = new Collider2D[48];
+    static readonly RaycastHit2D[] LineBlockHits = new RaycastHit2D[64];
+    static readonly RaycastHit2D[] AstroCutterHits = new RaycastHit2D[128];
     static readonly Color PlasmaBulletColor = new Color(0.15f, 1f, 0.28f, 1f);
     static readonly Color RocketLockedMarkerColor = new Color(0.2f, 1f, 0.35f, 1f);
 
@@ -77,6 +85,7 @@ public class PlayerShooting : MonoBehaviourPun
         public int MaxAmmo;
         public float AmmoReloadStartedAt;
         public float NextAmmoAt;
+        public bool AshEmergencyReloadPending;
     }
 
     public Joystick shootJoystick;
@@ -157,14 +166,16 @@ public class PlayerShooting : MonoBehaviourPun
     float simpleAreaDamageRadius;
     string simpleHitEffectId = string.Empty;
     float simpleFlightTime = 10f;
+    readonly HashSet<int> astroCutterDamagedViews = new HashSet<int>();
+    readonly HashSet<string> astroCutterDamagedObstacles = new HashSet<string>(StringComparer.Ordinal);
 
     public int CurrentAmmo => IsComplexShootingActive && GetActiveComplexWeaponState() != null ? GetActiveComplexWeaponState().CurrentAmmo : currentAmmo;
     public int MaxAmmo => IsComplexShootingActive && GetActiveComplexWeaponState() != null ? GetActiveComplexWeaponState().MaxAmmo : maxAmmo;
     public bool IsReloading => isReloading;
-    public bool IsComplexShootingActive => RoomSettings.IsComplexShootingModel() && GetComponent<EnemyBot>() == null && !AstronautSurvivor.IsAstronautInstantiationData(photonView != null ? photonView.InstantiationData : null);
+    public bool IsComplexShootingActive => GetComponent<EnemyBot>() == null && !AstronautSurvivor.IsAstronautInstantiationData(photonView != null ? photonView.InstantiationData : null);
     public float ComplexAmmoReloadProgress => GetComplexAmmoReloadProgress();
     public float SuperChargeNormalized => Mathf.Clamp01(superCharge);
-    public bool IsSuperAttackReady => IsComplexShootingActive && RoomSettings.IsSuperAttackEnabled() && superCharge >= 0.999f;
+    public bool IsSuperAttackReady => IsComplexShootingActive && superCharge >= 0.999f;
     public bool CanManualReload => photonView.IsMine && IsGameStarted() && !IsComplexShootingActive && !isReloading && currentAmmo > 0 && currentAmmo < maxAmmo;
     public int ComplexWeaponCount => complexWeaponStates.Count;
     public int ActiveComplexWeaponNumber => complexWeaponStates.Count > 0 ? activeComplexWeaponIndex + 1 : 1;
@@ -244,16 +255,6 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (!photonView.IsMine)
             return;
-
-        if (GetComponent<AmmoUI>() == null)
-        {
-            gameObject.AddComponent<AmmoUI>();
-        }
-
-        if (GetComponent<ReloadButtonUI>() == null)
-        {
-            gameObject.AddComponent<ReloadButtonUI>();
-        }
 
         if (GetComponent<ComplexAmmoBarUI>() == null)
         {
@@ -357,7 +358,7 @@ public class PlayerShooting : MonoBehaviourPun
             if (Shoot(direction.normalized))
             {
                 ConsumeAmmo();
-                nextFireTime = Time.time + fireRate;
+                nextFireTime = Time.time + fireRate * GetFireIntervalMultiplier();
             }
         }
     }
@@ -693,7 +694,7 @@ public class PlayerShooting : MonoBehaviourPun
 
     bool HandleComplexSuperInput()
     {
-        if (superJoystick == null || !RoomSettings.IsSuperAttackEnabled())
+        if (superJoystick == null)
             return false;
 
         WeaponAttackProfile normalProfile = activeComplexWeaponProfile ?? SyncComplexWeaponProfile();
@@ -863,7 +864,8 @@ public class PlayerShooting : MonoBehaviourPun
                 MaxAmmo = max,
                 CurrentAmmo = previous != null ? Mathf.Clamp(previous.CurrentAmmo, 0, max) : max,
                 AmmoReloadStartedAt = previous != null ? previous.AmmoReloadStartedAt : 0f,
-                NextAmmoAt = previous != null ? previous.NextAmmoAt : 0f
+                NextAmmoAt = previous != null ? previous.NextAmmoAt : 0f,
+                AshEmergencyReloadPending = previous != null && previous.AshEmergencyReloadPending
             };
             complexWeaponStates.Add(state);
         }
@@ -957,7 +959,7 @@ public class PlayerShooting : MonoBehaviourPun
                 continue;
             }
 
-            float reloadTime = Mathf.Max(0f, state.Profile.AmmoReloadTime);
+            float reloadTime = GetAdjustedAmmoReloadTime(state.Profile, state.AshEmergencyReloadPending);
             if (reloadTime <= 0f)
                 continue;
 
@@ -966,10 +968,15 @@ public class PlayerShooting : MonoBehaviourPun
                 state.AmmoReloadStartedAt = Time.time;
                 state.NextAmmoAt = Time.time + reloadTime;
             }
+            else
+            {
+                ShortenActiveAmmoReloadIfFaster(state, reloadTime);
+            }
 
             while (state.CurrentAmmo < state.MaxAmmo && state.NextAmmoAt > 0f && Time.time >= state.NextAmmoAt)
             {
                 state.CurrentAmmo++;
+                state.AshEmergencyReloadPending = false;
                 if (state.CurrentAmmo >= state.MaxAmmo)
                 {
                     state.NextAmmoAt = 0f;
@@ -977,12 +984,27 @@ public class PlayerShooting : MonoBehaviourPun
                     break;
                 }
 
+                reloadTime = GetAdjustedAmmoReloadTime(state.Profile, false);
                 state.AmmoReloadStartedAt = state.NextAmmoAt;
                 state.NextAmmoAt += reloadTime;
             }
         }
 
         SyncActiveComplexAmmoMirror();
+    }
+
+    void ShortenActiveAmmoReloadIfFaster(ComplexWeaponRuntimeState state, float desiredReloadTime)
+    {
+        if (state == null || desiredReloadTime <= 0f || state.NextAmmoAt <= 0f)
+            return;
+
+        float scheduledDuration = state.NextAmmoAt - state.AmmoReloadStartedAt;
+        if (scheduledDuration <= 0.001f || desiredReloadTime >= scheduledDuration - 0.01f)
+            return;
+
+        float progress = Mathf.Clamp01((Time.time - state.AmmoReloadStartedAt) / scheduledDuration);
+        state.AmmoReloadStartedAt = Time.time - (desiredReloadTime * progress);
+        state.NextAmmoAt = state.AmmoReloadStartedAt + desiredReloadTime;
     }
 
     float GetComplexAmmoReloadProgress()
@@ -997,12 +1019,6 @@ public class PlayerShooting : MonoBehaviourPun
 
     void UpdateSuperCharge()
     {
-        if (!RoomSettings.IsSuperAttackEnabled())
-        {
-            superCharge = 0f;
-            return;
-        }
-
         superCharge = Mathf.Clamp01(superCharge + (Time.deltaTime / SuperChargeTimeSeconds) * GetSuperChargeGainMultiplier());
     }
 
@@ -1022,10 +1038,14 @@ public class PlayerShooting : MonoBehaviourPun
         if (consumeAmmo)
         {
             activeWeaponState.CurrentAmmo = Mathf.Max(0, activeWeaponState.CurrentAmmo - 1);
-            if (activeWeaponState.CurrentAmmo < activeWeaponState.MaxAmmo && activeWeaponState.NextAmmoAt <= 0f)
+            if (activeWeaponState.CurrentAmmo <= 0)
+            {
+                ApplyAshEmergencyCapacitor(activeWeaponState, profile);
+            }
+            else if (activeWeaponState.CurrentAmmo < activeWeaponState.MaxAmmo && activeWeaponState.NextAmmoAt <= 0f)
             {
                 activeWeaponState.AmmoReloadStartedAt = Time.time;
-                activeWeaponState.NextAmmoAt = Time.time + Mathf.Max(0.001f, profile.AmmoReloadTime);
+                activeWeaponState.NextAmmoAt = Time.time + GetAdjustedAmmoReloadTime(profile, false);
             }
 
             SyncActiveComplexAmmoMirror();
@@ -1036,7 +1056,7 @@ public class PlayerShooting : MonoBehaviourPun
         {
             if (TryStartPulseDisruptorWave(profile, ownerId))
             {
-                nextComplexAttackTime = Time.time + Mathf.Max(0.05f, profile.AttackCooldown);
+                nextComplexAttackTime = Time.time + GetAdjustedAttackCooldown(profile);
                 NotifyShotFiredForUseCancel();
                 return true;
             }
@@ -1054,7 +1074,7 @@ public class PlayerShooting : MonoBehaviourPun
 
             if (TryStartAstroCutterBeam(profile, direction, photonView != null ? photonView.ViewID : 0))
             {
-                nextComplexAttackTime = Time.time + Mathf.Max(0.05f, profile.AttackCooldown);
+                nextComplexAttackTime = Time.time + GetAdjustedAttackCooldown(profile);
                 NotifyShotFiredForUseCancel();
                 return true;
             }
@@ -1065,10 +1085,34 @@ public class PlayerShooting : MonoBehaviourPun
         if (complexBurstRoutine != null)
             StopCoroutine(complexBurstRoutine);
 
-        complexBurstRoutine = StartCoroutine(FireComplexBurst(profile, direction, targetPoint, homingTargetViewId));
-        nextComplexAttackTime = Time.time + Mathf.Max(0.05f, profile.AttackCooldown);
+        bool pilotBreachSalvo = TryConsumePilotBreachSalvo();
+        complexBurstRoutine = StartCoroutine(FireComplexBurst(profile, direction, targetPoint, homingTargetViewId, pilotBreachSalvo));
+        nextComplexAttackTime = Time.time + GetAdjustedAttackCooldown(profile);
         NotifyShotFiredForUseCancel();
         return true;
+    }
+
+    void ApplyAshEmergencyCapacitor(ComplexWeaponRuntimeState state, WeaponAttackProfile profile)
+    {
+        if (state == null)
+            return;
+
+        bool applies = ShouldApplyAshEmergencyCapacitor(profile);
+        state.AshEmergencyReloadPending = applies;
+
+        if (state.NextAmmoAt <= 0f)
+        {
+            state.AmmoReloadStartedAt = Time.time;
+            state.NextAmmoAt = Time.time + GetAdjustedAmmoReloadTime(profile, applies);
+            return;
+        }
+
+        if (!applies)
+            return;
+
+        float remaining = Mathf.Max(0.001f, state.NextAmmoAt - Time.time);
+        state.AmmoReloadStartedAt = Time.time;
+        state.NextAmmoAt = Time.time + (remaining * AshEmergencyAmmoReloadMultiplier);
     }
 
     public void SwitchComplexWeapon()
@@ -1082,7 +1126,7 @@ public class PlayerShooting : MonoBehaviourPun
         SyncActiveComplexAmmoMirror();
     }
 
-    IEnumerator FireComplexBurst(WeaponAttackProfile profile, Vector2 direction, Vector2 targetPoint, int homingTargetViewId)
+    IEnumerator FireComplexBurst(WeaponAttackProfile profile, Vector2 direction, Vector2 targetPoint, int homingTargetViewId, bool pilotBreachSalvo = false)
     {
         if (profile == null)
             yield break;
@@ -1103,7 +1147,7 @@ public class PlayerShooting : MonoBehaviourPun
                 : ResolveComplexProjectileDirection(direction, profile.SpreadAngle, i, count);
             Vector2 projectileTargetPoint = ResolveComplexProjectileTargetPoint(profile, targetPoint, direction, i, count);
             Vector3 spawnPos = ResolveComplexProjectileSpawnPosition(profile, shotDirection, i, count);
-            bool spawned = SpawnComplexBullet(profile, shotDirection.normalized, spawnPos, ownerId, projectileTargetPoint, homingTargetViewId);
+            bool spawned = SpawnComplexBullet(profile, shotDirection.normalized, spawnPos, ownerId, projectileTargetPoint, homingTargetViewId, pilotBreachSalvo);
             if (spawned && !playOneSoundForBurst)
                 photonView.RPC(nameof(PlayShotSfx), RpcTarget.All, profile.ShotSoundId ?? string.Empty);
 
@@ -1286,10 +1330,10 @@ public class PlayerShooting : MonoBehaviourPun
 
     bool IsLineBlockedByObstacle(Vector2 start, Vector2 end, Transform target)
     {
-        RaycastHit2D[] hits = Physics2D.LinecastAll(start, end);
-        for (int i = 0; i < hits.Length; i++)
+        int hitCount = Physics2D.Linecast(start, end, CreatePhysicsQueryFilter(), LineBlockHits);
+        for (int i = 0; i < hitCount; i++)
         {
-            Collider2D hit = hits[i].collider;
+            Collider2D hit = LineBlockHits[i].collider;
             if (hit == null || hit.isTrigger)
                 continue;
 
@@ -1369,7 +1413,7 @@ public class PlayerShooting : MonoBehaviourPun
         return 1f;
     }
 
-    bool SpawnComplexBullet(WeaponAttackProfile profile, Vector2 direction, Vector3 spawnPos, int ownerId, Vector2 explicitTargetPoint, int homingTargetViewId = 0)
+    bool SpawnComplexBullet(WeaponAttackProfile profile, Vector2 direction, Vector3 spawnPos, int ownerId, Vector2 explicitTargetPoint, int homingTargetViewId = 0, bool pilotBreachProjectile = false)
     {
         if (bulletPrefab == null || profile == null)
             return false;
@@ -1412,7 +1456,8 @@ public class PlayerShooting : MonoBehaviourPun
                 isRocketProjectile ? homingTargetViewId : 0,
                 isRocketProjectile ? RocketHomingTurnRate : 0f,
                 isRocketProjectile ? profile.ProjectileSpeed : 0f,
-                isRocketProjectile
+                isRocketProjectile,
+                pilotBreachProjectile ? PilotBreachProjectileMarker : string.Empty
             }
         );
 
@@ -1471,10 +1516,10 @@ public class PlayerShooting : MonoBehaviourPun
         if (profile == null || damagedViews == null)
             return;
 
-        Collider2D[] hits = Physics2D.OverlapCircleAll(center, Mathf.Max(0.05f, currentRadius));
-        for (int i = 0; i < hits.Length; i++)
+        int hitCount = Physics2D.OverlapCircle(center, Mathf.Max(0.05f, currentRadius), CreatePhysicsQueryFilter(), PulseDisruptorHits);
+        for (int i = 0; i < hitCount; i++)
         {
-            Collider2D hit = hits[i];
+            Collider2D hit = PulseDisruptorHits[i];
             if (hit == null)
                 continue;
 
@@ -1561,29 +1606,30 @@ public class PlayerShooting : MonoBehaviourPun
         Vector2 safeDirection = ResolveSafeAimDirection(direction);
         Vector2 start = (Vector2)transform.position + (Vector2)transform.up * Mathf.Max(0.05f, muzzleOffsetDistance);
         float beamRadius = isSuperBeam ? AstroCutterSuperBeamRadius : AstroCutterBeamRadius;
-        RaycastHit2D[] hits = Physics2D.CircleCastAll(start, beamRadius, safeDirection, Mathf.Max(0.2f, range));
-        float clippedRange = AstroCutterBeamBlocker.ResolveClippedRange(hits, transform, ownerId, range);
-        HashSet<int> damagedViews = new HashSet<int>();
-        HashSet<string> damagedObstacles = new HashSet<string>(StringComparer.Ordinal);
+        int hitCount = Physics2D.CircleCast(start, beamRadius, safeDirection, CreatePhysicsQueryFilter(), AstroCutterHits, Mathf.Max(0.2f, range));
+        float clippedRange = AstroCutterBeamBlocker.ResolveClippedRange(AstroCutterHits, hitCount, transform, ownerId, range);
+        astroCutterDamagedViews.Clear();
+        astroCutterDamagedObstacles.Clear();
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
-            Collider2D hit = hits[i].collider;
+            RaycastHit2D hitInfo = AstroCutterHits[i];
+            Collider2D hit = hitInfo.collider;
             if (hit == null)
                 continue;
 
             if (hit.transform == transform || hit.transform.IsChildOf(transform))
                 continue;
 
-            if (hits[i].distance > clippedRange + 0.035f)
+            if (hitInfo.distance > clippedRange + 0.035f)
                 continue;
 
             PlayerDeployableBase deployable = hit.GetComponentInParent<PlayerDeployableBase>();
             if (deployable != null && deployable.photonView != null)
             {
-                if (damagedViews.Add(deployable.photonView.ViewID))
+                if (astroCutterDamagedViews.Add(deployable.photonView.ViewID))
                 {
-                    Vector2 point = hits[i].point.sqrMagnitude > 0.001f ? hits[i].point : (Vector2)deployable.transform.position;
+                    Vector2 point = hitInfo.point.sqrMagnitude > 0.001f ? hitInfo.point : (Vector2)deployable.transform.position;
                     deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, profile.ShieldDamage, profile.HpDamage, ownerId, point.x, point.y);
                     AddSuperChargeForDamage();
                 }
@@ -1594,9 +1640,9 @@ public class PlayerShooting : MonoBehaviourPun
             PlayerHealth hp = hit.GetComponentInParent<PlayerHealth>();
             if (hp != null && hp.photonView != null && hp.GetComponent<LureBeaconDecoy>() == null && !hp.IsWreck && hp.photonView.ViewID != ownerId)
             {
-                if (damagedViews.Add(hp.photonView.ViewID))
+                if (astroCutterDamagedViews.Add(hp.photonView.ViewID))
                 {
-                    Vector2 point = hits[i].point.sqrMagnitude > 0.001f ? hits[i].point : (Vector2)hp.transform.position;
+                    Vector2 point = hitInfo.point.sqrMagnitude > 0.001f ? hitInfo.point : (Vector2)hp.transform.position;
                     hp.photonView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, profile.ShieldDamage, profile.HpDamage, ownerId, point.x, point.y);
                     AddSuperChargeForDamage();
                 }
@@ -1608,7 +1654,7 @@ public class PlayerShooting : MonoBehaviourPun
             if (obstacleChunk != null &&
                 !string.IsNullOrWhiteSpace(obstacleChunk.StableId) &&
                 RoomSettings.AreObstaclesDestructible() &&
-                damagedObstacles.Add(obstacleChunk.StableId))
+                astroCutterDamagedObstacles.Add(obstacleChunk.StableId))
             {
                 int obstacleMultiplier = isSuperBeam ? AstroCutterSuperObstacleDamageMultiplier : AstroCutterObstacleDamageMultiplier;
                 int obstacleDamage = Mathf.Max(1, profile.HpDamage * obstacleMultiplier);
@@ -1634,7 +1680,7 @@ public class PlayerShooting : MonoBehaviourPun
 
     public void AddSuperChargeForDamage()
     {
-        if (!IsComplexShootingActive || !RoomSettings.IsSuperAttackEnabled())
+        if (!IsComplexShootingActive)
             return;
 
         superCharge = Mathf.Clamp01(superCharge + (SuperChargeOnComplexHit * GetSuperChargeDamageGainMultiplier()));
@@ -1732,11 +1778,13 @@ public class PlayerShooting : MonoBehaviourPun
 
             Vector2 safeDirection = ResolveSafeAimDirection(direction);
             Vector2 targetPoint = (Vector2)transform.position + (safeDirection * GetComplexRangeWorld(profile));
-            complexBurstRoutine = StartCoroutine(FireComplexBurst(profile, safeDirection, targetPoint, 0));
+            bool pilotBreachSalvo = TryConsumePilotBreachSalvo();
+            complexBurstRoutine = StartCoroutine(FireComplexBurst(profile, safeDirection, targetPoint, 0, pilotBreachSalvo));
             NotifyShotFiredForUseCancel();
             return true;
         }
 
+        bool pilotBreachProjectile = TryConsumePilotBreachSalvo();
         if (IsRocketWeaponProfile(profile))
         {
             int count = Mathf.Max(1, profile.ProjectileCount);
@@ -1747,14 +1795,14 @@ public class PlayerShooting : MonoBehaviourPun
                     : ResolveComplexProjectileDirection(direction.normalized, profile.SpreadAngle, i, count);
                 Vector3 spawnPos = ResolveComplexProjectileSpawnPosition(profile, shotDirection, i, count);
                 Vector2 targetPoint = (Vector2)spawnPos + (shotDirection.normalized * GetComplexRangeWorld(profile));
-                spawned |= SpawnComplexBullet(profile, shotDirection.normalized, spawnPos, ownerId, targetPoint);
+                spawned |= SpawnComplexBullet(profile, shotDirection.normalized, spawnPos, ownerId, targetPoint, 0, pilotBreachProjectile);
             }
         }
         else if (ShouldUseArcSimpleShot(profile))
         {
             Vector3 spawnPos = transform.position + (transform.up * muzzleOffsetDistance);
             Vector2 targetPoint = (Vector2)transform.position + (direction.normalized * GetComplexRangeWorld(profile));
-            spawned |= SpawnComplexBullet(profile, direction.normalized, spawnPos, ownerId, targetPoint);
+            spawned |= SpawnComplexBullet(profile, direction.normalized, spawnPos, ownerId, targetPoint, 0, pilotBreachProjectile);
         }
         else if (ShouldUseSimpleSpreadShot(profile))
         {
@@ -1763,18 +1811,18 @@ public class PlayerShooting : MonoBehaviourPun
             for (int i = 0; i < count; i++)
             {
                 Vector2 shotDirection = ResolveComplexProjectileDirection(direction.normalized, profile.SpreadAngle, i, count);
-                spawned |= SpawnBullet(shotDirection, spawnPos, ownerId);
+                spawned |= SpawnBullet(shotDirection, spawnPos, ownerId, pilotBreachProjectile);
             }
         }
         else if (ShouldFireFromDualWingMuzzles())
         {
-            spawned |= SpawnBullet(direction, GetWingMuzzlePosition(-1f), ownerId);
-            spawned |= SpawnBullet(direction, GetWingMuzzlePosition(1f), ownerId);
+            spawned |= SpawnBullet(direction, GetWingMuzzlePosition(-1f), ownerId, pilotBreachProjectile);
+            spawned |= SpawnBullet(direction, GetWingMuzzlePosition(1f), ownerId, pilotBreachProjectile);
         }
         else
         {
             Vector3 spawnPos = transform.position + (transform.up * muzzleOffsetDistance);
-            spawned |= SpawnBullet(direction, spawnPos, ownerId);
+            spawned |= SpawnBullet(direction, spawnPos, ownerId, pilotBreachProjectile);
         }
 
         if (spawned)
@@ -1790,6 +1838,8 @@ public class PlayerShooting : MonoBehaviourPun
     {
         if (!photonView.IsMine || GetComponent<EnemyBot>() != null)
             return;
+
+        AshPilotRoundTracker.RecordShot();
 
         TreasureCollector collector = GetComponent<TreasureCollector>();
         if (collector != null)
@@ -1869,7 +1919,7 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (!infiniteAmmo)
             ConsumeAmmo();
-        nextFireTime = Time.time + fireRate;
+        nextFireTime = Time.time + fireRate * GetFireIntervalMultiplier();
         return true;
     }
 
@@ -1897,7 +1947,7 @@ public class PlayerShooting : MonoBehaviourPun
         photonView.RPC(nameof(PlayLaserSfx), RpcTarget.All);
         if (!infiniteAmmo)
             ConsumeAmmo();
-        nextFireTime = Time.time + fireRate + Mathf.Max(0f, cooldownOffset);
+        nextFireTime = Time.time + (fireRate * GetFireIntervalMultiplier()) + Mathf.Max(0f, cooldownOffset);
         return true;
     }
 
@@ -1929,7 +1979,7 @@ public class PlayerShooting : MonoBehaviourPun
         photonView.RPC(nameof(PlayLaserSfx), RpcTarget.All);
         if (!infiniteAmmo)
             ConsumeAmmo();
-        nextFireTime = Time.time + fireRate + Mathf.Max(0f, cooldownOffset);
+        nextFireTime = Time.time + (fireRate * GetFireIntervalMultiplier()) + Mathf.Max(0f, cooldownOffset);
         return true;
     }
 
@@ -1964,7 +2014,7 @@ public class PlayerShooting : MonoBehaviourPun
             return;
 
         isReloading = true;
-        reloadFinishTime = Time.time + reloadDuration;
+        reloadFinishTime = Time.time + GetAdjustedSimpleReloadDuration();
 
         if (playSound)
         {
@@ -2148,15 +2198,6 @@ public class PlayerShooting : MonoBehaviourPun
         if (signature == lastAppliedGadgetSignature)
             return;
 
-        Dictionary<string, int> previousCharges = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (KeyValuePair<string, GadgetRuntimeState> pair in gadgetStates)
-        {
-            if (pair.Value == null || string.IsNullOrWhiteSpace(pair.Key))
-                continue;
-
-            previousCharges[pair.Key] = pair.Value.RemainingCharges;
-        }
-
         activeGadgetItemIds.Clear();
         gadgetStates.Clear();
         for (int i = 0; i < orderedItems.Count; i++)
@@ -2172,9 +2213,7 @@ public class PlayerShooting : MonoBehaviourPun
 
             int remainingCharges = authoritativeGadgetCharges.TryGetValue(itemId, out int authoritativeRemaining)
                 ? Mathf.Clamp(authoritativeRemaining, 0, maxCharges)
-                : previousCharges.TryGetValue(itemId, out int previousRemaining)
-                    ? Mathf.Clamp(previousRemaining, 0, maxCharges)
-                    : maxCharges;
+                : maxCharges;
 
             GadgetRuntimeState state = new GadgetRuntimeState
             {
@@ -2207,7 +2246,7 @@ public class PlayerShooting : MonoBehaviourPun
             if (authoritativeGadgetCharges.TryGetValue(pair.Key, out int remainingCharges))
                 state.RemainingCharges = Mathf.Clamp(remainingCharges, 0, Mathf.Max(0, state.MaxCharges));
             else
-                state.RemainingCharges = Mathf.Clamp(state.RemainingCharges, 0, Mathf.Max(0, state.MaxCharges));
+                state.RemainingCharges = Mathf.Max(0, state.MaxCharges);
         }
     }
 
@@ -2335,7 +2374,7 @@ public class PlayerShooting : MonoBehaviourPun
         return 0.55f;
     }
 
-    bool SpawnBullet(Vector2 direction, Vector3 spawnPos, int ownerId)
+    bool SpawnBullet(Vector2 direction, Vector3 spawnPos, int ownerId, bool pilotBreachProjectile = false)
     {
         object[] data = simpleUsesDamageProfile
             ? new object[]
@@ -2353,7 +2392,8 @@ public class PlayerShooting : MonoBehaviourPun
                 simplePierces,
                 simpleAreaDamageRadius,
                 simpleHitEffectId ?? string.Empty,
-                simpleFlightTime
+                simpleFlightTime,
+                pilotBreachProjectile ? PilotBreachProjectileMarker : string.Empty
             }
             : new object[]
             {
@@ -2364,7 +2404,8 @@ public class PlayerShooting : MonoBehaviourPun
                 bulletColor.g,
                 bulletColor.b,
                 bulletColor.a,
-                bulletRangeMultiplier
+                bulletRangeMultiplier,
+                pilotBreachProjectile ? PilotBreachProjectileMarker : string.Empty
             };
 
         GameObject bullet = PhotonNetwork.Instantiate(
@@ -2403,6 +2444,12 @@ public class PlayerShooting : MonoBehaviourPun
         return true;
     }
 
+    bool TryConsumePilotBreachSalvo()
+    {
+        PilotActiveAbilityController pilotAbility = GetComponent<PilotActiveAbilityController>();
+        return pilotAbility != null && pilotAbility.TryConsumeSirNowitzkyBreachSalvo();
+    }
+
     bool IsGameStarted()
     {
         if (PhotonNetwork.CurrentRoom == null)
@@ -2422,14 +2469,13 @@ public class PlayerShooting : MonoBehaviourPun
                photonView.IsMine &&
                IsGameStarted() &&
                IsComplexShootingActive &&
-               RoomSettings.IsAdvancedShootingJoystickEnabled() &&
                !RoundChatCommandUI.IsLocalChatMenuOpen &&
                !AreShipControlsBlocked();
     }
 
     public bool IsAdvancedShootJoystickEnabled()
     {
-        return RoomSettings.IsAdvancedShootingJoystickEnabled() && IsComplexShootingActive;
+        return IsComplexShootingActive;
     }
 
     public bool TriggerAdvancedAutoAimShot()
@@ -2506,7 +2552,81 @@ public class PlayerShooting : MonoBehaviourPun
         if (ShouldApplyNovaNoEquipmentAmmoBonus())
             configuredAmmo *= 2;
 
+        if (ShouldApplyCovaxRocketAmmoBonus(profile))
+            configuredAmmo += 1;
+
         return configuredAmmo;
+    }
+
+    bool ShouldApplyCovaxRocketAmmoBonus(WeaponAttackProfile profile)
+    {
+        if (!IsRocketWeaponProfile(profile))
+            return false;
+
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        return PilotCatalog.IsSelectedPilot(owner, PilotCatalog.CovaxId);
+    }
+
+    float GetAdjustedAttackCooldown(WeaponAttackProfile profile)
+    {
+        return Mathf.Max(0.05f, profile != null ? profile.AttackCooldown : fireRate) * GetFireIntervalMultiplier();
+    }
+
+    float GetFireIntervalMultiplier()
+    {
+        return ElectromagneticShockStatus.GetFireIntervalMultiplier(gameObject) *
+               AshSuperchargeStatus.GetFireIntervalMultiplier(gameObject);
+    }
+
+    float GetAdjustedSimpleReloadDuration()
+    {
+        return Mathf.Max(0.05f, reloadDuration * AshSuperchargeStatus.GetAmmoReloadMultiplier(gameObject));
+    }
+
+    float GetAdjustedAmmoReloadTime(WeaponAttackProfile profile, bool ashEmergencyReload)
+    {
+        float reloadTime = Mathf.Max(0f, profile != null ? profile.AmmoReloadTime : reloadDuration);
+        if (reloadTime <= 0f)
+            return 0f;
+
+        if (ShouldApplyAshCapacitorTuning(profile))
+            reloadTime *= AshCapacitorAmmoReloadMultiplier;
+
+        if (ashEmergencyReload && ShouldApplyAshEmergencyCapacitor(profile))
+            reloadTime *= AshEmergencyAmmoReloadMultiplier;
+
+        reloadTime *= AshSuperchargeStatus.GetAmmoReloadMultiplier(gameObject);
+        return Mathf.Max(0.001f, reloadTime);
+    }
+
+    bool ShouldApplyAshCapacitorTuning(WeaponAttackProfile profile)
+    {
+        if (!IsAshSelected())
+            return false;
+
+        return IsWeaponProfile(profile, WeaponAttackCatalog.PlasmaGunId) ||
+               IsWeaponProfile(profile, WeaponAttackCatalog.RailGunId) ||
+               IsWeaponProfile(profile, WeaponAttackCatalog.DoubleIonizerId);
+    }
+
+    bool ShouldApplyAshEmergencyCapacitor(WeaponAttackProfile profile)
+    {
+        return IsAshSelected() && profile != null && profile.AmmoReloadTime > 0f;
+    }
+
+    bool IsAshSelected()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        return PilotCatalog.IsSelectedPilot(owner, PilotCatalog.AshId);
+    }
+
+    static bool IsWeaponProfile(WeaponAttackProfile profile, string weaponId)
+    {
+        if (profile == null || string.IsNullOrWhiteSpace(profile.Id) || string.IsNullOrWhiteSpace(weaponId))
+            return false;
+
+        return string.Equals(profile.Id, weaponId, StringComparison.Ordinal) ||
+               profile.Id.StartsWith(weaponId + "_", StringComparison.Ordinal);
     }
 
     public void TriggerManualReload()
@@ -2677,6 +2797,12 @@ public class PlayerShooting : MonoBehaviourPun
             return;
         }
 
+        if (soundId == "cosmic_worm")
+        {
+            AudioManager.Instance.PlayCosmicWormShotAt(transform.position);
+            return;
+        }
+
         AudioManager.Instance.PlayLaserAt(transform.position);
     }
 
@@ -2762,10 +2888,10 @@ public class PlayerShooting : MonoBehaviourPun
 
     bool IsMineSpawnPositionFree(Vector2 candidate)
     {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(candidate, 0.38f);
-        for (int i = 0; i < hits.Length; i++)
+        int hitCount = Physics2D.OverlapCircle(candidate, 0.38f, CreatePhysicsQueryFilter(), SpawnClearanceHits);
+        for (int i = 0; i < hitCount; i++)
         {
-            Collider2D hit = hits[i];
+            Collider2D hit = SpawnClearanceHits[i];
             if (hit == null || hit.isTrigger)
                 continue;
 
@@ -2857,6 +2983,9 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal))
             return new Color(0.14f, 0.5f, 0.28f, 0.96f);
 
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceBombId, StringComparison.Ordinal))
+            return new Color(0.78f, 0.22f, 0.12f, 0.96f);
+
         if (string.Equals(itemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
             return new Color(0.16f, 0.46f, 0.78f, 0.96f);
 
@@ -2907,6 +3036,9 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(gadgetItemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal))
             return GadgetMineDefaultCharges * equippedCount;
 
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.SpaceBombId, StringComparison.Ordinal))
+            return SpaceBombDefaultCharges * equippedCount;
+
         if (string.Equals(gadgetItemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
         {
             int charges = BatteryDefaultCharges * equippedCount;
@@ -2947,6 +3079,53 @@ public class PlayerShooting : MonoBehaviourPun
             return SuperBoosterDefaultCharges * equippedCount;
 
         return 0;
+    }
+
+    public bool TryRestoreOneMissingGadgetChargeOnMaster()
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView == null || photonView.Owner == null)
+            return false;
+
+        Photon.Realtime.Player owner = photonView.Owner;
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        List<string> orderedItems = new List<string>();
+        Dictionary<string, int> gadgetCounts = CollectEquippedGadgetCounts(equipmentSlots, shipSkinIndex, orderedItems);
+        if (orderedItems.Count == 0)
+            return false;
+
+        List<string> missingChargeItems = new List<string>();
+        for (int i = 0; i < orderedItems.Count; i++)
+        {
+            string itemId = orderedItems[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            int equippedCount = gadgetCounts.TryGetValue(itemId, out int count) ? count : 0;
+            int maxCharges = ResolveGadgetMaxCharges(itemId, equippedCount);
+            if (maxCharges <= 0)
+                continue;
+
+            int remainingCharges = GetAuthoritativeRemainingChargesOnMaster(owner.ActorNumber, itemId, maxCharges);
+            if (remainingCharges < maxCharges)
+                missingChargeItems.Add(itemId);
+        }
+
+        if (missingChargeItems.Count == 0)
+            return false;
+
+        string selectedItemId = missingChargeItems.Count == 1
+            ? missingChargeItems[0]
+            : missingChargeItems[UnityEngine.Random.Range(0, missingChargeItems.Count)];
+
+        int selectedEquippedCount = gadgetCounts.TryGetValue(selectedItemId, out int selectedCount) ? selectedCount : 0;
+        int selectedMaxCharges = ResolveGadgetMaxCharges(selectedItemId, selectedEquippedCount);
+        int selectedRemainingCharges = GetAuthoritativeRemainingChargesOnMaster(owner.ActorNumber, selectedItemId, selectedMaxCharges);
+        if (selectedMaxCharges <= 0 || selectedRemainingCharges >= selectedMaxCharges)
+            return false;
+
+        SetAuthoritativeRemainingChargesOnMaster(owner.ActorNumber, selectedItemId, selectedRemainingCharges + 1, selectedMaxCharges);
+        return true;
     }
 
     bool ShouldApplyRoburLureBeaconBonus()
@@ -3068,6 +3247,15 @@ public class PlayerShooting : MonoBehaviourPun
     {
         if (string.Equals(itemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal))
             return TryDeployGadgetMine();
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceBombId, StringComparison.Ordinal))
+        {
+            bool deployed = NewItemsRuntime.TryDeploySpaceBomb(this);
+            if (deployed)
+                RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+
+            return deployed;
+        }
 
         if (string.Equals(itemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
             return TryActivateBatteryCharge();
@@ -3214,10 +3402,10 @@ public class PlayerShooting : MonoBehaviourPun
 
     bool IsLureBeaconSpawnPositionFree(Vector2 candidate)
     {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(candidate, LureBeaconSpawnClearanceRadius);
-        for (int i = 0; i < hits.Length; i++)
+        int hitCount = Physics2D.OverlapCircle(candidate, LureBeaconSpawnClearanceRadius, CreatePhysicsQueryFilter(), SpawnClearanceHits);
+        for (int i = 0; i < hitCount; i++)
         {
-            Collider2D hit = hits[i];
+            Collider2D hit = SpawnClearanceHits[i];
             if (hit == null || hit.isTrigger)
                 continue;
 
@@ -3231,6 +3419,15 @@ public class PlayerShooting : MonoBehaviourPun
         }
 
         return true;
+    }
+
+    static ContactFilter2D CreatePhysicsQueryFilter()
+    {
+        return new ContactFilter2D
+        {
+            useLayerMask = false,
+            useTriggers = true
+        };
     }
 
     bool TryActivateMagneticBeam()
@@ -4205,150 +4402,6 @@ public sealed class AdvancedShootInputZoneSurface : MonoBehaviour, IPointerDownH
     public void OnPointerUp(PointerEventData eventData)
     {
         Owner?.HandlePointerUp(eventData);
-    }
-}
-
-[RequireComponent(typeof(PlayerShooting))]
-public class ReloadButtonUI : MonoBehaviourPun
-{
-    const string ReloadButtonName = "ReloadButton";
-
-    PlayerShooting shooting;
-    GameObject buttonObject;
-    Button reloadButton;
-    Image backgroundImage;
-    TextMeshProUGUI buttonText;
-
-    void Start()
-    {
-        shooting = GetComponent<PlayerShooting>();
-
-        if (!photonView.IsMine)
-        {
-            enabled = false;
-            return;
-        }
-
-        CreateButton();
-        RefreshState();
-    }
-
-    void Update()
-    {
-        EnsureButton();
-        RefreshState();
-    }
-
-    void OnDestroy()
-    {
-        if (buttonObject != null)
-        {
-            Destroy(buttonObject);
-        }
-    }
-
-    void CreateButton()
-    {
-        GameObject existing = GameObject.Find(ReloadButtonName);
-        if (existing != null)
-        {
-            Destroy(existing);
-        }
-
-        GameObject canvas = GameObject.Find("Canvas");
-        GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
-        if (canvas == null || shootJoystickObject == null)
-            return;
-
-        RectTransform canvasRect = canvas.GetComponent<RectTransform>();
-        RectTransform joystickRect = shootJoystickObject.GetComponent<RectTransform>();
-        if (canvasRect == null || joystickRect == null)
-            return;
-
-        buttonObject = new GameObject(ReloadButtonName, typeof(RectTransform), typeof(Image), typeof(Button));
-        buttonObject.transform.SetParent(canvas.transform, false);
-
-        RectTransform rect = buttonObject.GetComponent<RectTransform>();
-        rect.anchorMin = joystickRect.anchorMin;
-        rect.anchorMax = joystickRect.anchorMax;
-        rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = joystickRect.anchoredPosition + new Vector2(0f, 216f);
-        rect.sizeDelta = new Vector2(176f, 62f);
-
-        backgroundImage = buttonObject.GetComponent<Image>();
-        backgroundImage.color = new Color(0.23f, 0.56f, 0.9f, 0.96f);
-        backgroundImage.type = Image.Type.Sliced;
-
-        reloadButton = buttonObject.GetComponent<Button>();
-        reloadButton.transition = Selectable.Transition.ColorTint;
-        reloadButton.targetGraphic = backgroundImage;
-        reloadButton.onClick.AddListener(HandleReloadClicked);
-
-        GameObject textObject = new GameObject("ReloadButtonText", typeof(RectTransform), typeof(TextMeshProUGUI));
-        textObject.transform.SetParent(buttonObject.transform, false);
-
-        RectTransform textRect = textObject.GetComponent<RectTransform>();
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = Vector2.zero;
-        textRect.offsetMax = Vector2.zero;
-
-        buttonText = textObject.GetComponent<TextMeshProUGUI>();
-        buttonText.text = "RELOAD";
-        buttonText.fontSize = 26f;
-        buttonText.fontStyle = FontStyles.Bold;
-        buttonText.alignment = TextAlignmentOptions.Center;
-        buttonText.textWrappingMode = TextWrappingModes.NoWrap;
-        buttonText.margin = new Vector4(12f, 6f, 12f, 6f);
-        buttonText.color = Color.white;
-
-        TMP_Text referenceText = FindAnyObjectByType<TMP_Text>();
-        if (referenceText != null)
-        {
-            buttonText.font = referenceText.font;
-            buttonText.fontSharedMaterial = referenceText.fontSharedMaterial;
-        }
-    }
-
-    void EnsureButton()
-    {
-        if (!photonView.IsMine)
-            return;
-
-        if (buttonObject != null && reloadButton != null && backgroundImage != null && buttonText != null)
-            return;
-
-        CreateButton();
-    }
-
-    void RefreshState()
-    {
-        if (shooting == null || reloadButton == null || backgroundImage == null || buttonText == null)
-            return;
-
-        bool visible = GameplayHudVisibility.IsGameplayHudVisible(!shooting.IsComplexShootingActive);
-        if (buttonObject != null && buttonObject.activeSelf != visible)
-            buttonObject.SetActive(visible);
-
-        if (!visible)
-            return;
-
-        bool canReload = shooting.CanManualReload;
-        reloadButton.interactable = canReload;
-        backgroundImage.color = canReload
-            ? new Color(0.23f, 0.56f, 0.9f, 0.96f)
-            : new Color(0.14f, 0.18f, 0.24f, 0.78f);
-        buttonText.color = canReload
-            ? Color.white
-            : new Color(0.82f, 0.86f, 0.91f, 0.82f);
-    }
-
-    void HandleReloadClicked()
-    {
-        if (shooting == null)
-            return;
-
-        shooting.TriggerManualReload();
     }
 }
 

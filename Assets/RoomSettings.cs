@@ -19,6 +19,8 @@ public static class RoomSettings
     public const string TreasureDensityKey = "treasureDensity";
     public const string ResourceRichnessKey = "resourceRichness";
     public const string RandomLootWreckCountKey = "randomLootWreckCount";
+    public const string HiddenTreasureEnabledKey = "hiddenTreasureEnabled";
+    public const string CosmicWormEnabledKey = "cosmicWormEnabled";
     public const string CrazyEnemiesModeKey = "mapEffect.crazyEnemies.mode";
     public const string CrazyEnemiesStartUtcMsKey = "mapEffect.crazyEnemies.startUtcMs";
     public const string CrazyEnemiesActiveKey = "mapEffect.crazyEnemies.active";
@@ -41,10 +43,11 @@ public static class RoomSettings
     public const string CloudsDensityKey = "cloudsDensity";
     public const string CloudsSizeKey = "cloudsSize";
     public const string ExtractionCountKey = "extractionCount";
+    public const string ExtractionTypeKey = "extractionType";
     public const string RepairBayCountKey = "repairBayCount";
     public const string SpaceFactoryCountKey = "spaceFactoryCount";
+    public const string ScienceStationCountKey = "scienceStationCount";
     public const string BoosterSlowdownKey = "boosterSlowdownPercent";
-    public const string AmmoCountKey = "ammoCount";
     public const string BoosterRecoveryDelayKey = "boosterRecoveryDelay";
     public const string ShipDriftEnabledKey = "shipDriftEnabled";
     public const string LastShipTimerMultiplierKey = "lastShipTimerMultiplier";
@@ -57,14 +60,11 @@ public static class RoomSettings
     public const string MapBackgroundKey = "mapBackground";
     public const string SelectedMapKey = "selectedMap";
     public const string VisualEffectsEnabledKey = "visualEffectsEnabled";
-    public const string AdvancedBackgroundEnabledKey = "advancedBackgroundEnabled";
     public const string ParallaxBackgroundKey = "parallaxBackground";
     public const string BackgroundObjectKey = "backgroundObject";
     public const string GravityWellPhysicsEnabledKey = "gravityWellPhysicsEnabled";
-    public const string StartingVfxEnabledKey = "startingVfxEnabled";
     public const string EndDisasterModeKey = "endDisasterMode";
     public const string EndDisasterWarningSecondsKey = "endDisasterWarningSeconds";
-    public const string DynamicUseLabelEnabledKey = "dynamicUseLabelEnabled";
     public const string CollectKeepAliveRangeBonusPercentKey = "collectKeepAliveRangeBonusPercent";
     public const string HapticsEnabledKey = "hapticsEnabled";
     public const string FpsCounterEnabledKey = "fpsCounterEnabled";
@@ -77,10 +77,6 @@ public static class RoomSettings
     public const string ObstacleWeightFactorKey = "obstacleWeightFactor";
     public const string TreasureWeightFactorKey = "treasureWeightFactor";
     public const string BatteringDamageKey = "batteringDamage";
-    public const string ShootingModelKey = "shootingModel";
-    public const string AdvancedMovingJoystickEnabledKey = "advancedMovingJoystickEnabled";
-    public const string AdvancedShootingJoystickEnabledKey = "advancedShootingJoystickEnabled";
-    public const string SuperAttackEnabledKey = "superAttackEnabled";
     public const string GunSetupKeyPrefix = "gunSetup.";
     public const string RoundResultsKey = "roundResultsSnapshot";
     public const string FinishedRoundResultsKey = "finishedRoundResults";
@@ -93,6 +89,7 @@ public static class RoomSettings
     public const string RepairBayOccupancyStateKey = "repairBayOccupancyState";
     public const string SpaceFactoryStateKey = "spaceFactoryState";
     public const string SpaceFactoryOccupancyStateKey = "spaceFactoryOccupancyState";
+    public const string ScienceStationOccupancyStateKey = "scienceStationOccupancyState";
     public const string ScoreKey = "score";
 
     public const float DefaultRoundDuration = 240f;
@@ -103,9 +100,16 @@ public static class RoomSettings
     public const int DefaultObstacleSizePercent = 100;
     public const bool DefaultObstacleNoBorders = false;
     public const int DefaultExtractionCount = 3;
+    public const string ExtractionTypePortal = "portal";
+    public const string ExtractionTypeCarrier = "carrier";
+    public const string ExtractionTypeSpaceCity = "space_city";
+    public const string DefaultExtractionType = ExtractionTypePortal;
     public const int DefaultRepairBayCount = 1;
     public const int DefaultSpaceFactoryCount = 0;
+    public const int DefaultScienceStationCount = 0;
     public const int DefaultRandomLootWreckCount = 0;
+    public const bool DefaultHiddenTreasureEnabled = false;
+    public const bool DefaultCosmicWormEnabled = false;
     public const int DefaultBoosterSlowdownPercent = 40;
     public const int DefaultAmmoCount = 15;
     public const int DefaultBoosterRecoveryDelay = 5;
@@ -121,7 +125,6 @@ public static class RoomSettings
     public const int MaxMapBackground = 21;
     public const string DefaultLobbyMapId = "just_space";
     public const bool DefaultVisualEffectsEnabled = true;
-    public const bool DefaultAdvancedBackgroundEnabled = true;
     public const string ParallaxBackgroundKosmos3 = "kosmos3";
     public const string ParallaxBackgroundKosmos6 = "kosmos6";
     public const string ParallaxBackgroundKosmos8 = "kosmos8";
@@ -148,8 +151,6 @@ public static class RoomSettings
     public const string BackgroundObject13 = "background_object13";
     public const string DefaultBackgroundObject = BackgroundObjectOff;
     public const bool DefaultGravityWellPhysicsEnabled = false;
-    public const bool DefaultStartingVfxEnabled = true;
-    public const bool DefaultDynamicUseLabelEnabled = true;
     public const int DefaultCollectKeepAliveRangeBonusPercent = 50;
     public const bool DefaultHapticsEnabled = true;
     public const bool DefaultFpsCounterEnabled = false;
@@ -168,12 +169,6 @@ public static class RoomSettings
     public const int DefaultObstacleWeightFactor = 12;
     public const int DefaultTreasureWeightFactor = 6;
     public const int DefaultBatteringDamage = 20;
-    public const string ShootingModelSimple = "simple";
-    public const string ShootingModelComplex = "complex";
-    public const string DefaultShootingModel = ShootingModelComplex;
-    public const bool DefaultAdvancedMovingJoystickEnabled = true;
-    public const bool DefaultAdvancedShootingJoystickEnabled = true;
-    public const bool DefaultSuperAttackEnabled = true;
     public const int MaxObstacleWeightFactor = 999;
     public const bool DefaultEnemyRespawnEnabled = false;
     public const int DefaultEnemyRespawnIntervalSeconds = 60;
@@ -308,6 +303,35 @@ public static class RoomSettings
         return GetInt(ExtractionCountKey, DefaultExtractionCount, 1, 4);
     }
 
+    public static string GetExtractionType()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ExtractionTypeKey, out object value) &&
+            value is string extractionType)
+        {
+            return NormalizeExtractionType(extractionType);
+        }
+
+        return DefaultExtractionType;
+    }
+
+    public static string NormalizeExtractionType(string extractionType)
+    {
+        string normalized = string.IsNullOrWhiteSpace(extractionType)
+            ? DefaultExtractionType
+            : extractionType.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case ExtractionTypeCarrier:
+                return ExtractionTypeCarrier;
+            case ExtractionTypeSpaceCity:
+                return ExtractionTypeSpaceCity;
+            default:
+                return ExtractionTypePortal;
+        }
+    }
+
     public static int GetRepairBayCount()
     {
         return GetInt(RepairBayCountKey, DefaultRepairBayCount, 0, 2);
@@ -318,9 +342,38 @@ public static class RoomSettings
         return GetInt(SpaceFactoryCountKey, DefaultSpaceFactoryCount, 0, 2);
     }
 
+    public static int GetScienceStationCount()
+    {
+        return GetInt(ScienceStationCountKey, DefaultScienceStationCount, 0, 1);
+    }
+
     public static int GetRandomLootWreckCount()
     {
         return GetInt(RandomLootWreckCountKey, DefaultRandomLootWreckCount, 0, 5);
+    }
+
+    public static bool IsHiddenTreasureEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(HiddenTreasureEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultHiddenTreasureEnabled;
+    }
+
+    public static bool IsCosmicWormEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(CosmicWormEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultCosmicWormEnabled;
     }
 
     public static int GetBoosterSlowdownPercent()
@@ -330,7 +383,7 @@ public static class RoomSettings
 
     public static int GetAmmoCount()
     {
-        return GetInt(AmmoCountKey, DefaultAmmoCount, 5, 30);
+        return DefaultAmmoCount;
     }
 
     public static int GetBoosterRecoveryDelay()
@@ -459,18 +512,6 @@ public static class RoomSettings
         return DefaultVisualEffectsEnabled;
     }
 
-    public static bool IsAdvancedBackgroundEnabled()
-    {
-        if (PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(AdvancedBackgroundEnabledKey, out object value) &&
-            value is bool enabled)
-        {
-            return enabled;
-        }
-
-        return DefaultAdvancedBackgroundEnabled;
-    }
-
     public static string GetParallaxBackgroundId()
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -547,30 +588,6 @@ public static class RoomSettings
         }
 
         return DefaultGravityWellPhysicsEnabled;
-    }
-
-    public static bool AreStartingVfxEnabled()
-    {
-        if (PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(StartingVfxEnabledKey, out object value) &&
-            value is bool enabled)
-        {
-            return enabled;
-        }
-
-        return DefaultStartingVfxEnabled;
-    }
-
-    public static bool IsDynamicUseLabelEnabled()
-    {
-        if (PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(DynamicUseLabelEnabledKey, out object value) &&
-            value is bool enabled)
-        {
-            return enabled;
-        }
-
-        return DefaultDynamicUseLabelEnabled;
     }
 
     public static int GetCollectKeepAliveRangeBonusPercent()
@@ -1057,6 +1074,9 @@ public static class RoomSettings
         if (definition == null)
             return true;
 
+        if (kind == EnemyBotKind.CosmicWorm)
+            return IsCosmicWormEnabled();
+
         if (kind == EnemyBotKind.PirateBase && IsPirateBaseEffectReadyOrActive())
             return true;
 
@@ -1090,6 +1110,9 @@ public static class RoomSettings
     {
         EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
         if (definition == null)
+            return 1;
+
+        if (kind == EnemyBotKind.CosmicWorm)
             return 1;
 
         int maxCount = kind == EnemyBotKind.SpaceMine ? 30 : 5;
@@ -1266,79 +1289,6 @@ public static class RoomSettings
     public static int GetBatteringDamage()
     {
         return GetInt(BatteringDamageKey, DefaultBatteringDamage, 0, 50);
-    }
-
-    public static string GetShootingModel()
-    {
-        if (PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ShootingModelKey, out object value) &&
-            value is string model)
-        {
-            return NormalizeShootingModel(model);
-        }
-
-        return DefaultShootingModel;
-    }
-
-    public static bool IsComplexShootingModel()
-    {
-        return GetShootingModel() == ShootingModelComplex;
-    }
-
-    public static string NormalizeShootingModel(string model)
-    {
-        string normalized = string.IsNullOrWhiteSpace(model)
-            ? DefaultShootingModel
-            : model.Trim().ToLowerInvariant();
-
-        switch (normalized)
-        {
-            case ShootingModelComplex:
-                return ShootingModelComplex;
-            default:
-                return ShootingModelSimple;
-        }
-    }
-
-    public static bool IsSuperAttackToggleEnabled()
-    {
-        if (PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(SuperAttackEnabledKey, out object value) &&
-            value is bool enabled)
-        {
-            return enabled;
-        }
-
-        return DefaultSuperAttackEnabled;
-    }
-
-    public static bool IsSuperAttackEnabled()
-    {
-        return IsComplexShootingModel() && IsSuperAttackToggleEnabled();
-    }
-
-    public static bool IsAdvancedShootingJoystickEnabled()
-    {
-        if (PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(AdvancedShootingJoystickEnabledKey, out object value) &&
-            value is bool enabled)
-        {
-            return enabled;
-        }
-
-        return DefaultAdvancedShootingJoystickEnabled;
-    }
-
-    public static bool IsAdvancedMovingJoystickEnabled()
-    {
-        if (PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(AdvancedMovingJoystickEnabledKey, out object value) &&
-            value is bool enabled)
-        {
-            return enabled;
-        }
-
-        return DefaultAdvancedMovingJoystickEnabled;
     }
 
     public static string GetMapEffectMode(string modeKey)
@@ -1726,9 +1676,9 @@ public static class ShipCatalog
         1,
         75,
         40,
-        5f,
+        3.125f,
         1f,
-        5f,
+        10f,
         30,
         new[] { new Vector2(0f, 0.02f) });
 
@@ -1744,9 +1694,9 @@ public static class ShipCatalog
         0,
         60,
         30,
-        6f,
+        3.75f,
         1.2f,
-        4f,
+        8f,
         40,
         new[]
         {
@@ -1766,9 +1716,9 @@ public static class ShipCatalog
         2,
         98,
         55,
-        4.2f,
+        2.625f,
         0.82f,
-        6f,
+        12f,
         30,
         new[] { new Vector2(0f, 0.02f) });
 
@@ -1784,9 +1734,9 @@ public static class ShipCatalog
         1,
         63,
         25,
-        6.8f,
+        4.25f,
         1.45f,
-        3.6f,
+        7.2f,
         20,
         new[]
         {
@@ -1807,9 +1757,9 @@ public static class ShipCatalog
         2,
         72,
         35,
-        5.4f,
+        3.375f,
         1.08f,
-        5.4f,
+        10.8f,
         25,
         new[] { new Vector2(0f, 0.18f) });
 

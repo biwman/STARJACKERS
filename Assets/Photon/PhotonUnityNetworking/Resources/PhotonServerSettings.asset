@@ -198,6 +198,36 @@ MonoBehaviour:
   - TakeDeployableShieldOnlyDamageAt
   - TakeShieldOnlyDamageAt
   - ApplyAsteroidKnockbackRpc
+  - SetBeingCollectedRpc
+  - StartPirateBaseCollectionBeamRpc
+  - StopPirateBaseCollectionBeamRpc
+  - ApplyConfusionRpc
+  - ApplyRoburMarkRpc
+  - ApplyRobyBoosterRefillRpc
+  - PlayCharlieConfusionWaveRpc
+  - PlayJakeBarrierVfxRpc
+  - PlayNovaScavengerBurstVfxRpc
+  - ReceiveNovaTreasureRpc
+  - RequestUsePilotActiveAbility
+  - ResolveReservedNovaTreasure
+  - SyncPilotActiveAbilityStateRpc
+  - SyncSirNowitzkyBreachShotsRpc
+  - ApplyElectromagneticShockRpc
+  - PlayCovaxElectromagneticWaveRpc
+  - ApplyAshSuperchargeRpc
+  - PlayCosmicWormPhaseRpc
+  - SpawnCosmicWormDashTrailRpc
+  - SpawnCosmicWormDashWarningRpc
+  - SpawnCosmicWormSpitVfxRpc
+  - StartCosmicWormSwallowRpc
+  - StopCosmicWormSwallowRpc
+  - SetSpaceBombLaunchedRpc
+  - BeginScienceStationLanding
+  - ReceiveScienceStationRewardRpc
+  - RequestScienceStationDock
+  - RequestScienceStationLaunch
+  - RequestScienceStationReward
+  - ShowScienceStationRewardRpc
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

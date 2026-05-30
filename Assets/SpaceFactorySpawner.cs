@@ -181,7 +181,7 @@ public sealed class SpaceFactorySpawner : MonoBehaviourPunCallbacks
                 repairBayPositions,
                 obstaclePositions,
                 nebulaPositions,
-                MinDistanceFromExtractionZones * 0.82f,
+                MinDistanceFromExtractionZones,
                 MinDistanceFromRepairBays * 0.62f,
                 MinDistanceFromObstacles * 0.58f,
                 MinDistanceFromNebulas * 0.55f,

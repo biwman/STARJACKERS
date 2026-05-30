@@ -42,7 +42,7 @@ public class Treasure : MonoBehaviourPun
             movingObject = gameObject.AddComponent<MovingSpaceObject>();
         }
 
-        bool isContainer = InventoryItemCatalog.IsContainerItem(itemId);
+        bool isContainer = InventoryItemCatalog.IsContainerItem(itemId) || InventoryItemCatalog.IsBlueprintScrapContainerItem(itemId);
         bool isRandomLootWreck = InventoryItemCatalog.IsRandomLootWreckItem(itemId);
         string stablePrefix = isRandomLootWreck ? "random_loot_wreck_" : isContainer ? "container_" : "treasure_";
         string stableId = photonView != null
@@ -53,6 +53,8 @@ public class Treasure : MonoBehaviourPun
             : MovingSpaceObject.SpaceObjectType.Treasure;
         movingObject.Configure(stableId, objectType);
         GameVisualTheme.ApplyTreasureVisual(this);
+        if (sr != null)
+            originalColor = sr.color;
     }
 
     void InitializeFromPhotonData()
@@ -72,7 +74,7 @@ public class Treasure : MonoBehaviourPun
         if (InventoryItemCatalog.IsRandomLootWreckItem(itemId))
             return 0.82f;
 
-        if (InventoryItemCatalog.IsContainerItem(itemId))
+        if (InventoryItemCatalog.IsContainerItem(itemId) || InventoryItemCatalog.IsBlueprintScrapContainerItem(itemId))
             return 0.78f;
 
         if (itemId == InventoryItemCatalog.SpaceAnimalRemainsId)
@@ -105,5 +107,11 @@ public class Treasure : MonoBehaviourPun
     {
         if (sr != null)
             sr.color = originalColor;
+    }
+
+    [PunRPC]
+    public void SetBeingCollectedRpc(bool value)
+    {
+        isBeingCollected = value;
     }
 }

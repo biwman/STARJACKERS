@@ -26,6 +26,7 @@ public static class RoundXpBalance
     public const int KillPirateFighterAceXp = 140;
     public const int KillRadarShipXp = 220;
     public const int KillMothershipXp = 400;
+    public const int KillCosmicWormXp = 650;
     public const int KillPlayerShipXp = 150;
     public const int FirstBloodXp = 75;
 
@@ -50,7 +51,7 @@ public static class RoundXpBalance
 
     public static int GetTreasureCollectXp(string itemId)
     {
-        if (InventoryItemCatalog.IsContainerItem(itemId))
+        if (InventoryItemCatalog.IsContainerItem(itemId) || InventoryItemCatalog.IsBlueprintScrapContainerItem(itemId))
             return ContainerCollectXp;
 
         return IsAsteroidResource(itemId) ? AsteroidCollectXp : OtherCollectibleCollectXp;
@@ -73,11 +74,13 @@ public static class RoundXpBalance
             case EnemyBotKind.SpaceMine: return KillSpaceMineXp;
             case EnemyBotKind.Corsair: return KillCorsairXp;
             case EnemyBotKind.SpaceTruck: return KillSpaceTruckXp;
+            case EnemyBotKind.ContainerShip: return KillSpaceTruckXp;
             case EnemyBotKind.PirateFighter: return KillPirateFighterXp;
             case EnemyBotKind.PirateFighterElite: return KillPirateFighterEliteXp;
             case EnemyBotKind.PirateFighterAce: return KillPirateFighterAceXp;
             case EnemyBotKind.RadarShip: return KillRadarShipXp;
             case EnemyBotKind.Mothership: return KillMothershipXp;
+            case EnemyBotKind.CosmicWorm: return KillCosmicWormXp;
             default: return KillDroneXp;
         }
     }

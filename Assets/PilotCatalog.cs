@@ -8,7 +8,9 @@ public enum PilotUnlockType
     PersistentUnlock,
     Level,
     DroneKills,
-    CharlieSmart
+    CharlieSmart,
+    AsteroidSalvage,
+    OverloadReturns
 }
 
 public sealed class PilotDefinition
@@ -22,6 +24,8 @@ public sealed class PilotDefinition
     public int RequiredLevel { get; }
     public string UnlockDescription { get; }
     public string[] AbilityDescriptions { get; }
+    public string ActiveAbilityName { get; }
+    public string ActiveAbilityDescription { get; }
 
     public PilotDefinition(
         string id,
@@ -32,7 +36,9 @@ public sealed class PilotDefinition
         PilotUnlockType unlockType,
         int requiredLevel,
         string unlockDescription,
-        string[] abilityDescriptions)
+        string[] abilityDescriptions,
+        string activeAbilityName,
+        string activeAbilityDescription)
     {
         Id = string.IsNullOrWhiteSpace(id) ? PilotCatalog.JakeId : id.Trim().ToLowerInvariant();
         DisplayName = displayName;
@@ -43,6 +49,8 @@ public sealed class PilotDefinition
         RequiredLevel = Mathf.Max(1, requiredLevel);
         UnlockDescription = unlockDescription ?? string.Empty;
         AbilityDescriptions = abilityDescriptions ?? Array.Empty<string>();
+        ActiveAbilityName = activeAbilityName ?? string.Empty;
+        ActiveAbilityDescription = activeAbilityDescription ?? string.Empty;
     }
 }
 
@@ -54,9 +62,13 @@ public static class PilotCatalog
     public const string SirNowitzkyId = "sir_nowitzky";
     public const string RobyId = "roby";
     public const string CharlieSmartId = "charlie_smart";
+    public const string CovaxId = "covax";
+    public const string AshId = "ash";
     public const int CharlieSmartRequiredSoldAstrons = 20000;
     public const int CharlieSmartRequiredLevel = 10;
     public const int CharlieSmartRequiredPirateBayReturns = 5;
+    public const int CovaxRequiredAsteroidSalvage = 200;
+    public const int AshRequiredOverloadReturns = 3;
 
     static readonly PilotDefinition JakeDefinition = new PilotDefinition(
         JakeId,
@@ -72,7 +84,9 @@ public static class PilotCatalog
             "The first time HP drops below 50%, regenerates 1 HP per second for 30 seconds.",
             "Damage from ramming is reduced by 50%.",
             "The astronaut has 3x more HP after losing the ship."
-        });
+        },
+        "Emergency Barrier",
+        "Activate a shield for 10 seconds, reducing all incoming damage by 50%.");
 
     static readonly PilotDefinition NovaDefinition = new PilotDefinition(
         NovaId,
@@ -88,7 +102,9 @@ public static class PilotCatalog
             "Killing any enemy grants +20% speed for 5 seconds.",
             "Looting space junk grants 2 items instead of 1.",
             "When flying with no equipment, the main gun has 2x ammo."
-        });
+        },
+        "Scavenger Burst",
+        "Channel collection beams for 2.5 seconds to every collectible object within 2.5x the normal collection range, then collect them.");
 
     static readonly PilotDefinition RoburDefinition = new PilotDefinition(
         RoburId,
@@ -104,7 +120,9 @@ public static class PilotCatalog
             "Killing an enemy human player grants 2x XP for 60 seconds.",
             "Damage from space mines is reduced by 50%.",
             "Lure Beacons have double charges."
-        });
+        },
+        "Red Mark",
+        "Mark the nearest enemy or player for 15 seconds. The marked target takes 50% increased damage from all sources.");
 
     static readonly PilotDefinition SirNowitzkyDefinition = new PilotDefinition(
         SirNowitzkyId,
@@ -120,7 +138,9 @@ public static class PilotCatalog
             "Deals 15% more damage to the Mothership.",
             "Nebulas damage shields only and never decrease HP.",
             "Deals 50% more damage to obstacles."
-        });
+        },
+        "Breach Protocol",
+        "The next 5 salvos deal 100% increased damage to bosses and obstacles. Every projectile fired in those salvos is empowered. Bosses currently include the Mothership and Pirate Base.");
 
     static readonly PilotDefinition RobyDefinition = new PilotDefinition(
         RobyId,
@@ -136,7 +156,9 @@ public static class PilotCatalog
             "Battery gadgets have +1 charge each.",
             "Booster recovery cooldown is 1 second shorter.",
             "Looting treasures takes 0.5 second less."
-        });
+        },
+        "Field Reboot",
+        "Restore 1 charge to an equipped gadget that has been used. If several gadgets are missing charges, one is chosen at random. Also fully restores the booster.");
 
     static readonly PilotDefinition CharlieSmartDefinition = new PilotDefinition(
         CharlieSmartId,
@@ -152,7 +174,45 @@ public static class PilotCatalog
             "Gets a 5% discount when buying items from traders/shop.",
             "Pirate Fighters, Elites and Aces do not attack unless attacked first.",
             "Returning in the last 30 seconds grants extra 1000 Astrons."
-        });
+        },
+        "Confusion Wave",
+        "Release a green wave that scrambles all computer-controlled enemies in roughly screen range for 10 seconds, making them move randomly and fire in random directions.");
+
+    static readonly PilotDefinition CovaxDefinition = new PilotDefinition(
+        CovaxId,
+        "COVAX",
+        "UI/Pilots/pilot_07",
+        "Assets/Resources/UI/Pilots/pilot_07.png",
+        "Assets/pilot_07.png",
+        PilotUnlockType.AsteroidSalvage,
+        CovaxRequiredAsteroidSalvage,
+        "Salvage 200 asteroids.",
+        new[]
+        {
+            "Collecting an asteroid has a 10% chance to upgrade it by one rarity level before it enters cargo.",
+            "Rocket weapons have +1 ammo.",
+            "When losing the ship, engine-slot equipment is kept even on maps with equipment loss."
+        },
+        "Electromagnetic Wave",
+        "Release a cone-shaped EMP wave from the ship nose across roughly one screen. Hit ships are shocked for 10 seconds, moving 3x slower and firing 3x less often.");
+
+    static readonly PilotDefinition AshDefinition = new PilotDefinition(
+        AshId,
+        "ASH",
+        "UI/Pilots/pilot_08",
+        "Assets/Resources/UI/Pilots/pilot_08.png",
+        "Assets/pilot_08.png",
+        PilotUnlockType.OverloadReturns,
+        AshRequiredOverloadReturns,
+        "Complete 3 Overload Returns: extract with full cargo, cargo worth 800 Astrons, 90 shots fired and 20 seconds of booster use in one run.",
+        new[]
+        {
+            "Plasma Gun, Rail Gun and Double Ionizer ammo recharges 10% faster.",
+            "Booster drains 12% slower.",
+            "After ammo reaches zero, the first recovered ammo charge comes back 25% faster."
+        },
+        "Supercharge",
+        "Overload the ship for 10 seconds, increasing ship speed, fire rate and ammo recharge speed by 30% with a visible charge effect.");
 
     static readonly PilotDefinition[] Definitions =
     {
@@ -161,7 +221,9 @@ public static class PilotCatalog
         RoburDefinition,
         SirNowitzkyDefinition,
         RobyDefinition,
-        CharlieSmartDefinition
+        CharlieSmartDefinition,
+        CovaxDefinition,
+        AshDefinition
     };
 
     static readonly Dictionary<string, PilotDefinition> DefinitionsById = BuildDefinitionsById();
@@ -264,6 +326,18 @@ public static class PilotCatalog
                    pirateBayReturns >= CharlieSmartRequiredPirateBayReturns;
         }
 
+        if (definition.UnlockType == PilotUnlockType.AsteroidSalvage)
+        {
+            int asteroidSalvage = profile != null ? profile.PilotAsteroidSalvageCount : 0;
+            return asteroidSalvage >= definition.RequiredLevel;
+        }
+
+        if (definition.UnlockType == PilotUnlockType.OverloadReturns)
+        {
+            int overloadReturns = profile != null ? profile.PilotAshOverloadReturns : 0;
+            return overloadReturns >= definition.RequiredLevel;
+        }
+
         string normalized = NormalizePilotId(pilotId);
         string[] unlocked = profile != null ? profile.UnlockedPilotIds : null;
         if (unlocked == null)
@@ -311,6 +385,19 @@ public static class PilotCatalog
             return "Sell items worth " + CharlieSmartRequiredSoldAstrons + " Astrons (" + soldAstrons + "/" + CharlieSmartRequiredSoldAstrons + ").\n" +
                    "Reach XP level " + CharlieSmartRequiredLevel + " (" + level + "/" + CharlieSmartRequiredLevel + ").\n" +
                    "Return from Pirate Bay " + CharlieSmartRequiredPirateBayReturns + " times (" + pirateBayReturns + "/" + CharlieSmartRequiredPirateBayReturns + ").";
+        }
+
+        if (definition.UnlockType == PilotUnlockType.AsteroidSalvage)
+        {
+            int progress = Mathf.Clamp(profile != null ? profile.PilotAsteroidSalvageCount : 0, 0, definition.RequiredLevel);
+            return "Salvage " + definition.RequiredLevel + " asteroids (" + progress + "/" + definition.RequiredLevel + ").";
+        }
+
+        if (definition.UnlockType == PilotUnlockType.OverloadReturns)
+        {
+            int progress = Mathf.Clamp(profile != null ? profile.PilotAshOverloadReturns : 0, 0, definition.RequiredLevel);
+            return "Complete " + definition.RequiredLevel + " Overload Returns (" + progress + "/" + definition.RequiredLevel + ").\n" +
+                   "Each return needs full cargo, 800 Astrons in cargo, 90 shots and 20 seconds of booster use.";
         }
 
         return definition.UnlockDescription;

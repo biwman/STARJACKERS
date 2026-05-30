@@ -13,7 +13,7 @@ public class PlayerMovement : MonoBehaviourPun
     bool lastNetworkBodyAuthority;
     public float speed = 5f;
     public float depletedSpeedMultiplier = 0.7f;
-    public float boosterDuration = 5f;
+    public float boosterDuration = 10f;
     public float maxSpeedThreshold = 0.9f;
     public float fullSpeedSnapThreshold = 0.92f;
     public float boosterRecoveryThreshold = 0.2f;
@@ -32,15 +32,20 @@ public class PlayerMovement : MonoBehaviourPun
     private AudioSource engineAudioSource;
     private Vector3 lastAudioPosition;
     float baseSpeed = 5f;
-    float baseBoosterDuration = 5f;
+    float baseBoosterDuration = 10f;
     float turnRateMultiplier = 1f;
     int maxBoostPercent = 30;
     bool baseSpeedCaptured;
     bool fusionEngineEquipped;
+    int equippedPowerEngineCount;
+    int equippedIonEngineCount;
     int equippedFusionEngineCount;
     int equippedFuelTankCount;
+    int equippedHybridEngineCount;
+    int equippedDoubleEngineCount;
     int equippedAfterburnerStabilizerCount;
     string lastAppliedEngineSignature = string.Empty;
+    string equippedEngineTrailItemId = string.Empty;
     float pilotSpeedBoostMultiplier = 1f;
     float pilotSpeedBoostUntil = -1f;
     float superBoosterUntil = -1f;
@@ -59,6 +64,25 @@ public class PlayerMovement : MonoBehaviourPun
     const float BatteringProbeRadius = 0.82f;
     const float BatteringFrontDotThreshold = 0.34f;
     const float AvengerBatteringFrontDotThreshold = 0.24f;
+    const float MaxEngineSpeedBonus = 0.35f;
+    const int MaxEngineBoostPercentBonus = 20;
+    const float PowerEngineSpeedBonus = 0.1f;
+    const int PowerEngineBoostPercentBonus = 5;
+    const float IonEngineSpeedBonus = 0.06f;
+    const float IonEngineRecoveryDelayBonus = 1.25f;
+    const float IonEngineTurnRateBonus = 0.1f;
+    const float FusionEngineSpeedBonus = 0.14f;
+    const float FusionEngineRecoveryDelayBonus = 1f;
+    const float FuelTankBoosterDurationBonus = 1f;
+    const float HybridEngineSpeedBonus = 0.08f;
+    const float HybridEngineBoosterDurationBonus = 0.5f;
+    const float HybridEngineRecoveryDelayBonus = 0.5f;
+    const float DoubleEngineSpeedBonus = 0.2f;
+    const int DoubleEngineBoostPercentBonus = 10;
+    const float DoubleEngineBoosterDurationPenalty = 0.15f;
+    const float DoubleEngineTurnRatePenalty = 0.1f;
+    const float AshCleanBurnBoosterDrainMultiplier = 0.88f;
+    const float AfterburnerTurnRateBonus = 0.25f;
     const float RemotePushNoseProbeRadius = 0.52f;
     const float RemotePushBodyProbeRadius = 0.38f;
     const float RemotePushContactTolerance = 0.12f;
@@ -77,6 +101,7 @@ public class PlayerMovement : MonoBehaviourPun
     public float BoosterNormalized => boosterCharge;
     public bool IsBoosterDepleted => boosterExhausted;
     public bool HasFusionEngineEquipped => fusionEngineEquipped;
+    public string CurrentEngineTrailItemId => equippedEngineTrailItemId;
     public float CurrentSpeedReference => speed;
     float CurrentDepletedSpeedMultiplier => 1f - (RoomSettings.GetBoosterSlowdownPercent() / 100f);
 
@@ -359,6 +384,7 @@ public class PlayerMovement : MonoBehaviourPun
         if (nextLocalBatteringRequestTimeByTargetView.TryGetValue(targetView.ViewID, out float nextAllowedTime) && Time.time < nextAllowedTime)
             return;
 
+        float reportedBoosterSeconds = continuousBoosterTime;
         nextLocalBatteringRequestTimeByTargetView[targetView.ViewID] = Time.time + BatteringPairCooldown;
         photonView.RPC(
             nameof(RequestBatteringImpact),
@@ -366,8 +392,9 @@ public class PlayerMovement : MonoBehaviourPun
             targetView.ViewID,
             impactPoint.x,
             impactPoint.y,
-            continuousBoosterTime,
+            reportedBoosterSeconds,
             rb.linearVelocity.magnitude);
+        ResetBatteringCharge();
     }
 
     void TryRequestObstacleBatteringImpact(Collision2D collision, Vector2 impactPoint)
@@ -381,6 +408,7 @@ public class PlayerMovement : MonoBehaviourPun
         if (nextLocalBatteringRequestTimeByObstacle.TryGetValue(obstacle.StableId, out float nextAllowedTime) && Time.time < nextAllowedTime)
             return;
 
+        float reportedBoosterSeconds = continuousBoosterTime;
         nextLocalBatteringRequestTimeByObstacle[obstacle.StableId] = Time.time + BatteringPairCooldown;
         photonView.RPC(
             nameof(RequestObstacleBatteringImpact),
@@ -388,8 +416,9 @@ public class PlayerMovement : MonoBehaviourPun
             obstacle.StableId,
             impactPoint.x,
             impactPoint.y,
-            continuousBoosterTime,
+            reportedBoosterSeconds,
             rb != null ? rb.linearVelocity.magnitude : 0f);
+        ResetBatteringCharge();
     }
 
     void TryRequestBatteringProbe()
@@ -426,14 +455,16 @@ public class PlayerMovement : MonoBehaviourPun
                         continue;
 
                     nextLocalBatteringRequestTimeByTargetView[targetView.ViewID] = Time.time + BatteringPairCooldown;
+                    float reportedBoosterSeconds = continuousBoosterTime;
                     photonView.RPC(
                         nameof(RequestBatteringImpact),
                         RpcTarget.MasterClient,
                         targetView.ViewID,
                         impactPoint.x,
                         impactPoint.y,
-                        continuousBoosterTime,
+                        reportedBoosterSeconds,
                         rb.linearVelocity.magnitude);
+                    ResetBatteringCharge();
                     return;
                 }
             }
@@ -447,14 +478,16 @@ public class PlayerMovement : MonoBehaviourPun
                     continue;
 
                 nextLocalBatteringRequestTimeByObstacle[obstacle.StableId] = Time.time + BatteringPairCooldown;
+                float reportedBoosterSeconds = continuousBoosterTime;
                 photonView.RPC(
                     nameof(RequestObstacleBatteringImpact),
                     RpcTarget.MasterClient,
                     obstacle.StableId,
                     impactPoint.x,
                     impactPoint.y,
-                    continuousBoosterTime,
+                    reportedBoosterSeconds,
                     rb.linearVelocity.magnitude);
+                ResetBatteringCharge();
                 return;
             }
         }
@@ -589,6 +622,12 @@ public class PlayerMovement : MonoBehaviourPun
     {
         if (continuousBoosterTime >= BatteringRequiredBoosterSeconds && rb != null && IsAtBatteringSpeed(rb.linearVelocity.magnitude))
             lastBatteringEligibleSpeedTime = Time.time;
+    }
+
+    void ResetBatteringCharge()
+    {
+        continuousBoosterTime = 0f;
+        lastBatteringEligibleSpeedTime = -999f;
     }
 
     bool HasRecentBatteringSpeed()
@@ -932,9 +971,6 @@ public class PlayerMovement : MonoBehaviourPun
         if (!enabled || photonView == null || !photonView.IsMine || GetComponent<EnemyBot>() != null)
             return false;
 
-        if (!RoomSettings.IsAdvancedMovingJoystickEnabled())
-            return false;
-
         if (!IsGameStarted() || IsStartingEntryActive())
             return false;
 
@@ -965,9 +1001,10 @@ public class PlayerMovement : MonoBehaviourPun
 
         if (usingBooster)
         {
-            boosterCharge -= deltaTime / boosterDuration;
+            boosterCharge -= (deltaTime * GetBoosterDrainMultiplier()) / boosterDuration;
             boosterRecoveryDelayTimer = GetCurrentBoosterRecoveryDelay();
             continuousBoosterTime += deltaTime;
+            AshPilotRoundTracker.RecordBoosterSeconds(deltaTime);
         }
         else if (usingFullAcceleration)
         {
@@ -1183,7 +1220,7 @@ public class PlayerMovement : MonoBehaviourPun
         movementJoystick.deadZone = 0.12f;
         movementJoystick.rescaleInputAfterDeadZone = true;
         movementJoystick.responseExponent = 1.08f;
-        movementJoystick.recenterOnPointerDown = RoomSettings.IsAdvancedMovingJoystickEnabled();
+        movementJoystick.recenterOnPointerDown = true;
     }
 
     void SetupEngineAudio()
@@ -1309,6 +1346,17 @@ public class PlayerMovement : MonoBehaviourPun
         superBoosterUntil = Mathf.Max(superBoosterUntil, Time.time + Mathf.Max(0.05f, duration));
     }
 
+    public void RefillBooster()
+    {
+        if (!photonView.IsMine || GetComponent<EnemyBot>() != null || GetComponent<AstronautSurvivor>() != null)
+            return;
+
+        boosterCharge = 1f;
+        boosterExhausted = false;
+        boosterRecoveryDelayTimer = 0f;
+        continuousBoosterTime = 0f;
+    }
+
     void RefreshPilotSpeedBoost()
     {
         if (pilotSpeedBoostMultiplier <= 1f || Time.time < pilotSpeedBoostUntil)
@@ -1324,6 +1372,12 @@ public class PlayerMovement : MonoBehaviourPun
         return Time.time < pilotSpeedBoostUntil ? Mathf.Max(1f, pilotSpeedBoostMultiplier) : 1f;
     }
 
+    float GetBoosterDrainMultiplier()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        return PilotCatalog.IsSelectedPilot(owner, PilotCatalog.AshId) ? AshCleanBurnBoosterDrainMultiplier : 1f;
+    }
+
     void SyncEquippedEngineProfile(bool forceRefresh = false)
     {
         if (GetComponent<EnemyBot>() != null || GetComponent<AstronautSurvivor>() != null)
@@ -1334,11 +1388,30 @@ public class PlayerMovement : MonoBehaviourPun
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
         string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
-        int fusionCount = CountEquippedFusionEngines(equipmentSlots, shipSkinIndex);
+        int powerCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.PowerEngineId);
+        int ionCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.IonEngineId);
+        int fusionCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.FusionEngineId);
         int fuelTankCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.FuelTankId);
+        int hybridCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.HybridEngineId);
+        int doubleEngineCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.DoubleEngineId);
+        int superBoosterCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.SuperBoosterId);
         int afterburnerStabilizerCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.AfterburnerStabilizerId);
+        string engineTrailItemId = ResolveEngineTrailItemId(equipmentSlots, shipSkinIndex);
         bool hasFusion = fusionCount > 0;
-        string signature = shipSkinIndex + ":" + fusionCount + ":" + fuelTankCount + ":" + afterburnerStabilizerCount;
+        float shockSpeedMultiplier = ElectromagneticShockStatus.GetSpeedMultiplier(gameObject);
+        float ashSuperchargeSpeedMultiplier = AshSuperchargeStatus.GetSpeedMultiplier(gameObject);
+        string signature = shipSkinIndex + ":" +
+                           powerCount + ":" +
+                           ionCount + ":" +
+                           fusionCount + ":" +
+                           fuelTankCount + ":" +
+                           hybridCount + ":" +
+                           doubleEngineCount + ":" +
+                           superBoosterCount + ":" +
+                           afterburnerStabilizerCount + ":" +
+                           engineTrailItemId + ":" +
+                           Mathf.RoundToInt(shockSpeedMultiplier * 1000f) + ":" +
+                           Mathf.RoundToInt(ashSuperchargeSpeedMultiplier * 1000f);
         if (!forceRefresh && signature == lastAppliedEngineSignature)
             return;
 
@@ -1347,16 +1420,39 @@ public class PlayerMovement : MonoBehaviourPun
         float baseShipTurnRate = ShipCatalog.GetTurnRateMultiplier(shipSkinIndex);
         int baseShipMaxBoostPercent = ShipCatalog.GetMaxBoostPercent(shipSkinIndex);
 
+        equippedPowerEngineCount = powerCount;
+        equippedIonEngineCount = ionCount;
         equippedFusionEngineCount = fusionCount;
         equippedFuelTankCount = fuelTankCount;
+        equippedHybridEngineCount = hybridCount;
+        equippedDoubleEngineCount = doubleEngineCount;
         equippedAfterburnerStabilizerCount = afterburnerStabilizerCount;
+        equippedEngineTrailItemId = engineTrailItemId;
         fusionEngineEquipped = hasFusion;
         baseSpeed = Mathf.Max(0.1f, baseShipSpeed);
         baseBoosterDuration = Mathf.Max(0.1f, baseShipBoosterDuration);
-        turnRateMultiplier = Mathf.Max(0.1f, baseShipTurnRate * (1f + 0.25f * equippedAfterburnerStabilizerCount));
-        maxBoostPercent = Mathf.Max(0, baseShipMaxBoostPercent);
-        speed = baseSpeed * (1f + (0.15f * equippedFusionEngineCount)) * GetPilotSpeedMultiplier();
-        boosterDuration = baseBoosterDuration * (1f + (0.5f * equippedFuelTankCount));
+        float engineSpeedBonus = Mathf.Min(MaxEngineSpeedBonus,
+            PowerEngineSpeedBonus * equippedPowerEngineCount +
+            IonEngineSpeedBonus * equippedIonEngineCount +
+            FusionEngineSpeedBonus * equippedFusionEngineCount +
+            HybridEngineSpeedBonus * equippedHybridEngineCount +
+            DoubleEngineSpeedBonus * equippedDoubleEngineCount);
+        float engineTurnRateBonus =
+            AfterburnerTurnRateBonus * equippedAfterburnerStabilizerCount +
+            IonEngineTurnRateBonus * equippedIonEngineCount -
+            DoubleEngineTurnRatePenalty * equippedDoubleEngineCount;
+        int engineBoostPercentBonus = Mathf.Min(MaxEngineBoostPercentBonus,
+            PowerEngineBoostPercentBonus * equippedPowerEngineCount +
+            DoubleEngineBoostPercentBonus * equippedDoubleEngineCount);
+        float engineBoosterDurationBonus =
+            FuelTankBoosterDurationBonus * equippedFuelTankCount +
+            HybridEngineBoosterDurationBonus * equippedHybridEngineCount -
+            DoubleEngineBoosterDurationPenalty * equippedDoubleEngineCount;
+
+        turnRateMultiplier = Mathf.Max(0.1f, baseShipTurnRate * Mathf.Max(0.1f, 1f + engineTurnRateBonus));
+        maxBoostPercent = Mathf.Max(0, baseShipMaxBoostPercent + engineBoostPercentBonus);
+        speed = baseSpeed * (1f + engineSpeedBonus) * GetPilotSpeedMultiplier() * shockSpeedMultiplier * ashSuperchargeSpeedMultiplier;
+        boosterDuration = baseBoosterDuration * Mathf.Max(0.25f, 1f + engineBoosterDurationBonus);
         lastAppliedEngineSignature = signature;
         SyncEngineAudioClip();
 
@@ -1365,9 +1461,50 @@ public class PlayerMovement : MonoBehaviourPun
             thrusterVfx.RefreshMode();
     }
 
-    int CountEquippedFusionEngines(string[] equipmentSlots, int shipSkinIndex)
+    string ResolveEngineTrailItemId(string[] equipmentSlots, int shipSkinIndex)
     {
-        return CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.FusionEngineId);
+        string selectedItemId = string.Empty;
+        int selectedPriority = 0;
+        for (int i = 4; i <= 5; i++)
+        {
+            if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
+                continue;
+
+            string itemId = GetEquipmentItem(equipmentSlots, i);
+            int priority = GetEngineTrailPriority(itemId);
+            if (priority > selectedPriority)
+            {
+                selectedPriority = priority;
+                selectedItemId = itemId;
+            }
+        }
+
+        return selectedItemId ?? string.Empty;
+    }
+
+    int GetEngineTrailPriority(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return 0;
+
+        if (string.Equals(itemId, InventoryItemCatalog.DoubleEngineId, StringComparison.Ordinal))
+            return 80;
+        if (string.Equals(itemId, InventoryItemCatalog.HybridEngineId, StringComparison.Ordinal))
+            return 70;
+        if (string.Equals(itemId, InventoryItemCatalog.FusionEngineId, StringComparison.Ordinal))
+            return 60;
+        if (string.Equals(itemId, InventoryItemCatalog.PowerEngineId, StringComparison.Ordinal))
+            return 50;
+        if (string.Equals(itemId, InventoryItemCatalog.IonEngineId, StringComparison.Ordinal))
+            return 45;
+        if (string.Equals(itemId, InventoryItemCatalog.SuperBoosterId, StringComparison.Ordinal))
+            return 40;
+        if (string.Equals(itemId, InventoryItemCatalog.AfterburnerStabilizerId, StringComparison.Ordinal))
+            return 30;
+        if (string.Equals(itemId, InventoryItemCatalog.FuelTankId, StringComparison.Ordinal))
+            return 20;
+
+        return 0;
     }
 
     int CountEquippedEngineItem(string[] equipmentSlots, int shipSkinIndex, string itemId)
@@ -1419,7 +1556,11 @@ public class PlayerMovement : MonoBehaviourPun
     {
         float baseDelay = RoomSettings.GetBoosterRecoveryDelay();
         float pilotBonus = PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.RobyId) ? 1f : 0f;
-        return Mathf.Max(0f, baseDelay - equippedFusionEngineCount - pilotBonus);
+        float engineBonus =
+            FusionEngineRecoveryDelayBonus * equippedFusionEngineCount +
+            IonEngineRecoveryDelayBonus * equippedIonEngineCount +
+            HybridEngineRecoveryDelayBonus * equippedHybridEngineCount;
+        return Mathf.Max(0f, baseDelay - engineBonus - pilotBonus);
     }
 
     AudioClip ResolveEngineAudioClip()
@@ -1528,7 +1669,7 @@ public class EngineThrusterVFX : MonoBehaviour
     bool isEnemyBot;
     bool isAstronaut;
     bool isEscapePod;
-    bool fusionTrailEquipped;
+    string playerEngineTrailItemId = string.Empty;
     EnemyTrailProfile enemyTrailProfile;
     Vector2[] playerThrusterOffsetFactors = new[] { new Vector2(0f, 0.02f) };
 
@@ -1556,7 +1697,10 @@ public class EngineThrusterVFX : MonoBehaviour
         AstronautSurvivor astronaut = GetComponent<AstronautSurvivor>();
         isAstronaut = astronaut != null;
         isEscapePod = astronaut != null && astronaut.IsEscapePodMode;
-        fusionTrailEquipped = movement != null && movement.HasFusionEngineEquipped && !isEnemyBot && !isAstronaut;
+        if (movement == null)
+            movement = GetComponent<PlayerMovement>();
+
+        playerEngineTrailItemId = ResolvePlayerEngineTrailItemId();
 
         if (photonViewCache == null)
             photonViewCache = GetComponent<PhotonView>();
@@ -1590,10 +1734,10 @@ public class EngineThrusterVFX : MonoBehaviour
         if (movement != null)
             referenceSpeed = Mathf.Max(1f, movement.CurrentSpeedReference);
 
-        bool desiredFusionTrail = movement != null && movement.HasFusionEngineEquipped && !isEnemyBot && !isAstronaut;
-        if (desiredFusionTrail != fusionTrailEquipped)
+        string desiredEngineTrailItemId = ResolvePlayerEngineTrailItemId();
+        if (!string.Equals(desiredEngineTrailItemId, playerEngineTrailItemId, StringComparison.Ordinal))
         {
-            fusionTrailEquipped = desiredFusionTrail;
+            playerEngineTrailItemId = desiredEngineTrailItemId;
             ReapplyTrailAppearance();
         }
 
@@ -1671,6 +1815,19 @@ public class EngineThrusterVFX : MonoBehaviour
         }
 
         return offsets;
+    }
+
+    string ResolvePlayerEngineTrailItemId()
+    {
+        if (isEnemyBot || isAstronaut || movement == null)
+            return string.Empty;
+
+        return movement.CurrentEngineTrailItemId ?? string.Empty;
+    }
+
+    bool HasPlayerEngineTrailOverride()
+    {
+        return !string.IsNullOrWhiteSpace(playerEngineTrailItemId);
     }
 
     void ApplyTrailAppearance(TrailRenderer trail)
@@ -1805,23 +1962,9 @@ public class EngineThrusterVFX : MonoBehaviour
                     new GradientAlphaKey(0f, 1f)
                 });
         }
-        else if (fusionTrailEquipped)
+        else if (HasPlayerEngineTrailOverride())
         {
-            gradient.SetKeys(
-                new[]
-                {
-                    new GradientColorKey(new Color(0.84f, 0.72f, 1f), 0f),
-                    new GradientColorKey(new Color(0.48f, 0.18f, 0.76f), 0.18f),
-                    new GradientColorKey(new Color(0.22f, 0.04f, 0.42f), 0.54f),
-                    new GradientColorKey(new Color(0.06f, 0.01f, 0.14f), 1f)
-                },
-                new[]
-                {
-                    new GradientAlphaKey(0.92f, 0f),
-                    new GradientAlphaKey(0.62f, 0.26f),
-                    new GradientAlphaKey(0.24f, 0.72f),
-                    new GradientAlphaKey(0f, 1f)
-                });
+            SetPlayerEngineTrailGradient(gradient, playerEngineTrailItemId);
         }
         else if (isEnemyBot)
         {
@@ -1871,6 +2014,117 @@ public class EngineThrusterVFX : MonoBehaviour
             trail.sortingLayerID = shipRenderer.sortingLayerID;
             trail.sortingOrder = shipRenderer.sortingOrder - 2;
         }
+    }
+
+    void SetPlayerEngineTrailGradient(Gradient gradient, string engineItemId)
+    {
+        if (gradient == null)
+            return;
+
+        if (string.Equals(engineItemId, InventoryItemCatalog.PowerEngineId, StringComparison.Ordinal))
+        {
+            SetTrailGradient(gradient,
+                new Color(1f, 1f, 0.72f),
+                new Color(1f, 0.78f, 0.14f),
+                new Color(0.92f, 0.42f, 0.04f),
+                new Color(0.38f, 0.12f, 0f));
+            return;
+        }
+
+        if (string.Equals(engineItemId, InventoryItemCatalog.IonEngineId, StringComparison.Ordinal))
+        {
+            SetTrailGradient(gradient,
+                new Color(0.78f, 1f, 1f),
+                new Color(0.16f, 0.88f, 1f),
+                new Color(0.02f, 0.42f, 0.96f),
+                new Color(0f, 0.08f, 0.34f));
+            return;
+        }
+
+        if (string.Equals(engineItemId, InventoryItemCatalog.FusionEngineId, StringComparison.Ordinal))
+        {
+            SetTrailGradient(gradient,
+                new Color(0.84f, 0.72f, 1f),
+                new Color(0.48f, 0.18f, 0.76f),
+                new Color(0.22f, 0.04f, 0.42f),
+                new Color(0.06f, 0.01f, 0.14f));
+            return;
+        }
+
+        if (string.Equals(engineItemId, InventoryItemCatalog.HybridEngineId, StringComparison.Ordinal))
+        {
+            SetTrailGradient(gradient,
+                new Color(0.82f, 1f, 0.82f),
+                new Color(0.22f, 1f, 0.68f),
+                new Color(0.02f, 0.56f, 0.46f),
+                new Color(0f, 0.16f, 0.12f));
+            return;
+        }
+
+        if (string.Equals(engineItemId, InventoryItemCatalog.DoubleEngineId, StringComparison.Ordinal))
+        {
+            SetTrailGradient(gradient,
+                new Color(1f, 0.92f, 0.82f),
+                new Color(1f, 0.18f, 0.1f),
+                new Color(0.78f, 0f, 0f),
+                new Color(0.24f, 0f, 0f));
+            return;
+        }
+
+        if (string.Equals(engineItemId, InventoryItemCatalog.FuelTankId, StringComparison.Ordinal))
+        {
+            SetTrailGradient(gradient,
+                new Color(1f, 0.95f, 0.64f),
+                new Color(1f, 0.55f, 0.08f),
+                new Color(0.75f, 0.28f, 0.03f),
+                new Color(0.26f, 0.08f, 0f));
+            return;
+        }
+
+        if (string.Equals(engineItemId, InventoryItemCatalog.SuperBoosterId, StringComparison.Ordinal))
+        {
+            SetTrailGradient(gradient,
+                new Color(0.86f, 0.9f, 1f),
+                new Color(0.24f, 0.46f, 1f),
+                new Color(0.1f, 0.16f, 0.9f),
+                new Color(0.02f, 0.02f, 0.32f));
+            return;
+        }
+
+        if (string.Equals(engineItemId, InventoryItemCatalog.AfterburnerStabilizerId, StringComparison.Ordinal))
+        {
+            SetTrailGradient(gradient,
+                new Color(1f, 0.82f, 1f),
+                new Color(1f, 0.25f, 0.82f),
+                new Color(0.66f, 0.04f, 0.45f),
+                new Color(0.18f, 0f, 0.14f));
+            return;
+        }
+
+        SetTrailGradient(gradient,
+            new Color(1f, 1f, 1f),
+            new Color(0.64f, 0.97f, 1f),
+            new Color(0.2f, 0.8f, 1f),
+            new Color(0.03f, 0.18f, 0.86f));
+    }
+
+    static void SetTrailGradient(Gradient gradient, Color core, Color hot, Color body, Color tail)
+    {
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(core, 0f),
+                new GradientColorKey(hot, 0.18f),
+                new GradientColorKey(body, 0.54f),
+                new GradientColorKey(tail, 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0.92f, 0f),
+                new GradientAlphaKey(0.62f, 0.26f),
+                new GradientAlphaKey(0.24f, 0.72f),
+                new GradientAlphaKey(0f, 1f)
+            });
     }
 
     void ReapplyTrailAppearance()
@@ -1953,7 +2207,7 @@ public class EngineThrusterVFX : MonoBehaviour
             }
             else
             {
-                float maxTrailTime = fusionTrailEquipped ? 0.72f : 0.58f;
+                float maxTrailTime = HasPlayerEngineTrailOverride() ? 0.72f : 0.58f;
                 trailRenderer.time = Mathf.Lerp(0.18f, maxTrailTime, intensity);
                 trailRenderer.widthMultiplier = Mathf.Lerp(0.028f, 0.12f, intensity);
                 trailRenderer.emitting = clamped > 0.04f;

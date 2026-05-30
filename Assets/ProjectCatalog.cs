@@ -249,17 +249,17 @@ public static class ProjectCatalog
                 Stages = new[]
                 {
                     Stage("stage_1", "STAGE 1",
-                        Reward(10000, InventoryItemCatalog.PlasmaGunId),
+                        Reward(10000, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.PlasmaGunId), InventoryItemCatalog.BlueprintScrapId),
                         Exact("common_asteroid", "Common Asteroid", InventoryItemCatalog.AsteroidCommonId, 20),
                         Exact("uncommon_asteroid", "Uncommon Asteroid", InventoryItemCatalog.AsteroidUncommonId, 10),
                         Exact("rare_asteroid", "Rare Asteroid", InventoryItemCatalog.AsteroidRareId, 5)),
                     Stage("stage_2", "STAGE 2",
-                        Reward(20000, InventoryItemCatalog.FusionEngineId),
+                        Reward(20000, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.FusionEngineId), InventoryItemCatalog.BlueprintScrapId),
                         AnyContainer("containers", "Any Container", 30),
                         AnySpaceJunk("space_junk", "Any Space Junk", 10),
                         Exact("very_rare_asteroid", "Very Rare Asteroid", InventoryItemCatalog.AsteroidVeryRareId, 3)),
                     Stage("stage_3", "STAGE 3",
-                        Reward(30000, InventoryItemCatalog.RailGunId),
+                        Reward(30000, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.RocketLauncherId), InventoryItemCatalog.BlueprintScrapId),
                         Exact("cash_suitcase", "Cash Suitcase", InventoryItemCatalog.CashSuitcaseId, 1),
                         Exact("legendary_asteroid", "Legendary Asteroid", InventoryItemCatalog.AsteroidLegendaryId, 1),
                         Exact("corsair_wreck", "Corsair Wreck", InventoryItemCatalog.CorsairSalvageId, 1))
@@ -283,11 +283,11 @@ public static class ProjectCatalog
                         Exact("rescue_ship_wreck", "Rescue Ship Wreck", InventoryItemCatalog.RescueShipSalvageId, 1),
                         Exact("corsair_wrecks", "Corsair Wreck", InventoryItemCatalog.CorsairSalvageId, 2)),
                     Stage("stage_3", "STAGE 3",
-                        Reward(7000),
+                        Reward(7000, InventoryItemCatalog.BlueprintScrapId),
                         Exact("space_mine_wrecks", "Space Mine Wreck", InventoryItemCatalog.SpaceMineWreckId, 10),
                         Exact("pirate_fighter_wreck", "Pirate Fighter Wreck", InventoryItemCatalog.PirateFighterSalvageId, 1)),
                     Stage("stage_4", "STAGE 4",
-                        Reward(10000, InventoryItemCatalog.AlienTransmitterId),
+                        Reward(10000, InventoryItemCatalog.AlienTransmitterId, InventoryItemCatalog.BlueprintScrapId),
                         Exact("radar_ship_wreck", "Radar Ship Wreck", InventoryItemCatalog.RadarShipSalvageId, 1),
                         Exact("pirate_fighter_wrecks", "Pirate Fighter Wreck", InventoryItemCatalog.PirateFighterSalvageId, 3))
                 }

@@ -35,9 +35,26 @@ public class ButtonClickSoundHook : MonoBehaviour
             label = text.text.ToLowerInvariant();
         }
 
-        if (objectName.Contains("collect") || label.Contains("use") || label.Contains("reload"))
+        if (ShouldSuppressClickSound(objectName, label))
             return;
 
         AudioManager.Instance.PlayClick();
+    }
+
+    public static bool ShouldSuppressClickSound(string objectName, string label)
+    {
+        objectName = (objectName ?? string.Empty).ToLowerInvariant();
+        label = (label ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (objectName.Contains("collect") || label.Contains("use") || label.Contains("reload"))
+            return true;
+
+        return objectName.Contains("shopbuybutton") ||
+               objectName.Contains("shoptradebutton") ||
+               objectName.Contains("itempreviewsellbutton") ||
+               objectName.Contains("playerinventoryextendconfirmbutton") ||
+               label == "buy" ||
+               label == "sell" ||
+               label == "trade";
     }
 }

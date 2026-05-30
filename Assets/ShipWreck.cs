@@ -18,6 +18,7 @@ public class ShipWreck : MonoBehaviourPun
     SpriteRenderer spriteRenderer;
     Color baseColor = Color.white;
     int sourceShipSkinIndex;
+    int sourceEnemyKindValue = -1;
     bool isHighlighted;
     bool destroyWhenEmpty = true;
 
@@ -25,6 +26,7 @@ public class ShipWreck : MonoBehaviourPun
     public bool HasLoot => lootItems.Count > 0;
     public int LootCount => lootItems.Count;
     public int SourceShipSkinIndex => sourceShipSkinIndex;
+    public int SourceEnemyKindValue => sourceEnemyKindValue;
 
     void Awake()
     {
@@ -36,9 +38,10 @@ public class ShipWreck : MonoBehaviourPun
         }
     }
 
-    public void InitializeFromLootJson(string rawLoot, int shipSkinIndex = 0)
+    public void InitializeFromLootJson(string rawLoot, int shipSkinIndex = 0, int enemyKindValue = -1)
     {
         sourceShipSkinIndex = shipSkinIndex;
+        sourceEnemyKindValue = shipSkinIndex < 0 ? enemyKindValue : -1;
         if (shipSkinIndex >= 0)
             baseColor = Color.white;
         lootItems.Clear();
@@ -101,6 +104,16 @@ public class ShipWreck : MonoBehaviourPun
     public void Unhighlight()
     {
         isHighlighted = false;
+        RefreshVisualState();
+    }
+
+    [PunRPC]
+    public void SetBeingCollectedRpc(bool value)
+    {
+        isBeingCollected = value;
+        if (!value)
+            isHighlighted = false;
+
         RefreshVisualState();
     }
 

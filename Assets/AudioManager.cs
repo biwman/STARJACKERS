@@ -17,6 +17,7 @@ public class AudioManager : MonoBehaviour
     AudioClip corsairLaserClip;
     AudioClip drillingClip;
     AudioClip clickClip;
+    AudioClip cashClip;
     AudioClip engineClip;
     AudioClip fusionEngineClip;
     AudioClip alarmClip;
@@ -57,6 +58,7 @@ public class AudioManager : MonoBehaviour
     AudioClip rocketLockClip;
     AudioClip rocketFlyLoopClip;
     AudioClip rocketExplosionClip;
+    AudioClip cosmicWormShotClip;
 
     AudioSource oneShotSource;
     AudioSource drillingLoopSource;
@@ -88,6 +90,7 @@ public class AudioManager : MonoBehaviour
     public AudioClip SpaceDrillDeliveryClip => spaceDrillDeliveryClip != null ? spaceDrillDeliveryClip : shieldChargeClip != null ? shieldChargeClip : clickClip;
     public AudioClip GravitySquidTetherClip => gravitySquidTetherClip != null ? gravitySquidTetherClip : magneticBeamClip != null ? magneticBeamClip : shieldChargeClip;
     public AudioClip RocketFlyLoopClip => rocketFlyLoopClip != null ? rocketFlyLoopClip : engineClip;
+    public float EvacBuzzerPulseInterval => GetEvacBuzzerPulseInterval();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -146,6 +149,7 @@ public class AudioManager : MonoBehaviour
         corsairLaserClip = Resources.Load<AudioClip>("Audio/laser_classic_corsair");
         drillingClip = Resources.Load<AudioClip>("Audio/drilling");
         clickClip = Resources.Load<AudioClip>("Audio/click");
+        cashClip = Resources.Load<AudioClip>("Audio/cash_sound");
         engineClip = Resources.Load<AudioClip>("Audio/silnik");
         fusionEngineClip = Resources.Load<AudioClip>("Audio/fusion_engine_sound");
         alarmClip = Resources.Load<AudioClip>("Audio/alarm");
@@ -188,6 +192,9 @@ public class AudioManager : MonoBehaviour
             rocketLockClip = CreateRocketLockConfirmationClip();
         rocketFlyLoopClip = Resources.Load<AudioClip>("Audio/rocket_fly_loop");
         rocketExplosionClip = Resources.Load<AudioClip>("Audio/rocket_boom_sound");
+        cosmicWormShotClip = Resources.Load<AudioClip>("Audio/cosmic_worm_shot");
+        if (cosmicWormShotClip == null)
+            cosmicWormShotClip = CreateCosmicWormShotClip();
     }
 
     AudioClip CreateRocketLockConfirmationClip()
@@ -214,6 +221,46 @@ public class AudioManager : MonoBehaviour
         AudioClip clip = AudioClip.Create("GeneratedRocketLockConfirmed", sampleCount, 1, sampleRate, false);
         clip.SetData(data, 0);
         return clip;
+    }
+
+    AudioClip CreateCosmicWormShotClip()
+    {
+        const int sampleRate = 44100;
+        const float duration = 0.34f;
+        int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+        float[] data = new float[sampleCount];
+        float phaseA = 0f;
+        float phaseB = 0f;
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float time = i / (float)sampleRate;
+            float normalized = Mathf.Clamp01(time / duration);
+            float attack = Mathf.Clamp01(time / 0.018f);
+            float release = Mathf.Clamp01((duration - time) / 0.11f);
+            float envelope = attack * release * (1f - normalized * 0.18f);
+            float glide = 1f - Mathf.SmoothStep(0f, 1f, normalized);
+            float frequencyA = Mathf.Lerp(62f, 245f, glide) + Mathf.Sin(time * 38f) * 18f;
+            float frequencyB = Mathf.Lerp(420f, 110f, normalized) + Mathf.Sin(time * 91f) * 35f;
+            phaseA += Mathf.PI * 2f * frequencyA / sampleRate;
+            phaseB += Mathf.PI * 2f * frequencyB / sampleRate;
+            float ringMod = Mathf.Sin(phaseA) * Mathf.Sin(phaseB * 0.73f);
+            float throat = Mathf.Sin(phaseA * 0.51f + Mathf.Sin(phaseB) * 0.75f);
+            float grit = HashNoise(i) * Mathf.Lerp(0.11f, 0.035f, normalized);
+            data[i] = (ringMod * 0.34f + throat * 0.23f + grit) * envelope;
+        }
+
+        AudioClip clip = AudioClip.Create("GeneratedCosmicWormShot", sampleCount, 1, sampleRate, false);
+        clip.SetData(data, 0);
+        return clip;
+    }
+
+    static float HashNoise(int sampleIndex)
+    {
+        uint value = (uint)sampleIndex;
+        value ^= value << 13;
+        value ^= value >> 17;
+        value ^= value << 5;
+        return ((value & 0xffff) / 32767.5f) - 1f;
     }
 
     void EnsureSources()
@@ -270,6 +317,11 @@ public class AudioManager : MonoBehaviour
 
         lastClickSoundTime = Time.unscaledTime;
         PlayOneShot(clickClip, 0.8f);
+    }
+
+    public void PlayCash()
+    {
+        PlayOneShot(cashClip != null ? cashClip : clickClip, 0.86f);
     }
 
     public void PlayLaser()
@@ -457,6 +509,11 @@ public class AudioManager : MonoBehaviour
         PlaySpatialOneShot(rocketExplosionClip != null ? rocketExplosionClip : explosionClip, worldPosition, 0.86f);
     }
 
+    public void PlayCosmicWormShotAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(cosmicWormShotClip != null ? cosmicWormShotClip : gravitySquidTetherClip != null ? gravitySquidTetherClip : lazer2Clip != null ? lazer2Clip : laserClip, worldPosition, 0.84f);
+    }
+
     public void PlayEvacBuzzerBurst()
     {
         if (evacBuzzerClip == null)
@@ -524,7 +581,7 @@ public class AudioManager : MonoBehaviour
         for (int i = 0; i < 5; i++)
         {
             PlayOneShot(evacBuzzerClip, 0.95f);
-            float waitTime = evacBuzzerClip != null ? Mathf.Max(0.45f, evacBuzzerClip.length + 0.06f) : 0.5f;
+            float waitTime = GetEvacBuzzerPulseInterval();
             yield return new WaitForSeconds(waitTime);
         }
     }
@@ -532,7 +589,7 @@ public class AudioManager : MonoBehaviour
     IEnumerator PlayEvacBuzzerLoopRoutine(float duration)
     {
         float elapsed = 0f;
-        float waitTime = evacBuzzerClip != null ? Mathf.Max(0.45f, evacBuzzerClip.length + 0.06f) : 0.5f;
+        float waitTime = GetEvacBuzzerPulseInterval();
 
         while (elapsed < duration)
         {
@@ -542,6 +599,11 @@ public class AudioManager : MonoBehaviour
         }
 
         evacBuzzerRoutine = null;
+    }
+
+    float GetEvacBuzzerPulseInterval()
+    {
+        return evacBuzzerClip != null ? Mathf.Max(0.45f, evacBuzzerClip.length + 0.06f) : 0.5f;
     }
 
     void PlayOneShot(AudioClip clip, float volumeScale)

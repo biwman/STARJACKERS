@@ -6,6 +6,7 @@ using Photon.Pun;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using Unity.Profiling;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 #if UNITY_EDITOR
@@ -14,6 +15,15 @@ using UnityEditor;
 
 public class PlayerProfilePanelUI : MonoBehaviour
 {
+    static readonly ProfilerMarker SwitchScreenMarker = new ProfilerMarker("ProfileMenu.SwitchToScreen");
+    static readonly ProfilerMarker ShopRefreshMarker = new ProfilerMarker("ProfileMenu.Shop.Refresh");
+    static readonly ProfilerMarker CraftingRecipeRefreshMarker = new ProfilerMarker("ProfileMenu.CraftingRecipes.Refresh");
+    static readonly ProfilerMarker CraftingBlueprintRefreshMarker = new ProfilerMarker("ProfileMenu.CraftingBlueprints.Refresh");
+    static readonly ProfilerMarker ProjectsRefreshMarker = new ProfilerMarker("ProfileMenu.Projects.Refresh");
+    static readonly ProfilerMarker ProjectDetailsRefreshMarker = new ProfilerMarker("ProfileMenu.ProjectDetails.Refresh");
+    static readonly ProfilerMarker ShipSelectionRefreshMarker = new ProfilerMarker("ProfileMenu.ShipSelection.Refresh");
+    static readonly ProfilerMarker PilotSelectionRefreshMarker = new ProfilerMarker("ProfileMenu.PilotSelection.Refresh");
+
     enum ProfileItemSource
     {
         None,
@@ -89,6 +99,48 @@ public class PlayerProfilePanelUI : MonoBehaviour
         public RectTransform[] ResultFrameRects;
         public Image[] ResultFrameImages;
         public GameObject[] MissingIngredientFrames;
+        public TMP_Text ResultPriceText;
+        public TMP_Text ResultLockText;
+    }
+
+    sealed class ShopCardView
+    {
+        public GameObject Root;
+        public Button CardButton;
+        public Image CardImage;
+        public Image IconImage;
+        public TMP_Text NameText;
+        public TMP_Text TypeText;
+        public Image PriceIcon;
+        public TMP_Text PriceText;
+        public Button BuyButton;
+        public TMP_Text BuyText;
+    }
+
+    sealed class ShopRowView
+    {
+        public GameObject Root;
+        public ShopCardView Left;
+        public ShopCardView Right;
+    }
+
+    sealed class MissEnigmaCardView
+    {
+        public GameObject Root;
+        public Button CardButton;
+        public Image CardImage;
+        public Image IconImage;
+        public TMP_Text NameText;
+        public TMP_Text CostText;
+        public Button TradeButton;
+        public TMP_Text TradeText;
+    }
+
+    sealed class MissEnigmaRowView
+    {
+        public GameObject Root;
+        public MissEnigmaCardView Left;
+        public MissEnigmaCardView Right;
     }
 
     static readonly string[] GameplayHudObjectNames =
@@ -98,7 +150,6 @@ public class PlayerProfilePanelUI : MonoBehaviour
         "CollectButton",
         "ShipInventoryButton",
         "ShipInventoryPanel",
-        "ReloadButton",
         "ComplexAmmoBar",
         "SuperAttackJoystickBG",
         "TimerText",
@@ -177,7 +228,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             "UI/Traders/exotic_trader",
             "Assets/Resources/UI/Traders/exotic_trader.png",
             "Assets/exotic_trader.png",
-            false)
+            true)
     };
 
     static PlayerProfilePanelUI instance;
@@ -273,8 +324,15 @@ public class PlayerProfilePanelUI : MonoBehaviour
     RectTransform craftingRecipeContentRect;
     Button craftingRecipeCloseButton;
     Button craftingRecipeAvailabilityButton;
+    Button craftingRecipeBlueprintsButton;
+    GameObject craftingBlueprintBrowserObject;
+    ScrollRect craftingBlueprintScrollRect;
+    RectTransform craftingBlueprintContentRect;
+    Button craftingBlueprintCloseButton;
     readonly List<GameObject> craftingRecipeRowObjects = new List<GameObject>();
     readonly List<Button> craftingRecipeResultButtons = new List<Button>();
+    readonly List<GameObject> craftingBlueprintRowObjects = new List<GameObject>();
+    readonly Dictionary<string, GameObject> craftingBlueprintRowsById = new Dictionary<string, GameObject>(StringComparer.Ordinal);
     readonly Dictionary<string, CraftingRecipeRowView> craftingRecipeRowsById = new Dictionary<string, CraftingRecipeRowView>(StringComparer.Ordinal);
     bool craftingRecipeShowAvailableOnly;
     bool resetCraftingRecipeScrollOnNextRefresh = true;
@@ -286,6 +344,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
     TMP_Text shopAstronsText;
     Button shopCloseButton;
     readonly List<GameObject> shopRowObjects = new List<GameObject>();
+    readonly List<ShopRowView> shopRowPool = new List<ShopRowView>();
+    readonly List<MissEnigmaRowView> missEnigmaShopRowPool = new List<MissEnigmaRowView>();
+    GameObject missEnigmaEmptyRowObject;
+    TMP_Text missEnigmaEmptyText;
     TraderShopKind selectedTraderShop = TraderShopKind.None;
     readonly Dictionary<TraderShopKind, Button> traderButtonsByKind = new Dictionary<TraderShopKind, Button>();
     readonly Dictionary<TraderShopKind, Image> traderCardImagesByKind = new Dictionary<TraderShopKind, Image>();
@@ -296,6 +358,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
     TMP_Text cheatStatusText;
     Button cheatAddMoneyButton;
     Button cheatAddXpButton;
+    Button cheatUnlockBlueprintsButton;
+    Button cheatLockBlueprintsButton;
     Button cheatResetAccountButton;
     Button cheatCloseButton;
     GameObject cheatResetConfirmObject;
@@ -367,6 +431,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
     TMP_Text[] pilotSelectionCardLockTexts;
     int pilotSelectionCenterIndex;
     string selectedPilotId = PilotCatalog.JakeId;
+    readonly Dictionary<string, Sprite> spriteCacheByResourcePath = new Dictionary<string, Sprite>(StringComparer.Ordinal);
+    readonly HashSet<string> missingSpriteResources = new HashSet<string>(StringComparer.Ordinal);
     readonly Dictionary<string, Sprite> grayscalePilotPortraitCache = new Dictionary<string, Sprite>(StringComparer.Ordinal);
     readonly List<Button> projectTileButtons = new List<Button>();
     readonly List<Button> projectStageTabButtons = new List<Button>();
@@ -404,6 +470,19 @@ public class PlayerProfilePanelUI : MonoBehaviour
     bool suppressNextProfileChangedRefresh;
     bool suppressNextInventoryClick;
     bool dragInProgress;
+    bool profileLayoutDirty = true;
+    bool skinVisualsDirty = true;
+    bool saveAndRunStyleDirty = true;
+    bool itemPreviewLayoutDirty = true;
+    bool shipSelectionDirty = true;
+    bool pilotSelectionDirty = true;
+    bool projectsDirty = true;
+    bool projectDetailsDirty = true;
+    bool lastSplashShowing;
+    bool interactableStateInitialized;
+    bool lastAppliedInteractable;
+    bool lastAppliedInventoryActionInProgress;
+    bool lastAppliedPreserveInventoryButtonVisualsDuringSave;
     GameObject dragVisualObject;
     Image dragVisualIcon;
     TMP_Text dragVisualLabel;
@@ -414,12 +493,34 @@ public class PlayerProfilePanelUI : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
     {
+        EnsureInstance();
+    }
+
+    static void EnsureInstance()
+    {
         if (instance != null)
             return;
 
         GameObject root = new GameObject("PlayerProfilePanelUI");
         instance = root.AddComponent<PlayerProfilePanelUI>();
         DontDestroyOnLoad(root);
+    }
+
+    public static async Task PrewarmAsync()
+    {
+        if (!Application.isPlaying)
+            return;
+
+        EnsureInstance();
+        await PlayerProfileService.Instance.EnsureInitializedAsync();
+        if (instance == null)
+            return;
+
+        instance.PrewarmProfileAssets();
+        instance.EnsurePanel();
+        instance.RefreshView();
+        instance.MarkAllProfileUiDirty();
+        instance.RefreshVisibility();
     }
 
     void Awake()
@@ -459,6 +560,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         profileDuplicatePanelsChecked = false;
         profilePanelVisibilityInitialized = false;
         gameplayHudObjectsByName.Clear();
+        MarkAllProfileUiDirty();
         EnsurePanel();
         RefreshView();
         RefreshVisibility();
@@ -470,6 +572,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             return;
 
         RefreshView();
+        MarkAllProfileUiDirty();
         if (!NetworkManager.SessionRequested)
         {
             SetInteractable(true);
@@ -483,18 +586,81 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (!RefreshVisibility())
             return;
 
-        ApplyProfileScreenLayout();
-        UpdateSkinButtonVisuals();
-        ApplySaveAndRunButtonStyle();
-        ApplyItemPreviewLayout();
-        if (currentScreen == ProfileScreen.ShipSelection)
+        bool splashShowing = IsSplashShowing();
+        if (profileLayoutDirty || splashShowing || lastSplashShowing)
+        {
+            ApplyProfileScreenLayout();
+            profileLayoutDirty = false;
+        }
+        lastSplashShowing = splashShowing;
+
+        if (skinVisualsDirty)
+        {
+            UpdateSkinButtonVisuals();
+            skinVisualsDirty = false;
+        }
+
+        if (saveAndRunStyleDirty)
+        {
+            ApplySaveAndRunButtonStyle();
+            saveAndRunStyleDirty = false;
+        }
+
+        if (itemPreviewLayoutDirty)
+        {
+            ApplyItemPreviewLayout();
+            itemPreviewLayoutDirty = false;
+        }
+
+        if (currentScreen == ProfileScreen.ShipSelection && shipSelectionDirty)
             RefreshShipSelectionView();
-        if (currentScreen == ProfileScreen.PilotSelection)
+        if (currentScreen == ProfileScreen.PilotSelection && pilotSelectionDirty)
             RefreshPilotSelectionView();
-        if (currentScreen == ProfileScreen.Projects)
+        if (currentScreen == ProfileScreen.Projects && projectsDirty)
             RefreshProjectsView();
-        if (currentScreen == ProfileScreen.ProjectDetails)
+        if (currentScreen == ProfileScreen.ProjectDetails && projectDetailsDirty)
             RefreshProjectDetailsView();
+    }
+
+    bool IsSplashShowing()
+    {
+        return splashScreenObject != null && splashHideTime > 0f && Time.unscaledTime < splashHideTime;
+    }
+
+    void MarkAllProfileUiDirty()
+    {
+        profileLayoutDirty = true;
+        skinVisualsDirty = true;
+        saveAndRunStyleDirty = true;
+        itemPreviewLayoutDirty = true;
+        shipSelectionDirty = true;
+        pilotSelectionDirty = true;
+        projectsDirty = true;
+        projectDetailsDirty = true;
+        InvalidateInteractableState();
+    }
+
+    void MarkCurrentScreenDirty()
+    {
+        profileLayoutDirty = true;
+        itemPreviewLayoutDirty = true;
+        InvalidateInteractableState();
+
+        switch (currentScreen)
+        {
+            case ProfileScreen.ShipSelection:
+                shipSelectionDirty = true;
+                break;
+            case ProfileScreen.PilotSelection:
+                pilotSelectionDirty = true;
+                break;
+            case ProfileScreen.Projects:
+                projectsDirty = true;
+                break;
+            case ProfileScreen.ProjectDetails:
+                projectDetailsDirty = true;
+                break;
+        }
     }
 
     void EnsurePanel()
@@ -650,6 +816,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         CreateShipInventoryStartConfirm(panelObject.transform);
         CreateCraftingPanel(panelObject.transform);
         CreateCraftingRecipeBrowser(panelObject.transform);
+        CreateCraftingBlueprintBrowser(panelObject.transform);
         CreateShopBrowser(panelObject.transform);
 
         exitGameButton = CreateButton(panelObject.transform, "ExitGameButton", "EXIT GAME", new Vector2(820f, -72f), new Vector2(210f, 54f), OnExitGameClicked);
@@ -670,6 +837,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         CreateShipSelectionView(panelObject.transform);
         CreatePilotSelectionView(panelObject.transform);
         SwitchToScreen(ProfileScreen.Home, false);
+        UIRuntimeStyler.RefreshStyles();
     }
 
     GameObject CreateSectionRoot(string name, Transform parent)
@@ -1418,9 +1586,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 out pilotSelectionCardLockTexts[i]);
         }
 
-        pilotSelectionAbilitiesText = CreateText(pilotSelectionViewObject.transform, "PilotSelectionAbilities", string.Empty, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 82f), new Vector2(1380f, 210f), 32f, TextAlignmentOptions.Center);
+        pilotSelectionAbilitiesText = CreateText(pilotSelectionViewObject.transform, "PilotSelectionAbilities", string.Empty, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 72f), new Vector2(1380f, 250f), 25f, TextAlignmentOptions.Center);
         pilotSelectionAbilitiesText.fontStyle = FontStyles.Normal;
-        pilotSelectionAbilitiesText.textWrappingMode = TextWrappingModes.NoWrap;
+        pilotSelectionAbilitiesText.textWrappingMode = TextWrappingModes.Normal;
         pilotSelectionAbilitiesText.color = new Color(0.86f, 0.92f, 0.98f, 0.98f);
         pilotSelectionAbilitiesText.raycastTarget = false;
 
@@ -2292,6 +2460,17 @@ public class PlayerProfilePanelUI : MonoBehaviour
         ConfigureNoBlinkInventoryActionButton(craftingRecipeAvailabilityButton);
         RefreshCraftingRecipeAvailabilityButton();
 
+        craftingRecipeBlueprintsButton = CreateButton(panel.transform, "CraftingRecipeBlueprintsButton", "Blueprints", new Vector2(0f, -28f), new Vector2(190f, 44f), OnCraftingBlueprintsClicked);
+        StyleCompactInventoryUtilityButton(craftingRecipeBlueprintsButton);
+        ConfigureNoBlinkInventoryActionButton(craftingRecipeBlueprintsButton);
+        TMP_Text blueprintsButtonText = craftingRecipeBlueprintsButton.GetComponentInChildren<TMP_Text>(true);
+        if (blueprintsButtonText != null)
+        {
+            blueprintsButtonText.enableAutoSizing = true;
+            blueprintsButtonText.fontSizeMin = 14f;
+            blueprintsButtonText.fontSizeMax = 19f;
+        }
+
         TMP_Text hint = CreateText(panel.transform, "CraftingRecipeBrowserHint", "Select a green recipe to auto-fill the crafting slots.", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -72f), new Vector2(620f, 24f), 16f, TextAlignmentOptions.Center);
         hint.fontStyle = FontStyles.Normal;
         hint.color = new Color(0.78f, 0.86f, 0.94f, 0.92f);
@@ -2380,6 +2559,131 @@ public class PlayerProfilePanelUI : MonoBehaviour
         craftingRecipeBrowserObject.SetActive(false);
     }
 
+    void CreateCraftingBlueprintBrowser(Transform parent)
+    {
+        craftingBlueprintBrowserObject = new GameObject("CraftingBlueprintBrowser", typeof(RectTransform), typeof(Image));
+        craftingBlueprintBrowserObject.transform.SetParent(parent, false);
+
+        RectTransform overlayRect = craftingBlueprintBrowserObject.GetComponent<RectTransform>();
+        overlayRect.anchorMin = Vector2.zero;
+        overlayRect.anchorMax = Vector2.one;
+        overlayRect.offsetMin = Vector2.zero;
+        overlayRect.offsetMax = Vector2.zero;
+
+        Image overlay = craftingBlueprintBrowserObject.GetComponent<Image>();
+        overlay.color = new Color(0.02f, 0.03f, 0.05f, 0.76f);
+        overlay.raycastTarget = true;
+
+        GameObject panel = new GameObject("CraftingBlueprintBrowserPanel", typeof(RectTransform), typeof(Image));
+        panel.transform.SetParent(craftingBlueprintBrowserObject.transform, false);
+        RectTransform panelRect = panel.GetComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.anchoredPosition = new Vector2(44f, -8f);
+        panelRect.sizeDelta = new Vector2(1800f, 1080f);
+
+        Image panelImage = panel.GetComponent<Image>();
+        panelImage.color = new Color(0.08f, 0.11f, 0.16f, 0.99f);
+
+        Outline panelOutline = panel.AddComponent<Outline>();
+        panelOutline.effectColor = new Color(0.45f, 0.58f, 0.74f, 0.62f);
+        panelOutline.effectDistance = new Vector2(4f, -4f);
+
+        TMP_Text title = CreateText(panel.transform, "CraftingBlueprintBrowserTitle", "BLUEPRINTS", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -76f), new Vector2(520f, 44f), 32f, TextAlignmentOptions.Center);
+        title.characterSpacing = 2f;
+
+        craftingBlueprintCloseButton = CreateButton(panel.transform, "CraftingBlueprintCloseButton", "CLOSE", new Vector2(650f, -62f), new Vector2(260f, 70f), HideCraftingBlueprintBrowser);
+        StyleCompactBackLikeButton(craftingBlueprintCloseButton);
+        TMP_Text closeText = craftingBlueprintCloseButton.GetComponentInChildren<TMP_Text>(true);
+        if (closeText != null)
+        {
+            closeText.fontSize = 20f;
+            closeText.characterSpacing = 2.2f;
+        }
+
+        GameObject viewportObject = new GameObject("CraftingBlueprintViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
+        viewportObject.transform.SetParent(panel.transform, false);
+        RectTransform viewportRect = viewportObject.GetComponent<RectTransform>();
+        viewportRect.anchorMin = new Vector2(0.5f, 0.5f);
+        viewportRect.anchorMax = new Vector2(0.5f, 0.5f);
+        viewportRect.pivot = new Vector2(0.5f, 0.5f);
+        viewportRect.anchoredPosition = new Vector2(-22f, -122f);
+        viewportRect.sizeDelta = new Vector2(1630f, 836f);
+
+        Image viewportImage = viewportObject.GetComponent<Image>();
+        viewportImage.color = new Color(0f, 0f, 0f, 0f);
+
+        GameObject contentObject = new GameObject("CraftingBlueprintContent", typeof(RectTransform), typeof(GridLayoutGroup), typeof(ContentSizeFitter));
+        contentObject.transform.SetParent(viewportObject.transform, false);
+        craftingBlueprintContentRect = contentObject.GetComponent<RectTransform>();
+        craftingBlueprintContentRect.anchorMin = new Vector2(0f, 1f);
+        craftingBlueprintContentRect.anchorMax = new Vector2(1f, 1f);
+        craftingBlueprintContentRect.pivot = new Vector2(0.5f, 1f);
+        craftingBlueprintContentRect.anchoredPosition = Vector2.zero;
+        craftingBlueprintContentRect.sizeDelta = Vector2.zero;
+
+        GridLayoutGroup layout = contentObject.GetComponent<GridLayoutGroup>();
+        layout.padding = new RectOffset(14, 14, 14, 14);
+        layout.spacing = new Vector2(12f, 12f);
+        layout.cellSize = new Vector2(520f, 480f);
+        layout.childAlignment = TextAnchor.UpperCenter;
+        layout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        layout.constraintCount = 3;
+
+        ContentSizeFitter fitter = contentObject.GetComponent<ContentSizeFitter>();
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+        GameObject scrollbarObject = new GameObject("CraftingBlueprintScrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
+        scrollbarObject.transform.SetParent(panel.transform, false);
+        RectTransform scrollbarRect = scrollbarObject.GetComponent<RectTransform>();
+        scrollbarRect.anchorMin = new Vector2(0.5f, 0.5f);
+        scrollbarRect.anchorMax = new Vector2(0.5f, 0.5f);
+        scrollbarRect.pivot = new Vector2(0.5f, 0.5f);
+        scrollbarRect.anchoredPosition = new Vector2(846f, -122f);
+        scrollbarRect.sizeDelta = new Vector2(58f, 836f);
+
+        Image scrollbarBg = scrollbarObject.GetComponent<Image>();
+        scrollbarBg.color = new Color(0.1f, 0.14f, 0.18f, 0.92f);
+
+        GameObject slidingAreaObject = new GameObject("Sliding Area", typeof(RectTransform));
+        slidingAreaObject.transform.SetParent(scrollbarObject.transform, false);
+        RectTransform slidingAreaRect = slidingAreaObject.GetComponent<RectTransform>();
+        slidingAreaRect.anchorMin = Vector2.zero;
+        slidingAreaRect.anchorMax = Vector2.one;
+        slidingAreaRect.offsetMin = new Vector2(4f, 4f);
+        slidingAreaRect.offsetMax = new Vector2(-4f, -4f);
+
+        GameObject handleObject = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+        handleObject.transform.SetParent(slidingAreaObject.transform, false);
+        RectTransform handleRect = handleObject.GetComponent<RectTransform>();
+        handleRect.anchorMin = new Vector2(0f, 1f);
+        handleRect.anchorMax = new Vector2(1f, 1f);
+        handleRect.pivot = new Vector2(0.5f, 1f);
+        handleRect.sizeDelta = new Vector2(0f, 96f);
+
+        Image handleImage = handleObject.GetComponent<Image>();
+        handleImage.color = new Color(0.22f, 0.54f, 0.88f, 0.96f);
+
+        Scrollbar scrollbar = scrollbarObject.GetComponent<Scrollbar>();
+        scrollbar.direction = Scrollbar.Direction.BottomToTop;
+        scrollbar.handleRect = handleRect;
+        scrollbar.targetGraphic = handleImage;
+
+        craftingBlueprintScrollRect = viewportObject.GetComponent<ScrollRect>();
+        craftingBlueprintScrollRect.horizontal = false;
+        craftingBlueprintScrollRect.vertical = true;
+        craftingBlueprintScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        craftingBlueprintScrollRect.viewport = viewportRect;
+        craftingBlueprintScrollRect.content = craftingBlueprintContentRect;
+        craftingBlueprintScrollRect.verticalScrollbar = scrollbar;
+        craftingBlueprintScrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+        craftingBlueprintScrollRect.scrollSensitivity = 30f;
+
+        craftingBlueprintBrowserObject.SetActive(false);
+    }
+
     Button CreateCraftingSlotButton(Transform parent, string objectName, Vector2 anchoredPosition, int slotIndex, out TMP_Text label, out Image icon)
     {
         GameObject buttonObject = new GameObject(objectName, typeof(RectTransform), typeof(Image), typeof(Button));
@@ -2447,6 +2751,17 @@ public class PlayerProfilePanelUI : MonoBehaviour
         RefreshCraftingRecipeBrowser(true);
     }
 
+    void OnCraftingBlueprintsClicked()
+    {
+        if (inventoryActionInProgress || dragInProgress || craftingBlueprintBrowserObject == null)
+            return;
+
+        HideItemPreview();
+        RefreshCraftingBlueprintBrowser();
+        craftingBlueprintBrowserObject.SetActive(true);
+        craftingBlueprintBrowserObject.transform.SetAsLastSibling();
+    }
+
     void RefreshCraftingRecipeAvailabilityButton()
     {
         if (craftingRecipeAvailabilityButton == null)
@@ -2457,8 +2772,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         {
             text.text = craftingRecipeShowAvailableOnly ? "Available" : "ALL";
             text.enableAutoSizing = true;
-            text.fontSizeMin = 14f;
-            text.fontSizeMax = 18f;
+            text.fontSizeMin = 16f;
+            text.fontSizeMax = 22f;
         }
 
         Image image = craftingRecipeAvailabilityButton.GetComponent<Image>();
@@ -2474,6 +2789,148 @@ public class PlayerProfilePanelUI : MonoBehaviour
     {
         if (craftingRecipeBrowserObject != null)
             craftingRecipeBrowserObject.SetActive(false);
+    }
+
+    void HideCraftingBlueprintBrowser()
+    {
+        if (craftingBlueprintBrowserObject != null)
+            craftingBlueprintBrowserObject.SetActive(false);
+    }
+
+    void RefreshCraftingBlueprintBrowser()
+    {
+        using (CraftingBlueprintRefreshMarker.Auto())
+        {
+            if (craftingBlueprintContentRect == null)
+                return;
+
+            ClearCraftingBlueprintRows();
+
+            string[] blueprintItemIds = InventoryItemCatalog.GetAllBlueprintItemIds();
+            Array.Sort(blueprintItemIds, CompareBlueprintItemNames);
+
+            for (int i = 0; i < blueprintItemIds.Length; i++)
+            {
+                string blueprintItemId = blueprintItemIds[i];
+                string targetItemId = InventoryItemCatalog.GetBlueprintTargetItemId(blueprintItemId);
+                if (string.IsNullOrWhiteSpace(targetItemId))
+                    continue;
+
+                bool unlocked = PlayerProfileService.Instance.IsBlueprintUnlocked(blueprintItemId);
+                GameObject rowObject = CreateCraftingBlueprintRow(blueprintItemId, targetItemId, unlocked);
+                if (rowObject != null)
+                {
+                    rowObject.SetActive(true);
+                    rowObject.transform.SetSiblingIndex(craftingBlueprintRowObjects.Count);
+                    craftingBlueprintRowObjects.Add(rowObject);
+                }
+            }
+
+            if (craftingBlueprintScrollRect != null)
+            {
+                Canvas.ForceUpdateCanvases();
+                craftingBlueprintScrollRect.verticalNormalizedPosition = 1f;
+            }
+        }
+    }
+
+    int CompareBlueprintItemNames(string leftBlueprintItemId, string rightBlueprintItemId)
+    {
+        string leftTargetItemId = InventoryItemCatalog.GetBlueprintTargetItemId(leftBlueprintItemId);
+        string rightTargetItemId = InventoryItemCatalog.GetBlueprintTargetItemId(rightBlueprintItemId);
+        string leftName = InventoryItemCatalog.GetDisplayName(leftTargetItemId);
+        string rightName = InventoryItemCatalog.GetDisplayName(rightTargetItemId);
+        int nameComparison = string.Compare(leftName, rightName, StringComparison.OrdinalIgnoreCase);
+        return nameComparison != 0
+            ? nameComparison
+            : string.Compare(leftBlueprintItemId, rightBlueprintItemId, StringComparison.Ordinal);
+    }
+
+    void ClearCraftingBlueprintRows()
+    {
+        for (int i = 0; i < craftingBlueprintRowObjects.Count; i++)
+        {
+            GameObject rowObject = craftingBlueprintRowObjects[i];
+            if (rowObject != null)
+                rowObject.SetActive(false);
+        }
+
+        craftingBlueprintRowObjects.Clear();
+    }
+
+    GameObject CreateCraftingBlueprintRow(string blueprintItemId, string targetItemId, bool unlocked)
+    {
+        if (craftingBlueprintRowsById.TryGetValue(blueprintItemId, out GameObject cachedRow) && cachedRow != null)
+        {
+            UpdateCraftingBlueprintRow(cachedRow, blueprintItemId, targetItemId, unlocked);
+            return cachedRow;
+        }
+
+        GameObject rowObject = new GameObject("CraftingBlueprintTile_" + blueprintItemId, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+        rowObject.transform.SetParent(craftingBlueprintContentRect, false);
+
+        RectTransform rowRect = rowObject.GetComponent<RectTransform>();
+        rowRect.sizeDelta = new Vector2(520f, 480f);
+
+        LayoutElement rowLayout = rowObject.GetComponent<LayoutElement>();
+        rowLayout.preferredWidth = 520f;
+        rowLayout.preferredHeight = 480f;
+
+        Image rowImage = rowObject.GetComponent<Image>();
+        rowImage.color = new Color(0f, 0f, 0f, 0f);
+        rowImage.raycastTarget = false;
+
+        GameObject iconObject = new GameObject("BlueprintIcon", typeof(RectTransform), typeof(Image));
+        iconObject.transform.SetParent(rowObject.transform, false);
+        RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+        iconRect.anchorMin = new Vector2(0.5f, 1f);
+        iconRect.anchorMax = new Vector2(0.5f, 1f);
+        iconRect.pivot = new Vector2(0.5f, 1f);
+        iconRect.anchoredPosition = new Vector2(0f, -2f);
+        iconRect.sizeDelta = new Vector2(444f, 444f);
+
+        Image iconImage = iconObject.GetComponent<Image>();
+        iconImage.sprite = InventoryItemCatalog.GetIcon(blueprintItemId) ?? InventoryItemCatalog.GetIcon(targetItemId);
+        iconImage.preserveAspect = true;
+        iconImage.raycastTarget = false;
+        iconImage.color = unlocked
+            ? Color.white
+            : new Color(0.38f, 0.38f, 0.38f, 0.9f);
+
+        TMP_Text nameText = CreateText(rowObject.transform, "BlueprintItemName", InventoryItemCatalog.GetDisplayName(targetItemId).ToUpperInvariant(), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 22f), new Vector2(472f, 44f), 26f, TextAlignmentOptions.Center);
+        nameText.fontStyle = FontStyles.Bold;
+        nameText.textWrappingMode = TextWrappingModes.Normal;
+        nameText.enableAutoSizing = true;
+        nameText.fontSizeMin = 15f;
+        nameText.fontSizeMax = 26f;
+        UpdateCraftingBlueprintRow(rowObject, blueprintItemId, targetItemId, unlocked);
+
+        craftingBlueprintRowsById[blueprintItemId] = rowObject;
+        return rowObject;
+    }
+
+    void UpdateCraftingBlueprintRow(GameObject rowObject, string blueprintItemId, string targetItemId, bool unlocked)
+    {
+        if (rowObject == null)
+            return;
+
+        Image iconImage = rowObject.transform.Find("BlueprintIcon")?.GetComponent<Image>();
+        if (iconImage != null)
+        {
+            iconImage.sprite = InventoryItemCatalog.GetIcon(blueprintItemId) ?? InventoryItemCatalog.GetIcon(targetItemId);
+            iconImage.color = unlocked
+                ? Color.white
+                : new Color(0.38f, 0.38f, 0.38f, 0.9f);
+        }
+
+        TMP_Text nameText = rowObject.transform.Find("BlueprintItemName")?.GetComponent<TMP_Text>();
+        if (nameText != null)
+        {
+            nameText.text = InventoryItemCatalog.GetDisplayName(targetItemId).ToUpperInvariant();
+            nameText.color = unlocked
+                ? new Color(0.78f, 0.9f, 1f, 1f)
+                : new Color(0.58f, 0.58f, 0.58f, 0.95f);
+        }
     }
 
     void CreateShopBrowser(Transform parent)
@@ -2635,7 +3092,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         panelRect.anchorMax = new Vector2(0.5f, 0.5f);
         panelRect.pivot = new Vector2(0.5f, 0.5f);
         panelRect.anchoredPosition = new Vector2(0f, 6f);
-        panelRect.sizeDelta = new Vector2(620f, 560f);
+        panelRect.sizeDelta = new Vector2(620f, 700f);
 
         Image panelImage = panel.GetComponent<Image>();
         panelImage.color = new Color(0.11f, 0.1f, 0.14f, 0.98f);
@@ -2656,20 +3113,26 @@ public class PlayerProfilePanelUI : MonoBehaviour
         cheatXpText.fontStyle = FontStyles.Normal;
         cheatXpText.color = new Color(0.74f, 0.92f, 1f, 1f);
 
-        cheatAddMoneyButton = CreateButton(panel.transform, "CheatAddMoneyButton", "ADD MONEY", new Vector2(0f, -244f), new Vector2(260f, 58f), OnCheatAddMoneyClicked);
+        cheatAddMoneyButton = CreateButton(panel.transform, "CheatAddMoneyButton", "ADD MONEY", new Vector2(0f, -238f), new Vector2(260f, 54f), OnCheatAddMoneyClicked);
         StyleButton(cheatAddMoneyButton, new Color(0.5f, 0.22f, 0.18f, 1f), new Color(0.7f, 0.3f, 0.22f, 1f));
 
-        cheatAddXpButton = CreateButton(panel.transform, "CheatAddXpButton", "ADD XP", new Vector2(0f, -314f), new Vector2(260f, 58f), OnCheatAddXpClicked);
+        cheatAddXpButton = CreateButton(panel.transform, "CheatAddXpButton", "ADD XP", new Vector2(0f, -300f), new Vector2(260f, 54f), OnCheatAddXpClicked);
         StyleButton(cheatAddXpButton, new Color(0.16f, 0.38f, 0.5f, 1f), new Color(0.22f, 0.52f, 0.7f, 1f));
 
-        cheatResetAccountButton = CreateButton(panel.transform, "CheatResetAccountButton", "RESET ACCOUNT", new Vector2(0f, -384f), new Vector2(260f, 58f), OnCheatResetAccountClicked);
+        cheatUnlockBlueprintsButton = CreateButton(panel.transform, "CheatUnlockBlueprintsButton", "UNLOCK ALL BLUEPRINTS", new Vector2(0f, -362f), new Vector2(340f, 54f), OnCheatUnlockBlueprintsClicked);
+        StyleButton(cheatUnlockBlueprintsButton, new Color(0.12f, 0.42f, 0.46f, 1f), new Color(0.18f, 0.58f, 0.64f, 1f));
+
+        cheatLockBlueprintsButton = CreateButton(panel.transform, "CheatLockBlueprintsButton", "LOCK ALL BLUEPRINTS", new Vector2(0f, -424f), new Vector2(340f, 54f), OnCheatLockBlueprintsClicked);
+        StyleButton(cheatLockBlueprintsButton, new Color(0.42f, 0.23f, 0.13f, 1f), new Color(0.58f, 0.34f, 0.18f, 1f));
+
+        cheatResetAccountButton = CreateButton(panel.transform, "CheatResetAccountButton", "RESET ACCOUNT", new Vector2(0f, -492f), new Vector2(260f, 54f), OnCheatResetAccountClicked);
         StyleButton(cheatResetAccountButton, new Color(0.52f, 0.14f, 0.18f, 1f), new Color(0.72f, 0.2f, 0.25f, 1f));
 
-        cheatStatusText = CreateText(panel.transform, "CheatStatusText", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -456f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
+        cheatStatusText = CreateText(panel.transform, "CheatStatusText", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -564f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
         cheatStatusText.fontStyle = FontStyles.Normal;
         cheatStatusText.color = new Color(0.74f, 0.86f, 0.94f, 0.96f);
 
-        cheatCloseButton = CreateButton(panel.transform, "CheatCloseButton", "CLOSE", new Vector2(0f, -494f), new Vector2(220f, 52f), HideCheatBrowser);
+        cheatCloseButton = CreateButton(panel.transform, "CheatCloseButton", "CLOSE", new Vector2(0f, -614f), new Vector2(220f, 52f), HideCheatBrowser);
         StyleButton(cheatCloseButton, new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f));
 
         cheatBrowserObject.SetActive(false);
@@ -2702,7 +3165,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         panelImage.color = new Color(0.13f, 0.09f, 0.11f, 0.98f);
 
         CreateText(panel.transform, "CheatResetTitle", "RESET ACCOUNT", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -36f), new Vector2(560f, 36f), 26f, TextAlignmentOptions.Center);
-        cheatResetConfirmText = CreateText(panel.transform, "CheatResetText", "This will reset XP, level, Astrons, inventory, equipment and unlocked pilots. Continue?", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -102f), new Vector2(560f, 96f), 20f, TextAlignmentOptions.Center);
+        cheatResetConfirmText = CreateText(panel.transform, "CheatResetText", "This will reset XP, level, Astrons, inventory, equipment, blueprints and unlocked pilots. Continue?", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -102f), new Vector2(560f, 96f), 20f, TextAlignmentOptions.Center);
         cheatResetConfirmText.fontStyle = FontStyles.Normal;
         cheatResetConfirmText.textWrappingMode = TextWrappingModes.Normal;
 
@@ -2761,6 +3224,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
             cheatAddMoneyButton.interactable = !inventoryActionInProgress;
         if (cheatAddXpButton != null)
             cheatAddXpButton.interactable = !inventoryActionInProgress;
+        if (cheatUnlockBlueprintsButton != null)
+            cheatUnlockBlueprintsButton.interactable = !inventoryActionInProgress;
+        if (cheatLockBlueprintsButton != null)
+            cheatLockBlueprintsButton.interactable = !inventoryActionInProgress;
         if (cheatResetAccountButton != null)
             cheatResetAccountButton.interactable = !inventoryActionInProgress;
         if (cheatCloseButton != null)
@@ -2829,6 +3296,66 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
     }
 
+    async void OnCheatUnlockBlueprintsClicked()
+    {
+        if (inventoryActionInProgress || cheatBrowserObject == null)
+            return;
+
+        inventoryActionInProgress = true;
+        SetInventoryInteractable(false);
+        RefreshCheatBrowser("Unlocking blueprints...");
+
+        try
+        {
+            await PlayerProfileService.Instance.UnlockAllBlueprintsAsync();
+            SetStatus("All blueprints unlocked.");
+            RefreshCheatBrowser("All blueprints unlocked.");
+            RefreshCraftingRecipeBrowser(true);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Cheat unlock blueprints failed: " + ex);
+            SetStatus("Cheat failed.");
+            RefreshCheatBrowser("Could not unlock blueprints.");
+        }
+        finally
+        {
+            inventoryActionInProgress = false;
+            SetInventoryInteractable(true);
+            RefreshCheatBrowser();
+        }
+    }
+
+    async void OnCheatLockBlueprintsClicked()
+    {
+        if (inventoryActionInProgress || cheatBrowserObject == null)
+            return;
+
+        inventoryActionInProgress = true;
+        SetInventoryInteractable(false);
+        RefreshCheatBrowser("Locking blueprints...");
+
+        try
+        {
+            await PlayerProfileService.Instance.LockAllBlueprintsAsync();
+            SetStatus("All blueprints locked.");
+            RefreshCheatBrowser("All blueprints locked.");
+            RefreshCraftingRecipeBrowser(true);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Cheat lock blueprints failed: " + ex);
+            SetStatus("Cheat failed.");
+            RefreshCheatBrowser("Could not lock blueprints.");
+        }
+        finally
+        {
+            inventoryActionInProgress = false;
+            SetInventoryInteractable(true);
+            RefreshCheatBrowser();
+        }
+    }
+
     void OnCheatResetAccountClicked()
     {
         if (inventoryActionInProgress || cheatResetConfirmObject == null)
@@ -2874,59 +3401,125 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void RefreshShopBrowser()
     {
-        if (shopBrowserObject == null || shopContentRect == null)
-            return;
+        using (ShopRefreshMarker.Auto())
+        {
+            if (shopBrowserObject == null || shopContentRect == null)
+                return;
 
+            HideActiveShopRows();
+
+            UpdateShopBrowserTitle();
+            if (!TraderOpensShop(selectedTraderShop))
+            {
+                shopBrowserObject.SetActive(false);
+                return;
+            }
+
+            if (selectedTraderShop == TraderShopKind.MissEnigma)
+            {
+                RefreshMissEnigmaShopBrowser();
+                return;
+            }
+
+            PlayerProfileData profile = PlayerProfileService.Instance.CurrentProfile;
+            int astrons = profile != null ? profile.Astrons : 0;
+            if (shopAstronsText != null)
+                shopAstronsText.gameObject.SetActive(false);
+
+            IReadOnlyList<InventoryItemDefinition> definitions = InventoryItemCatalog.GetAllDefinitions();
+            List<InventoryItemDefinition> shopItems = new List<InventoryItemDefinition>();
+            List<int> shopPrices = new List<int>();
+            List<bool> affordability = new List<bool>();
+
+            for (int i = 0; i < definitions.Count; i++)
+            {
+                InventoryItemDefinition definition = definitions[i];
+                if (!ShouldTraderSellDefinition(selectedTraderShop, definition))
+                    continue;
+
+                int price = PlayerProfileService.Instance.GetShopBuyPriceAstrons(definition.Id);
+                if (price <= 0)
+                    continue;
+
+                shopItems.Add(definition);
+                shopPrices.Add(price);
+                affordability.Add(astrons >= price);
+            }
+
+            for (int i = 0; i < shopItems.Count; i += 2)
+            {
+                InventoryItemDefinition leftDefinition = shopItems[i];
+                int leftPrice = shopPrices[i];
+                bool leftCanAfford = affordability[i];
+                InventoryItemDefinition rightDefinition = i + 1 < shopItems.Count ? shopItems[i + 1] : null;
+                int rightPrice = i + 1 < shopPrices.Count ? shopPrices[i + 1] : 0;
+                bool rightCanAfford = i + 1 < affordability.Count && affordability[i + 1];
+
+                GameObject row = CreateShopRow(shopRowObjects.Count, leftDefinition, leftPrice, leftCanAfford, rightDefinition, rightPrice, rightCanAfford);
+                if (row != null)
+                    shopRowObjects.Add(row);
+            }
+
+            Canvas.ForceUpdateCanvases();
+            if (shopScrollRect != null)
+                shopScrollRect.verticalNormalizedPosition = 1f;
+        }
+    }
+
+    void HideActiveShopRows()
+    {
         for (int i = 0; i < shopRowObjects.Count; i++)
         {
             if (shopRowObjects[i] != null)
-                Destroy(shopRowObjects[i]);
+                shopRowObjects[i].SetActive(false);
         }
 
         shopRowObjects.Clear();
+    }
 
-        UpdateShopBrowserTitle();
-        if (!TraderOpensShop(selectedTraderShop))
+    void RefreshMissEnigmaShopBrowser()
+    {
+        BlueprintTradeOffer[] offers = BlueprintCatalog.GetMissEnigmaOffers();
+        List<BlueprintTradeOffer> visibleOffers = new List<BlueprintTradeOffer>();
+        List<bool> affordability = new List<bool>();
+
+        for (int i = 0; i < offers.Length; i++)
         {
-            shopBrowserObject.SetActive(false);
+            BlueprintTradeOffer offer = offers[i];
+            if (offer == null || string.IsNullOrWhiteSpace(offer.BlueprintItemId))
+                continue;
+
+            if (PlayerProfileService.Instance.IsBlueprintUnlocked(offer.BlueprintItemId))
+                continue;
+
+            if (PlayerProfileService.Instance.IsMissEnigmaBlueprintPurchased(offer.BlueprintItemId))
+                continue;
+
+            visibleOffers.Add(offer);
+            affordability.Add(PlayerProfileService.Instance.CanAffordItemTrade(offer.CostItemIds));
+        }
+
+        if (visibleOffers.Count == 0)
+        {
+            GameObject rowObject = GetOrCreateMissEnigmaEmptyRow();
+            rowObject.transform.SetParent(shopContentRect, false);
+            rowObject.transform.SetSiblingIndex(0);
+            rowObject.SetActive(true);
+            shopRowObjects.Add(rowObject);
+            Canvas.ForceUpdateCanvases();
+            if (shopScrollRect != null)
+                shopScrollRect.verticalNormalizedPosition = 1f;
             return;
         }
 
-        PlayerProfileData profile = PlayerProfileService.Instance.CurrentProfile;
-        int astrons = profile != null ? profile.Astrons : 0;
-        if (shopAstronsText != null)
-            shopAstronsText.gameObject.SetActive(false);
-
-        IReadOnlyList<InventoryItemDefinition> definitions = InventoryItemCatalog.GetAllDefinitions();
-        List<InventoryItemDefinition> shopItems = new List<InventoryItemDefinition>();
-        List<int> shopPrices = new List<int>();
-        List<bool> affordability = new List<bool>();
-
-        for (int i = 0; i < definitions.Count; i++)
+        for (int i = 0; i < visibleOffers.Count; i += 2)
         {
-            InventoryItemDefinition definition = definitions[i];
-            if (!ShouldTraderSellDefinition(selectedTraderShop, definition))
-                continue;
-
-            int price = PlayerProfileService.Instance.GetShopBuyPriceAstrons(definition.Id);
-            if (price <= 0)
-                continue;
-
-            shopItems.Add(definition);
-            shopPrices.Add(price);
-            affordability.Add(astrons >= price);
-        }
-
-        for (int i = 0; i < shopItems.Count; i += 2)
-        {
-            InventoryItemDefinition leftDefinition = shopItems[i];
-            int leftPrice = shopPrices[i];
-            bool leftCanAfford = affordability[i];
-            InventoryItemDefinition rightDefinition = i + 1 < shopItems.Count ? shopItems[i + 1] : null;
-            int rightPrice = i + 1 < shopPrices.Count ? shopPrices[i + 1] : 0;
+            BlueprintTradeOffer leftOffer = visibleOffers[i];
+            bool leftCanAfford = i < affordability.Count && affordability[i];
+            BlueprintTradeOffer rightOffer = i + 1 < visibleOffers.Count ? visibleOffers[i + 1] : null;
             bool rightCanAfford = i + 1 < affordability.Count && affordability[i + 1];
 
-            GameObject row = CreateShopRow(leftDefinition, leftPrice, leftCanAfford, rightDefinition, rightPrice, rightCanAfford);
+            GameObject row = CreateMissEnigmaShopRow(shopRowObjects.Count, leftOffer, leftCanAfford, rightOffer, rightCanAfford);
             if (row != null)
                 shopRowObjects.Add(row);
         }
@@ -2934,6 +3527,247 @@ public class PlayerProfilePanelUI : MonoBehaviour
         Canvas.ForceUpdateCanvases();
         if (shopScrollRect != null)
             shopScrollRect.verticalNormalizedPosition = 1f;
+    }
+
+    GameObject GetOrCreateMissEnigmaEmptyRow()
+    {
+        if (missEnigmaEmptyRowObject != null)
+            return missEnigmaEmptyRowObject;
+
+        missEnigmaEmptyRowObject = new GameObject("ShopRow_MissEnigmaEmpty", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+        missEnigmaEmptyRowObject.transform.SetParent(shopContentRect, false);
+        missEnigmaEmptyRowObject.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 180f);
+        missEnigmaEmptyRowObject.GetComponent<LayoutElement>().preferredHeight = 180f;
+        missEnigmaEmptyRowObject.GetComponent<Image>().color = new Color(0.12f, 0.16f, 0.21f, 0.98f);
+        missEnigmaEmptyText = CreateText(missEnigmaEmptyRowObject.transform, "MissEnigmaEmptyText", "ALL BLUEPRINTS SOLD", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, 24f, TextAlignmentOptions.Center);
+        missEnigmaEmptyText.fontStyle = FontStyles.Bold;
+        missEnigmaEmptyText.color = new Color(0.84f, 0.9f, 0.96f, 0.96f);
+        return missEnigmaEmptyRowObject;
+    }
+
+    GameObject CreateMissEnigmaShopRow(
+        int rowIndex,
+        BlueprintTradeOffer leftOffer,
+        bool leftCanAfford,
+        BlueprintTradeOffer rightOffer,
+        bool rightCanAfford)
+    {
+        if (shopContentRect == null || leftOffer == null)
+            return null;
+
+        MissEnigmaRowView rowView = GetOrCreateMissEnigmaShopRowView(rowIndex);
+        if (rowView == null || rowView.Root == null)
+            return null;
+
+        GameObject rowObject = rowView.Root;
+        rowObject.name = "ShopRow_" + leftOffer.BlueprintItemId;
+        rowObject.transform.SetParent(shopContentRect, false);
+        rowObject.transform.SetSiblingIndex(rowIndex);
+        rowObject.SetActive(true);
+        rowObject.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 326f);
+        rowObject.GetComponent<LayoutElement>().preferredHeight = 326f;
+        rowObject.GetComponent<Image>().color = new Color(0.12f, 0.16f, 0.21f, 0.98f);
+
+        UpdateMissEnigmaBlueprintCard(rowView.Left, leftOffer, leftCanAfford);
+        UpdateMissEnigmaBlueprintCard(rowView.Right, rightOffer, rightCanAfford);
+
+        return rowObject;
+    }
+
+    MissEnigmaRowView GetOrCreateMissEnigmaShopRowView(int rowIndex)
+    {
+        while (missEnigmaShopRowPool.Count <= rowIndex)
+            missEnigmaShopRowPool.Add(null);
+
+        MissEnigmaRowView rowView = missEnigmaShopRowPool[rowIndex];
+        if (rowView != null && rowView.Root != null)
+            return rowView;
+
+        GameObject rowObject = new GameObject("ShopRow_MissEnigmaPool_" + rowIndex, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+        rowObject.transform.SetParent(shopContentRect, false);
+
+        rowView = new MissEnigmaRowView
+        {
+            Root = rowObject,
+            Left = CreateMissEnigmaBlueprintCardView(rowObject.transform, "Left", -130f),
+            Right = CreateMissEnigmaBlueprintCardView(rowObject.transform, "Right", 130f)
+        };
+        missEnigmaShopRowPool[rowIndex] = rowView;
+        return rowView;
+    }
+
+    MissEnigmaCardView CreateMissEnigmaBlueprintCardView(Transform parent, string suffix, float centerX)
+    {
+        MissEnigmaCardView view = new MissEnigmaCardView();
+        view.CardButton = CreateButton(parent, "ShopItemCardButton_MissEnigma_" + suffix, string.Empty, new Vector2(centerX, -12f), new Vector2(214f, 214f), null);
+        view.Root = view.CardButton.gameObject;
+        view.CardImage = view.CardButton.GetComponent<Image>();
+
+        Outline itemCardOutline = view.CardButton.GetComponent<Outline>();
+        if (itemCardOutline == null)
+            itemCardOutline = view.CardButton.gameObject.AddComponent<Outline>();
+        itemCardOutline.effectColor = new Color(0.08f, 0.76f, 0.94f, 0.38f);
+        itemCardOutline.effectDistance = new Vector2(4f, 4f);
+
+        GameObject iconObject = new GameObject("ShopItemIcon", typeof(RectTransform), typeof(Image));
+        iconObject.transform.SetParent(view.CardButton.transform, false);
+        RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+        iconRect.anchorMin = new Vector2(0.5f, 1f);
+        iconRect.anchorMax = new Vector2(0.5f, 1f);
+        iconRect.pivot = new Vector2(0.5f, 1f);
+        iconRect.anchoredPosition = new Vector2(0f, -12f);
+        iconRect.sizeDelta = new Vector2(108f, 108f);
+        view.IconImage = iconObject.GetComponent<Image>();
+        view.IconImage.preserveAspect = true;
+        view.IconImage.raycastTarget = false;
+
+        view.NameText = CreateText(view.CardButton.transform, "ShopItemName", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -124f), new Vector2(182f, 44f), 18f, TextAlignmentOptions.Center);
+        view.NameText.enableAutoSizing = true;
+        view.NameText.fontSizeMin = 11f;
+        view.NameText.fontSizeMax = 18f;
+        view.NameText.textWrappingMode = TextWrappingModes.Normal;
+        view.NameText.overflowMode = TextOverflowModes.Truncate;
+        view.NameText.raycastTarget = false;
+
+        view.CostText = CreateText(view.CardButton.transform, "ShopItemCost", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -170f), new Vector2(186f, 36f), 13f, TextAlignmentOptions.Center);
+        view.CostText.enableAutoSizing = true;
+        view.CostText.fontSizeMin = 9f;
+        view.CostText.fontSizeMax = 13f;
+        view.CostText.textWrappingMode = TextWrappingModes.Normal;
+        view.CostText.raycastTarget = false;
+
+        view.TradeButton = CreateButton(parent, "ShopTradeButton_MissEnigma_" + suffix, "TRADE", new Vector2(centerX, -258f), new Vector2(150f, 50f), null);
+        view.TradeText = view.TradeButton.GetComponentInChildren<TMP_Text>(true);
+        StyleButton(view.TradeButton, new Color(0.18f, 0.36f, 0.5f, 1f), new Color(0.26f, 0.52f, 0.68f, 1f));
+
+        return view;
+    }
+
+    void UpdateMissEnigmaBlueprintCard(MissEnigmaCardView view, BlueprintTradeOffer offer, bool canAfford)
+    {
+        if (view == null)
+            return;
+
+        InventoryItemDefinition definition = offer != null
+            ? InventoryItemCatalog.GetDefinition(offer.BlueprintItemId)
+            : null;
+        bool active = definition != null;
+        if (view.Root != null)
+            view.Root.SetActive(active);
+        if (view.TradeButton != null)
+            view.TradeButton.gameObject.SetActive(active);
+        if (!active)
+            return;
+
+        string blueprintItemId = offer.BlueprintItemId;
+        view.CardButton.onClick.RemoveAllListeners();
+        view.CardButton.onClick.AddListener(() =>
+        {
+            AudioManager.Instance?.PlayClick();
+            OnShopItemPreviewClicked(blueprintItemId);
+        });
+        view.CardButton.interactable = !inventoryActionInProgress;
+
+        if (view.CardImage != null)
+            view.CardImage.color = InventoryItemCatalog.GetRarityColor(definition.Rarity);
+        if (view.IconImage != null)
+            view.IconImage.sprite = definition.GetIcon();
+        if (view.NameText != null)
+            view.NameText.text = definition.DisplayName.ToUpperInvariant();
+        if (view.CostText != null)
+        {
+            view.CostText.text = FormatTradeCost(offer.CostItemIds);
+            view.CostText.color = canAfford ? new Color(0.94f, 0.84f, 0.44f, 1f) : new Color(0.78f, 0.46f, 0.46f, 1f);
+        }
+
+        view.TradeButton.onClick.RemoveAllListeners();
+        view.TradeButton.onClick.AddListener(() =>
+        {
+            OnMissEnigmaTradeClicked(blueprintItemId);
+        });
+        view.TradeButton.interactable = canAfford && !inventoryActionInProgress;
+        if (view.TradeText != null)
+            view.TradeText.text = "TRADE";
+    }
+
+    void CreateMissEnigmaBlueprintCard(Transform parent, BlueprintTradeOffer offer, bool canAfford, float centerX)
+    {
+        InventoryItemDefinition definition = InventoryItemCatalog.GetDefinition(offer.BlueprintItemId);
+        if (parent == null || definition == null)
+            return;
+
+        Button itemCardButton = CreateButton(parent, "ShopItemCardButton_" + definition.Id, string.Empty, new Vector2(centerX, -12f), new Vector2(214f, 214f), () => OnShopItemPreviewClicked(definition.Id));
+        itemCardButton.interactable = !inventoryActionInProgress;
+
+        Image itemCardImage = itemCardButton.GetComponent<Image>();
+        if (itemCardImage != null)
+            itemCardImage.color = InventoryItemCatalog.GetRarityColor(definition.Rarity);
+
+        Outline itemCardOutline = itemCardButton.GetComponent<Outline>();
+        if (itemCardOutline == null)
+            itemCardOutline = itemCardButton.gameObject.AddComponent<Outline>();
+        itemCardOutline.effectColor = new Color(0.08f, 0.76f, 0.94f, 0.38f);
+        itemCardOutline.effectDistance = new Vector2(4f, 4f);
+
+        GameObject iconObject = new GameObject("ShopItemIcon", typeof(RectTransform), typeof(Image));
+        iconObject.transform.SetParent(itemCardButton.transform, false);
+        RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+        iconRect.anchorMin = new Vector2(0.5f, 1f);
+        iconRect.anchorMax = new Vector2(0.5f, 1f);
+        iconRect.pivot = new Vector2(0.5f, 1f);
+        iconRect.anchoredPosition = new Vector2(0f, -12f);
+        iconRect.sizeDelta = new Vector2(108f, 108f);
+
+        Image icon = iconObject.GetComponent<Image>();
+        icon.sprite = definition.GetIcon();
+        icon.preserveAspect = true;
+        icon.raycastTarget = false;
+
+        TMP_Text nameText = CreateText(itemCardButton.transform, "ShopItemName", definition.DisplayName.ToUpperInvariant(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -124f), new Vector2(182f, 44f), 18f, TextAlignmentOptions.Center);
+        nameText.enableAutoSizing = true;
+        nameText.fontSizeMin = 11f;
+        nameText.fontSizeMax = 18f;
+        nameText.textWrappingMode = TextWrappingModes.Normal;
+        nameText.overflowMode = TextOverflowModes.Truncate;
+        nameText.raycastTarget = false;
+
+        TMP_Text costText = CreateText(itemCardButton.transform, "ShopItemCost", FormatTradeCost(offer.CostItemIds), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -170f), new Vector2(186f, 36f), 13f, TextAlignmentOptions.Center);
+        costText.enableAutoSizing = true;
+        costText.fontSizeMin = 9f;
+        costText.fontSizeMax = 13f;
+        costText.textWrappingMode = TextWrappingModes.Normal;
+        costText.color = canAfford ? new Color(0.94f, 0.84f, 0.44f, 1f) : new Color(0.78f, 0.46f, 0.46f, 1f);
+        costText.raycastTarget = false;
+
+        Button tradeButton = CreateButton(parent, "ShopTradeButton_" + definition.Id, "TRADE", new Vector2(centerX, -258f), new Vector2(150f, 50f), () => OnMissEnigmaTradeClicked(offer.BlueprintItemId));
+        StyleButton(tradeButton, new Color(0.18f, 0.36f, 0.5f, 1f), new Color(0.26f, 0.52f, 0.68f, 1f));
+        tradeButton.interactable = canAfford && !inventoryActionInProgress;
+    }
+
+    string FormatTradeCost(string[] costItemIds)
+    {
+        if (costItemIds == null || costItemIds.Length == 0)
+            return "FREE";
+
+        Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (int i = 0; i < costItemIds.Length; i++)
+        {
+            string itemId = costItemIds[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            counts.TryGetValue(itemId, out int count);
+            counts[itemId] = count + 1;
+        }
+
+        List<string> parts = new List<string>();
+        foreach (KeyValuePair<string, int> entry in counts)
+        {
+            parts.Add(InventoryItemCatalog.GetDisplayName(entry.Key) + (entry.Value > 1 ? " x" + entry.Value : string.Empty));
+        }
+
+        parts.Sort(StringComparer.Ordinal);
+        return string.Join("\n", parts);
     }
 
     void UpdateShopBrowserTitle()
@@ -2948,6 +3782,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
     }
 
     GameObject CreateShopRow(
+        int rowIndex,
         InventoryItemDefinition leftDefinition,
         int leftPrice,
         bool leftCanAfford,
@@ -2958,8 +3793,15 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (shopContentRect == null || leftDefinition == null)
             return null;
 
-        GameObject rowObject = new GameObject("ShopRow_" + leftDefinition.Id, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+        ShopRowView rowView = GetOrCreateShopRowView(rowIndex);
+        if (rowView == null || rowView.Root == null)
+            return null;
+
+        GameObject rowObject = rowView.Root;
+        rowObject.name = "ShopRow_" + leftDefinition.Id;
         rowObject.transform.SetParent(shopContentRect, false);
+        rowObject.transform.SetSiblingIndex(rowIndex);
+        rowObject.SetActive(true);
 
         RectTransform rowRect = rowObject.GetComponent<RectTransform>();
         rowRect.sizeDelta = new Vector2(0f, 294f);
@@ -2970,11 +3812,147 @@ public class PlayerProfilePanelUI : MonoBehaviour
         Image rowImage = rowObject.GetComponent<Image>();
         rowImage.color = new Color(0.12f, 0.16f, 0.21f, 0.98f);
 
-        CreateShopCard(rowObject.transform, leftDefinition, leftPrice, leftCanAfford, -130f);
-        if (rightDefinition != null)
-            CreateShopCard(rowObject.transform, rightDefinition, rightPrice, rightCanAfford, 130f);
+        UpdateShopCard(rowView.Left, leftDefinition, leftPrice, leftCanAfford);
+        UpdateShopCard(rowView.Right, rightDefinition, rightPrice, rightCanAfford);
 
         return rowObject;
+    }
+
+    ShopRowView GetOrCreateShopRowView(int rowIndex)
+    {
+        while (shopRowPool.Count <= rowIndex)
+            shopRowPool.Add(null);
+
+        ShopRowView rowView = shopRowPool[rowIndex];
+        if (rowView != null && rowView.Root != null)
+            return rowView;
+
+        GameObject rowObject = new GameObject("ShopRowPool_" + rowIndex, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+        rowObject.transform.SetParent(shopContentRect, false);
+
+        rowView = new ShopRowView
+        {
+            Root = rowObject,
+            Left = CreateShopCardView(rowObject.transform, "Left", -130f),
+            Right = CreateShopCardView(rowObject.transform, "Right", 130f)
+        };
+        shopRowPool[rowIndex] = rowView;
+        return rowView;
+    }
+
+    ShopCardView CreateShopCardView(Transform parent, string suffix, float centerX)
+    {
+        ShopCardView view = new ShopCardView();
+        view.CardButton = CreateButton(parent, "ShopItemCardButton_" + suffix, string.Empty, new Vector2(centerX, -12f), new Vector2(214f, 214f), null);
+        view.Root = view.CardButton.gameObject;
+        view.CardImage = view.CardButton.GetComponent<Image>();
+
+        Outline itemCardOutline = view.CardButton.GetComponent<Outline>();
+        if (itemCardOutline == null)
+            itemCardOutline = view.CardButton.gameObject.AddComponent<Outline>();
+        itemCardOutline.effectColor = new Color(0f, 0f, 0f, 0.28f);
+        itemCardOutline.effectDistance = new Vector2(4f, 4f);
+
+        Shadow itemCardShadow = view.CardButton.GetComponent<Shadow>();
+        if (itemCardShadow == null)
+            itemCardShadow = view.CardButton.gameObject.AddComponent<Shadow>();
+        itemCardShadow.effectColor = new Color(0f, 0f, 0f, 0.2f);
+        itemCardShadow.effectDistance = new Vector2(0f, -3f);
+
+        GameObject iconObject = new GameObject("ShopItemIcon", typeof(RectTransform), typeof(Image));
+        iconObject.transform.SetParent(view.CardButton.transform, false);
+        RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+        iconRect.anchorMin = new Vector2(0.5f, 1f);
+        iconRect.anchorMax = new Vector2(0.5f, 1f);
+        iconRect.pivot = new Vector2(0.5f, 1f);
+        iconRect.anchoredPosition = new Vector2(0f, -12f);
+        iconRect.sizeDelta = new Vector2(108f, 108f);
+        view.IconImage = iconObject.GetComponent<Image>();
+        view.IconImage.preserveAspect = true;
+        view.IconImage.raycastTarget = false;
+
+        view.NameText = CreateText(view.CardButton.transform, "ShopItemName", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -124f), new Vector2(182f, 28f), 18f, TextAlignmentOptions.Center);
+        view.NameText.enableAutoSizing = true;
+        view.NameText.fontSizeMin = 12f;
+        view.NameText.fontSizeMax = 18f;
+        view.NameText.textWrappingMode = TextWrappingModes.Normal;
+        view.NameText.overflowMode = TextOverflowModes.Truncate;
+        view.NameText.raycastTarget = false;
+
+        view.TypeText = CreateText(view.CardButton.transform, "ShopItemType", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -154f), new Vector2(182f, 22f), 15f, TextAlignmentOptions.Center);
+        view.TypeText.fontStyle = FontStyles.Bold;
+        view.TypeText.color = new Color(0.92f, 0.96f, 1f, 0.96f);
+        view.TypeText.raycastTarget = false;
+
+        GameObject priceIconObject = new GameObject("ShopItemPriceIcon", typeof(RectTransform), typeof(Image));
+        priceIconObject.transform.SetParent(view.CardButton.transform, false);
+        RectTransform priceIconRect = priceIconObject.GetComponent<RectTransform>();
+        priceIconRect.anchorMin = new Vector2(0.5f, 1f);
+        priceIconRect.anchorMax = new Vector2(0.5f, 1f);
+        priceIconRect.pivot = new Vector2(0.5f, 0.5f);
+        priceIconRect.anchoredPosition = new Vector2(-42f, -176f);
+        priceIconRect.sizeDelta = new Vector2(28f, 28f);
+        view.PriceIcon = priceIconObject.GetComponent<Image>();
+        view.PriceIcon.sprite = LoadSpriteFromResources("UI/icon_astrons_coin");
+        view.PriceIcon.color = new Color(1f, 1f, 1f, 0.96f);
+        view.PriceIcon.preserveAspect = true;
+        view.PriceIcon.raycastTarget = false;
+
+        view.PriceText = CreateText(view.CardButton.transform, "ShopItemPrice", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(28f, -176f), new Vector2(112f, 28f), 21f, TextAlignmentOptions.MidlineLeft);
+        view.PriceText.fontStyle = FontStyles.Normal;
+        view.PriceText.raycastTarget = false;
+
+        view.BuyButton = CreateButton(parent, "ShopBuyButton_" + suffix, "BUY", new Vector2(centerX, -236f), new Vector2(150f, 50f), null);
+        view.BuyText = view.BuyButton.GetComponentInChildren<TMP_Text>(true);
+        StyleButton(view.BuyButton, new Color(0.12f, 0.46f, 0.34f, 1f), new Color(0.16f, 0.62f, 0.44f, 1f));
+
+        return view;
+    }
+
+    void UpdateShopCard(ShopCardView view, InventoryItemDefinition definition, int price, bool canAfford)
+    {
+        if (view == null)
+            return;
+
+        bool active = definition != null;
+        if (view.Root != null)
+            view.Root.SetActive(active);
+        if (view.BuyButton != null)
+            view.BuyButton.gameObject.SetActive(active);
+        if (!active)
+            return;
+
+        string itemId = definition.Id;
+        view.CardButton.onClick.RemoveAllListeners();
+        view.CardButton.onClick.AddListener(() =>
+        {
+            AudioManager.Instance?.PlayClick();
+            OnShopItemPreviewClicked(itemId);
+        });
+        view.CardButton.interactable = !inventoryActionInProgress;
+
+        if (view.CardImage != null)
+            view.CardImage.color = InventoryItemCatalog.GetRarityColor(definition.Rarity);
+        if (view.IconImage != null)
+            view.IconImage.sprite = definition.GetIcon();
+        if (view.NameText != null)
+            view.NameText.text = definition.DisplayName.ToUpperInvariant();
+        if (view.TypeText != null)
+            view.TypeText.text = InventoryItemCatalog.GetCategoryLabel(definition.Id);
+        if (view.PriceText != null)
+        {
+            view.PriceText.text = price.ToString();
+            view.PriceText.color = canAfford ? new Color(0.94f, 0.84f, 0.44f, 1f) : new Color(0.78f, 0.46f, 0.46f, 1f);
+        }
+
+        view.BuyButton.onClick.RemoveAllListeners();
+        view.BuyButton.onClick.AddListener(() =>
+        {
+            OnShopBuyClicked(itemId);
+        });
+        view.BuyButton.interactable = canAfford && !inventoryActionInProgress;
+        if (view.BuyText != null)
+            view.BuyText.text = "BUY";
     }
 
     void CreateShopCard(Transform parent, InventoryItemDefinition definition, int price, bool canAfford, float centerX)
@@ -3084,6 +4062,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             if (bought)
             {
                 SetStatus("Bought " + InventoryItemCatalog.GetDisplayName(itemId) + ".");
+                AudioManager.Instance?.PlayCash();
                 RefreshView();
             }
             else
@@ -3104,8 +4083,50 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
     }
 
+    async void OnMissEnigmaTradeClicked(string blueprintItemId)
+    {
+        if (inventoryActionInProgress || string.IsNullOrWhiteSpace(blueprintItemId))
+            return;
+
+        BlueprintTradeOffer offer = BlueprintCatalog.GetMissEnigmaOffer(blueprintItemId);
+        if (offer == null)
+            return;
+
+        inventoryActionInProgress = true;
+        SetInventoryInteractable(false);
+        SetStatus("Trading for " + InventoryItemCatalog.GetDisplayName(blueprintItemId) + "...");
+
+        try
+        {
+            bool traded = await PlayerProfileService.Instance.TryPurchaseMissEnigmaBlueprintAsync(blueprintItemId);
+            if (traded)
+            {
+                SetStatus("Traded for " + InventoryItemCatalog.GetDisplayName(blueprintItemId) + ".");
+                AudioManager.Instance?.PlayCash();
+                RefreshView();
+            }
+            else
+            {
+                SetStatus("Missing trade items or inventory space.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Miss Enigma trade failed: " + ex);
+            SetStatus("Trade failed.");
+        }
+        finally
+        {
+            inventoryActionInProgress = false;
+            SetInventoryInteractable(true);
+            RefreshShopBrowser();
+        }
+    }
+
     void RefreshCraftingRecipeBrowser(bool forceRebuild = false)
     {
+        using var marker = CraftingRecipeRefreshMarker.Auto();
+
         if (craftingRecipeBrowserObject == null || craftingRecipeContentRect == null)
             return;
 
@@ -3139,9 +4160,24 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (recipes == null)
             return;
 
-        for (int i = 0; i < recipes.Count; i++)
+        List<PlayerProfileCraftingRecipe> orderedRecipes = new List<PlayerProfileCraftingRecipe>(recipes.Count);
+        for (int pass = 0; pass < 2; pass++)
         {
-            PlayerProfileCraftingRecipe recipe = recipes[i];
+            bool unlockedPass = pass == 0;
+            for (int i = 0; i < recipes.Count; i++)
+            {
+                PlayerProfileCraftingRecipe recipe = recipes[i];
+                if (recipe == null)
+                    continue;
+
+                if (IsCraftingRecipeUnlocked(recipe) == unlockedPass)
+                    orderedRecipes.Add(recipe);
+            }
+        }
+
+        for (int i = 0; i < orderedRecipes.Count; i++)
+        {
+            PlayerProfileCraftingRecipe recipe = orderedRecipes[i];
             if (recipe == null)
                 continue;
 
@@ -3195,6 +4231,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         AppendInventorySlotsSignature(builder, inventory != null ? inventory.ShipSlots : null);
         builder.Append('|');
         AppendInventorySlotsSignature(builder, inventory != null ? inventory.CraftingSlots : null);
+        builder.Append('|');
+        AppendInventorySlotsSignature(builder, PlayerProfileService.Instance.CurrentProfile != null ? PlayerProfileService.Instance.CurrentProfile.UnlockedBlueprintIds : null);
         return builder.ToString();
     }
 
@@ -3390,6 +4428,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
         TMP_Text resultPrice = CreateText(resultInner.transform, "RecipeResultPrice", InventoryItemCatalog.GetSellValueAstrons(recipe.OutputItemId) + " Astrons", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -158f), new Vector2(146f, 22f), 13f, TextAlignmentOptions.Center);
         resultPrice.fontStyle = FontStyles.Normal;
         resultPrice.color = new Color(0.94f, 0.98f, 1f, 0.96f);
+        rowView.ResultPriceText = resultPrice;
+
+        TMP_Text resultLock = CreateText(resultInner.transform, "RecipeResultLock", "BLUEPRINT\nREQUIRED", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -142f), new Vector2(146f, 38f), 12f, TextAlignmentOptions.Center);
+        resultLock.fontStyle = FontStyles.Bold;
+        resultLock.color = new Color(1f, 0.66f, 0.36f, 0.98f);
+        resultLock.textWrappingMode = TextWrappingModes.Normal;
+        resultLock.gameObject.SetActive(false);
+        rowView.ResultLockText = resultLock;
 
         bool[] missingIngredients = ResolveMissingRecipeIngredients(inventory, recipe);
         rowView.MissingIngredientFrames = new GameObject[recipe.Inputs.Length];
@@ -3446,23 +4492,29 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (rowView == null || recipe == null)
             return;
 
+        bool unlocked = IsCraftingRecipeUnlocked(recipe);
+
         if (rowView.ResultButton != null)
             rowView.ResultButton.interactable = inventoryControlsInteractable && (preserveInventoryButtonVisualsDuringSave || !inventoryActionInProgress);
 
         if (rowView.ResultButtonImage != null)
         {
             Color rarityColor = InventoryItemCatalog.GetRarityColor(recipe.OutputItemId);
-            rowView.ResultButtonImage.color = craftable
+            rowView.ResultButtonImage.color = !unlocked
+                ? Color.Lerp(rarityColor, new Color(0.08f, 0.1f, 0.13f, 1f), 0.72f)
+                : craftable
                 ? rarityColor
                 : Color.Lerp(rarityColor, new Color(0.16f, 0.18f, 0.22f, 1f), 0.58f);
         }
 
         if (rowView.ResultOutline != null)
         {
-            rowView.ResultOutline.effectColor = craftable
+            rowView.ResultOutline.effectColor = !unlocked
+                ? new Color(0.82f, 0.5f, 0.22f, 0.86f)
+                : craftable
                 ? new Color(0.23f, 0.92f, 0.49f, 0.95f)
                 : new Color(0.28f, 0.36f, 0.44f, 0.8f);
-            rowView.ResultOutline.effectDistance = craftable ? new Vector2(4f, 4f) : new Vector2(2f, 2f);
+            rowView.ResultOutline.effectDistance = craftable || !unlocked ? new Vector2(4f, 4f) : new Vector2(2f, 2f);
         }
 
         if (rowView.ResultShadow != null)
@@ -3473,7 +4525,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
             rowView.ResultShadow.effectDistance = new Vector2(0f, -3f);
         }
 
-        UpdateCraftingRecipeResultFrame(rowView, craftable);
+        if (rowView.ResultPriceText != null)
+            rowView.ResultPriceText.gameObject.SetActive(unlocked);
+        if (rowView.ResultLockText != null)
+            rowView.ResultLockText.gameObject.SetActive(!unlocked);
+
+        UpdateCraftingRecipeResultFrame(rowView, craftable, unlocked);
 
         bool[] missingIngredients = ResolveMissingRecipeIngredients(inventory, recipe);
         if (rowView.MissingIngredientFrames == null)
@@ -3490,15 +4547,17 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
     }
 
-    void UpdateCraftingRecipeResultFrame(CraftingRecipeRowView rowView, bool craftable)
+    void UpdateCraftingRecipeResultFrame(CraftingRecipeRowView rowView, bool craftable, bool unlocked)
     {
         if (rowView == null || rowView.ResultFrameRects == null || rowView.ResultFrameImages == null)
             return;
 
-        Color frameColor = craftable
+        Color frameColor = !unlocked
+            ? new Color(0.9f, 0.54f, 0.22f, 1f)
+            : craftable
             ? new Color(0.24f, 0.94f, 0.5f, 1f)
             : new Color(0.18f, 0.24f, 0.3f, 0.92f);
-        float thickness = craftable ? 6f : 4f;
+        float thickness = craftable || !unlocked ? 6f : 4f;
 
         SetCraftingRecipeFrameBar(rowView, 0, frameColor, new Vector2(0f, -thickness), new Vector2(0f, 0f));
         SetCraftingRecipeFrameBar(rowView, 1, frameColor, new Vector2(0f, 0f), new Vector2(0f, thickness));
@@ -3656,6 +4715,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
         ShowItemPreview(ProfileItemSource.None, -1, recipe.OutputItemId);
 
+        if (!IsCraftingRecipeUnlocked(recipe))
+        {
+            SetStatus("Blueprint required for " + InventoryItemCatalog.GetDisplayName(recipe.OutputItemId) + ".");
+            return;
+        }
+
         PlayerInventoryData workingInventory = profile.Inventory != null ? profile.Inventory.Clone() : PlayerInventoryData.Default();
         if (!TryPrepareCraftingRecipe(workingInventory, recipe, out string failureMessage))
         {
@@ -3707,6 +4772,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
     bool CanPrepareCraftingRecipe(PlayerInventoryData inventory, PlayerProfileCraftingRecipe recipe)
     {
         if (inventory == null || recipe == null || recipe.Inputs == null || recipe.Inputs.Length == 0)
+            return false;
+
+        if (!IsCraftingRecipeUnlocked(recipe))
             return false;
 
         if (recipe.Inputs.Length > PlayerInventoryData.CraftingSlotCount)
@@ -4240,7 +5308,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         Button button = buttonObject.GetComponent<Button>();
         button.onClick.AddListener(() =>
         {
-            AudioManager.Instance?.PlayClick();
+            if (!ButtonClickSoundHook.ShouldSuppressClickSound(objectName, label))
+                AudioManager.Instance?.PlayClick();
             onClick?.Invoke();
         });
 
@@ -4384,6 +5453,16 @@ public class PlayerProfilePanelUI : MonoBehaviour
             text.characterSpacing = 1.6f;
             text.margin = new Vector4(8f, 4f, 8f, 4f);
         }
+    }
+
+    void SetButtonLabel(Button button, string label)
+    {
+        if (button == null)
+            return;
+
+        TMP_Text text = button.GetComponentInChildren<TMP_Text>(true);
+        if (text != null)
+            text.text = label ?? string.Empty;
     }
 
     TMP_Text CreateText(Transform parent, string objectName, string value, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 sizeDelta, float fontSize, TextAlignmentOptions alignment)
@@ -4594,10 +5673,18 @@ public class PlayerProfilePanelUI : MonoBehaviour
         RefreshShipPreview();
         RefreshPilotPortrait();
         RefreshInventoryView(profile.Inventory);
-        RefreshProjectsView();
-        RefreshProjectDetailsView();
+        if (currentScreen == ProfileScreen.Projects)
+            RefreshProjectsView();
+        else
+            projectsDirty = true;
+        if (currentScreen == ProfileScreen.ProjectDetails)
+            RefreshProjectDetailsView();
+        else
+            projectDetailsDirty = true;
         if (craftingRecipeBrowserObject != null && craftingRecipeBrowserObject.activeSelf)
             RefreshCraftingRecipeBrowser();
+        if (craftingBlueprintBrowserObject != null && craftingBlueprintBrowserObject.activeSelf)
+            RefreshCraftingBlueprintBrowser();
         if (shopBrowserObject != null && shopBrowserObject.activeSelf)
             RefreshShopBrowser();
         if (cheatBrowserObject != null && cheatBrowserObject.activeSelf)
@@ -4635,6 +5722,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         RefreshEquipmentSlotPreview();
         if (craftingRecipeBrowserObject != null && craftingRecipeBrowserObject.activeSelf)
             RefreshCraftingRecipeBrowser();
+        if (craftingBlueprintBrowserObject != null && craftingBlueprintBrowserObject.activeSelf)
+            RefreshCraftingBlueprintBrowser();
         if (shopBrowserObject != null && shopBrowserObject.activeSelf)
             RefreshShopBrowser();
     }
@@ -4819,8 +5908,6 @@ public class PlayerProfilePanelUI : MonoBehaviour
         {
             text.text = "PLAY";
         }
-
-        UIRuntimeStyler.RefreshStyles();
     }
 
     void ApplyItemPreviewLayout()
@@ -5129,49 +6216,56 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (!await TryClearCraftingSlotsBeforeLeavingAsync(screen))
             return;
 
-        currentScreen = screen;
-        if (clearStatus)
-            SetStatus(string.Empty);
-
-        HideItemPreview();
-        HideCraftingRecipeBrowser();
-        HideShopBrowser();
-        HideShipImageModal();
-
-        if (screen == ProfileScreen.Trader)
+        using (SwitchScreenMarker.Auto())
         {
-            selectedTraderShop = TraderShopKind.None;
-            RefreshTraderSelectionVisuals();
-        }
+            currentScreen = screen;
+            MarkCurrentScreenDirty();
+            skinVisualsDirty = true;
+            saveAndRunStyleDirty = true;
+            if (clearStatus)
+                SetStatus(string.Empty);
 
-        if (screen == ProfileScreen.ShipSelection)
-        {
-            shipSelectionCenterType = GetSelectedShipType();
-            shipSelectionCenterIndex = Mathf.Clamp(Array.IndexOf(SelectableShipTypes, shipSelectionCenterType), 0, SelectableShipTypes.Length - 1);
-            RefreshShipSelectionView();
-        }
-        else if (screen == ProfileScreen.PilotSelection)
-        {
-            pilotSelectionCenterIndex = PilotCatalog.GetPilotIndex(selectedPilotId);
-            RefreshPilotSelectionView();
-        }
-        else if (screen == ProfileScreen.Projects)
-        {
-            RefreshProjectsView();
-        }
-        else if (screen == ProfileScreen.ProjectDetails)
-        {
-            RefreshProjectDetailsView();
-        }
+            HideItemPreview();
+            HideCraftingRecipeBrowser();
+            HideCraftingBlueprintBrowser();
+            HideShopBrowser();
+            HideShipImageModal();
 
-        ApplyProfileScreenLayout();
+            if (screen == ProfileScreen.Trader)
+            {
+                selectedTraderShop = TraderShopKind.None;
+                RefreshTraderSelectionVisuals();
+            }
 
-        if (screen == ProfileScreen.Crafting)
-            RefreshCraftingRecipeBrowser();
-        else if (screen == ProfileScreen.Trader)
-            RefreshShopBrowser();
+            if (screen == ProfileScreen.ShipSelection)
+            {
+                shipSelectionCenterType = GetSelectedShipType();
+                shipSelectionCenterIndex = Mathf.Clamp(Array.IndexOf(SelectableShipTypes, shipSelectionCenterType), 0, SelectableShipTypes.Length - 1);
+                RefreshShipSelectionView();
+            }
+            else if (screen == ProfileScreen.PilotSelection)
+            {
+                pilotSelectionCenterIndex = PilotCatalog.GetPilotIndex(selectedPilotId);
+                RefreshPilotSelectionView();
+            }
+            else if (screen == ProfileScreen.Projects)
+            {
+                RefreshProjectsView();
+            }
+            else if (screen == ProfileScreen.ProjectDetails)
+            {
+                RefreshProjectDetailsView();
+            }
 
-        UIRuntimeStyler.RefreshStyles();
+            ApplyProfileScreenLayout();
+            profileLayoutDirty = false;
+
+            if (screen == ProfileScreen.Crafting)
+                RefreshCraftingRecipeBrowser();
+            else if (screen == ProfileScreen.Trader)
+                RefreshShopBrowser();
+
+        }
     }
 
     void OnProfileBackClicked()
@@ -5330,6 +6424,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
             craftingPanelObject.SetActive(showCrafting);
         if (craftingRecipeBrowserObject != null)
             craftingRecipeBrowserObject.SetActive(showCrafting);
+        if (craftingBlueprintBrowserObject != null && !showCrafting)
+            craftingBlueprintBrowserObject.SetActive(false);
         if (shopBrowserObject != null)
             shopBrowserObject.SetActive(showTrader && TraderOpensShop(selectedTraderShop));
         if (traderFuturePanelObject != null)
@@ -5421,6 +6517,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
         {
             itemInfoOverlayObject.transform.SetParent(panelObject.transform, false);
             itemInfoOverlayObject.transform.SetAsLastSibling();
+        }
+
+        if (craftingBlueprintBrowserObject != null && craftingBlueprintBrowserObject.activeSelf)
+        {
+            craftingBlueprintBrowserObject.transform.SetParent(panelObject.transform, false);
+            craftingBlueprintBrowserObject.transform.SetAsLastSibling();
         }
 
         if (cheatBrowserObject != null && cheatBrowserObject.activeSelf)
@@ -6045,47 +7147,54 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void RefreshProjectsView()
     {
-        if (projectsViewRootObject == null || !projectsViewRootObject.activeSelf)
-            return;
-
-        IReadOnlyList<ProjectDefinition> projects = ProjectCatalog.AllProjects;
-        for (int i = 0; i < projectTileButtons.Count; i++)
+        using (ProjectsRefreshMarker.Auto())
         {
-            Button tile = projectTileButtons[i];
-            bool active = i < projects.Count;
-            if (tile == null)
-                continue;
+            if (projectsViewRootObject == null || !projectsViewRootObject.activeSelf)
+                return;
 
-            tile.gameObject.SetActive(active);
-            if (!active)
-                continue;
-
-            ProjectDefinition project = projects[i];
-            EnsureProjectTileVisual(tile, project);
-            Image preview = tile.transform.Find("ProjectTilePreview")?.GetComponent<Image>();
-            if (preview != null)
+            IReadOnlyList<ProjectDefinition> projects = ProjectCatalog.AllProjects;
+            for (int i = 0; i < projectTileButtons.Count; i++)
             {
-                preview.sprite = LoadSpriteFromResources(project.TileResourcePath);
-                preview.color = preview.sprite != null ? Color.white : new Color(0.12f, 0.16f, 0.22f, 1f);
+                Button tile = projectTileButtons[i];
+                bool active = i < projects.Count;
+                if (tile == null)
+                    continue;
+
+                tile.gameObject.SetActive(active);
+                if (!active)
+                    continue;
+
+                ProjectDefinition project = projects[i];
+                EnsureProjectTileVisual(tile, project);
+                Image preview = tile.transform.Find("ProjectTilePreview")?.GetComponent<Image>();
+                if (preview != null)
+                {
+                    preview.sprite = LoadSpriteFromResources(project.TileResourcePath);
+                    preview.color = preview.sprite != null ? Color.white : new Color(0.12f, 0.16f, 0.22f, 1f);
+                }
+
+                bool complete = PlayerProfileService.HasInstance && PlayerProfileService.Instance.IsProjectComplete(project.Id);
+                tile.interactable = !inventoryActionInProgress;
+                Image image = tile.GetComponent<Image>();
+                if (image != null)
+                    image.color = complete ? new Color(0.18f, 0.18f, 0.18f, 0.92f) : new Color(0.1f, 0.16f, 0.24f, 0.96f);
+
+                TMP_Text check = tile.transform.Find("ProjectTileCheck")?.GetComponent<TMP_Text>();
+                if (check != null)
+                    check.gameObject.SetActive(complete);
+
+                if (preview != null && complete)
+                    preview.color = new Color(0.45f, 0.45f, 0.45f, 0.72f);
             }
 
-            bool complete = PlayerProfileService.HasInstance && PlayerProfileService.Instance.IsProjectComplete(project.Id);
-            tile.interactable = !inventoryActionInProgress;
-            Image image = tile.GetComponent<Image>();
-            if (image != null)
-                image.color = complete ? new Color(0.18f, 0.18f, 0.18f, 0.92f) : new Color(0.1f, 0.16f, 0.24f, 0.96f);
-
-            TMP_Text check = tile.transform.Find("ProjectTileCheck")?.GetComponent<TMP_Text>();
-            if (check != null)
-                check.gameObject.SetActive(complete);
-
-            if (preview != null && complete)
-                preview.color = new Color(0.45f, 0.45f, 0.45f, 0.72f);
+            projectsDirty = false;
         }
     }
 
     void RefreshProjectDetailsView()
     {
+        using var marker = ProjectDetailsRefreshMarker.Auto();
+
         if (projectDetailsViewObject == null || !projectDetailsViewObject.activeSelf)
             return;
 
@@ -6196,6 +7305,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
 
         RefreshProjectCommitPanel();
+        projectDetailsDirty = false;
     }
 
     void RefreshProjectDescriptionText(ProjectDefinition project)
@@ -6565,7 +7675,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
         TMP_Text title = craftingRecipeBrowserObject.transform.Find("CraftingRecipeBrowserPanel/CraftingRecipeBrowserTitle")?.GetComponent<TMP_Text>();
         if (title != null)
-            title.rectTransform.anchoredPosition = new Vector2(0f, 18f);
+            title.gameObject.SetActive(false);
 
         Transform hint = craftingRecipeBrowserObject.transform.Find("CraftingRecipeBrowserPanel/CraftingRecipeBrowserHint");
         if (hint != null)
@@ -6590,8 +7700,18 @@ public class PlayerProfilePanelUI : MonoBehaviour
             RectTransform rect = craftingRecipeAvailabilityButton.GetComponent<RectTransform>();
             if (rect != null)
             {
-                rect.anchoredPosition = new Vector2(-286f, 22f);
-                rect.sizeDelta = new Vector2(170f, 42f);
+                rect.anchoredPosition = new Vector2(-286f, 42f);
+                rect.sizeDelta = new Vector2(255f, 63f);
+            }
+        }
+
+        if (craftingRecipeBlueprintsButton != null)
+        {
+            RectTransform rect = craftingRecipeBlueprintsButton.GetComponent<RectTransform>();
+            if (rect != null)
+            {
+                rect.anchoredPosition = new Vector2(0f, 42f);
+                rect.sizeDelta = new Vector2(255f, 63f);
             }
         }
 
@@ -6989,45 +8109,49 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void RefreshPilotSelectionView()
     {
-        if (pilotSelectionViewObject == null || pilotSelectionCardObjects == null || PilotCatalog.AllDefinitions.Count <= 0)
-            return;
-
-        pilotSelectionCenterIndex = Mathf.Clamp(pilotSelectionCenterIndex, 0, PilotCatalog.AllDefinitions.Count - 1);
-        PlayerProfileData profile = PlayerProfileService.Instance.CurrentProfile;
-        PilotDefinition centerDefinition = PilotCatalog.AllDefinitions[pilotSelectionCenterIndex];
-        bool centerUnlocked = PilotCatalog.IsPilotUnlocked(profile, centerDefinition.Id);
-
-        if (pilotSelectionTitleText != null)
-            pilotSelectionTitleText.text = centerDefinition.DisplayName;
-
-        if (!inventoryActionInProgress && pilotSelectionStatusText != null)
+        using (PilotSelectionRefreshMarker.Auto())
         {
-            pilotSelectionStatusText.text = centerUnlocked
-                ? string.Equals(selectedPilotId, centerDefinition.Id, StringComparison.Ordinal) ? "SELECTED" : "TAP CENTER PORTRAIT TO SELECT"
-                : PilotCatalog.GetUnlockRequirementText(profile, centerDefinition.Id);
+            if (pilotSelectionViewObject == null || pilotSelectionCardObjects == null || PilotCatalog.AllDefinitions.Count <= 0)
+                return;
+
+            pilotSelectionCenterIndex = Mathf.Clamp(pilotSelectionCenterIndex, 0, PilotCatalog.AllDefinitions.Count - 1);
+            PlayerProfileData profile = PlayerProfileService.Instance.CurrentProfile;
+            PilotDefinition centerDefinition = PilotCatalog.AllDefinitions[pilotSelectionCenterIndex];
+            bool centerUnlocked = PilotCatalog.IsPilotUnlocked(profile, centerDefinition.Id);
+
+            if (pilotSelectionTitleText != null)
+                pilotSelectionTitleText.text = centerDefinition.DisplayName;
+
+            if (!inventoryActionInProgress && pilotSelectionStatusText != null)
+            {
+                pilotSelectionStatusText.text = centerUnlocked
+                    ? string.Equals(selectedPilotId, centerDefinition.Id, StringComparison.Ordinal) ? "SELECTED" : "TAP CENTER PORTRAIT TO SELECT"
+                    : PilotCatalog.GetUnlockRequirementText(profile, centerDefinition.Id);
+            }
+
+            if (pilotSelectionAbilitiesText != null)
+                pilotSelectionAbilitiesText.text = BuildPilotAbilitiesText(centerDefinition);
+
+            for (int i = 0; i < pilotSelectionCardObjects.Length; i++)
+            {
+                int offset = i - 1;
+                int targetIndex = pilotSelectionCenterIndex + offset;
+                bool visible = targetIndex >= 0 && targetIndex < PilotCatalog.AllDefinitions.Count;
+                pilotSelectionCardObjects[i].SetActive(visible);
+                if (!visible)
+                    continue;
+
+                UpdatePilotSelectionCard(i, PilotCatalog.AllDefinitions[targetIndex], i == 1);
+            }
+
+            if (pilotSelectionPrevButton != null)
+                pilotSelectionPrevButton.gameObject.SetActive(pilotSelectionCenterIndex > 0);
+            if (pilotSelectionNextButton != null)
+                pilotSelectionNextButton.gameObject.SetActive(pilotSelectionCenterIndex < PilotCatalog.AllDefinitions.Count - 1);
+
+            UpdatePilotSelectionCardLayering();
+            pilotSelectionDirty = false;
         }
-
-        if (pilotSelectionAbilitiesText != null)
-            pilotSelectionAbilitiesText.text = BuildPilotAbilitiesText(centerDefinition);
-
-        for (int i = 0; i < pilotSelectionCardObjects.Length; i++)
-        {
-            int offset = i - 1;
-            int targetIndex = pilotSelectionCenterIndex + offset;
-            bool visible = targetIndex >= 0 && targetIndex < PilotCatalog.AllDefinitions.Count;
-            pilotSelectionCardObjects[i].SetActive(visible);
-            if (!visible)
-                continue;
-
-            UpdatePilotSelectionCard(i, PilotCatalog.AllDefinitions[targetIndex], i == 1);
-        }
-
-        if (pilotSelectionPrevButton != null)
-            pilotSelectionPrevButton.gameObject.SetActive(pilotSelectionCenterIndex > 0);
-        if (pilotSelectionNextButton != null)
-            pilotSelectionNextButton.gameObject.SetActive(pilotSelectionCenterIndex < PilotCatalog.AllDefinitions.Count - 1);
-
-        UpdatePilotSelectionCardLayering();
     }
 
     void UpdatePilotSelectionCard(int cardIndex, PilotDefinition definition, bool centerCard)
@@ -7116,10 +8240,21 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     string BuildPilotAbilitiesText(PilotDefinition definition)
     {
-        if (definition == null || definition.AbilityDescriptions == null || definition.AbilityDescriptions.Length == 0)
+        if (definition == null)
             return string.Empty;
 
         System.Text.StringBuilder builder = new System.Text.StringBuilder();
+        if (!string.IsNullOrWhiteSpace(definition.ActiveAbilityDescription))
+        {
+            builder.Append("<color=#72FF9B><b>ACTIVE - ");
+            builder.Append(string.IsNullOrWhiteSpace(definition.ActiveAbilityName) ? "Pilot Ability" : definition.ActiveAbilityName);
+            builder.Append(":</b></color> ");
+            builder.Append(definition.ActiveAbilityDescription);
+        }
+
+        if (definition.AbilityDescriptions == null || definition.AbilityDescriptions.Length == 0)
+            return builder.ToString();
+
         for (int i = 0; i < definition.AbilityDescriptions.Length; i++)
         {
             if (string.IsNullOrWhiteSpace(definition.AbilityDescriptions[i]))
@@ -7128,7 +8263,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
             if (builder.Length > 0)
                 builder.AppendLine();
 
-            builder.Append(i + 1).Append(". ").Append(definition.AbilityDescriptions[i]);
+            builder.Append("<color=#AFC8FF><b>PASSIVE ");
+            builder.Append(i + 1);
+            builder.Append(":</b></color> ");
+            builder.Append(definition.AbilityDescriptions[i]);
         }
 
         return builder.ToString();
@@ -7256,66 +8394,70 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void RefreshShipSelectionView()
     {
-        if (shipSelectionViewObject == null || shipSelectionCardObjects == null)
-            return;
-
-        shipSelectionCenterIndex = Mathf.Clamp(shipSelectionCenterIndex, 0, SelectableShipTypes.Length - 1);
-        shipSelectionCenterType = SelectableShipTypes[shipSelectionCenterIndex];
-
-        if (shipSelectionTitleText != null)
+        using (ShipSelectionRefreshMarker.Auto())
         {
-            shipSelectionTitleText.gameObject.SetActive(true);
-            shipSelectionTitleText.text = ShipCatalog.GetShipTypeDisplayName(shipSelectionCenterType).ToUpperInvariant();
-            shipSelectionTitleText.transform.SetAsLastSibling();
-        }
+            if (shipSelectionViewObject == null || shipSelectionCardObjects == null)
+                return;
 
-        if (shipSelectionBackButton != null)
-            LayoutSharedProfileBackButton(shipSelectionBackButton.GetComponent<RectTransform>());
+            shipSelectionCenterIndex = Mathf.Clamp(shipSelectionCenterIndex, 0, SelectableShipTypes.Length - 1);
+            shipSelectionCenterType = SelectableShipTypes[shipSelectionCenterIndex];
 
-        if (!inventoryActionInProgress && shipSelectionStatusText != null)
-            shipSelectionStatusText.text = string.Empty;
-
-        for (int i = 0; i < shipSelectionCardObjects.Length; i++)
-        {
-            int offset = i - 1;
-            int targetIndex = shipSelectionCenterIndex + offset;
-            bool visible = targetIndex >= 0 && targetIndex < SelectableShipTypes.Length;
-            shipSelectionCardObjects[i].SetActive(visible);
-            if (!visible)
-                continue;
-
-            ShipType shipType = SelectableShipTypes[targetIndex];
-            UpdateShipSelectionCard(i, shipType, i == 1);
-        }
-
-        int[] allowedSkins = ShipCatalog.GetSkinsForShipType(shipSelectionCenterType);
-        for (int i = 0; i < shipSelectionSkinButtons.Length; i++)
-        {
-            if (shipSelectionSkinButtons[i] == null)
-                continue;
-
-            bool active = i < allowedSkins.Length;
-            shipSelectionSkinButtons[i].gameObject.SetActive(active);
-            if (!active)
-                continue;
-
-            bool selected = allowedSkins[i] == GetShipSelectionDisplaySkin(shipSelectionCenterType);
-            TMP_Text text = shipSelectionSkinButtons[i].GetComponentInChildren<TMP_Text>(true);
-            if (text != null)
+            if (shipSelectionTitleText != null)
             {
-                text.text = ShipCatalog.GetSkinDisplayName(allowedSkins[i]).ToUpperInvariant();
-                text.enableAutoSizing = true;
-                text.fontSizeMin = 12f;
-                text.fontSizeMax = 20f;
+                shipSelectionTitleText.gameObject.SetActive(true);
+                shipSelectionTitleText.text = ShipCatalog.GetShipTypeDisplayName(shipSelectionCenterType).ToUpperInvariant();
+                shipSelectionTitleText.transform.SetAsLastSibling();
             }
 
-            StyleButton(
-                shipSelectionSkinButtons[i],
-                selected ? new Color(0.2f, 0.38f, 0.58f, 0.98f) : new Color(0.16f, 0.2f, 0.27f, 0.95f),
-                selected ? new Color(0.28f, 0.5f, 0.74f, 1f) : new Color(0.22f, 0.3f, 0.42f, 1f));
-        }
+            if (shipSelectionBackButton != null)
+                LayoutSharedProfileBackButton(shipSelectionBackButton.GetComponent<RectTransform>());
 
-        UpdateShipSelectionCardLayering();
+            if (!inventoryActionInProgress && shipSelectionStatusText != null)
+                shipSelectionStatusText.text = string.Empty;
+
+            for (int i = 0; i < shipSelectionCardObjects.Length; i++)
+            {
+                int offset = i - 1;
+                int targetIndex = shipSelectionCenterIndex + offset;
+                bool visible = targetIndex >= 0 && targetIndex < SelectableShipTypes.Length;
+                shipSelectionCardObjects[i].SetActive(visible);
+                if (!visible)
+                    continue;
+
+                ShipType shipType = SelectableShipTypes[targetIndex];
+                UpdateShipSelectionCard(i, shipType, i == 1);
+            }
+
+            int[] allowedSkins = ShipCatalog.GetSkinsForShipType(shipSelectionCenterType);
+            for (int i = 0; i < shipSelectionSkinButtons.Length; i++)
+            {
+                if (shipSelectionSkinButtons[i] == null)
+                    continue;
+
+                bool active = i < allowedSkins.Length;
+                shipSelectionSkinButtons[i].gameObject.SetActive(active);
+                if (!active)
+                    continue;
+
+                bool selected = allowedSkins[i] == GetShipSelectionDisplaySkin(shipSelectionCenterType);
+                TMP_Text text = shipSelectionSkinButtons[i].GetComponentInChildren<TMP_Text>(true);
+                if (text != null)
+                {
+                    text.text = ShipCatalog.GetSkinDisplayName(allowedSkins[i]).ToUpperInvariant();
+                    text.enableAutoSizing = true;
+                    text.fontSizeMin = 12f;
+                    text.fontSizeMax = 20f;
+                }
+
+                StyleButton(
+                    shipSelectionSkinButtons[i],
+                    selected ? new Color(0.2f, 0.38f, 0.58f, 0.98f) : new Color(0.16f, 0.2f, 0.27f, 0.95f),
+                    selected ? new Color(0.28f, 0.5f, 0.74f, 1f) : new Color(0.22f, 0.3f, 0.42f, 1f));
+            }
+
+            UpdateShipSelectionCardLayering();
+            shipSelectionDirty = false;
+        }
     }
 
     void UpdateShipSelectionCardLayering()
@@ -7693,6 +8835,46 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
     }
 
+    void PrewarmProfileAssets()
+    {
+        UIRuntimeStyler.PrewarmRuntimeSprites();
+        InventoryItemCatalog.PrewarmIcons();
+
+        LoadStandaloneSprite("STAR_RAIDERS_screen.png");
+        LoadStandaloneSprite("hangar1_2D.png");
+        LoadStandaloneSprite("hangar1_2D_przesuniety.png");
+        LoadStandaloneSprite("PROJECTS_SCREEN.png");
+        LoadStandaloneSprite("SUPPLY_TO_SURVIVE_PROJECT.png");
+        LoadStandaloneSprite("SPACE_MAYHEM.png");
+
+        for (int skinIndex = 0; skinIndex <= ShipCatalog.MaxShipSkinIndex; skinIndex++)
+            LoadShipPreviewSprite(skinIndex);
+
+        for (int i = 0; i < PilotCatalog.AllDefinitions.Count; i++)
+        {
+            PilotDefinition definition = PilotCatalog.AllDefinitions[i];
+            Sprite portrait = LoadPilotPortraitSprite(definition);
+            GetGrayscalePilotPortraitSprite(definition, portrait);
+        }
+
+        for (int i = 0; i < TraderDefinitions.Length; i++)
+            LoadTraderPortraitSprite(TraderDefinitions[i]);
+
+        IReadOnlyList<ProjectDefinition> projects = ProjectCatalog.AllProjects;
+        for (int i = 0; i < projects.Count; i++)
+        {
+            ProjectDefinition project = projects[i];
+            if (project == null)
+                continue;
+
+            LoadSpriteFromResources(project.TileResourcePath);
+            if (!string.IsNullOrWhiteSpace(project.BackgroundResourcePath))
+                LoadSpriteFromResources(project.BackgroundResourcePath);
+        }
+
+        LoadSpriteFromResources("UI/icon_astrons_coin");
+    }
+
     Sprite LoadStandaloneSprite(string fileName)
     {
         string resourcesPath = fileName switch
@@ -7738,10 +8920,17 @@ public class PlayerProfilePanelUI : MonoBehaviour
 #if UNITY_EDITOR
         sprite = LoadEditorSprite(editorPreferredPath);
         if (sprite != null)
+        {
+            CacheLoadedSprite(resourcesPath, sprite);
             return sprite;
+        }
 
         if (!string.IsNullOrWhiteSpace(editorFallbackPath))
-            return LoadEditorSprite(editorFallbackPath);
+        {
+            sprite = LoadEditorSprite(editorFallbackPath);
+            CacheLoadedSprite(resourcesPath, sprite);
+            return sprite;
+        }
 #endif
 
         return null;
@@ -7752,23 +8941,48 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (string.IsNullOrWhiteSpace(resourcesPath))
             return null;
 
+        if (spriteCacheByResourcePath.TryGetValue(resourcesPath, out Sprite cachedSprite) && cachedSprite != null)
+            return cachedSprite;
+        if (missingSpriteResources.Contains(resourcesPath))
+            return null;
+
         Sprite sprite = Resources.Load<Sprite>(resourcesPath);
         if (sprite != null)
+        {
+            spriteCacheByResourcePath[resourcesPath] = sprite;
             return sprite;
+        }
 
         Sprite[] sprites = Resources.LoadAll<Sprite>(resourcesPath);
         sprite = GetLargestSprite(sprites);
         if (sprite != null)
+        {
+            spriteCacheByResourcePath[resourcesPath] = sprite;
             return sprite;
+        }
 
         Texture2D texture = Resources.Load<Texture2D>(resourcesPath);
         if (texture == null)
+        {
+            missingSpriteResources.Add(resourcesPath);
             return null;
+        }
 
         texture.wrapMode = TextureWrapMode.Clamp;
         texture.filterMode = FilterMode.Bilinear;
         float pixelsPerUnit = Mathf.Max(100f, Mathf.Max(texture.width, texture.height));
-        return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), pixelsPerUnit);
+        sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), pixelsPerUnit);
+        spriteCacheByResourcePath[resourcesPath] = sprite;
+        return sprite;
+    }
+
+    void CacheLoadedSprite(string resourcesPath, Sprite sprite)
+    {
+        if (string.IsNullOrWhiteSpace(resourcesPath) || sprite == null)
+            return;
+
+        spriteCacheByResourcePath[resourcesPath] = sprite;
+        missingSpriteResources.Remove(resourcesPath);
     }
 
     Sprite GetLargestSprite(Sprite[] sprites)
@@ -7851,9 +9065,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
             panelObject.SetActive(true);
 
         if (changed)
+        {
             SetGameplayHudVisible(false);
+            MarkAllProfileUiDirty();
+        }
 
-        bool splashShowing = splashScreenObject != null && splashHideTime > 0f && Time.unscaledTime < splashHideTime;
+        bool splashShowing = IsSplashShowing();
         if (splashScreenObject != null)
         {
             splashScreenObject.SetActive(splashShowing);
@@ -7862,7 +9079,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
 
         bool browserVisible = SessionBrowserPanelUI.IsVisible;
-        SetInteractable(!NetworkManager.SessionRequested || !browserVisible);
+        ApplyInteractableIfChanged(!NetworkManager.SessionRequested || !browserVisible);
         if (statusText != null &&
             (statusText.text == "Connecting..." || statusText.text == "Loading active rounds...") &&
             !NetworkManager.SessionRequested)
@@ -7871,6 +9088,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
 
         return true;
+    }
+
+    bool IsCraftingRecipeUnlocked(PlayerProfileCraftingRecipe recipe)
+    {
+        PlayerProfileData profile = PlayerProfileService.Instance.CurrentProfile;
+        return PlayerProfileCraftingCatalog.IsRecipeUnlocked(
+            recipe,
+            profile != null ? profile.UnlockedBlueprintIds : null);
     }
 
     void SetStatus(string value)
@@ -8007,7 +9232,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
             bool extended = await PlayerProfileService.Instance.TryExtendPlayerInventoryAsync();
             HidePlayerInventoryExtendConfirm();
             if (extended)
+            {
                 SetStatus("Player inventory extended by " + PlayerInventoryData.PlayerSlotExtensionSize + " slots.");
+                AudioManager.Instance?.PlayCash();
+            }
             else
                 SetStatus("Not enough Astrons. Need " + price + ".");
         }
@@ -8022,6 +9250,32 @@ public class PlayerProfilePanelUI : MonoBehaviour
             SetInteractable(!NetworkManager.SessionRequested);
             RefreshView();
         }
+    }
+
+    void ApplyInteractableIfChanged(bool interactable)
+    {
+        if (interactableStateInitialized &&
+            lastAppliedInteractable == interactable &&
+            lastAppliedInventoryActionInProgress == inventoryActionInProgress &&
+            lastAppliedPreserveInventoryButtonVisualsDuringSave == preserveInventoryButtonVisualsDuringSave)
+        {
+            return;
+        }
+
+        SetInteractable(interactable);
+    }
+
+    void InvalidateInteractableState()
+    {
+        interactableStateInitialized = false;
+    }
+
+    void RememberInteractableState(bool interactable)
+    {
+        interactableStateInitialized = true;
+        lastAppliedInteractable = interactable;
+        lastAppliedInventoryActionInProgress = inventoryActionInProgress;
+        lastAppliedPreserveInventoryButtonVisualsDuringSave = preserveInventoryButtonVisualsDuringSave;
     }
 
     void SetInteractable(bool interactable)
@@ -8056,13 +9310,13 @@ public class PlayerProfilePanelUI : MonoBehaviour
             }
         }
 
-        if (skinButtons == null)
-            return;
-
-        for (int i = 0; i < skinButtons.Length; i++)
+        if (skinButtons != null)
         {
-            if (skinButtons[i] != null)
-                skinButtons[i].interactable = interactable;
+            for (int i = 0; i < skinButtons.Length; i++)
+            {
+                if (skinButtons[i] != null)
+                    skinButtons[i].interactable = interactable;
+            }
         }
 
         if (shipSelectionBackButton != null)
@@ -8093,6 +9347,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             pilotSelectionNextButton.interactable = interactable;
 
         SetInventoryInteractable(interactable && !inventoryActionInProgress);
+        RememberInteractableState(interactable);
     }
 
     void SetProjectButtonsInteractable(bool interactable)
@@ -8141,6 +9396,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
             craftingRecipeCloseButton.interactable = interactable;
         if (craftingRecipeAvailabilityButton != null)
             craftingRecipeAvailabilityButton.interactable = visualInteractable;
+        if (craftingRecipeBlueprintsButton != null)
+            craftingRecipeBlueprintsButton.interactable = visualInteractable;
+        if (craftingBlueprintCloseButton != null)
+            craftingBlueprintCloseButton.interactable = interactable;
         SetCraftingRecipeRowsInteractable(interactable);
         if (itemPreviewSellButton != null)
             itemPreviewSellButton.interactable = visualInteractable;
@@ -8175,6 +9434,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
             cheatAddMoneyButton.interactable = interactable && !inventoryActionInProgress;
         if (cheatAddXpButton != null)
             cheatAddXpButton.interactable = interactable && !inventoryActionInProgress;
+        if (cheatUnlockBlueprintsButton != null)
+            cheatUnlockBlueprintsButton.interactable = interactable && !inventoryActionInProgress;
+        if (cheatLockBlueprintsButton != null)
+            cheatLockBlueprintsButton.interactable = interactable && !inventoryActionInProgress;
         if (cheatResetAccountButton != null)
             cheatResetAccountButton.interactable = interactable && !inventoryActionInProgress;
         if (cheatResetConfirmYesButton != null)
@@ -8591,12 +9854,17 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
 
         bool supportsInventoryActions = source == ProfileItemSource.PlayerInventory || source == ProfileItemSource.ShipInventory;
+        bool isBlueprint = InventoryItemCatalog.IsBlueprintItem(itemId);
+        bool blueprintUnlocked = isBlueprint && PlayerProfileService.Instance.IsBlueprintUnlocked(itemId);
         if (itemPreviewInfoButton != null)
             itemPreviewInfoButton.gameObject.SetActive(true);
         if (itemPreviewSellButton != null)
             itemPreviewSellButton.gameObject.SetActive(supportsInventoryActions);
         if (itemPreviewSalvageButton != null)
+        {
+            SetButtonLabel(itemPreviewSalvageButton, isBlueprint && !blueprintUnlocked ? "USE" : "SALVAGE");
             itemPreviewSalvageButton.gameObject.SetActive(supportsInventoryActions);
+        }
     }
 
     void HideItemPreview()
@@ -8655,7 +9923,20 @@ public class PlayerProfilePanelUI : MonoBehaviour
             itemInfoPriceText.text = BuildItemInfoPriceText(itemId, definition);
 
         if (itemInfoSalvageText != null)
-            itemInfoSalvageText.text = "SALVAGE\n" + FormatItemIdList(InventoryItemCatalog.GetSalvageOutputs(itemId), "No salvage output.");
+        {
+            if (InventoryItemCatalog.IsBlueprintItem(itemId))
+            {
+                string targetItemId = InventoryItemCatalog.GetBlueprintTargetItemId(itemId);
+                bool unlocked = PlayerProfileService.Instance.IsBlueprintUnlocked(itemId);
+                itemInfoSalvageText.text = "BLUEPRINT\n" + (unlocked
+                    ? "Salvage into " + InventoryItemCatalog.GetDisplayName(InventoryItemCatalog.BlueprintScrapId) + "."
+                    : "Use to unlock crafting for " + InventoryItemCatalog.GetDisplayName(targetItemId) + ".");
+            }
+            else
+            {
+                itemInfoSalvageText.text = "SALVAGE\n" + FormatItemIdList(InventoryItemCatalog.GetSalvageOutputs(itemId), "No salvage output.");
+            }
+        }
 
         if (itemInfoRecipeText != null)
             itemInfoRecipeText.text = "RECIPE\n" + BuildItemInfoRecipeText(itemId);
@@ -8779,8 +10060,16 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 return "A cutting beam that helps carve through tough targets and space rock.";
             case InventoryItemCatalog.PulseDisruptorId:
                 return "A slow shield disruptor that needs a short arming distance and releases a defensive EMP wave as its super.";
+            case InventoryItemCatalog.PowerEngineId:
+                return "A direct engine upgrade for better cruise speed and stronger booster top speed.";
+            case InventoryItemCatalog.IonEngineId:
+                return "A responsive engine that favors quick booster recovery and sharper turning.";
             case InventoryItemCatalog.FusionEngineId:
-                return "An engine upgrade that makes the ship feel faster and more responsive.";
+                return "A high-output engine that adds strong speed and faster booster recovery.";
+            case InventoryItemCatalog.HybridEngineId:
+                return "A balanced engine that blends speed, longer boost endurance, and quicker recovery.";
+            case InventoryItemCatalog.DoubleEngineId:
+                return "A twin-drive engine for extreme speed and boost output, with shorter boost endurance and heavier handling.";
             case InventoryItemCatalog.FuelTankId:
                 return "An engine module for longer booster use during travel, chase, or escape.";
             case InventoryItemCatalog.SuperBoosterId:
@@ -9119,6 +10408,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             if (sold)
             {
                 SetStatus("Sold for " + value + " Astrons.");
+                AudioManager.Instance?.PlayCash();
                 HideItemPreview();
             }
         }
@@ -9142,6 +10432,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
             return;
 
         bool isShipInventory = previewSource == ProfileItemSource.ShipInventory;
+        string itemId = previewItemId;
+        bool isBlueprint = InventoryItemCatalog.IsBlueprintItem(itemId);
+        if (isBlueprint && !PlayerProfileService.Instance.IsBlueprintUnlocked(itemId))
+        {
+            await UsePreviewedBlueprintAsync(isShipInventory);
+            return;
+        }
+
         inventoryActionInProgress = true;
         SetInteractable(false);
 
@@ -9150,7 +10448,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
             bool salvaged = await PlayerProfileService.Instance.SalvageInventoryItemAsync(isShipInventory, previewSlotIndex);
             if (salvaged)
             {
-                SetStatus("Item salvaged.");
+                SetStatus(isBlueprint
+                    ? "Blueprint salvaged into " + InventoryItemCatalog.GetDisplayName(InventoryItemCatalog.BlueprintScrapId) + "."
+                    : "Item salvaged.");
                 HideItemPreview();
             }
             else
@@ -9168,6 +10468,50 @@ public class PlayerProfilePanelUI : MonoBehaviour
             inventoryActionInProgress = false;
             SetInteractable(true);
             RefreshView();
+        }
+    }
+
+    async Task UsePreviewedBlueprintAsync(bool isShipInventory)
+    {
+        string blueprintItemId = previewItemId;
+        if (string.IsNullOrWhiteSpace(blueprintItemId))
+            return;
+
+        if (PlayerProfileService.Instance.IsBlueprintUnlocked(blueprintItemId))
+        {
+            SetStatus("Blueprint already learned.");
+            HideItemPreview();
+            return;
+        }
+
+        inventoryActionInProgress = true;
+        SetInteractable(false);
+
+        try
+        {
+            bool used = await PlayerProfileService.Instance.UseBlueprintItemAsync(isShipInventory, previewSlotIndex);
+            if (used)
+            {
+                string targetItemId = InventoryItemCatalog.GetBlueprintTargetItemId(blueprintItemId);
+                SetStatus("Blueprint learned: " + InventoryItemCatalog.GetDisplayName(targetItemId) + ".");
+                HideItemPreview();
+            }
+            else
+            {
+                SetStatus("Blueprint use failed.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Blueprint use failed: " + ex);
+            SetStatus("Blueprint use failed.");
+        }
+        finally
+        {
+            inventoryActionInProgress = false;
+            SetInteractable(true);
+            RefreshView();
+            RefreshCraftingRecipeBrowser(true);
         }
     }
 
@@ -9444,6 +10788,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (!PlayerProfileCraftingCatalog.TryCraft(workingInventory.CraftingSlots, out PlayerProfileCraftingResult craftResult) || craftResult.Recipe == null)
         {
             SetStatus("No matching crafting recipe.");
+            return;
+        }
+
+        if (!PlayerProfileCraftingCatalog.IsRecipeUnlocked(craftResult.Recipe, profile.UnlockedBlueprintIds))
+        {
+            SetStatus("Blueprint required for " + InventoryItemCatalog.GetDisplayName(craftResult.Recipe.OutputItemId) + ".");
             return;
         }
 
@@ -10004,6 +11354,21 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
 public class SessionBrowserPanelUI : MonoBehaviour
 {
+    sealed class SessionRowView
+    {
+        public GameObject Root;
+        public Image RowImage;
+        public Button Button;
+        public Outline Outline;
+        public TMP_Text TitleText;
+        public TMP_Text MetaText;
+        public TMP_Text EffectsText;
+        public TMP_Text StateText;
+        public GameObject JoinPillObject;
+        public Image JoinPillImage;
+        public TMP_Text JoinText;
+    }
+
     static SessionBrowserPanelUI instance;
     static bool visibleRequested;
 
@@ -10016,9 +11381,15 @@ public class SessionBrowserPanelUI : MonoBehaviour
     bool browserPanelVisibilityInitialized;
     bool browserPanelVisible;
     readonly List<GameObject> rowObjects = new List<GameObject>();
+    readonly List<SessionRowView> rowPool = new List<SessionRowView>();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
+    {
+        EnsureInstance();
+    }
+
+    static void EnsureInstance()
     {
         if (instance != null)
             return;
@@ -10026,6 +11397,21 @@ public class SessionBrowserPanelUI : MonoBehaviour
         GameObject root = new GameObject("SessionBrowserPanelUI");
         instance = root.AddComponent<SessionBrowserPanelUI>();
         DontDestroyOnLoad(root);
+    }
+
+    public static void Prewarm()
+    {
+        if (!Application.isPlaying)
+            return;
+
+        EnsureInstance();
+        if (instance == null)
+            return;
+
+        instance.EnsurePanel();
+        instance.RefreshStatus();
+        instance.RebuildRoomList(NetworkManager.GetSessionRooms());
+        instance.RefreshVisibility();
     }
 
     public static bool IsVisible => visibleRequested && !PhotonNetwork.InRoom;
@@ -10264,7 +11650,7 @@ public class SessionBrowserPanelUI : MonoBehaviour
         for (int i = 0; i < rowObjects.Count; i++)
         {
             if (rowObjects[i] != null)
-                Destroy(rowObjects[i]);
+                rowObjects[i].SetActive(false);
         }
 
         rowObjects.Clear();
@@ -10279,7 +11665,7 @@ public class SessionBrowserPanelUI : MonoBehaviour
         for (int i = 0; i < rooms.Count; i++)
         {
             NetworkManager.SessionRoomEntry room = rooms[i];
-            GameObject rowObject = CreateSessionRow(room);
+            GameObject rowObject = CreateSessionRow(i, room);
             rowObjects.Add(rowObject);
         }
 
@@ -10288,94 +11674,128 @@ public class SessionBrowserPanelUI : MonoBehaviour
             roomListScrollRect.verticalNormalizedPosition = 1f;
     }
 
-    GameObject CreateSessionRow(NetworkManager.SessionRoomEntry room)
+    GameObject CreateSessionRow(int rowIndex, NetworkManager.SessionRoomEntry room)
     {
-        GameObject rowObject = new GameObject("RoomRow_" + room.RoomName, typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+        SessionRowView rowView = GetOrCreateSessionRowView(rowIndex);
+        if (rowView == null || rowView.Root == null || room == null)
+            return null;
+
+        GameObject rowObject = rowView.Root;
+        rowObject.name = "RoomRow_" + room.RoomName;
         rowObject.transform.SetParent(roomListContentRect, false);
+        rowObject.transform.SetSiblingIndex(rowIndex);
+        rowObject.SetActive(true);
 
-        RectTransform rect = rowObject.GetComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(0f, 156f);
-
-        LayoutElement layout = rowObject.GetComponent<LayoutElement>();
-        layout.preferredHeight = 156f;
-
-        Image image = rowObject.GetComponent<Image>();
-        image.color = room.CanJoin
+        Color rowColor = room.CanJoin
             ? new Color(0.14f, 0.18f, 0.24f, 0.98f)
             : new Color(0.11f, 0.12f, 0.14f, 0.98f);
 
-        Button button = rowObject.GetComponent<Button>();
-        button.interactable = room.CanJoin;
-        button.onClick.AddListener(() =>
+        rowView.RowImage.color = rowColor;
+        rowView.Button.interactable = room.CanJoin;
+        rowView.Button.onClick.RemoveAllListeners();
+        string roomName = room.RoomName;
+        rowView.Button.onClick.AddListener(() =>
         {
             AudioManager.Instance?.PlayClick();
-            OnRoomClicked(room.RoomName);
+            OnRoomClicked(roomName);
         });
-        ColorBlock rowColors = button.colors;
-        rowColors.normalColor = image.color;
-        rowColors.highlightedColor = room.CanJoin ? new Color(0.2f, 0.28f, 0.36f, 1f) : image.color;
+
+        ColorBlock rowColors = rowView.Button.colors;
+        rowColors.normalColor = rowColor;
+        rowColors.highlightedColor = room.CanJoin ? new Color(0.2f, 0.28f, 0.36f, 1f) : rowColor;
         rowColors.selectedColor = rowColors.highlightedColor;
-        rowColors.pressedColor = room.CanJoin ? new Color(0.1f, 0.38f, 0.25f, 1f) : image.color;
-        rowColors.disabledColor = image.color;
-        button.colors = rowColors;
+        rowColors.pressedColor = room.CanJoin ? new Color(0.1f, 0.38f, 0.25f, 1f) : rowColor;
+        rowColors.disabledColor = rowColor;
+        rowView.Button.colors = rowColors;
 
-        Outline rowOutline = rowObject.AddComponent<Outline>();
-        rowOutline.effectColor = room.CanJoin ? new Color(0.38f, 0.76f, 0.58f, 0.55f) : new Color(0.28f, 0.32f, 0.38f, 0.42f);
-        rowOutline.effectDistance = new Vector2(2f, -2f);
-        rowOutline.useGraphicAlpha = true;
+        rowView.Outline.effectColor = room.CanJoin ? new Color(0.38f, 0.76f, 0.58f, 0.55f) : new Color(0.28f, 0.32f, 0.38f, 0.42f);
+        rowView.TitleText.text = room.DisplayName;
+        rowView.MetaText.text = BuildMetaLine(room);
 
-        TMP_Text titleText = CreateText(rowObject.transform, "RoomTitle", room.DisplayName, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -28f), new Vector2(620f, 38f), 26f, TextAlignmentOptions.Left);
-        RectTransform titleRect = titleText.rectTransform;
-        titleRect.pivot = new Vector2(0f, 0.5f);
-        TMP_Text metaText = CreateText(rowObject.transform, "RoomMeta", BuildMetaLine(room), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -70f), new Vector2(760f, 30f), 17f, TextAlignmentOptions.Left);
-        RectTransform metaRect = metaText.rectTransform;
-        metaRect.pivot = new Vector2(0f, 0.5f);
-        metaText.fontStyle = FontStyles.Normal;
-        metaText.color = new Color(0.72f, 0.81f, 0.9f, 0.95f);
+        bool hasEffects = !string.IsNullOrWhiteSpace(room.ActiveEffectsLabel);
+        rowView.EffectsText.gameObject.SetActive(hasEffects);
+        if (hasEffects)
+            rowView.EffectsText.text = "Effects: " + room.ActiveEffectsLabel;
 
-        if (!string.IsNullOrWhiteSpace(room.ActiveEffectsLabel))
-        {
-            TMP_Text effectsText = CreateText(rowObject.transform, "RoomEffects", "Effects: " + room.ActiveEffectsLabel, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -106f), new Vector2(760f, 26f), 16f, TextAlignmentOptions.Left);
-            RectTransform effectsRect = effectsText.rectTransform;
-            effectsRect.pivot = new Vector2(0f, 0.5f);
-            effectsText.fontStyle = FontStyles.Bold;
-            effectsText.color = new Color(0.72f, 0.58f, 1f, 0.98f);
-            effectsText.overflowMode = TextOverflowModes.Truncate;
-        }
-
-        TMP_Text stateText = CreateText(rowObject.transform, "RoomState", BuildStateLabel(room), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-232f, -34f), new Vector2(210f, 38f), 20f, TextAlignmentOptions.Center);
-        RectTransform stateRect = stateText.rectTransform;
-        stateRect.pivot = new Vector2(1f, 0.5f);
-        stateText.color = room.BlockedByLocalDeath
+        rowView.StateText.text = BuildStateLabel(room);
+        rowView.StateText.color = room.BlockedByLocalDeath
             ? new Color(0.95f, 0.38f, 0.34f, 1f)
             : room.State == RoomSettings.SessionStateInPlay
             ? new Color(0.94f, 0.75f, 0.33f, 1f)
             : new Color(0.38f, 0.83f, 0.62f, 1f);
 
-        GameObject joinPillObject = new GameObject("RoomJoinPill", typeof(RectTransform), typeof(Image));
-        joinPillObject.transform.SetParent(rowObject.transform, false);
-        RectTransform joinPillRect = joinPillObject.GetComponent<RectTransform>();
+        rowView.JoinPillImage.color = room.CanJoin
+            ? new Color(0.1f, 0.48f, 0.3f, 0.98f)
+            : new Color(0.2f, 0.22f, 0.25f, 0.9f);
+        rowView.JoinText.text = BuildJoinLabel(room);
+        rowView.JoinText.color = room.CanJoin
+            ? new Color(0.95f, 0.98f, 1f, 1f)
+            : new Color(0.62f, 0.64f, 0.68f, 1f);
+
+        return rowObject;
+    }
+
+    SessionRowView GetOrCreateSessionRowView(int rowIndex)
+    {
+        while (rowPool.Count <= rowIndex)
+            rowPool.Add(null);
+
+        SessionRowView rowView = rowPool[rowIndex];
+        if (rowView != null && rowView.Root != null)
+            return rowView;
+
+        GameObject rowObject = new GameObject("RoomRowPool_" + rowIndex, typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+        rowObject.transform.SetParent(roomListContentRect, false);
+
+        RectTransform rect = rowObject.GetComponent<RectTransform>();
+        rect.sizeDelta = new Vector2(0f, 156f);
+        LayoutElement layout = rowObject.GetComponent<LayoutElement>();
+        layout.preferredHeight = 156f;
+
+        rowView = new SessionRowView
+        {
+            Root = rowObject,
+            RowImage = rowObject.GetComponent<Image>(),
+            Button = rowObject.GetComponent<Button>(),
+            Outline = rowObject.AddComponent<Outline>()
+        };
+        rowView.Outline.effectDistance = new Vector2(2f, -2f);
+        rowView.Outline.useGraphicAlpha = true;
+
+        rowView.TitleText = CreateText(rowObject.transform, "RoomTitle", string.Empty, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -28f), new Vector2(620f, 38f), 26f, TextAlignmentOptions.Left);
+        rowView.TitleText.rectTransform.pivot = new Vector2(0f, 0.5f);
+
+        rowView.MetaText = CreateText(rowObject.transform, "RoomMeta", string.Empty, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -70f), new Vector2(760f, 30f), 17f, TextAlignmentOptions.Left);
+        rowView.MetaText.rectTransform.pivot = new Vector2(0f, 0.5f);
+        rowView.MetaText.fontStyle = FontStyles.Normal;
+        rowView.MetaText.color = new Color(0.72f, 0.81f, 0.9f, 0.95f);
+
+        rowView.EffectsText = CreateText(rowObject.transform, "RoomEffects", string.Empty, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -106f), new Vector2(760f, 26f), 16f, TextAlignmentOptions.Left);
+        rowView.EffectsText.rectTransform.pivot = new Vector2(0f, 0.5f);
+        rowView.EffectsText.fontStyle = FontStyles.Bold;
+        rowView.EffectsText.color = new Color(0.72f, 0.58f, 1f, 0.98f);
+        rowView.EffectsText.overflowMode = TextOverflowModes.Truncate;
+
+        rowView.StateText = CreateText(rowObject.transform, "RoomState", string.Empty, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-232f, -34f), new Vector2(210f, 38f), 20f, TextAlignmentOptions.Center);
+        rowView.StateText.rectTransform.pivot = new Vector2(1f, 0.5f);
+
+        rowView.JoinPillObject = new GameObject("RoomJoinPill", typeof(RectTransform), typeof(Image));
+        rowView.JoinPillObject.transform.SetParent(rowObject.transform, false);
+        RectTransform joinPillRect = rowView.JoinPillObject.GetComponent<RectTransform>();
         joinPillRect.anchorMin = new Vector2(1f, 1f);
         joinPillRect.anchorMax = new Vector2(1f, 1f);
         joinPillRect.pivot = new Vector2(1f, 0.5f);
         joinPillRect.anchoredPosition = new Vector2(-28f, -84f);
         joinPillRect.sizeDelta = new Vector2(158f, 56f);
 
-        Image joinPillImage = joinPillObject.GetComponent<Image>();
-        joinPillImage.raycastTarget = false;
-        joinPillImage.color = room.CanJoin
-            ? new Color(0.1f, 0.48f, 0.3f, 0.98f)
-            : new Color(0.2f, 0.22f, 0.25f, 0.9f);
+        rowView.JoinPillImage = rowView.JoinPillObject.GetComponent<Image>();
+        rowView.JoinPillImage.raycastTarget = false;
+        rowView.JoinText = CreateText(rowView.JoinPillObject.transform, "RoomJoin", string.Empty, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, 21f, TextAlignmentOptions.Center);
+        rowView.JoinText.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        rowView.JoinText.fontStyle = FontStyles.Bold;
 
-        TMP_Text joinText = CreateText(joinPillObject.transform, "RoomJoin", BuildJoinLabel(room), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, 21f, TextAlignmentOptions.Center);
-        RectTransform joinRect = joinText.rectTransform;
-        joinRect.pivot = new Vector2(0.5f, 0.5f);
-        joinText.color = room.CanJoin
-            ? new Color(0.95f, 0.98f, 1f, 1f)
-            : new Color(0.62f, 0.64f, 0.68f, 1f);
-        joinText.fontStyle = FontStyles.Bold;
-
-        return rowObject;
+        rowPool[rowIndex] = rowView;
+        return rowView;
     }
 
     string BuildMetaLine(NetworkManager.SessionRoomEntry room)
@@ -10463,7 +11883,8 @@ public class SessionBrowserPanelUI : MonoBehaviour
         Button button = buttonObject.GetComponent<Button>();
         button.onClick.AddListener(() =>
         {
-            AudioManager.Instance?.PlayClick();
+            if (!ButtonClickSoundHook.ShouldSuppressClickSound(objectName, label))
+                AudioManager.Instance?.PlayClick();
             onClick?.Invoke();
         });
 

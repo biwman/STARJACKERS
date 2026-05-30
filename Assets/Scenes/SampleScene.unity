@@ -367,6 +367,7 @@ GameObject:
   - component: {fileID: 264499442}
   - component: {fileID: 264499441}
   - component: {fileID: 264499443}
+  - component: {fileID: 900100001}
   m_Layer: 5
   m_Name: ScoreText
   m_TagString: Untagged
@@ -1451,6 +1452,7 @@ GameObject:
   m_Component:
   - component: {fileID: 647578925}
   - component: {fileID: 647578926}
+  - component: {fileID: 900100003}
   m_Layer: 5
   m_Name: HP_Bar
   m_TagString: Untagged
@@ -1968,6 +1970,7 @@ GameObject:
   - component: {fileID: 922154095}
   - component: {fileID: 922154094}
   - component: {fileID: 922154097}
+  - component: {fileID: 900100002}
   m_Layer: 5
   m_Name: readyButton
   m_TagString: Untagged
@@ -2405,6 +2408,7 @@ GameObject:
   - component: {fileID: 1087554305}
   - component: {fileID: 1087554304}
   - component: {fileID: 1087554307}
+  - component: {fileID: 900100004}
   m_Layer: 5
   m_Name: CollectButton
   m_TagString: Untagged
@@ -2889,6 +2893,7 @@ GameObject:
   - component: {fileID: 1130682801}
   - component: {fileID: 1130682800}
   - component: {fileID: 1130682803}
+  - component: {fileID: 900100005}
   m_Layer: 5
   m_Name: JoystickBG
   m_TagString: Untagged
@@ -2913,7 +2918,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 224, y: 204}
+  m_AnchoredPosition: {x: 248, y: 228}
   m_SizeDelta: {x: 430, y: 430}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1130682800
@@ -3547,6 +3552,7 @@ GameObject:
   - component: {fileID: 1437229234}
   - component: {fileID: 1437229236}
   - component: {fileID: 1437229235}
+  - component: {fileID: 900100006}
   m_Layer: 5
   m_Name: TimerText
   m_TagString: Untagged
@@ -3686,6 +3692,7 @@ GameObject:
   - component: {fileID: 1437756231}
   - component: {fileID: 1437756230}
   - component: {fileID: 1437756233}
+  - component: {fileID: 900100007}
   m_Layer: 5
   m_Name: ShootJoystickBG
   m_TagString: Untagged
@@ -4944,6 +4951,90 @@ MonoBehaviour:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.28}
   m_EffectDistance: {x: 2, y: -2}
   m_UseGraphicAlpha: 1
+--- !u!225 &900100001
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 264499439}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!225 &900100002
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 922154092}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!225 &900100003
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 647578924}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!225 &900100004
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1087554302}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!225 &900100005
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1130682798}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!225 &900100006
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1437229233}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!225 &900100007
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1437756228}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

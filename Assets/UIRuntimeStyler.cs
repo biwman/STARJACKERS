@@ -1,12 +1,16 @@
 using System.Collections;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using Unity.Profiling;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class UIRuntimeStyler : MonoBehaviour
 {
+    static readonly ProfilerMarker ApplyStylesMarker = new ProfilerMarker("UIRuntimeStyler.ApplyStyles");
+
     static UIRuntimeStyler instance;
     static Sprite playButtonShapeSprite;
     static Sprite whitePixelSprite;
@@ -14,6 +18,12 @@ public class UIRuntimeStyler : MonoBehaviour
     static Sprite cachedCraftingIconSprite;
     static Sprite cachedTraderIconSprite;
     static Sprite cachedInventoryIconSprite;
+    static bool styleRefreshQueued;
+
+    readonly List<GameObject> sceneObjects = new List<GameObject>(256);
+    readonly List<Button> sceneButtons = new List<Button>(96);
+    readonly Dictionary<string, GameObject> sceneObjectsByName = new Dictionary<string, GameObject>(System.StringComparer.Ordinal);
+    bool sceneObjectCacheReady;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -52,7 +62,20 @@ public class UIRuntimeStyler : MonoBehaviour
         if (instance == null)
             return;
 
-        instance.StartCoroutine(instance.ApplyStylesDeferred());
+        instance.QueueStyleRefresh();
+    }
+
+    public static void PrewarmRuntimeSprites()
+    {
+        if (!Application.isPlaying)
+            return;
+
+        GetWhitePixelSprite();
+        GetPlayButtonShapeSprite();
+        LoadPlayRocketSprite();
+        LoadRuntimeUiSprite("UI/icon_crafting", ref cachedCraftingIconSprite, "RuntimeCraftingIconSprite");
+        LoadRuntimeUiSprite("UI/icon_trader", ref cachedTraderIconSprite, "RuntimeTraderIconSprite");
+        LoadRuntimeUiSprite("UI/icon_inventory", ref cachedInventoryIconSprite, "RuntimeInventoryIconSprite");
     }
 
     void Awake()
@@ -63,26 +86,38 @@ public class UIRuntimeStyler : MonoBehaviour
     void OnEnable()
     {
         if (Application.isPlaying)
-            StartCoroutine(ApplyStylesDeferred());
+            QueueStyleRefresh();
     }
 
     void OnDestroy()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
         if (instance == this)
+        {
             instance = null;
+            styleRefreshQueued = false;
+        }
     }
 
     void Start()
     {
         if (Application.isPlaying)
-            StartCoroutine(ApplyStylesDeferred());
+            QueueStyleRefresh();
     }
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         if (Application.isPlaying)
-            StartCoroutine(ApplyStylesDeferred());
+            QueueStyleRefresh();
+    }
+
+    void QueueStyleRefresh()
+    {
+        if (styleRefreshQueued)
+            return;
+
+        styleRefreshQueued = true;
+        StartCoroutine(ApplyStylesDeferred());
     }
 
     IEnumerator ApplyStylesDeferred()
@@ -91,26 +126,37 @@ public class UIRuntimeStyler : MonoBehaviour
         yield return null;
 
         ApplyStylesImmediate();
+        styleRefreshQueued = false;
     }
 
     void ApplyStylesImmediate()
     {
-        StyleButtons();
-        StyleJoysticks();
-        StyleScoreText();
-        StyleLobbyPanel();
-        StyleEndScreen();
-        StyleExtractionMessage();
+        using (ApplyStylesMarker.Auto())
+        {
+            RebuildSceneObjectCache();
+            try
+            {
+                StyleButtons();
+                StyleJoysticks();
+                StyleScoreText();
+                StyleLobbyPanel();
+                StyleEndScreen();
+                StyleExtractionMessage();
+            }
+            finally
+            {
+                ClearSceneObjectCache();
+            }
+        }
     }
 
     void StyleButtons()
     {
-        foreach (Button button in Resources.FindObjectsOfTypeAll<Button>())
+        for (int i = 0; i < sceneButtons.Count; i++)
         {
-            if (!IsSceneObject(button.gameObject))
-                continue;
-
-            StyleButton(button);
+            Button button = sceneButtons[i];
+            if (button != null)
+                StyleButton(button);
         }
     }
 
@@ -530,7 +576,6 @@ public class UIRuntimeStyler : MonoBehaviour
         StyleLobbySettingButton("NebulaSettingButton", new Vector2(-690f, -464f));
         StyleLobbySettingButton("ExtractionSettingButton", new Vector2(-290f, -464f));
         StyleLobbySettingButton("BoosterSettingButton", new Vector2(-690f, -550f));
-        StyleLobbySettingButton("AmmoSettingButton", new Vector2(-290f, -550f));
         StyleLobbySettingButton("BoosterDelaySettingButton", new Vector2(-690f, -636f));
         StyleLobbySettingButton("ShipDriftSettingButton", new Vector2(-290f, -636f));
         StyleLobbySettingButton("DeathTimerSettingButton", new Vector2(-690f, -722f));
@@ -540,9 +585,10 @@ public class UIRuntimeStyler : MonoBehaviour
         StyleLobbySettingButton("ObstacleWeightSettingButton", new Vector2(-290f, -808f));
         StyleLobbySettingButton("TreasureWeightSettingButton", new Vector2(-690f, -894f));
 
-        foreach (GameObject sceneObject in Resources.FindObjectsOfTypeAll<GameObject>())
+        for (int i = 0; i < sceneObjects.Count; i++)
         {
-            if (sceneObject == null || !IsSceneObject(sceneObject) || !sceneObject.name.StartsWith("EnemySettingButton_"))
+            GameObject sceneObject = sceneObjects[i];
+            if (sceneObject == null || !sceneObject.name.StartsWith("EnemySettingButton_"))
                 continue;
 
             RectTransform buttonRect = sceneObject.GetComponent<RectTransform>();
@@ -691,7 +737,7 @@ public class UIRuntimeStyler : MonoBehaviour
 
     void StyleMovementJoystick(string objectName)
     {
-        GameObject root = GameObject.Find(objectName);
+        GameObject root = FindSceneObjectByName(objectName);
         if (root == null)
             return;
 
@@ -776,7 +822,7 @@ public class UIRuntimeStyler : MonoBehaviour
 
     void StyleJoystick(string objectName, Color backgroundColor, Color handleColor)
     {
-        GameObject root = GameObject.Find(objectName);
+        GameObject root = FindSceneObjectByName(objectName);
         if (root == null)
             return;
 
@@ -1156,8 +1202,48 @@ public class UIRuntimeStyler : MonoBehaviour
         return obj != null && obj.scene.IsValid();
     }
 
+    void RebuildSceneObjectCache()
+    {
+        sceneObjects.Clear();
+        sceneButtons.Clear();
+        sceneObjectsByName.Clear();
+
+        GameObject[] objects = Resources.FindObjectsOfTypeAll<GameObject>();
+        for (int i = 0; i < objects.Length; i++)
+        {
+            GameObject obj = objects[i];
+            if (!IsSceneObject(obj))
+                continue;
+
+            sceneObjects.Add(obj);
+            if (!sceneObjectsByName.ContainsKey(obj.name))
+                sceneObjectsByName.Add(obj.name, obj);
+
+            Button button = obj.GetComponent<Button>();
+            if (button != null)
+                sceneButtons.Add(button);
+        }
+
+        sceneObjectCacheReady = true;
+    }
+
+    void ClearSceneObjectCache()
+    {
+        sceneObjectCacheReady = false;
+        sceneObjects.Clear();
+        sceneButtons.Clear();
+        sceneObjectsByName.Clear();
+    }
+
     GameObject FindSceneObjectByName(string name)
     {
+        if (sceneObjectCacheReady)
+        {
+            return sceneObjectsByName.TryGetValue(name, out GameObject cachedObject) && IsSceneObject(cachedObject)
+                ? cachedObject
+                : null;
+        }
+
         foreach (GameObject go in Resources.FindObjectsOfTypeAll<GameObject>())
         {
             if (go.name == name && IsSceneObject(go))

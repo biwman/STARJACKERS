@@ -13,8 +13,7 @@ public sealed class RepairBaySpawner : MonoBehaviourPunCallbacks
     const string EmptyLayoutSentinel = "__empty__";
     const float Margin = 4.2f;
     const float MinDistanceBetweenBays = 9f;
-    const float MinDistanceFromExtractionZones = 7f;
-    const float ExtractionLayoutWaitTimeout = 2f;
+    const float MinDistanceFromExtractionZones = 10.5f;
 
     static RepairBaySpawner instance;
 
@@ -112,10 +111,8 @@ public sealed class RepairBaySpawner : MonoBehaviourPunCallbacks
 
     IEnumerator WaitForExtractionLayout()
     {
-        float deadline = Time.realtimeSinceStartup + ExtractionLayoutWaitTimeout;
         while (PhotonNetwork.CurrentRoom != null &&
-               string.IsNullOrWhiteSpace(GetRoomLayout(ExtractionLayoutKey)) &&
-               Time.realtimeSinceStartup < deadline)
+               string.IsNullOrWhiteSpace(GetRoomLayout(ExtractionLayoutKey)))
         {
             yield return null;
         }

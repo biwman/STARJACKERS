@@ -5,13 +5,16 @@ using UnityEngine;
 public class EnemyBotManager : MonoBehaviour
 {
     const float ScanInterval = 0.2f;
+    const float RuntimeComponentScanInterval = 1f;
     const string SpawnStateStartTimeRoomKey = "enemyRuntime.spawnStateStartTime";
     const string SpawnedCountRoomKeyPrefix = "enemyRuntime.spawned.";
 
     static EnemyBotManager instance;
+    static readonly Collider2D[] SpawnCandidateOverlapHits = new Collider2D[64];
 
     double lastHandledStartTime = double.MinValue;
     float nextScanTime;
+    float nextRuntimeComponentScanTime;
     readonly System.Collections.Generic.Dictionary<EnemyBotKind, int> spawnedThisRound = new System.Collections.Generic.Dictionary<EnemyBotKind, int>();
     readonly System.Collections.Generic.Dictionary<EnemyBotKind, int> lastHandledRespawnTick = new System.Collections.Generic.Dictionary<EnemyBotKind, int>();
     bool rescueShipSummonUnlockedThisRound;
@@ -55,11 +58,17 @@ public class EnemyBotManager : MonoBehaviour
 
     void Update()
     {
-        if (Time.unscaledTime < nextScanTime)
+        float now = Time.unscaledTime;
+        if (now >= nextRuntimeComponentScanTime)
+        {
+            nextRuntimeComponentScanTime = now + RuntimeComponentScanInterval;
+            EnsureRuntimeComponents();
+        }
+
+        if (now < nextScanTime)
             return;
 
-        nextScanTime = Time.unscaledTime + ScanInterval;
-        EnsureRuntimeComponents();
+        nextScanTime = now + ScanInterval;
         HandleSpawnLifecycle();
     }
 
@@ -173,6 +182,7 @@ public class EnemyBotManager : MonoBehaviour
         int desiredCount = RoomSettings.GetEnemyCount(definition.Kind);
         int spawnedCount = GetSpawnedCount(definition.Kind);
         int spawnedTotal = spawnedCount;
+        bool spawnedAny = false;
 
         for (int i = spawnedCount; i < desiredCount; i++)
         {
@@ -180,7 +190,13 @@ public class EnemyBotManager : MonoBehaviour
                 break;
 
             spawnedTotal++;
+            spawnedAny = true;
+        }
+
+        if (spawnedAny)
+        {
             SetSpawnedCount(definition.Kind, spawnedTotal);
+            GameVisualTheme.RequestRuntimeRefresh();
         }
 
         if (!RoomSettings.GetEnemyRespawnEnabled(definition.Kind))
@@ -213,6 +229,8 @@ public class EnemyBotManager : MonoBehaviour
         }
 
         SetSpawnedCount(definition.Kind, spawnBase + spawnedSuccessCount);
+        if (spawnedSuccessCount > 0)
+            GameVisualTheme.RequestRuntimeRefresh();
     }
 
     void HandleRescueShipSpawn(EnemyBotDefinition definition, double currentStartTime)
@@ -245,6 +263,7 @@ public class EnemyBotManager : MonoBehaviour
         int spawnedCount = GetSpawnedCount(definition.Kind);
         int spawnedTotal = spawnedCount;
         bool hasSpawnFocus = TryGetRescueShipSpawnFocus(out Vector2 spawnFocus);
+        bool spawnedAny = false;
 
         for (int i = spawnedCount; i < desiredCount; i++)
         {
@@ -252,7 +271,13 @@ public class EnemyBotManager : MonoBehaviour
                 break;
 
             spawnedTotal++;
+            spawnedAny = true;
+        }
+
+        if (spawnedAny)
+        {
             SetSpawnedCount(definition.Kind, spawnedTotal);
+            GameVisualTheme.RequestRuntimeRefresh();
         }
 
         if (!RoomSettings.GetEnemyRespawnEnabled(definition.Kind))
@@ -285,6 +310,8 @@ public class EnemyBotManager : MonoBehaviour
         }
 
         SetSpawnedCount(definition.Kind, spawnBase + spawnedSuccessCount);
+        if (spawnedSuccessCount > 0)
+            GameVisualTheme.RequestRuntimeRefresh();
     }
 
     void RegisterRescueShipSummonTrigger(EnemyBot damagedBot)
@@ -366,7 +393,8 @@ public class EnemyBotManager : MonoBehaviour
             return false;
         }
 
-        GameObject botObject = PhotonNetwork.Instantiate("Player", spawn, Quaternion.identity, 0, new object[] { definition.InstantiationMarker });
+        object[] instantiationData = BuildEnemyInstantiationData(definition, spawnOrdinal);
+        GameObject botObject = PhotonNetwork.Instantiate("Player", spawn, Quaternion.identity, 0, instantiationData);
         if (botObject != null)
         {
             EnemyBot bot = botObject.GetComponent<EnemyBot>();
@@ -374,7 +402,6 @@ public class EnemyBotManager : MonoBehaviour
                 bot = botObject.AddComponent<EnemyBot>();
 
             bot.InitializeFromPhotonData();
-            GameVisualTheme.RequestRuntimeRefresh();
             if (definition.Kind == EnemyBotKind.RescueShip)
             {
                 StartCoroutine(PlayRescueShipIncomingAfterBootstrap(bot.photonView.ViewID, spawn));
@@ -382,6 +409,18 @@ public class EnemyBotManager : MonoBehaviour
         }
 
         return botObject != null;
+    }
+
+    object[] BuildEnemyInstantiationData(EnemyBotDefinition definition, int spawnOrdinal)
+    {
+        if (definition != null && definition.Kind == EnemyBotKind.ContainerShip)
+        {
+            int variantCount = Mathf.Max(1, InventoryItemCatalog.BlueprintScrapContainerVariantCount);
+            int variantIndex = Mathf.Abs((spawnOrdinal * 37) + Mathf.RoundToInt(Time.time * 1000f)) % variantCount;
+            return new object[] { definition.InstantiationMarker, variantIndex };
+        }
+
+        return new object[] { definition != null ? definition.InstantiationMarker : string.Empty };
     }
 
     System.Collections.IEnumerator PlayRescueShipIncomingAfterBootstrap(int viewId, Vector2 spawn)
@@ -573,7 +612,7 @@ public class EnemyBotManager : MonoBehaviour
         for (int i = 0; i < bots.Length; i++)
         {
             EnemyBot bot = bots[i];
-            if (bot == null || bot.Kind != kind || bot.IsPlayerPlacedMine || bot.IsSummonedDrone || bot.IsPirateBaseLaunchedFighter)
+            if (bot == null || bot.Kind != kind || bot.IsOwnedMine || bot.IsSummonedDrone || bot.IsPirateBaseLaunchedFighter)
                 continue;
 
             PlayerHealth health = bot.GetComponent<PlayerHealth>();
@@ -592,7 +631,7 @@ public class EnemyBotManager : MonoBehaviour
         for (int i = 0; i < bots.Length; i++)
         {
             EnemyBot bot = bots[i];
-            if (bot == null || bot.Kind != kind || bot.IsPlayerPlacedMine || bot.IsSummonedDrone || bot.IsPirateBaseLaunchedFighter)
+            if (bot == null || bot.Kind != kind || bot.IsOwnedMine || bot.IsSummonedDrone || bot.IsPirateBaseLaunchedFighter)
                 continue;
 
             PhotonView view = bot.GetComponent<PhotonView>();
@@ -689,10 +728,10 @@ public class EnemyBotManager : MonoBehaviour
         }
 
         float overlapRadius = Mathf.Max(0.45f, targetSize * 0.34f);
-        Collider2D[] overlaps = Physics2D.OverlapCircleAll(candidate, overlapRadius);
-        for (int i = 0; i < overlaps.Length; i++)
+        int overlapCount = Physics2D.OverlapCircle(candidate, overlapRadius, CreatePhysicsQueryFilter(), SpawnCandidateOverlapHits);
+        for (int i = 0; i < overlapCount; i++)
         {
-            Collider2D hit = overlaps[i];
+            Collider2D hit = SpawnCandidateOverlapHits[i];
             if (hit == null || hit.isTrigger)
                 continue;
 
@@ -702,6 +741,15 @@ public class EnemyBotManager : MonoBehaviour
         }
 
         return true;
+    }
+
+    static ContactFilter2D CreatePhysicsQueryFilter()
+    {
+        return new ContactFilter2D
+        {
+            useLayerMask = false,
+            useTriggers = true
+        };
     }
 
     Vector2 GetOffscreenSpawnPosition(EnemyBotDefinition definition, Vector2 mapSize, bool hasEntryFocus, Vector2 entryFocusPosition)

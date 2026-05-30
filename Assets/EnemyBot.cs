@@ -22,7 +22,9 @@ public enum EnemyBotKind
     SpaceManta,
     PirateBase,
     GravitySquid,
-    HunterLance
+    HunterLance,
+    ContainerShip,
+    CosmicWorm
 }
 
 public sealed class RescueShipBeamVfx : MonoBehaviour
@@ -288,6 +290,261 @@ public sealed class RescueShipBeamVfx : MonoBehaviour
             color = Color.white
         };
         sharedMaterial.renderQueue = 3350;
+        return sharedMaterial;
+    }
+}
+
+public sealed class PirateBaseCollectionBeamVfx : MonoBehaviour
+{
+    const int BeamPointCount = 18;
+    const float EffectZOffset = -0.078f;
+    const int SortingOrderOffset = 284;
+
+    static readonly Dictionary<int, PirateBaseCollectionBeamVfx> ActiveBySourceViewId = new Dictionary<int, PirateBaseCollectionBeamVfx>();
+    static Material sharedMaterial;
+
+    Transform source;
+    Transform target;
+    LineRenderer coreLine;
+    LineRenderer glowLine;
+    AudioSource audioSource;
+    int sourceViewId;
+    int sortingLayerId;
+    int sortingOrder = 2400;
+
+    public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId)
+    {
+        StopBeam(sourcePhotonViewId);
+
+        PhotonView sourceView = PhotonView.Find(sourcePhotonViewId);
+        PhotonView targetView = PhotonView.Find(targetPhotonViewId);
+        if (sourceView == null || targetView == null)
+            return;
+
+        GameObject effect = new GameObject("PirateBaseCollectionBeamVfx_" + sourcePhotonViewId);
+        PirateBaseCollectionBeamVfx vfx = effect.AddComponent<PirateBaseCollectionBeamVfx>();
+        vfx.Initialize(sourceView.transform, targetView.transform, sourcePhotonViewId);
+        ActiveBySourceViewId[sourcePhotonViewId] = vfx;
+    }
+
+    public static void StopBeam(int sourcePhotonViewId)
+    {
+        if (!ActiveBySourceViewId.TryGetValue(sourcePhotonViewId, out PirateBaseCollectionBeamVfx vfx))
+            return;
+
+        ActiveBySourceViewId.Remove(sourcePhotonViewId);
+        if (vfx != null)
+            Destroy(vfx.gameObject);
+    }
+
+    void Initialize(Transform sourceTransform, Transform targetTransform, int resolvedSourceViewId)
+    {
+        source = sourceTransform;
+        target = targetTransform;
+        sourceViewId = resolvedSourceViewId;
+
+        SpriteRenderer sourceRenderer = source != null ? source.GetComponentInChildren<SpriteRenderer>() : null;
+        if (sourceRenderer != null)
+        {
+            sortingLayerId = sourceRenderer.sortingLayerID;
+            sortingOrder = sourceRenderer.sortingOrder + SortingOrderOffset;
+        }
+
+        if (source != null)
+            gameObject.layer = source.gameObject.layer;
+
+        glowLine = CreateLine("PirateBaseCollectGlow", 0.34f, sortingOrder);
+        coreLine = CreateLine("PirateBaseCollectCore", 0.12f, sortingOrder + 1);
+        CreateAudioSource();
+    }
+
+    void Update()
+    {
+        if (source == null || target == null)
+        {
+            StopBeam(sourceViewId);
+            return;
+        }
+
+        transform.position = source.position;
+        UpdateBeam();
+        UpdateAudio();
+    }
+
+    void OnDestroy()
+    {
+        if (ActiveBySourceViewId.TryGetValue(sourceViewId, out PirateBaseCollectionBeamVfx active) && active == this)
+            ActiveBySourceViewId.Remove(sourceViewId);
+
+        if (audioSource != null)
+            audioSource.Stop();
+    }
+
+    void UpdateBeam()
+    {
+        Vector3 start = GetSourcePoint();
+        Vector3 end = GetTargetPoint(start);
+        Vector3 delta = end - start;
+        Vector3 direction = delta.sqrMagnitude > 0.0001f ? delta.normalized : source.up;
+        Vector3 perpendicular = Vector3.Cross(direction, Vector3.forward);
+        float distance = Mathf.Max(0.1f, delta.magnitude);
+        float pulse = Mathf.Sin(Time.time * 14f) * 0.5f + 0.5f;
+        float wave = Mathf.Lerp(0.045f, 0.14f, pulse) * Mathf.Clamp01(distance / 5f);
+
+        UpdateLine(glowLine, start, end, perpendicular, wave, pulse, false);
+        UpdateLine(coreLine, start, end, perpendicular, wave * 0.34f, pulse, true);
+    }
+
+    void UpdateLine(LineRenderer line, Vector3 start, Vector3 end, Vector3 perpendicular, float wave, float pulse, bool core)
+    {
+        if (line == null)
+            return;
+
+        line.enabled = true;
+        for (int i = 0; i < line.positionCount; i++)
+        {
+            float t = i / (float)(line.positionCount - 1);
+            Vector3 point = Vector3.Lerp(start, end, t);
+            float taper = Mathf.Sin(t * Mathf.PI);
+            float ripple = Mathf.Sin((t * Mathf.PI * 5f) + Time.time * 13f) * wave * taper;
+            float shimmer = Mathf.Sin((t * Mathf.PI * 11f) - Time.time * 8f) * wave * 0.32f * taper;
+            point += perpendicular * (ripple + shimmer);
+            point.z = source.position.z + EffectZOffset;
+            line.SetPosition(i, point);
+        }
+
+        float alpha = core ? Mathf.Lerp(0.82f, 1f, pulse) : Mathf.Lerp(0.38f, 0.68f, pulse);
+        line.colorGradient = core ? BuildCoreGradient(alpha) : BuildGlowGradient(alpha);
+        line.widthMultiplier = core
+            ? Mathf.Lerp(0.09f, 0.15f, pulse)
+            : Mathf.Lerp(0.23f, 0.38f, pulse);
+    }
+
+    Vector3 GetSourcePoint()
+    {
+        SpriteRenderer renderer = source != null ? source.GetComponentInChildren<SpriteRenderer>() : null;
+        if (renderer == null)
+            return source != null ? source.position : Vector3.zero;
+
+        Vector3 center = renderer.bounds.center;
+        Vector3 towardTarget = target != null ? target.position - center : source.up;
+        if (towardTarget.sqrMagnitude <= 0.0001f)
+            towardTarget = source.up;
+
+        return center + towardTarget.normalized * Mathf.Max(0.15f, Mathf.Max(renderer.bounds.extents.x, renderer.bounds.extents.y) * 0.18f);
+    }
+
+    Vector3 GetTargetPoint(Vector3 sourcePoint)
+    {
+        Collider2D collider = target != null ? target.GetComponent<Collider2D>() : null;
+        if (collider != null)
+            return collider.ClosestPoint(sourcePoint);
+
+        return target != null ? target.position : sourcePoint;
+    }
+
+    LineRenderer CreateLine(string objectName, float width, int order)
+    {
+        GameObject lineObject = new GameObject(objectName);
+        lineObject.transform.SetParent(transform, false);
+        if (source != null)
+            lineObject.layer = source.gameObject.layer;
+
+        LineRenderer line = lineObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.positionCount = BeamPointCount;
+        line.widthMultiplier = width;
+        line.numCapVertices = 12;
+        line.numCornerVertices = 10;
+        line.alignment = LineAlignment.View;
+        line.textureMode = LineTextureMode.Stretch;
+        line.material = GetMaterial();
+        line.sortingLayerID = sortingLayerId;
+        line.sortingOrder = order;
+        line.widthCurve = new AnimationCurve(
+            new Keyframe(0f, 0.58f),
+            new Keyframe(0.18f, 1.18f),
+            new Keyframe(0.62f, 0.8f),
+            new Keyframe(1f, 0.24f));
+        return line;
+    }
+
+    void CreateAudioSource()
+    {
+        AudioClip clip = AudioManager.Instance.DrillingClip;
+        if (clip == null)
+            return;
+
+        audioSource = gameObject.AddComponent<AudioSource>();
+        AudioManager.Instance.ConfigureSpatialSource(audioSource, 0.5f);
+        audioSource.clip = clip;
+        audioSource.loop = true;
+        audioSource.playOnAwake = false;
+        audioSource.Play();
+    }
+
+    void UpdateAudio()
+    {
+        if (audioSource == null || source == null)
+            return;
+
+        if (!audioSource.isPlaying)
+            audioSource.Play();
+    }
+
+    static Gradient BuildCoreGradient(float alpha)
+    {
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(0.96f, 1f, 0.86f), 0f),
+                new GradientColorKey(new Color(0.28f, 1f, 0.66f), 0.44f),
+                new GradientColorKey(new Color(0.1f, 0.74f, 1f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0.95f * alpha, 0f),
+                new GradientAlphaKey(0.82f * alpha, 0.55f),
+                new GradientAlphaKey(0.2f * alpha, 1f)
+            });
+        return gradient;
+    }
+
+    static Gradient BuildGlowGradient(float alpha)
+    {
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(0.3f, 1f, 0.76f), 0f),
+                new GradientColorKey(new Color(0.08f, 0.6f, 1f), 0.56f),
+                new GradientColorKey(new Color(0.02f, 0.18f, 0.48f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0.42f * alpha, 0f),
+                new GradientAlphaKey(0.52f * alpha, 0.5f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        return gradient;
+    }
+
+    static Material GetMaterial()
+    {
+        if (sharedMaterial != null)
+            return sharedMaterial;
+
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null)
+            shader = Shader.Find("Unlit/Color");
+
+        sharedMaterial = new Material(shader)
+        {
+            name = "PirateBaseCollectionBeamVfxMaterial",
+            color = Color.white
+        };
+        sharedMaterial.renderQueue = 3355;
         return sharedMaterial;
     }
 }
@@ -1220,7 +1477,9 @@ public enum EnemyMovementModel
     PirateBase,
     SpaceManta,
     GravitySquid,
-    HunterLance
+    HunterLance,
+    ContainerShip,
+    CosmicWorm
 }
 
 public enum EnemySpawnPattern
@@ -1519,6 +1778,7 @@ public class EnemyBotDefinition
     public int MaxShield;
     public float DefaultSpeedMultiplier = 1f;
     public bool DefaultEnabled;
+    public bool ShowInEnemySettings = true;
     public int DefaultCount;
     public int DefaultSpawnSecond;
     public EnemyMovementProfile Movement;
@@ -1912,6 +2172,81 @@ public static class EnemyBotCatalog
                 MaxTrailWidth = 0.24f,
                 EmissionThreshold = 0.02f,
                 VisualStyle = EnemyTrailVisualStyle.GreenTwin
+            }
+        },
+        new EnemyBotDefinition
+        {
+            Kind = EnemyBotKind.ContainerShip,
+            Id = "container_ship",
+            DisplayName = "Container Hauler",
+            InstantiationMarker = "enemy_bot_container_ship",
+            VisualResourcePath = "Enemies/ContainerShip/container_ship",
+            EditorAssetPath = "Assets/Resources/Enemies/ContainerShip/container_ship.png",
+            TargetSize = 3.35f,
+            PhysicsMass = 15f,
+            LinearDamping = 0.11f,
+            AngularDamping = 0.3f,
+            DefaultHp = 120,
+            DefaultShield = 70,
+            MaxHp = 280,
+            MaxShield = 220,
+            DefaultSpeedMultiplier = 1f,
+            DefaultEnabled = false,
+            DefaultCount = 1,
+            DefaultSpawnSecond = 0,
+            Movement = new EnemyMovementProfile
+            {
+                Model = EnemyMovementModel.ContainerShip,
+                SpawnPattern = EnemySpawnPattern.WideCorners,
+                MoveSpeed = 1.32f,
+                TurnResponsiveness = 180f,
+                OrbitRadiusFactor = 0.38f,
+                OrbitAngularSpeed = 0.24f,
+                TargetRefreshInterval = 0.35f
+            },
+            Weapon = new EnemyWeaponProfile
+            {
+                AmmoCount = 0,
+                ReloadDuration = 0f,
+                FireRate = 0f,
+                Damage = 0,
+                BulletScaleMultiplier = 1f,
+                BulletColor = Color.white,
+                BulletSpeed = 0f,
+                MuzzleOffsetDistance = 0f,
+                InfiniteAmmo = true,
+                RotateTowardAim = false,
+                Range = 0f,
+                ShotSoundId = string.Empty
+            },
+            Wreck = new EnemyWreckProfile
+            {
+                Mass = 15f,
+                LinearDamping = 0.82f,
+                AngularDamping = 1f,
+                DriftSpeed = 0.08f,
+                AngularVelocityRange = 1.6f,
+                RewardItemId = InventoryItemCatalog.ContainerShipWreckId,
+                DestroyWhenEmpty = false,
+                BaseColor = new Color(0.34f, 0.35f, 0.36f, 0.98f),
+                VisualResourcePath = "Enemies/ContainerShip/container_ship_wreck",
+                EditorAssetPath = "Assets/Resources/Enemies/ContainerShip/container_ship_wreck.png"
+            },
+            Trails = new EnemyTrailProfile
+            {
+                RootOffsetFactors = new Vector2(0.46f, 0f),
+                RootRotationZ = 90f,
+                TrailOffsetFactors = new[]
+                {
+                    new Vector2(0.1f, -0.34f),
+                    new Vector2(0.1f, 0.34f)
+                },
+                MinTrailTime = 0.38f,
+                MaxTrailTime = 1.1f,
+                MinTrailWidth = 0.05f,
+                MaxTrailWidth = 0.19f,
+                EmissionThreshold = 0.02f,
+                VisualStyle = EnemyTrailVisualStyle.BlueTwin
             }
         },
         new EnemyBotDefinition
@@ -2786,6 +3121,90 @@ public static class EnemyBotCatalog
                 EmissionThreshold = 0f,
                 VisualStyle = EnemyTrailVisualStyle.RedLarge
             }
+        },
+        new EnemyBotDefinition
+        {
+            Kind = EnemyBotKind.CosmicWorm,
+            Id = "cosmic_worm",
+            DisplayName = "Cosmic Worm",
+            InstantiationMarker = "enemy_bot_cosmic_worm",
+            VisualResourcePath = "Enemies/CosmicWorm/cosmic_worm_resource",
+            EditorAssetPath = "Assets/Resources/Enemies/CosmicWorm/cosmic_worm_resource.png",
+            TargetSize = 11.8f,
+            PhysicsMass = 140f,
+            LinearDamping = 0.12f,
+            AngularDamping = 0.52f,
+            DefaultHp = 1600,
+            DefaultShield = 260,
+            MaxHp = 3200,
+            MaxShield = 900,
+            DefaultSpeedMultiplier = 1f,
+            DefaultEnabled = false,
+            ShowInEnemySettings = false,
+            DefaultCount = 1,
+            DefaultSpawnSecond = 25,
+            Movement = new EnemyMovementProfile
+            {
+                Model = EnemyMovementModel.CosmicWorm,
+                SpawnPattern = EnemySpawnPattern.WideCorners,
+                MoveSpeed = 0.72f,
+                TurnResponsiveness = 44f,
+                DetectionRadius = 24f,
+                DisengageRadius = 36f,
+                OrbitDistance = 8.5f,
+                PreferredDistance = 11.5f,
+                ShootDistance = 18f,
+                RepathInterval = 0.38f,
+                TargetRefreshInterval = 0.32f,
+                OrbitRadiusFactor = 0.44f,
+                OrbitAngularSpeed = 0.2f
+            },
+            Weapon = new EnemyWeaponProfile
+            {
+                AmmoCount = 9999,
+                ReloadDuration = 0f,
+                FireRate = 0.18f,
+                Damage = 18,
+                BulletScaleMultiplier = 1.75f,
+                BulletColor = new Color(0.55f, 0.18f, 1f, 1f),
+                BulletSpeed = 8.6f,
+                MuzzleOffsetDistance = 0.54f,
+                InfiniteAmmo = true,
+                RotateTowardAim = false,
+                Range = 18f,
+                ShotSoundId = "cosmic_worm",
+                MuzzleStreamCount = 5
+            },
+            Wreck = new EnemyWreckProfile
+            {
+                Mass = 155f,
+                LinearDamping = 1.08f,
+                AngularDamping = 1.42f,
+                DriftSpeed = 0.035f,
+                AngularVelocityRange = 0.45f,
+                RewardItemId = InventoryItemCatalog.VoidMawCoreId,
+                DestroyWhenEmpty = false,
+                BaseColor = new Color(0.32f, 0.28f, 0.38f, 0.98f),
+                VisualResourcePath = "Enemies/CosmicWorm/cosmic_worm_resource",
+                EditorAssetPath = "Assets/Resources/Enemies/CosmicWorm/cosmic_worm_resource.png"
+            },
+            Trails = new EnemyTrailProfile
+            {
+                RootOffsetFactors = new Vector2(-0.48f, 0f),
+                RootRotationZ = 0f,
+                TrailOffsetFactors = new[]
+                {
+                    new Vector2(-0.58f, -0.16f),
+                    new Vector2(-0.52f, 0.16f),
+                    new Vector2(-0.28f, 0f)
+                },
+                MinTrailTime = 1.8f,
+                MaxTrailTime = 3.8f,
+                MinTrailWidth = 0.26f,
+                MaxTrailWidth = 0.72f,
+                EmissionThreshold = 0f,
+                VisualStyle = EnemyTrailVisualStyle.PurpleLarge
+            }
         }
     };
 
@@ -2965,6 +3384,7 @@ public sealed class EnemySpriteFrameAnimator : MonoBehaviour
 public class EnemyBot : MonoBehaviourPun
 {
     const string PlayerPlacedMineMarker = "player_gadget_mine";
+    public const string ContainerShipMineMarker = "container_ship_mine";
     const string SummonedDroneMarker = "space_truck_summoned_drone";
     public const string PirateBaseLaunchedFighterMarker = "pirate_base_launched_fighter";
     const float PirateBaseLaunchAnimationDuration = 3f;
@@ -2982,6 +3402,7 @@ public class EnemyBot : MonoBehaviourPun
     bool hasDetonated;
     bool spawnTeleportVfxPlayed;
     bool isPlayerPlacedMine;
+    bool isOwnedMine;
     bool isSummonedDrone;
     bool isPirateBaseLaunchedFighter;
     bool spaceTruckFirstHitHandled;
@@ -2990,6 +3411,7 @@ public class EnemyBot : MonoBehaviourPun
     bool pirateBaseLaunchBodyStateStored;
     bool pirateBaseLaunchColliderStateStored;
     float forcedSpeedMultiplier;
+    float forcedSpeedMultiplierUntil;
     float visualScaleMultiplier = 1f;
     float pirateBaseLaunchStartedAt;
     RigidbodyType2D pirateBaseLaunchPreviousBodyType;
@@ -2999,8 +3421,13 @@ public class EnemyBot : MonoBehaviourPun
     Vector3 pirateBaseLaunchStartPosition;
     Vector3 pirateBaseLaunchEndPosition;
     int mineOwnerViewId;
+    int containerShipCargoVariantIndex;
     int pirateBaseLaunchTargetViewId;
     int pirateBaseLaunchSourceViewId;
+    float confusedUntil;
+    float nextConfusedDirectionAt;
+    float nextConfusedShotAt;
+    Vector2 confusedMoveDirection = Vector2.up;
 
     public EnemyBotKind Kind => kind;
     public EnemyBotDefinition Definition => EnemyBotCatalog.GetDefinition(kind);
@@ -3012,18 +3439,22 @@ public class EnemyBot : MonoBehaviourPun
     public bool IsPirateFighter => IsPirateFighterKind(kind);
     public bool IsMothership => kind == EnemyBotKind.Mothership;
     public bool IsPirateBase => kind == EnemyBotKind.PirateBase;
+    public bool IsCosmicWorm => kind == EnemyBotKind.CosmicWorm;
     public bool IsPlayerPlacedMine => isPlayerPlacedMine;
+    public bool IsOwnedMine => isOwnedMine;
     public bool IsSummonedDrone => isSummonedDrone;
     public bool IsPirateBaseLaunchedFighter => isPirateBaseLaunchedFighter;
     public bool IsPirateBaseLaunchProtected => pirateBaseLaunchProtected;
     public int MineOwnerViewId => mineOwnerViewId;
+    public int ContainerShipCargoVariantIndex => Mathf.Clamp(containerShipCargoVariantIndex, 0, InventoryItemCatalog.BlueprintScrapContainerVariantCount - 1);
     public int PirateBaseLaunchTargetViewId => pirateBaseLaunchTargetViewId;
     public int PirateBaseLaunchSourceViewId => pirateBaseLaunchSourceViewId;
+    public bool IsConfused => Time.time < confusedUntil;
     public float VisualTargetSize => Definition != null ? Definition.TargetSize : 1.04f;
     public float EffectiveMoveSpeed => Definition != null && Definition.Movement != null
-        ? Definition.Movement.MoveSpeed * EffectiveSpeedMultiplier * NebulaSpeedMultiplier
+        ? Definition.Movement.MoveSpeed * EffectiveSpeedMultiplier * NebulaSpeedMultiplier * ElectromagneticShockStatus.GetSpeedMultiplier(gameObject)
         : 1f;
-    public float EffectiveSpeedMultiplier => forcedSpeedMultiplier > 0f
+    public float EffectiveSpeedMultiplier => forcedSpeedMultiplier > 0f && (forcedSpeedMultiplierUntil <= 0f || Time.time < forcedSpeedMultiplierUntil)
         ? forcedSpeedMultiplier
         : RoomSettings.GetEnemySpeedMultiplier(kind);
     float NebulaSpeedMultiplier
@@ -3048,6 +3479,12 @@ public class EnemyBot : MonoBehaviourPun
                candidate == EnemyBotKind.GravitySquid;
     }
 
+    public void ActivateTemporarySpeedMultiplier(float multiplier, float duration)
+    {
+        forcedSpeedMultiplier = Mathf.Max(0f, multiplier);
+        forcedSpeedMultiplierUntil = duration > 0f ? Time.time + duration : 0f;
+    }
+
     public static bool IsBotObject(GameObject target)
     {
         return target != null && target.GetComponent<EnemyBot>() != null;
@@ -3056,6 +3493,19 @@ public class EnemyBot : MonoBehaviourPun
     public static bool IsBotView(PhotonView targetView)
     {
         return targetView != null && targetView.GetComponent<EnemyBot>() != null;
+    }
+
+    public bool CanReceivePilotHostileEffect()
+    {
+        if (!hasInitialized)
+            InitializeFromPhotonData();
+
+        return health != null &&
+               !health.IsWreck &&
+               kind != EnemyBotKind.SpaceMine &&
+               kind != EnemyBotKind.RescueShip &&
+               !isOwnedMine &&
+               !isSummonedDrone;
     }
 
     public static bool IsBotInstantiationData(object[] data)
@@ -3091,6 +3541,7 @@ public class EnemyBot : MonoBehaviourPun
         health = GetComponent<PlayerHealth>();
         kind = GetKindFromInstantiationData(view != null ? view.InstantiationData : null);
         ResolveSpecialMineOwner(view != null ? view.InstantiationData : null);
+        ResolveContainerShipCargoVariant(view != null ? view.InstantiationData : null);
         ResolveSummonedDrone(view != null ? view.InstantiationData : null);
         ResolvePirateBaseLaunchedFighter(view != null ? view.InstantiationData : null);
 
@@ -3119,7 +3570,7 @@ public class EnemyBot : MonoBehaviourPun
 
     void PlaySpawnTeleportVfx()
     {
-        if (spawnTeleportVfxPlayed || !IsGameStarted() || isPlayerPlacedMine || isPirateBaseLaunchedFighter || kind == EnemyBotKind.RescueShip)
+        if (spawnTeleportVfxPlayed || !IsGameStarted() || isOwnedMine || isPirateBaseLaunchedFighter || kind == EnemyBotKind.RescueShip)
             return;
 
         spawnTeleportVfxPlayed = true;
@@ -3147,7 +3598,7 @@ public class EnemyBot : MonoBehaviourPun
     {
         EnsureStableVisuals();
         UpdatePirateBaseLaunchAnimation();
-        if (isPlayerPlacedMine)
+        if (isOwnedMine)
             ApplyMineOwnerCollisionIgnore();
 
         if (!view.IsMine || !IsGameStarted() || health == null || health.IsWreck)
@@ -3174,7 +3625,56 @@ public class EnemyBot : MonoBehaviourPun
             return;
         }
 
+        if (IsConfused)
+        {
+            ApplyConfusedBehavior();
+            return;
+        }
+
         behavior?.TickBehavior();
+    }
+
+    [PunRPC]
+    public void ApplyConfusionRpc(float duration)
+    {
+        if (!CanReceivePilotHostileEffect() || duration <= 0f)
+            return;
+
+        confusedUntil = Mathf.Max(confusedUntil, Time.time + duration);
+        nextConfusedDirectionAt = 0f;
+        nextConfusedShotAt = 0f;
+    }
+
+    void ApplyConfusedBehavior()
+    {
+        if (rb == null)
+            return;
+
+        if (Time.time >= nextConfusedDirectionAt || confusedMoveDirection.sqrMagnitude <= 0.001f)
+        {
+            confusedMoveDirection = Random.insideUnitCircle;
+            if (confusedMoveDirection.sqrMagnitude <= 0.001f)
+                confusedMoveDirection = Vector2.up;
+
+            confusedMoveDirection.Normalize();
+            nextConfusedDirectionAt = Time.time + Random.Range(0.35f, 0.95f);
+        }
+
+        float speed = EffectiveMoveSpeed * Random.Range(0.45f, 1.1f);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, confusedMoveDirection * speed, 0.22f);
+        float targetAngle = Mathf.Atan2(confusedMoveDirection.y, confusedMoveDirection.x) * Mathf.Rad2Deg - 90f;
+        rb.MoveRotation(Mathf.MoveTowardsAngle(rb.rotation, targetAngle, 240f * Time.fixedDeltaTime));
+
+        PlayerShooting shooting = GetComponent<PlayerShooting>();
+        if (shooting != null && Time.time >= nextConfusedShotAt)
+        {
+            Vector2 shotDirection = Random.insideUnitCircle;
+            if (shotDirection.sqrMagnitude <= 0.001f)
+                shotDirection = confusedMoveDirection;
+
+            shooting.TryFireBot(shotDirection.normalized);
+            nextConfusedShotAt = Time.time + Random.Range(0.22f, 0.75f);
+        }
     }
 
     void ConfigurePhysics()
@@ -3191,7 +3691,7 @@ public class EnemyBot : MonoBehaviourPun
 
     void ConfigureColliderToVisual()
     {
-        if (kind != EnemyBotKind.Mothership && kind != EnemyBotKind.PirateBase && kind != EnemyBotKind.SpaceManta && kind != EnemyBotKind.GravitySquid && kind != EnemyBotKind.HunterLance)
+        if (kind != EnemyBotKind.Mothership && kind != EnemyBotKind.PirateBase && kind != EnemyBotKind.SpaceManta && kind != EnemyBotKind.GravitySquid && kind != EnemyBotKind.HunterLance && kind != EnemyBotKind.ContainerShip && kind != EnemyBotKind.CosmicWorm)
             return;
 
         if (cachedRenderer == null)
@@ -3212,6 +3712,10 @@ public class EnemyBot : MonoBehaviourPun
                     ? new Vector2(bounds.size.x * 0.48f, bounds.size.y * 0.84f)
                 : kind == EnemyBotKind.PirateBase
                     ? new Vector2(bounds.size.x * 0.78f, bounds.size.y * 0.7f)
+                : kind == EnemyBotKind.ContainerShip
+                    ? new Vector2(bounds.size.x * 0.78f, bounds.size.y * 0.58f)
+                : kind == EnemyBotKind.CosmicWorm
+                    ? new Vector2(bounds.size.x * 0.74f, bounds.size.y * 0.5f)
                     : new Vector2(bounds.size.x * 0.82f, bounds.size.y * 0.72f);
             SetWorldBoxSize(boxCollider, boxScale);
         }
@@ -3280,6 +3784,12 @@ public class EnemyBot : MonoBehaviourPun
                     case EnemyMovementModel.HunterLance:
                         behavior = gameObject.AddComponent<EnemyHunterLanceBehavior>();
                         break;
+                    case EnemyMovementModel.ContainerShip:
+                        behavior = gameObject.AddComponent<EnemyContainerShipBehavior>();
+                        break;
+                    case EnemyMovementModel.CosmicWorm:
+                        behavior = gameObject.AddComponent<EnemyCosmicWormBehavior>();
+                        break;
                     case EnemyMovementModel.Mothership:
                         behavior = gameObject.AddComponent<EnemyMothershipBehavior>();
                         break;
@@ -3317,6 +3827,8 @@ public class EnemyBot : MonoBehaviourPun
             EnemyMovementModel.SpaceManta => existingBehavior is EnemySpaceMantaBehavior,
             EnemyMovementModel.GravitySquid => existingBehavior is EnemyGravitySquidBehavior,
             EnemyMovementModel.HunterLance => existingBehavior is EnemyHunterLanceBehavior,
+            EnemyMovementModel.ContainerShip => existingBehavior is EnemyContainerShipBehavior,
+            EnemyMovementModel.CosmicWorm => existingBehavior is EnemyCosmicWormBehavior,
             EnemyMovementModel.Mothership => existingBehavior is EnemyMothershipBehavior,
             EnemyMovementModel.NeutralFighter => existingBehavior is EnemyNeutralFighterBehavior,
             _ => existingBehavior is EnemyDroneBehavior
@@ -3333,17 +3845,9 @@ public class EnemyBot : MonoBehaviourPun
         if (cargoHud != null)
             cargoHud.enabled = false;
 
-        AmmoUI ammoUi = GetComponent<AmmoUI>();
-        if (ammoUi != null)
-            ammoUi.enabled = false;
-
         BoosterBarUI boosterUi = GetComponent<BoosterBarUI>();
         if (boosterUi != null)
             boosterUi.enabled = false;
-
-        ReloadButtonUI reloadUi = GetComponent<ReloadButtonUI>();
-        if (reloadUi != null)
-            reloadUi.enabled = false;
     }
 
     void ApplyBotVisuals()
@@ -3452,7 +3956,7 @@ public class EnemyBot : MonoBehaviourPun
         if (PhotonNetwork.IsMasterClient)
             return true;
 
-        return isPlayerPlacedMine && view != null && view.IsMine;
+        return isOwnedMine && view != null && view.IsMine;
     }
 
     void DetonateNearbyTargets(EnemyExplosionProfile explosion)
@@ -3469,6 +3973,9 @@ public class EnemyBot : MonoBehaviourPun
 
             EnemyBot candidateBot = candidate.GetComponent<EnemyBot>();
             if (candidateBot != null && candidateBot.Kind == EnemyBotKind.SpaceMine)
+                continue;
+
+            if (ShouldIgnoreMineTriggerFor(candidate))
                 continue;
 
             float distance = Vector2.Distance(transform.position, candidate.transform.position);
@@ -3555,22 +4062,43 @@ public class EnemyBot : MonoBehaviourPun
     void ResolveSpecialMineOwner(object[] instantiationData)
     {
         isPlayerPlacedMine = false;
+        isOwnedMine = false;
         mineOwnerViewId = 0;
 
         if (kind != EnemyBotKind.SpaceMine || instantiationData == null || instantiationData.Length < 3)
             return;
 
-        if (!(instantiationData[1] is string marker) ||
-            !string.Equals(marker, PlayerPlacedMineMarker, System.StringComparison.Ordinal))
-        {
+        if (!(instantiationData[1] is string marker))
             return;
-        }
+
+        bool playerMine = string.Equals(marker, PlayerPlacedMineMarker, System.StringComparison.Ordinal);
+        bool containerShipMine = string.Equals(marker, ContainerShipMineMarker, System.StringComparison.Ordinal);
+        if (!playerMine && !containerShipMine)
+            return;
 
         if (instantiationData[2] is int ownerViewId && ownerViewId > 0)
         {
-            isPlayerPlacedMine = true;
+            isPlayerPlacedMine = playerMine;
+            isOwnedMine = true;
             mineOwnerViewId = ownerViewId;
         }
+    }
+
+    void ResolveContainerShipCargoVariant(object[] instantiationData)
+    {
+        containerShipCargoVariantIndex = 0;
+        if (kind != EnemyBotKind.ContainerShip)
+            return;
+
+        int variantCount = Mathf.Max(1, InventoryItemCatalog.BlueprintScrapContainerVariantCount);
+        if (instantiationData != null && instantiationData.Length >= 2 && instantiationData[1] is int variantIndex)
+        {
+            containerShipCargoVariantIndex = Mathf.Clamp(variantIndex, 0, variantCount - 1);
+            return;
+        }
+
+        int seed = view != null && view.ViewID > 0 ? view.ViewID : Mathf.RoundToInt(transform.position.sqrMagnitude * 1000f);
+        containerShipCargoVariantIndex = Mathf.Abs(seed) % variantCount;
     }
 
     void ResolveSummonedDrone(object[] instantiationData)
@@ -3757,7 +4285,7 @@ public class EnemyBot : MonoBehaviourPun
 
     void ApplyMineOwnerCollisionIgnore()
     {
-        if (!isPlayerPlacedMine || mineOwnerViewId <= 0)
+        if (!isOwnedMine || mineOwnerViewId <= 0)
             return;
 
         PhotonView ownerView = PhotonView.Find(mineOwnerViewId);
@@ -3785,7 +4313,7 @@ public class EnemyBot : MonoBehaviourPun
 
     public bool ShouldIgnoreMineTriggerFor(PlayerHealth candidate)
     {
-        if (!isPlayerPlacedMine || candidate == null || mineOwnerViewId <= 0)
+        if (!isOwnedMine || candidate == null || mineOwnerViewId <= 0)
             return false;
 
         PhotonView candidateView = candidate.GetComponent<PhotonView>();
@@ -3839,6 +4367,12 @@ public class EnemyBot : MonoBehaviourPun
 
         if (kind == EnemyBotKind.HunterLance && behavior is EnemyHunterLanceBehavior hunterLanceBehavior)
             hunterLanceBehavior.NotifyDamageSource(attackerViewID);
+
+        if (kind == EnemyBotKind.ContainerShip && behavior is EnemyContainerShipBehavior containerShipBehavior)
+            containerShipBehavior.NotifyDamageTaken(attackerViewID);
+
+        if (kind == EnemyBotKind.CosmicWorm && behavior is EnemyCosmicWormBehavior cosmicWormBehavior)
+            cosmicWormBehavior.NotifyDamageSource(attackerViewID);
 
         if (kind != EnemyBotKind.SpaceTruck)
             return;
@@ -3959,6 +4493,43 @@ public class EnemyBot : MonoBehaviourPun
     }
 
     [PunRPC]
+    public void PlayCosmicWormPhaseRpc(int phase, float x, float y, float z, float radius)
+    {
+        CosmicWormPhaseBurstVfx.Spawn(new Vector3(x, y, z), phase, radius);
+        CosmicWormVisualController.AttachOrUpdate(this, phase, false);
+    }
+
+    [PunRPC]
+    public void SpawnCosmicWormSpitVfxRpc(float x, float y, float directionX, float directionY, int phase)
+    {
+        CosmicWormSpitVfx.Spawn(new Vector2(x, y), new Vector2(directionX, directionY), phase);
+    }
+
+    [PunRPC]
+    public void SpawnCosmicWormDashWarningRpc(float originX, float originY, float directionX, float directionY, float range, float duration)
+    {
+        CosmicWormDashWarningVfx.Spawn(new Vector2(originX, originY), new Vector2(directionX, directionY), range, duration);
+    }
+
+    [PunRPC]
+    public void SpawnCosmicWormDashTrailRpc(float x, float y, float directionX, float directionY, float radius)
+    {
+        CosmicWormDashTrailVfx.Spawn(new Vector2(x, y), new Vector2(directionX, directionY), radius);
+    }
+
+    [PunRPC]
+    public void StartCosmicWormSwallowRpc(float x, float y, float directionX, float directionY, float radius, float duration, int sourceViewId)
+    {
+        CosmicWormSwallowVfx.StartEffect(sourceViewId, new Vector2(x, y), new Vector2(directionX, directionY), radius, duration);
+    }
+
+    [PunRPC]
+    public void StopCosmicWormSwallowRpc(int sourceViewId)
+    {
+        CosmicWormSwallowVfx.StopEffect(sourceViewId);
+    }
+
+    [PunRPC]
     public void StartGravitySquidTetherRpc(int targetViewId)
     {
         GravitySquidTetherVfx.StartBeam(photonView != null ? photonView.ViewID : 0, targetViewId);
@@ -3983,6 +4554,21 @@ public class EnemyBot : MonoBehaviourPun
     }
 
     [PunRPC]
+    public void StartPirateBaseCollectionBeamRpc(int targetViewId)
+    {
+        if (kind != EnemyBotKind.PirateBase)
+            return;
+
+        PirateBaseCollectionBeamVfx.StartBeam(photonView != null ? photonView.ViewID : 0, targetViewId);
+    }
+
+    [PunRPC]
+    public void StopPirateBaseCollectionBeamRpc()
+    {
+        PirateBaseCollectionBeamVfx.StopBeam(photonView != null ? photonView.ViewID : 0);
+    }
+
+    [PunRPC]
     public void PlayPirateBaseLaunchVfxRpc(int fighterKindValue)
     {
         if (kind != EnemyBotKind.PirateBase)
@@ -3995,6 +4581,52 @@ public class EnemyBot : MonoBehaviourPun
     {
         if (IsPirateFighter && behavior is EnemyPirateFighterBehavior pirateFighterBehavior)
             pirateFighterBehavior.NotifyForcedTarget(targetViewId);
+    }
+
+    public void DropPirateBaseCargoOnDeath()
+    {
+        if (kind != EnemyBotKind.PirateBase)
+            return;
+
+        EnemyPirateBaseBehavior pirateBaseBehavior = behavior as EnemyPirateBaseBehavior;
+        if (pirateBaseBehavior == null)
+            pirateBaseBehavior = GetComponent<EnemyPirateBaseBehavior>();
+
+        pirateBaseBehavior?.DropCollectedCargoOnDeath();
+    }
+
+    public void DropContainerShipCargoOnDeath()
+    {
+        if (kind != EnemyBotKind.ContainerShip || !PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom)
+            return;
+
+        int variantIndex = ContainerShipCargoVariantIndex;
+        string itemId = InventoryItemCatalog.GetBlueprintScrapContainerItemId(variantIndex);
+        if (string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        Vector2 driftDirection = rb != null && rb.linearVelocity.sqrMagnitude > 0.04f
+            ? rb.linearVelocity.normalized
+            : (Vector2)transform.up;
+        if (driftDirection.sqrMagnitude <= 0.001f)
+            driftDirection = Vector2.up;
+
+        Vector2 side = new Vector2(-driftDirection.y, driftDirection.x);
+        float seed = (photonView != null ? photonView.ViewID : variantIndex + 1) * 0.173f;
+        Vector2 drift = (driftDirection * 0.62f + side * Mathf.Lerp(-0.22f, 0.22f, Mathf.PerlinNoise(seed, seed + 9.3f))).normalized * 0.58f;
+        Vector3 dropPosition = GetVisualCenterWorldPosition() - (Vector3)(driftDirection * 0.25f);
+        GameObject cargo = PhotonNetwork.Instantiate("TreasureNetwork", dropPosition, Quaternion.identity, 0, new object[] { itemId });
+        if (cargo != null)
+        {
+            Rigidbody2D cargoBody = cargo.GetComponent<Rigidbody2D>();
+            if (cargoBody != null)
+            {
+                cargoBody.linearVelocity = drift;
+                cargoBody.angularVelocity = Mathf.Lerp(-28f, 28f, Mathf.PerlinNoise(seed + 1.7f, seed + 4.1f));
+            }
+        }
+
+        GameVisualTheme.RequestRuntimeRefresh(true);
     }
 
     public static Vector3 ResolveSpaceMineDetonationPosition(int sourceViewId, Vector3 fallbackWorldPosition)
@@ -4030,7 +4662,10 @@ public class EnemyBot : MonoBehaviourPun
             return;
 
         float effectRadius = radius > 0.1f ? radius : explosion.TriggerRadius;
-        SpaceMineExplosionVfx.Spawn(worldPosition, effectRadius);
+        if (effectRadius >= 4.5f)
+            SpaceBombExplosionVfx.Spawn(worldPosition, effectRadius);
+        else
+            SpaceMineExplosionVfx.Spawn(worldPosition, effectRadius);
 
         if (explosion.SoundId == "space_mine_boom")
             AudioManager.Instance.PlaySpaceMineBoomAt(worldPosition);
@@ -7654,6 +8289,8 @@ public class EnemyMineBehavior : EnemyBotBehaviorBase
         movement = owner.Definition != null ? owner.Definition.Movement : null;
         explosion = owner.Definition != null ? owner.Definition.Explosion : null;
 
+        TryResolveInstancedDriftDirection();
+
         if (driftDirection.sqrMagnitude <= 0.001f)
         {
             int seed = view != null ? view.ViewID : Random.Range(1, 9999);
@@ -7662,6 +8299,37 @@ public class EnemyMineBehavior : EnemyBotBehaviorBase
             if (driftDirection.sqrMagnitude <= 0.001f)
                 driftDirection = Vector2.up;
         }
+    }
+
+    void TryResolveInstancedDriftDirection()
+    {
+        object[] data = view != null ? view.InstantiationData : null;
+        if (data == null || data.Length < 5)
+            return;
+
+        if (!(data[1] is string marker) ||
+            !string.Equals(marker, EnemyBot.ContainerShipMineMarker, System.StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Vector2 direction = new Vector2(ConvertToFloat(data[3]), ConvertToFloat(data[4]));
+        if (direction.sqrMagnitude > 0.001f)
+            driftDirection = direction.normalized;
+    }
+
+    static float ConvertToFloat(object value)
+    {
+        if (value is float floatValue)
+            return floatValue;
+
+        if (value is double doubleValue)
+            return (float)doubleValue;
+
+        if (value is int intValue)
+            return intValue;
+
+        return 0f;
     }
 
     public override void TickBehavior()
@@ -7714,6 +8382,235 @@ public class EnemyMineBehavior : EnemyBotBehaviorBase
         }
 
         return false;
+    }
+}
+
+[RequireComponent(typeof(EnemyBot))]
+public class EnemyContainerShipBehavior : EnemyBotBehaviorBase
+{
+    const float SpeedBoostDuration = 5f;
+    const float MineDropCooldown = 5f;
+    const float MineRearOffset = 1.05f;
+    const float MineSideOffset = 0.48f;
+    const float CargoVisualTargetSize = 1.08f;
+    const float MapEdgeMargin = 3.1f;
+    const string CargoVisualName = "ContainerShipCargoVisual";
+    const string CargoTopResourcePath = "Enemies/ContainerShip/container_set2_top";
+
+    static Sprite[] cachedCargoTopSprites;
+
+    Rigidbody2D rb;
+    PhotonView view;
+    PlayerHealth health;
+    EnemyMovementProfile movement;
+    Vector2 orbitCenter;
+    float orbitRadius;
+    float orbitAngle;
+    float orbitDirection = 1f;
+    float nextMineDropTime;
+    Vector2 lastMoveDirection = Vector2.left;
+    SpriteRenderer cargoRenderer;
+
+    public override void Initialize(EnemyBot owner)
+    {
+        base.Initialize(owner);
+        rb = owner.GetComponent<Rigidbody2D>();
+        view = owner.GetComponent<PhotonView>();
+        health = owner.GetComponent<PlayerHealth>();
+        movement = owner.Definition != null ? owner.Definition.Movement : null;
+
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        orbitCenter = Vector2.zero;
+        orbitRadius = Mathf.Max(5.6f, Mathf.Min(mapSize.x, mapSize.y) * (movement != null ? movement.OrbitRadiusFactor : 0.38f));
+        int seed = view != null ? view.ViewID : Random.Range(1, 9999);
+        orbitAngle = Mathf.Abs(seed * 0.137f) % (Mathf.PI * 2f);
+        orbitDirection = seed % 2 == 0 ? 1f : -1f;
+        EnsureCargoVisual();
+    }
+
+    public override void TickBehavior()
+    {
+        if (bot == null || view == null || !view.IsMine || rb == null || movement == null)
+            return;
+
+        if (health != null && health.IsWreck)
+            return;
+
+        EnsureCargoVisual();
+
+        orbitAngle += orbitDirection * movement.OrbitAngularSpeed * Time.fixedDeltaTime;
+        Vector2 fromCenter = rb.position - orbitCenter;
+        if (fromCenter.sqrMagnitude < 0.01f)
+            fromCenter = new Vector2(Mathf.Cos(orbitAngle), Mathf.Sin(orbitAngle));
+
+        Vector2 radialDirection = fromCenter.normalized;
+        Vector2 tangentDirection = orbitDirection > 0f
+            ? new Vector2(-radialDirection.y, radialDirection.x)
+            : new Vector2(radialDirection.y, -radialDirection.x);
+
+        float radialError = orbitRadius - fromCenter.magnitude;
+        Vector2 desiredVelocity = tangentDirection * bot.EffectiveMoveSpeed + radialDirection * (radialError * 1.12f);
+        desiredVelocity = ApplyMapEdgeSteering(desiredVelocity);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, desiredVelocity, 0.14f);
+
+        if (desiredVelocity.sqrMagnitude > 0.001f)
+        {
+            lastMoveDirection = desiredVelocity.normalized;
+            float targetAngle = Mathf.Atan2(lastMoveDirection.y, lastMoveDirection.x) * Mathf.Rad2Deg + 180f;
+            float nextAngle = Mathf.MoveTowardsAngle(rb.rotation, targetAngle, movement.TurnResponsiveness * Time.fixedDeltaTime);
+            rb.MoveRotation(nextAngle);
+        }
+    }
+
+    public void NotifyDamageTaken(int attackerViewID)
+    {
+        if (!PhotonNetwork.IsMasterClient || bot == null || health == null || health.IsWreck)
+            return;
+
+        bot.ActivateTemporarySpeedMultiplier(2f, SpeedBoostDuration);
+        if (Time.time < nextMineDropTime)
+            return;
+
+        nextMineDropTime = Time.time + MineDropCooldown;
+        SpawnDefensiveMines();
+    }
+
+    void SpawnDefensiveMines()
+    {
+        if (!PhotonNetwork.InRoom || view == null)
+            return;
+
+        EnemyBotDefinition mineDefinition = EnemyBotCatalog.GetDefinition(EnemyBotKind.SpaceMine);
+        if (mineDefinition == null)
+            return;
+
+        Vector2 forward = lastMoveDirection.sqrMagnitude > 0.001f
+            ? lastMoveDirection.normalized
+            : rb != null && rb.linearVelocity.sqrMagnitude > 0.001f
+                ? rb.linearVelocity.normalized
+                : Vector2.left;
+        Vector2 behind = -forward;
+        Vector2 side = new Vector2(-forward.y, forward.x);
+
+        for (int i = 0; i < 2; i++)
+        {
+            float sideSign = i == 0 ? -1f : 1f;
+            Vector2 spawnOffset = behind * MineRearOffset + side * (MineSideOffset * sideSign);
+            Vector2 driftDirection = (behind * 0.86f + side * (0.18f * sideSign)).normalized;
+            Vector3 spawnPosition = transform.position + (Vector3)spawnOffset;
+            GameObject mineObject = PhotonNetwork.Instantiate(
+                "Player",
+                spawnPosition,
+                Quaternion.identity,
+                0,
+                new object[] { mineDefinition.InstantiationMarker, EnemyBot.ContainerShipMineMarker, view.ViewID, driftDirection.x, driftDirection.y });
+
+            if (mineObject == null)
+                continue;
+
+            EnemyBot mine = mineObject.GetComponent<EnemyBot>();
+            if (mine == null)
+                mine = mineObject.AddComponent<EnemyBot>();
+
+            mine.InitializeFromPhotonData();
+            Rigidbody2D mineBody = mineObject.GetComponent<Rigidbody2D>();
+            if (mineBody != null)
+                mineBody.linearVelocity = driftDirection * Mathf.Max(0.25f, mine.EffectiveMoveSpeed);
+        }
+    }
+
+    Vector2 ApplyMapEdgeSteering(Vector2 desiredVelocity)
+    {
+        if (rb == null || desiredVelocity.sqrMagnitude <= 0.001f)
+            return desiredVelocity;
+
+        Vector2 desiredDirection = desiredVelocity.normalized;
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
+        float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
+        Vector2 predicted = rb.position + desiredDirection * Mathf.Max(1.6f, bot.EffectiveMoveSpeed * 2.2f);
+        Vector2 inward = Vector2.zero;
+
+        if (predicted.x > halfX)
+            inward.x -= 1f;
+        else if (predicted.x < -halfX)
+            inward.x += 1f;
+
+        if (predicted.y > halfY)
+            inward.y -= 1f;
+        else if (predicted.y < -halfY)
+            inward.y += 1f;
+
+        if (inward.sqrMagnitude <= 0.001f)
+            return desiredVelocity;
+
+        Vector2 steered = (desiredDirection * 0.42f + inward.normalized * 0.58f).normalized;
+        return steered * desiredVelocity.magnitude;
+    }
+
+    void EnsureCargoVisual()
+    {
+        if (bot == null)
+            return;
+
+        Sprite cargoSprite = GetCargoSprite(bot.ContainerShipCargoVariantIndex);
+        if (cargoSprite == null)
+            return;
+
+        if (cargoRenderer == null)
+        {
+            Transform existing = transform.Find(CargoVisualName);
+            GameObject cargoObject = existing != null ? existing.gameObject : new GameObject(CargoVisualName);
+            cargoObject.transform.SetParent(transform, false);
+            cargoObject.transform.localPosition = Vector3.zero;
+            cargoObject.transform.localRotation = Quaternion.identity;
+            cargoRenderer = cargoObject.GetComponent<SpriteRenderer>();
+            if (cargoRenderer == null)
+                cargoRenderer = cargoObject.AddComponent<SpriteRenderer>();
+        }
+
+        cargoRenderer.sprite = cargoSprite;
+        cargoRenderer.color = Color.white;
+        cargoRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        SpriteRenderer hullRenderer = bot.GetComponent<SpriteRenderer>();
+        cargoRenderer.sortingOrder = hullRenderer != null ? hullRenderer.sortingOrder + 1 : GameVisualTheme.EnemySortingOrder + 1;
+        FitCargoSpriteToTargetSize(cargoRenderer, CargoVisualTargetSize);
+    }
+
+    static Sprite GetCargoSprite(int variantIndex)
+    {
+        if (cachedCargoTopSprites == null || cachedCargoTopSprites.Length == 0)
+            cachedCargoTopSprites = Resources.LoadAll<Sprite>(CargoTopResourcePath);
+
+        if (cachedCargoTopSprites == null || cachedCargoTopSprites.Length == 0)
+            return null;
+
+        string expectedName = "container_set2_top_" + Mathf.Clamp(variantIndex, 0, InventoryItemCatalog.BlueprintScrapContainerVariantCount - 1);
+        for (int i = 0; i < cachedCargoTopSprites.Length; i++)
+        {
+            Sprite sprite = cachedCargoTopSprites[i];
+            if (sprite != null && string.Equals(sprite.name, expectedName, System.StringComparison.Ordinal))
+                return sprite;
+        }
+
+        int clampedIndex = Mathf.Clamp(variantIndex, 0, cachedCargoTopSprites.Length - 1);
+        return cachedCargoTopSprites[clampedIndex];
+    }
+
+    static void FitCargoSpriteToTargetSize(SpriteRenderer renderer, float targetSize)
+    {
+        if (renderer == null || renderer.sprite == null)
+            return;
+
+        Bounds spriteBounds = renderer.sprite.bounds;
+        float largestDimension = Mathf.Max(spriteBounds.size.x, spriteBounds.size.y);
+        if (largestDimension <= 0.0001f)
+            return;
+
+        Vector3 parentScale = renderer.transform.parent != null ? renderer.transform.parent.lossyScale : Vector3.one;
+        float inheritedScale = Mathf.Max(0.0001f, Mathf.Max(Mathf.Abs(parentScale.x), Mathf.Abs(parentScale.y)));
+        float scale = targetSize / (largestDimension * inheritedScale);
+        renderer.transform.localScale = new Vector3(scale, scale, 1f);
     }
 }
 
@@ -8309,10 +9206,15 @@ public class EnemyRescueShipBehavior : EnemyBotBehaviorBase
 [RequireComponent(typeof(EnemyBot))]
 public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
 {
-    const float ArrivalDistance = 1.65f;
+    const float ArrivalDistance = 2.25f;
+    const float CollectionDuration = 10f;
+    const float CollectionBreakDistance = 4.6f;
+    const float CargoDropRadius = 1.35f;
     const float MapEdgeMargin = 3f;
     const float LaunchSpawnDelay = 2f;
     const float LaunchStageDuration = 7f;
+    static readonly List<Collider2D> CollectibleColliderScratch = new List<Collider2D>(8);
+    static readonly List<SpriteRenderer> CollectibleRendererScratch = new List<SpriteRenderer>(4);
 
     Rigidbody2D rb;
     PhotonView view;
@@ -8325,6 +9227,12 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
     bool launchSequenceRunning;
     bool defenseLaunchTriggered;
     int latestThreatTargetViewId;
+    bool collectionRunning;
+    float collectionStartedAt;
+    int collectingTargetViewId;
+    int collectingLootIndex = -1;
+    string collectingItemId;
+    readonly List<string> collectedCargoItemIds = new List<string>();
 
     public override void Initialize(EnemyBot owner)
     {
@@ -8336,13 +9244,32 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
         initialRotation = rb != null ? rb.rotation : owner.transform.eulerAngles.z;
     }
 
+    void OnDisable()
+    {
+        CancelCollection(true);
+    }
+
+    void OnDestroy()
+    {
+        CancelCollection(true);
+    }
+
     public override void TickBehavior()
     {
         if (bot == null || view == null || !view.IsMine || rb == null || movement == null)
             return;
 
         if (health != null && health.IsWreck)
+        {
+            CancelCollection(false);
             return;
+        }
+
+        if (collectionRunning)
+        {
+            TickCollection();
+            return;
+        }
 
         if (launchSequenceRunning)
         {
@@ -8358,12 +9285,10 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
         if (currentTarget != null)
         {
             Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
-            float targetDistance = toTarget.magnitude;
+            float targetDistance = GetDistanceToCollectible(currentTarget);
             if (targetDistance <= ArrivalDistance)
             {
-                rb.linearVelocity = Vector2.zero;
-                rb.angularVelocity = 0f;
-                rb.MoveRotation(initialRotation);
+                BeginCollection();
                 return;
             }
 
@@ -8408,6 +9333,9 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
         if (collectibleViewId != currentTargetViewId)
             return;
 
+        if (collectionRunning)
+            CancelCollection(false);
+
         TryTriggerLaunchSequence(ResolveValidPlayerViewId(collectorViewId));
         currentTarget = null;
         currentTargetViewId = 0;
@@ -8445,14 +9373,14 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
 
         Treasure treasure = targetView.GetComponent<Treasure>();
         if (treasure != null)
-            return true;
+            return !treasure.isBeingCollected;
 
         DroppedCargoCrate crate = targetView.GetComponent<DroppedCargoCrate>();
         if (crate != null)
-            return crate.HasLoot;
+            return crate.HasLoot && !crate.isBeingCollected;
 
         ShipWreck wreck = targetView.GetComponent<ShipWreck>();
-        return wreck != null && wreck.HasLoot;
+        return wreck != null && wreck.HasLoot && !wreck.isBeingCollected;
     }
 
     Transform ResolveMostValuableCollectible(out int targetViewId)
@@ -8466,7 +9394,7 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
         for (int i = 0; i < treasures.Length; i++)
         {
             Treasure treasure = treasures[i];
-            if (treasure == null)
+            if (treasure == null || treasure.isBeingCollected)
                 continue;
 
             PhotonView targetView = treasure.GetComponent<PhotonView>();
@@ -8477,7 +9405,7 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
         for (int i = 0; i < crates.Length; i++)
         {
             DroppedCargoCrate crate = crates[i];
-            if (crate == null || !crate.HasLoot)
+            if (crate == null || !crate.HasLoot || crate.isBeingCollected)
                 continue;
 
             PhotonView targetView = crate.GetComponent<PhotonView>();
@@ -8488,7 +9416,7 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
         for (int i = 0; i < wrecks.Length; i++)
         {
             ShipWreck wreck = wrecks[i];
-            if (wreck == null || !wreck.HasLoot)
+            if (wreck == null || !wreck.HasLoot || wreck.isBeingCollected)
                 continue;
 
             PhotonView targetView = wreck.GetComponent<PhotonView>();
@@ -8505,7 +9433,7 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
             return;
 
         int value = Mathf.Max(0, InventoryItemCatalog.GetSellValueAstrons(itemId));
-        float distance = Vector2.Distance(rb != null ? rb.position : (Vector2)transform.position, candidate.position);
+        float distance = GetDistanceToCollectible(candidate);
         if (value < bestValue)
             return;
 
@@ -8516,6 +9444,331 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
         bestDistance = distance;
         bestTarget = candidate;
         bestViewId = targetView.ViewID;
+    }
+
+    void BeginCollection()
+    {
+        if (currentTargetViewId <= 0 || collectionRunning)
+            return;
+
+        PhotonView targetView = PhotonView.Find(currentTargetViewId);
+        if (targetView == null || IsCollectibleReserved(targetView))
+        {
+            ClearCurrentTarget();
+            return;
+        }
+
+        if (!TryResolveCollectibleLoot(targetView, out string itemId, out int lootIndex))
+        {
+            ClearCurrentTarget();
+            return;
+        }
+
+        collectionRunning = true;
+        collectionStartedAt = Time.time;
+        collectingTargetViewId = currentTargetViewId;
+        collectingItemId = itemId;
+        collectingLootIndex = lootIndex;
+        MarkCollectibleCollectionState(collectingTargetViewId, true);
+
+        if (bot != null && bot.photonView != null)
+            bot.photonView.RPC(nameof(EnemyBot.StartPirateBaseCollectionBeamRpc), RpcTarget.All, collectingTargetViewId);
+
+        rb.linearVelocity = Vector2.zero;
+        rb.angularVelocity = 0f;
+        rb.MoveRotation(initialRotation);
+    }
+
+    void TickCollection()
+    {
+        rb.linearVelocity = Vector2.zero;
+        rb.angularVelocity = 0f;
+        rb.MoveRotation(initialRotation);
+
+        if (!IsCollectingTargetStillValid())
+        {
+            CancelCollection(true);
+            ClearCurrentTarget();
+            return;
+        }
+
+        if (Time.time - collectionStartedAt >= CollectionDuration)
+            CompleteCollection();
+    }
+
+    void CompleteCollection()
+    {
+        if (!IsCollectingTargetStillValid())
+        {
+            CancelCollection(true);
+            ClearCurrentTarget();
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(collectingItemId))
+            collectedCargoItemIds.Add(collectingItemId);
+
+        RemoveCollectedTarget(collectingTargetViewId, collectingLootIndex, collectingItemId);
+        CancelCollection(false);
+        ClearCurrentTarget();
+    }
+
+    void CancelCollection(bool releaseTarget)
+    {
+        if (!collectionRunning && collectingTargetViewId <= 0)
+            return;
+
+        int targetViewId = collectingTargetViewId;
+        collectionRunning = false;
+        collectionStartedAt = 0f;
+        collectingTargetViewId = 0;
+        collectingLootIndex = -1;
+        collectingItemId = null;
+
+        if (releaseTarget && targetViewId > 0)
+            MarkCollectibleCollectionState(targetViewId, false);
+
+        if (view != null && view.IsMine && bot != null && bot.photonView != null)
+            bot.photonView.RPC(nameof(EnemyBot.StopPirateBaseCollectionBeamRpc), RpcTarget.All);
+    }
+
+    public void DropCollectedCargoOnDeath()
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        CancelCollection(true);
+        if (collectedCargoItemIds.Count == 0)
+            return;
+
+        Vector3 center = transform.position;
+        int seed = view != null ? view.ViewID : Mathf.RoundToInt(center.sqrMagnitude * 1000f);
+        for (int i = 0; i < collectedCargoItemIds.Count; i++)
+        {
+            string itemId = collectedCargoItemIds[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            float angle = ((i / Mathf.Max(1f, collectedCargoItemIds.Count)) * Mathf.PI * 2f) + seed * 0.173f;
+            Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+            if (direction.sqrMagnitude <= 0.001f)
+                direction = Vector2.up;
+
+            float radius = Mathf.Lerp(0.45f, CargoDropRadius, Hash01(seed, i + 17));
+            Vector3 dropPosition = center + (Vector3)(direction.normalized * radius);
+            Vector2 tangent = new Vector2(-direction.y, direction.x) * Mathf.Lerp(-0.28f, 0.28f, Hash01(seed, i + 41));
+            Vector2 drift = (direction.normalized * 0.78f + tangent).normalized * Mathf.Lerp(0.48f, 0.92f, Hash01(seed, i + 73));
+            DroppedCargoManager.DropItemAtPosition(itemId, dropPosition, drift);
+        }
+
+        collectedCargoItemIds.Clear();
+        GameVisualTheme.RequestRuntimeRefresh();
+    }
+
+    bool IsCollectingTargetStillValid()
+    {
+        if (collectingTargetViewId <= 0 || string.IsNullOrWhiteSpace(collectingItemId))
+            return false;
+
+        PhotonView targetView = PhotonView.Find(collectingTargetViewId);
+        if (targetView == null)
+            return false;
+
+        if (!TryResolveCollectibleLoot(targetView, out string currentItemId, out int currentLootIndex))
+            return false;
+
+        if (!string.Equals(currentItemId, collectingItemId, System.StringComparison.Ordinal) || currentLootIndex != collectingLootIndex)
+            return false;
+
+        float distance = GetDistanceToCollectible(targetView.transform);
+        return distance <= CollectionBreakDistance;
+    }
+
+    float GetDistanceToCollectible(Transform target)
+    {
+        if (target == null)
+            return float.MaxValue;
+
+        Vector2 origin = rb != null ? rb.position : (Vector2)transform.position;
+        float bestDistance = float.MaxValue;
+
+        CollectibleColliderScratch.Clear();
+        target.GetComponentsInChildren(false, CollectibleColliderScratch);
+        for (int i = 0; i < CollectibleColliderScratch.Count; i++)
+        {
+            Collider2D collider = CollectibleColliderScratch[i];
+            if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy)
+                continue;
+
+            float distance = Vector2.Distance(origin, collider.ClosestPoint(origin));
+            if (distance < bestDistance)
+                bestDistance = distance;
+        }
+
+        if (bestDistance < float.MaxValue)
+            return bestDistance;
+
+        CollectibleRendererScratch.Clear();
+        target.GetComponentsInChildren(false, CollectibleRendererScratch);
+        for (int i = 0; i < CollectibleRendererScratch.Count; i++)
+        {
+            SpriteRenderer renderer = CollectibleRendererScratch[i];
+            if (renderer == null || !renderer.enabled || renderer.sprite == null || !renderer.gameObject.activeInHierarchy)
+                continue;
+
+            Vector3 closest = renderer.bounds.ClosestPoint(origin);
+            float distance = Vector2.Distance(origin, closest);
+            if (distance < bestDistance)
+                bestDistance = distance;
+        }
+
+        return bestDistance < float.MaxValue
+            ? bestDistance
+            : Vector2.Distance(origin, target.position);
+    }
+
+    bool TryResolveCollectibleLoot(PhotonView targetView, out string itemId, out int lootIndex)
+    {
+        itemId = null;
+        lootIndex = -1;
+        if (targetView == null)
+            return false;
+
+        Treasure treasure = targetView.GetComponent<Treasure>();
+        if (treasure != null)
+        {
+            itemId = treasure.itemId;
+            lootIndex = 0;
+            return !string.IsNullOrWhiteSpace(itemId);
+        }
+
+        DroppedCargoCrate crate = targetView.GetComponent<DroppedCargoCrate>();
+        if (crate != null && crate.HasLoot)
+        {
+            itemId = crate.StoredItemId;
+            lootIndex = 0;
+            return !string.IsNullOrWhiteSpace(itemId);
+        }
+
+        ShipWreck wreck = targetView.GetComponent<ShipWreck>();
+        if (wreck != null && wreck.HasLoot)
+        {
+            lootIndex = wreck.GetFirstLootIndex();
+            itemId = wreck.GetLootItemAt(lootIndex);
+            return lootIndex >= 0 && !string.IsNullOrWhiteSpace(itemId);
+        }
+
+        return false;
+    }
+
+    bool IsCollectibleReserved(PhotonView targetView)
+    {
+        if (targetView == null)
+            return false;
+
+        Treasure treasure = targetView.GetComponent<Treasure>();
+        if (treasure != null)
+            return treasure.isBeingCollected;
+
+        DroppedCargoCrate crate = targetView.GetComponent<DroppedCargoCrate>();
+        if (crate != null)
+            return crate.isBeingCollected;
+
+        ShipWreck wreck = targetView.GetComponent<ShipWreck>();
+        return wreck != null && wreck.isBeingCollected;
+    }
+
+    void MarkCollectibleCollectionState(int targetViewId, bool value)
+    {
+        if (!PhotonNetwork.IsMasterClient || targetViewId <= 0)
+            return;
+
+        PhotonView targetView = PhotonView.Find(targetViewId);
+        if (targetView == null)
+            return;
+
+        Treasure treasure = targetView.GetComponent<Treasure>();
+        if (treasure != null)
+        {
+            targetView.RPC(nameof(Treasure.SetBeingCollectedRpc), RpcTarget.All, value);
+            return;
+        }
+
+        DroppedCargoCrate crate = targetView.GetComponent<DroppedCargoCrate>();
+        if (crate != null)
+        {
+            targetView.RPC(nameof(DroppedCargoCrate.SetBeingCollectedRpc), RpcTarget.All, value);
+            return;
+        }
+
+        ShipWreck wreck = targetView.GetComponent<ShipWreck>();
+        if (wreck != null)
+            targetView.RPC(nameof(ShipWreck.SetBeingCollectedRpc), RpcTarget.All, value);
+    }
+
+    void RemoveCollectedTarget(int targetViewId, int lootIndex, string itemId)
+    {
+        if (!PhotonNetwork.IsMasterClient || targetViewId <= 0)
+            return;
+
+        PhotonView targetView = PhotonView.Find(targetViewId);
+        if (targetView == null)
+            return;
+
+        int collectorViewId = view != null ? view.ViewID : 0;
+        Treasure treasure = targetView.GetComponent<Treasure>();
+        if (treasure != null)
+        {
+            if (!string.Equals(treasure.itemId, itemId, System.StringComparison.Ordinal))
+                return;
+
+            SpaceTrapTarget.DetonateIfArmed(targetViewId, collectorViewId);
+            PhotonNetwork.Destroy(targetView.gameObject);
+            return;
+        }
+
+        DroppedCargoCrate crate = targetView.GetComponent<DroppedCargoCrate>();
+        if (crate != null)
+        {
+            if (!crate.HasLoot || !string.Equals(crate.StoredItemId, itemId, System.StringComparison.Ordinal))
+                return;
+
+            SpaceTrapTarget.DetonateIfArmed(targetViewId, collectorViewId);
+            targetView.RPC(nameof(DroppedCargoCrate.ClearStoredItemRpc), RpcTarget.All);
+            PhotonNetwork.Destroy(targetView.gameObject);
+            return;
+        }
+
+        ShipWreck wreck = targetView.GetComponent<ShipWreck>();
+        if (wreck == null || !wreck.HasLoot)
+            return;
+
+        string currentItemId = wreck.GetLootItemAt(lootIndex);
+        if (!string.Equals(currentItemId, itemId, System.StringComparison.Ordinal))
+            return;
+
+        SpaceTrapTarget.DetonateIfArmed(targetViewId, collectorViewId);
+        targetView.RPC(nameof(ShipWreck.RemoveLootAtIndexRpc), RpcTarget.All, lootIndex);
+    }
+
+    void ClearCurrentTarget()
+    {
+        currentTarget = null;
+        currentTargetViewId = 0;
+        nextTargetRefreshTime = 0f;
+    }
+
+    static float Hash01(int baseSeed, int salt)
+    {
+        unchecked
+        {
+            uint hash = 2166136261u;
+            hash = (hash ^ (uint)baseSeed) * 16777619u;
+            hash = (hash ^ (uint)salt) * 16777619u;
+            hash ^= hash >> 13;
+            hash *= 1274126177u;
+            return (hash & 0xFFFFFF) / 16777215f;
+        }
     }
 
     Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
@@ -8551,6 +9804,9 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
 
         if (targetViewId <= 0)
             return;
+
+        if (collectionRunning)
+            CancelCollection(true);
 
         latestThreatTargetViewId = targetViewId;
         if (launchSequenceRunning || defenseLaunchTriggered)
