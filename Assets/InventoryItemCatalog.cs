@@ -24,6 +24,8 @@ public enum InventoryItemCategory
     Shield,
     Engine,
     Gadget,
+    Support,
+    Rescue,
     Blueprint,
     QuestItem,
     Resource,
@@ -56,6 +58,7 @@ public class InventoryItemDefinition
     public string IconSpriteName;
     public string ProjectFileName;
     public bool CanEnterSafePocket = true;
+    public bool RequiresSafePocket = false;
     public string[] SalvageOutputs;
 
     Sprite cachedIcon;
@@ -177,6 +180,8 @@ public static class InventoryItemCatalog
 {
     const int DefaultShopBuyValueMultiplier = 3;
 
+    public const int RadioactiveTreasureShieldDamagePerSecond = 1;
+    public const int RadioactiveTreasureHpDamagePerSecond = 1;
     public const string AsteroidResourceId = "asteroid_resource";
     public const string AsteroidGoldId = "asteroid_gold_resource";
     public const string AsteroidRareId = "asteroid_rare_resource";
@@ -202,7 +207,9 @@ public static class InventoryItemCatalog
     public const string BlueprintScrapId = "blueprint_scrap";
     public const int BlueprintScrapSellValueAstrons = 200;
     public const string CashSuitcaseId = "cash_suitcase";
+    public const string PirateCaseId = "pirate_case";
     public const string PlatinumChunkId = "platinum_chunk";
+    public const string RadioactiveTreasureId = "radioactive_treasure";
     public const string DroidScrapId = "droid_scrap";
     public const string CorsairSalvageId = "corsair_salvage";
     public const string SpaceMineWreckId = "space_mine_wreck";
@@ -237,13 +244,18 @@ public static class InventoryItemCatalog
     public const string AfterburnerStabilizerId = "afterburner_stabilizer";
     public const string GadgetMineId = "gadget_mine";
     public const string SpaceBombId = "space_bomb";
+    public const string DropbotId = "dropbot";
     public const string BatteryId = "battery";
     public const string MagneticBeamId = "magnetic_beam";
     public const string TractorBeamId = "tractor_beam";
     public const string LureBeaconId = "lure_beacon";
     public const string AutoTurretId = "auto_turret";
     public const string GuidanceSystemId = "guidance_system";
+    public const string TreasureScannerId = "treasure_scanner";
+    public const string ShortScannerId = "short_scanner";
+    public const string CloakDeviceId = "cloak_device";
     public const string LootingFriendId = "looting_friend";
+    public const string FiringFriendId = "firing_friend";
     public const string SpaceDrillId = "space_drill";
     public const string SpaceTrapId = "space_trap";
     public const string EmergencySuitBeaconId = "emergency_suit_beacon";
@@ -254,7 +266,13 @@ public static class InventoryItemCatalog
     public const string PhaseShieldId = "phase_shield";
     public const string CargoBayExtensionId = "cargo_bay_extension";
     public const string StrongPlatingId = "strong_plating";
+    public const string ShieldCapacitorId = "shield_capacitor";
+    public const string AegisBatteryId = "aegis_battery";
+    public const string RegenerativeShieldMatrixId = "regenerative_shield_matrix";
+    public const string BulwarkProjectorId = "bulwark_projector";
+    public const string AlienAegisCoreId = "alien_aegis_core";
     public const string AlienTransmitterId = "alien_transmitter";
+    public const string PirateSymbolId = "pirate_symbol";
 
     static readonly Dictionary<string, InventoryItemDefinition> Definitions = BuildDefinitions();
     static bool iconsPrewarmed;
@@ -330,6 +348,23 @@ public static class InventoryItemCatalog
     {
         InventoryItemDefinition definition = GetDefinition(itemId);
         return definition == null || definition.CanEnterSafePocket;
+    }
+
+    public static bool RequiresSafePocket(string itemId)
+    {
+        InventoryItemDefinition definition = GetDefinition(itemId);
+        return definition != null && definition.RequiresSafePocket;
+    }
+
+    public static bool IsTrackedValuableCargo(string itemId)
+    {
+        return string.Equals(itemId, CashSuitcaseId, StringComparison.Ordinal) ||
+               string.Equals(itemId, PirateCaseId, StringComparison.Ordinal);
+    }
+
+    public static bool IsRadioactiveTreasure(string itemId)
+    {
+        return string.Equals(itemId, RadioactiveTreasureId, StringComparison.Ordinal);
     }
 
     public static string GetContainerItemId(int variantIndex)
@@ -485,7 +520,15 @@ public static class InventoryItemCatalog
     public static string GetDescription(string itemId)
     {
         InventoryItemDefinition definition = GetDefinition(itemId);
-        return definition != null ? definition.Description : string.Empty;
+        string description = definition != null ? definition.Description : string.Empty;
+        string classification = WeaponAttackCatalog.BuildEquipmentClassificationSummary(itemId);
+        if (string.IsNullOrWhiteSpace(classification))
+            return description;
+
+        if (string.IsNullOrWhiteSpace(description))
+            return classification;
+
+        return description + "\n\n" + classification;
     }
 
     public static InventoryItemType GetItemType(string itemId)
@@ -511,6 +554,8 @@ public static class InventoryItemCatalog
             InventoryItemCategory.Shield => "Shield",
             InventoryItemCategory.Engine => "Engine",
             InventoryItemCategory.Gadget => "Gadget",
+            InventoryItemCategory.Support => "Support",
+            InventoryItemCategory.Rescue => "Rescue",
             InventoryItemCategory.Blueprint => "Blueprint",
             InventoryItemCategory.QuestItem => "Quest Items",
             InventoryItemCategory.Resource => "Resource",
@@ -541,6 +586,10 @@ public static class InventoryItemCatalog
             return InventoryItemCategory.Engine;
         if (equipmentSlotIndex == 6 || equipmentSlotIndex == 7)
             return InventoryItemCategory.Gadget;
+        if (equipmentSlotIndex == 8 || equipmentSlotIndex == 9)
+            return InventoryItemCategory.Support;
+        if (equipmentSlotIndex == 10 || equipmentSlotIndex == 11)
+            return InventoryItemCategory.Rescue;
 
         return InventoryItemCategory.Misc;
     }
@@ -566,6 +615,87 @@ public static class InventoryItemCatalog
     public static bool HasEquippedItem(string[] equipmentSlots, int shipSkinIndex, string itemId)
     {
         return CountEquippedItem(equipmentSlots, shipSkinIndex, itemId) > 0;
+    }
+
+    public static int GetShieldCapacityBonus(string itemId)
+    {
+        switch (itemId)
+        {
+            case ShieldReactorId:
+                return 40;
+            case KineticDampenerId:
+                return 30;
+            case PhaseShieldId:
+                return 30;
+            case CargoBayExtensionId:
+                return 20;
+            case StrongPlatingId:
+                return 40;
+            case ShieldCapacitorId:
+                return 55;
+            case AegisBatteryId:
+                return 50;
+            case RegenerativeShieldMatrixId:
+                return 60;
+            case BulwarkProjectorId:
+                return 75;
+            case AlienAegisCoreId:
+                return 110;
+            default:
+                return 0;
+        }
+    }
+
+    public static int GetEquippedShieldCapacityBonus(string[] equipmentSlots, int shipSkinIndex)
+    {
+        if (equipmentSlots == null)
+            return 0;
+
+        int bonus = 0;
+        for (int i = 2; i <= 3; i++)
+        {
+            if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
+                continue;
+
+            string itemId = i >= 0 && i < equipmentSlots.Length ? equipmentSlots[i] : null;
+            bonus += GetShieldCapacityBonus(itemId);
+        }
+
+        return bonus;
+    }
+
+    public static int GetShieldSpeedPenaltyPercent(string itemId)
+    {
+        switch (itemId)
+        {
+            case StrongPlatingId:
+            case RegenerativeShieldMatrixId:
+                return 5;
+            case BulwarkProjectorId:
+                return 10;
+            case AlienAegisCoreId:
+                return 15;
+            default:
+                return 0;
+        }
+    }
+
+    public static int GetEquippedShieldSpeedPenaltyPercent(string[] equipmentSlots, int shipSkinIndex)
+    {
+        if (equipmentSlots == null)
+            return 0;
+
+        int penalty = 0;
+        for (int i = 2; i <= 3; i++)
+        {
+            if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
+                continue;
+
+            string itemId = i >= 0 && i < equipmentSlots.Length ? equipmentSlots[i] : null;
+            penalty += GetShieldSpeedPenaltyPercent(itemId);
+        }
+
+        return Mathf.Clamp(penalty, 0, 75);
     }
 
     public static InventoryItemRarity GetRarity(string itemId)
@@ -632,6 +762,41 @@ public static class InventoryItemCatalog
         string[] outputs = new string[definition.SalvageOutputs.Length];
         Array.Copy(definition.SalvageOutputs, outputs, outputs.Length);
         return outputs;
+    }
+
+    public static string[] RollSalvageOutputs(string itemId)
+    {
+        if (IsRadioactiveTreasure(itemId))
+            return new[] { RollRadioactiveTreasureSalvageOutput() };
+
+        return GetSalvageOutputs(itemId);
+    }
+
+    public static bool HasRandomSalvageOutputs(string itemId)
+    {
+        return IsRadioactiveTreasure(itemId);
+    }
+
+    public static string GetRandomSalvageDescription(string itemId)
+    {
+        if (!IsRadioactiveTreasure(itemId))
+            return string.Empty;
+
+        return "50% " + GetDisplayName(RichAsteroidId) + "\n" +
+               "30% " + GetDisplayName(AsteroidEpicId) + "\n" +
+               "20% " + GetDisplayName(AsteroidLegendaryId);
+    }
+
+    static string RollRadioactiveTreasureSalvageOutput()
+    {
+        float roll = UnityEngine.Random.value;
+        if (roll < 0.5f)
+            return RichAsteroidId;
+
+        if (roll < 0.8f)
+            return AsteroidEpicId;
+
+        return AsteroidLegendaryId;
     }
 
     public static Color GetRarityColor(string itemId)
@@ -786,6 +951,21 @@ public static class InventoryItemCatalog
                 CanEnterSafePocket = false,
                 SalvageOutputs = new[] { AsteroidCommonId }
             },
+            [PirateCaseId] = new InventoryItemDefinition
+            {
+                Id = PirateCaseId,
+                DisplayName = "Pirate Case",
+                ShortLabel = "PIR",
+                Description = "A locked pirate payoff case loaded with stolen Astrons. Carrying it makes you very interesting.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Treasure,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 8000,
+                IconResourcePath = "Items/pirate_case",
+                ProjectFileName = "Resources/Items/pirate_case.png",
+                CanEnterSafePocket = false,
+                SalvageOutputs = new[] { AsteroidGoldId }
+            },
             [PlatinumChunkId] = new InventoryItemDefinition
             {
                 Id = PlatinumChunkId,
@@ -796,10 +976,25 @@ public static class InventoryItemCatalog
                 Category = InventoryItemCategory.Treasure,
                 Rarity = InventoryItemRarity.Legendary,
                 SellValueAstrons = 9000,
-                IconResourcePath = "treasure_asteroid_gold_legendary_resource",
-                ProjectFileName = "treasure_asteroid_gold_legendary.png",
+                IconResourcePath = "Items/platinum_chunk",
+                ProjectFileName = "Resources/Items/platinum_chunk.png",
                 CanEnterSafePocket = false,
                 SalvageOutputs = new[] { AsteroidLegendaryId, AsteroidEpicId, RichAsteroidId }
+            },
+            [RadioactiveTreasureId] = new InventoryItemDefinition
+            {
+                Id = RadioactiveTreasureId,
+                DisplayName = "Radioactive Treasure",
+                ShortLabel = "RAD",
+                Description = "An unstable irradiated treasure. Each one carried in cargo deals 1 shield damage per second, then 1 HP damage per second after shields fail. Salvage yields a random treasure: Very Rare 50%, Epic 30%, Legendary 20%.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Treasure,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 250,
+                IconResourcePath = "radioactive_treasure",
+                ProjectFileName = "Resources/radioactive_treasure.png",
+                CanEnterSafePocket = false,
+                SalvageOutputs = new[] { RichAsteroidId, AsteroidEpicId, AsteroidLegendaryId }
             },
             [BlueprintScrapId] = new InventoryItemDefinition
             {
@@ -1309,6 +1504,21 @@ public static class InventoryItemCatalog
                 ProjectFileName = "Resources/Items/space_bomb_gadget.png",
                 SalvageOutputs = new[] { SpaceMineWreckId, AsteroidRareId, SpaceJunkStandardId }
             },
+            [DropbotId] = new InventoryItemDefinition
+            {
+                Id = DropbotId,
+                DisplayName = "Dropbot",
+                ShortLabel = "DRP",
+                Description = "A single-use cargo evacuation drone. The first cargo slot after SAFE and ASTRO is marked DROP; activating Dropbot sends that item to extraction so it survives even if the ship is lost.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 2800,
+                ShopBuyValueAstronsOverride = 11200,
+                IconResourcePath = "Items/dropbot",
+                ProjectFileName = "Resources/Items/dropbot.png",
+                SalvageOutputs = new[] { DroidScrapId, RescueShipSalvageId, AsteroidRareId }
+            },
             [BatteryId] = new InventoryItemDefinition
             {
                 Id = BatteryId,
@@ -1384,28 +1594,91 @@ public static class InventoryItemCatalog
                 Id = GuidanceSystemId,
                 DisplayName = "Guidance System",
                 ShortLabel = "GUI",
-                Description = "A short-lived tactical navigator that points toward extraction, valuable loot, and the nearest hostile contact.",
+                Description = "A support-slot tactical navigator that points toward extraction, valuable loot, and the nearest hostile contact when activated.",
                 ItemType = InventoryItemType.Equipment,
-                Category = InventoryItemCategory.Gadget,
+                Category = InventoryItemCategory.Support,
                 Rarity = InventoryItemRarity.Epic,
                 SellValueAstrons = 3000,
                 IconResourcePath = "guidance_system_resource",
                 ProjectFileName = "guidance_system.png",
                 SalvageOutputs = new[] { RadarShipSalvageId, SpaceJunkStandardId }
             },
+            [TreasureScannerId] = new InventoryItemDefinition
+            {
+                Id = TreasureScannerId,
+                DisplayName = "Treasure Scanner",
+                ShortLabel = "SCN",
+                Description = "A support-slot scanner that pings more often as the ship gets closer to unrevealed Hidden Treasure.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Support,
+                Rarity = InventoryItemRarity.VeryRare,
+                SellValueAstrons = 2200,
+                ShopBuyValueAstronsOverride = 8700,
+                IconResourcePath = "Items/treasure_scanner",
+                IconSpriteName = "treasure_scanner_0",
+                ProjectFileName = "Resources/Items/treasure_scanner.png",
+                SalvageOutputs = new[] { RadarShipSalvageId, AsteroidGoldId }
+            },
+            [ShortScannerId] = new InventoryItemDefinition
+            {
+                Id = ShortScannerId,
+                DisplayName = "Short Scanner",
+                ShortLabel = "SSC",
+                Description = "Activating this support scanner reveals hidden player ships and enemy bots inside nebulas, fire nebulas, and clouds for 15 seconds. Each equipped Short Scanner grants 3 uses per round.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Support,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 2600,
+                ShopBuyValueAstronsOverride = 9600,
+                IconResourcePath = "Items/short_scanner",
+                IconSpriteName = "short_scanner_0",
+                ProjectFileName = "Resources/Items/short_scanner.png",
+                SalvageOutputs = new[] { RadarShipSalvageId, DroidScrapId, AsteroidGoldId }
+            },
+            [CloakDeviceId] = new InventoryItemDefinition
+            {
+                Id = CloakDeviceId,
+                DisplayName = "Cloak Device",
+                ShortLabel = "CLK",
+                Description = "A stealth field generator that hides the ship from players and enemies for a short time while preserving normal collisions.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 3000,
+                ShopBuyValueAstronsOverride = 12400,
+                IconResourcePath = "Items/cloak_device",
+                IconSpriteName = "cloak_device_0",
+                ProjectFileName = "Resources/Items/cloak_device.png",
+                SalvageOutputs = new[] { RadarShipSalvageId, DroidScrapId, AsteroidGoldId }
+            },
             [LootingFriendId] = new InventoryItemDefinition
             {
                 Id = LootingFriendId,
                 DisplayName = "Looting Friend",
                 ShortLabel = "LFR",
-                Description = "A passive companion drone that follows the ship and automatically collects nearby loot while the pilot keeps flying.",
+                Description = "A support-slot companion drone that follows the ship and automatically collects nearby loot while the pilot keeps flying.",
                 ItemType = InventoryItemType.Equipment,
-                Category = InventoryItemCategory.Gadget,
+                Category = InventoryItemCategory.Support,
                 Rarity = InventoryItemRarity.Epic,
                 SellValueAstrons = 2400,
                 IconResourcePath = "looting_friend_top_down_resource",
                 ProjectFileName = "looting_friend_top_down.png",
                 SalvageOutputs = new[] { DroidScrapId, SpaceJunkStandardId, AsteroidRareId }
+            },
+            [FiringFriendId] = new InventoryItemDefinition
+            {
+                Id = FiringFriendId,
+                DisplayName = "Firing Friend",
+                ShortLabel = "FFR",
+                Description = "A support-slot combat drone that follows the ship and fires short-range laser bursts at the nearest enemy.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Support,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 2600,
+                ShopBuyValueAstronsOverride = 9600,
+                IconResourcePath = "Items/firing_friend",
+                ProjectFileName = "Resources/Items/firing_friend.png",
+                SalvageOutputs = new[] { DroidScrapId, NeutralFighterSalvageId, AsteroidRareId }
             },
             [SpaceDrillId] = new InventoryItemDefinition
             {
@@ -1440,9 +1713,9 @@ public static class InventoryItemCatalog
                 Id = EmergencySuitBeaconId,
                 DisplayName = "Emergency Suit Beacon",
                 ShortLabel = "BEA",
-                Description = "A cheap passive beacon that helps a surviving astronaut immediately after ship loss.",
+                Description = "A rescue-slot beacon that helps a surviving astronaut immediately after ship loss.",
                 ItemType = InventoryItemType.Equipment,
-                Category = InventoryItemCategory.Gadget,
+                Category = InventoryItemCategory.Rescue,
                 Rarity = InventoryItemRarity.Uncommon,
                 SellValueAstrons = 300,
                 ShopBuyValueAstronsOverride = 900,
@@ -1455,9 +1728,9 @@ public static class InventoryItemCatalog
                 Id = EscapePodId,
                 DisplayName = "Escape Pod",
                 ShortLabel = "POD",
-                Description = "A passive emergency capsule that replaces the astronaut after ship loss, with stronger hull integrity and faster escape thrust.",
+                Description = "A rescue-slot emergency capsule that replaces the astronaut after ship loss, with stronger hull integrity and faster escape thrust.",
                 ItemType = InventoryItemType.Equipment,
-                Category = InventoryItemCategory.Gadget,
+                Category = InventoryItemCategory.Rescue,
                 Rarity = InventoryItemRarity.Epic,
                 SellValueAstrons = 3200,
                 ShopBuyValueAstronsOverride = 13200,
@@ -1485,11 +1758,12 @@ public static class InventoryItemCatalog
                 Id = ShieldReactorId,
                 DisplayName = "Shield Reactor",
                 ShortLabel = "SHR",
-                Description = "A defensive reactor that increases maximum shield capacity when installed in a shield slot.",
+                Description = "A compact defensive reactor that adds 40 maximum shield capacity when installed in a shield slot.",
                 ItemType = InventoryItemType.Equipment,
                 Category = InventoryItemCategory.Shield,
-                Rarity = InventoryItemRarity.Rare,
-                SellValueAstrons = 1400,
+                Rarity = InventoryItemRarity.Uncommon,
+                SellValueAstrons = 1000,
+                ShopBuyValueAstronsOverride = 3600,
                 IconResourcePath = "shield_reactor_resource",
                 ProjectFileName = "shield_reactor.png",
                 SalvageOutputs = new[] { AsteroidResourceId, AsteroidGoldId }
@@ -1499,12 +1773,12 @@ public static class InventoryItemCatalog
                 Id = KineticDampenerId,
                 DisplayName = "Kinetic Dampener",
                 ShortLabel = "KIN",
-                Description = "A shield-slot impact absorber that reduces ramming, mines, and physical collision damage.",
+                Description = "A shield-slot impact absorber that adds 30 maximum shield capacity and reduces physical hits plus explosive shock damage.",
                 ItemType = InventoryItemType.Equipment,
                 Category = InventoryItemCategory.Shield,
-                Rarity = InventoryItemRarity.Rare,
-                SellValueAstrons = 1200,
-                ShopBuyValueAstronsOverride = 4800,
+                Rarity = InventoryItemRarity.Uncommon,
+                SellValueAstrons = 1000,
+                ShopBuyValueAstronsOverride = 3600,
                 IconResourcePath = "Items/kinetic_dampener",
                 ProjectFileName = "Resources/Items/kinetic_dampener.png",
                 SalvageOutputs = new[] { SpaceMineWreckId, AsteroidRareId }
@@ -1514,12 +1788,12 @@ public static class InventoryItemCatalog
                 Id = PhaseShieldId,
                 DisplayName = "Phase Shield",
                 ShortLabel = "PHS",
-                Description = "A shield-slot failsafe that grants 3 seconds of invulnerability when hull integrity drops low.",
+                Description = "A shield-slot failsafe that adds 30 maximum shield capacity and grants 6 seconds of invulnerability when hull integrity drops low.",
                 ItemType = InventoryItemType.Equipment,
                 Category = InventoryItemCategory.Shield,
-                Rarity = InventoryItemRarity.Epic,
-                SellValueAstrons = 2400,
-                ShopBuyValueAstronsOverride = 9000,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1800,
+                ShopBuyValueAstronsOverride = 6500,
                 IconResourcePath = "Items/phase_shield",
                 ProjectFileName = "Resources/Items/phase_shield.png",
                 SalvageOutputs = new[] { RadarShipSalvageId, AsteroidRareId }
@@ -1529,12 +1803,12 @@ public static class InventoryItemCatalog
                 Id = CargoBayExtensionId,
                 DisplayName = "Cargo Bay Extension",
                 ShortLabel = "CEX",
-                Description = "A shield-slot cargo module that adds two extra ship inventory slots.",
+                Description = "A shield-slot cargo module that adds 20 maximum shield capacity and two extra ship inventory slots.",
                 ItemType = InventoryItemType.Equipment,
                 Category = InventoryItemCategory.Shield,
-                Rarity = InventoryItemRarity.Rare,
-                SellValueAstrons = 1600,
-                ShopBuyValueAstronsOverride = 5400,
+                Rarity = InventoryItemRarity.Uncommon,
+                SellValueAstrons = 1200,
+                ShopBuyValueAstronsOverride = 4200,
                 IconResourcePath = "Items/cargo_bay_extension",
                 ProjectFileName = "Resources/Items/cargo_bay_extension.png",
                 SalvageOutputs = new[] { SpaceTruckWreckId, AsteroidGoldId }
@@ -1544,22 +1818,97 @@ public static class InventoryItemCatalog
                 Id = StrongPlatingId,
                 DisplayName = "Strong Plating",
                 ShortLabel = "PLT",
-                Description = "A shield-slot hull plating that reduces damage from nebulae and other environmental hazards.",
+                Description = "A shield-slot hull plating that adds 40 maximum shield capacity and halves nebula and environmental damage, but slows the ship slightly.",
                 ItemType = InventoryItemType.Equipment,
                 Category = InventoryItemCategory.Shield,
-                Rarity = InventoryItemRarity.Epic,
-                SellValueAstrons = 1800,
-                ShopBuyValueAstronsOverride = 6600,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1600,
+                ShopBuyValueAstronsOverride = 5600,
                 IconResourcePath = "Items/strong_plating",
                 ProjectFileName = "Resources/Items/strong_plating.png",
                 SalvageOutputs = new[] { RescueShipSalvageId, AsteroidRareId }
+            },
+            [ShieldCapacitorId] = new InventoryItemDefinition
+            {
+                Id = ShieldCapacitorId,
+                DisplayName = "Shield Capacitor",
+                ShortLabel = "CAP",
+                Description = "A high-output capacitor that adds 55 maximum shield capacity with no handling penalty.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Shield,
+                Rarity = InventoryItemRarity.Uncommon,
+                SellValueAstrons = 1300,
+                ShopBuyValueAstronsOverride = 4200,
+                IconResourcePath = "Items/shield_capacitor",
+                ProjectFileName = "Resources/Items/shield_capacitor.png",
+                SalvageOutputs = new[] { AsteroidGoldId, AsteroidResourceId }
+            },
+            [AegisBatteryId] = new InventoryItemDefinition
+            {
+                Id = AegisBatteryId,
+                DisplayName = "Aegis Battery",
+                ShortLabel = "AEB",
+                Description = "A shield battery bank that adds 50 maximum shield capacity and doubles shield restored by Battery gadgets.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Shield,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1700,
+                ShopBuyValueAstronsOverride = 5800,
+                IconResourcePath = "Items/aegis_battery",
+                ProjectFileName = "Resources/Items/aegis_battery.png",
+                SalvageOutputs = new[] { BatteryId, AsteroidGoldId }
+            },
+            [RegenerativeShieldMatrixId] = new InventoryItemDefinition
+            {
+                Id = RegenerativeShieldMatrixId,
+                DisplayName = "Regenerative Shield Matrix",
+                ShortLabel = "RSM",
+                Description = "A shield matrix that adds 60 maximum shield capacity and slowly regenerates active shields after a quiet moment.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Shield,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1900,
+                ShopBuyValueAstronsOverride = 6400,
+                IconResourcePath = "Items/regenerative_shield_matrix",
+                ProjectFileName = "Resources/Items/regenerative_shield_matrix.png",
+                SalvageOutputs = new[] { BatteryId, RadarShipSalvageId }
+            },
+            [BulwarkProjectorId] = new InventoryItemDefinition
+            {
+                Id = BulwarkProjectorId,
+                DisplayName = "Bulwark Projector",
+                ShortLabel = "BLW",
+                Description = "A heavy shield projector that adds 75 maximum shield capacity and reduces laser and autocannon damage by 25%.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Shield,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 2200,
+                ShopBuyValueAstronsOverride = 7200,
+                IconResourcePath = "Items/bulwark_projector",
+                ProjectFileName = "Resources/Items/bulwark_projector.png",
+                SalvageOutputs = new[] { StrongPlatingId, AsteroidRareId }
+            },
+            [AlienAegisCoreId] = new InventoryItemDefinition
+            {
+                Id = AlienAegisCoreId,
+                DisplayName = "Alien Aegis Core",
+                ShortLabel = "AAC",
+                Description = "An alien shield core that adds 110 maximum shield capacity and grants a 3 second 50% damage barrier after the shield breaks.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Shield,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 3200,
+                ShopBuyValueAstronsOverride = 11000,
+                IconResourcePath = "Items/alien_aegis_core",
+                ProjectFileName = "Resources/Items/alien_aegis_core.png",
+                SalvageOutputs = new[] { SpaceAnimalRemainsId, AsteroidEpicId }
             },
             [AlienTransmitterId] = new InventoryItemDefinition
             {
                 Id = AlienTransmitterId,
                 DisplayName = "Alien Transmitter",
                 ShortLabel = "ALT",
-                Description = "A unique alien signal device recovered from Space Mayhem. It is a quest item for future projects and special events.",
+                Description = "A unique alien signal device recovered from Space Mayhem. It is a quest item for future projects and special events. It can be carried on a ship only in a SAFE cargo slot, so it survives ship loss unless you drop it yourself.",
                 ItemType = InventoryItemType.Quest,
                 Category = InventoryItemCategory.QuestItem,
                 Rarity = InventoryItemRarity.Legendary,
@@ -1567,6 +1916,23 @@ public static class InventoryItemCatalog
                 ShopBuyValueAstronsOverride = 0,
                 IconResourcePath = "alien_transmitter_resource",
                 ProjectFileName = "alien_transmitter.png",
+                RequiresSafePocket = true,
+                SalvageOutputs = Array.Empty<string>()
+            },
+            [PirateSymbolId] = new InventoryItemDefinition
+            {
+                Id = PirateSymbolId,
+                DisplayName = "Pirate Symbol",
+                ShortLabel = "PIR",
+                Description = "A pirate oath-mark earned through Project OMERTA. It is a quest item for future projects and special events. It can be carried on a ship only in a SAFE cargo slot, so it survives ship loss unless you drop it yourself.",
+                ItemType = InventoryItemType.Quest,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 0,
+                ShopBuyValueAstronsOverride = 0,
+                IconResourcePath = "Items/pirate_symbol",
+                ProjectFileName = "Resources/Items/pirate_symbol.png",
+                RequiresSafePocket = true,
                 SalvageOutputs = Array.Empty<string>()
             }
         };

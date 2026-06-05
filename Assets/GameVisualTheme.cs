@@ -20,7 +20,7 @@ public class GameVisualTheme : MonoBehaviour
     public const int EnemySortingOrder = 30;
     public const int PlayerSortingOrder = 32;
 
-    const float PlayerTargetSize = 1.04f;
+    public const float PlayerTargetSize = 1.04f;
     const float AstronautTargetSize = 0.56f;
     const float TreasureTargetSize = 1.5f;
     const float ContainerTargetSize = 1.05f;
@@ -51,10 +51,12 @@ public class GameVisualTheme : MonoBehaviour
     Sprite richTreasureSprite;
     Sprite epicTreasureSprite;
     Sprite legendaryTreasureSprite;
+    Sprite platinumChunkSprite;
     Sprite spaceJunkTrashSprite;
     Sprite spaceJunkStandardSprite;
     Sprite spaceJunkAsteroidSprite;
     Sprite spaceAnimalRemainsSprite;
+    Sprite radioactiveTreasureSprite;
     Sprite[] containerSprites;
     Sprite[] blueprintScrapContainerSprites;
     Sprite[] randomLootWreckSprites;
@@ -328,6 +330,7 @@ public class GameVisualTheme : MonoBehaviour
     void LoadAssets()
     {
         bool snowFieldTheme = IsSnowFieldTheme();
+        bool toxicAreaTheme = IsToxicAreaTheme();
         shipSprites = new Sprite[ShipCatalog.MaxShipSkinIndex + 1];
         wreckSprites = new Sprite[ShipCatalog.MaxShipSkinIndex + 1];
         for (int skinIndex = 0; skinIndex <= ShipCatalog.MaxShipSkinIndex; skinIndex++)
@@ -364,14 +367,20 @@ public class GameVisualTheme : MonoBehaviour
             epicTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_burgundy_epic_resource", "Assets/Resources/treasure_asteroid_burgundy_epic_resource.png", "Assets/treasure_asteroid_burgundy_epic.png");
             legendaryTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_gold_legendary_resource", "Assets/Resources/treasure_asteroid_gold_legendary_resource.png", "Assets/treasure_asteroid_gold_legendary.png");
         }
+        platinumChunkSprite = LoadSpriteFromResourcesOrEditor("Items/platinum_chunk", "Assets/Resources/Items/platinum_chunk.png");
         spaceJunkTrashSprite = LoadSpriteFromResourcesOrEditor("space_junk_trash", "Assets/Resources/space_junk_trash.png", "Assets/space_junk_trash.png");
         spaceJunkStandardSprite = LoadSpriteFromResourcesOrEditor("space_junk_standard", "Assets/Resources/space_junk_standard.png", "Assets/space_junk_standard.png");
         spaceJunkAsteroidSprite = LoadSpriteFromResourcesOrEditor("space_junk_asteroid", "Assets/Resources/space_junk_asteroid.png", "Assets/space_junk_asteroid.png");
         spaceAnimalRemainsSprite = LoadSpriteFromResourcesOrEditor("space_animal_remains_resource", "Assets/Resources/space_animal_remains_resource.png", "Assets/Resources/space_animal_remains_resource.png");
+        radioactiveTreasureSprite = LoadSpriteFromResourcesOrEditor("radioactive_treasure", "Assets/Resources/radioactive_treasure.png", "Assets/Resources/radioactive_treasure.png");
         containerSprites = LoadSpritesFromResourcesOrEditor("kontenery_9", "Assets/Resources/kontenery_9.png", "Assets/kontenery_9.png");
         blueprintScrapContainerSprites = LoadSpritesFromResourcesOrEditor("Enemies/ContainerShip/containers_set2", "Assets/Resources/Enemies/ContainerShip/containers_set2.png", "Assets/containers_set2.png");
         randomLootWreckSprites = LoadRandomLootWreckSprites();
-        obstacleSprites = snowFieldTheme ? LoadSnowObstacleSprites() : LoadDefaultObstacleSprites();
+        obstacleSprites = snowFieldTheme
+            ? LoadSnowObstacleSprites()
+            : toxicAreaTheme
+                ? LoadRadioactiveObstacleSprites()
+                : LoadDefaultObstacleSprites();
         portalExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/portal_nieaktywny_resource", "Assets/Resources/Visuals/Bases/portal_nieaktywny_resource.png", "Assets/portal_nieaktywny.png");
         carrierExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/lotniskowiec_strefa_resource", "Assets/Resources/Visuals/Bases/lotniskowiec_strefa_resource.png", "Assets/lotniskowiec_strefa.png");
         spaceCityExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/baza_strefa_resource", "Assets/Resources/Visuals/Bases/baza_strefa_resource.png", "Assets/baza_strefa.png");
@@ -381,6 +390,11 @@ public class GameVisualTheme : MonoBehaviour
     bool IsSnowFieldTheme()
     {
         return string.Equals(RoomSettings.GetSelectedLobbyMapId(), LobbyMapCatalog.SnowFieldMapId, System.StringComparison.Ordinal);
+    }
+
+    bool IsToxicAreaTheme()
+    {
+        return string.Equals(RoomSettings.GetSelectedLobbyMapId(), LobbyMapCatalog.ToxicAreaMapId, System.StringComparison.Ordinal);
     }
 
     Sprite[] LoadDefaultObstacleSprites()
@@ -409,6 +423,15 @@ public class GameVisualTheme : MonoBehaviour
             LoadObstacleSprite("obstacle_ice_7", "Assets/Resources/obstacle_ice_7.png", "Assets/asteroida_nadkruszona.png"),
             LoadObstacleSprite("obstacle_ice_8", "Assets/Resources/obstacle_ice_8.png", "Assets/asteroida_ziemniak.png")
         };
+    }
+
+    Sprite[] LoadRadioactiveObstacleSprites()
+    {
+        Sprite[] sprites = LoadSpritesFromResourcesOrEditor(
+            "Visuals/Obstacles/obstacles_radioactive",
+            "Assets/Resources/Visuals/Obstacles/obstacles_radioactive.png",
+            "Assets/obstacles_radioactive.png");
+        return sprites != null && sprites.Length > 0 ? sprites : LoadDefaultObstacleSprites();
     }
 
     void ApplyTheme()
@@ -517,9 +540,25 @@ public class GameVisualTheme : MonoBehaviour
             return;
 
         EnemyBot enemyBot = player.GetComponent<EnemyBot>();
+        ActorIdentity identity = ActorIdentity.Ensure(player.gameObject);
         AstronautSurvivor astronautSurvivor = player.GetComponent<AstronautSurvivor>();
-        bool isEnemyBot = player.IsBotControlled || EnemyBot.IsBotInstantiationData(view.InstantiationData);
-        bool isAstronaut = astronautSurvivor != null || AstronautSurvivor.IsAstronautInstantiationData(view.InstantiationData);
+        if (astronautSurvivor == null && AstronautSurvivor.IsAstronautInstantiationData(view.InstantiationData))
+        {
+            astronautSurvivor = player.gameObject.AddComponent<AstronautSurvivor>();
+            astronautSurvivor.InitializeFromPhotonData();
+            identity = ActorIdentity.Ensure(player.gameObject);
+        }
+        else if (astronautSurvivor != null)
+        {
+            astronautSurvivor.InitializeFromPhotonData();
+        }
+
+        bool isEnemyBot = (identity != null && identity.IsEnemy && identity.IsShip) || player.IsBotControlled || EnemyBot.IsBotInstantiationData(view.InstantiationData);
+        bool isNeutralRider = (identity != null && identity.Team == ActorTeam.Neutral && identity.IsShip) ||
+                              player.IsNeutralRiderControlled ||
+                              NeutralRiderController.IsNeutralRiderInstantiationData(view.InstantiationData);
+        bool isAstronaut = identity != null ? identity.IsAstronaut : astronautSurvivor != null || AstronautSurvivor.IsAstronautInstantiationData(view.InstantiationData);
+        bool isEnemyAstronaut = identity != null ? identity.IsEnemy && identity.IsAstronaut : astronautSurvivor != null && astronautSurvivor.IsEnemySurvivor;
         bool isEscapePod = astronautSurvivor != null
             ? astronautSurvivor.IsEscapePodMode
             : AstronautSurvivor.IsEscapePodInstantiationData(view.InstantiationData);
@@ -556,12 +595,13 @@ public class GameVisualTheme : MonoBehaviour
         }
         else if (isAstronaut)
         {
-            if (isEscapePod && astronautSurvivor != null)
+            if (astronautSurvivor != null)
             {
                 sprite = astronautSurvivor.GetVisualSprite();
                 targetSize = astronautSurvivor.VisualTargetSize;
             }
-            else if (astronautSprite != null)
+
+            if (sprite == null && astronautSprite != null)
             {
                 sprite = astronautSprite;
                 targetSize = AstronautTargetSize;
@@ -581,7 +621,10 @@ public class GameVisualTheme : MonoBehaviour
         else
         {
             int fallbackIndex = Mathf.Abs(view.Owner.ActorNumber - 1) % shipSprites.Length;
-            int shipIndex = RoomSettings.GetPlayerShipSkin(view.Owner, fallbackIndex) % shipSprites.Length;
+            int shipIndex = isNeutralRider
+                ? NeutralRiderController.GetShipSkinIndexFromInstantiationData(view.InstantiationData)
+                : RoomSettings.GetPlayerShipSkin(view.Owner, fallbackIndex);
+            shipIndex %= shipSprites.Length;
             sprite = shipSprites[shipIndex];
         }
 
@@ -600,7 +643,7 @@ public class GameVisualTheme : MonoBehaviour
         renderer.sortingLayerName = WorldSortingLayerName;
         renderer.sortingOrder = player.IsWreck
             ? WreckSortingOrder
-            : isEnemyBot ? EnemySortingOrder : PlayerSortingOrder;
+            : isEnemyBot || isEnemyAstronaut ? EnemySortingOrder : PlayerSortingOrder;
         FitSpriteToTargetSize(renderer, targetSize);
 
         Vector2 spriteWorldSize = GetSpriteWorldSize(renderer);
@@ -692,7 +735,7 @@ public class GameVisualTheme : MonoBehaviour
         switch (treasure.itemId)
         {
             case InventoryItemCatalog.PlatinumChunkId:
-                return legendaryTreasureSprite != null ? legendaryTreasureSprite : treasureSprite;
+                return platinumChunkSprite != null ? platinumChunkSprite : legendaryTreasureSprite != null ? legendaryTreasureSprite : treasureSprite;
             case InventoryItemCatalog.AsteroidGoldId:
                 return goldTreasureSprite != null ? goldTreasureSprite : treasureSprite;
             case InventoryItemCatalog.AsteroidRareId:
@@ -712,6 +755,8 @@ public class GameVisualTheme : MonoBehaviour
                 return spaceJunkAsteroidSprite != null ? spaceJunkAsteroidSprite : treasureSprite;
             case InventoryItemCatalog.SpaceAnimalRemainsId:
                 return spaceAnimalRemainsSprite != null ? spaceAnimalRemainsSprite : treasureSprite;
+            case InventoryItemCatalog.RadioactiveTreasureId:
+                return radioactiveTreasureSprite != null ? radioactiveTreasureSprite : treasureSprite;
             default:
                 return treasureSprite;
         }
@@ -719,7 +764,7 @@ public class GameVisualTheme : MonoBehaviour
 
     Color GetTreasureTint(Treasure treasure)
     {
-        if (treasure != null && treasure.itemId == InventoryItemCatalog.PlatinumChunkId)
+        if (treasure != null && treasure.itemId == InventoryItemCatalog.PlatinumChunkId && platinumChunkSprite == null)
             return new Color(0.82f, 0.94f, 1f, 1f);
 
         return Color.white;
@@ -826,6 +871,27 @@ public class GameVisualTheme : MonoBehaviour
         MovingSpaceObject movingObject = target.GetComponent<MovingSpaceObject>();
         if (movingObject != null)
             movingObject.NotifyColliderShapeChanged();
+
+        ConfigureRadioactiveObstacleHazard(target);
+    }
+
+    void ConfigureRadioactiveObstacleHazard(GameObject target)
+    {
+        if (!Application.isPlaying || target == null)
+            return;
+
+        RadioactiveObstacleHazard hazard = target.GetComponent<RadioactiveObstacleHazard>();
+        if (IsToxicAreaTheme())
+        {
+            if (hazard == null)
+                hazard = target.AddComponent<RadioactiveObstacleHazard>();
+
+            hazard.RefreshFromObstacle();
+        }
+        else if (hazard != null)
+        {
+            Destroy(hazard);
+        }
     }
 
     void ApplyExtractionZoneSprites()

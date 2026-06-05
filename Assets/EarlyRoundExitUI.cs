@@ -8,12 +8,16 @@ using UnityEngine.UI;
 
 public class EarlyRoundExitUI : MonoBehaviour
 {
+    const string ExitButtonLabel = "EXIT";
+    const string ExitButtonPendingLabel = "EXITING...";
+
     static EarlyRoundExitUI instance;
     static bool buttonRequested;
     static bool summaryRequested;
     static int cachedFinalScore;
     static string cachedOutcome = "dead";
     static bool awardRequested;
+    static bool exitRequested;
 
     GameObject buttonObject;
     GameObject summaryObject;
@@ -37,6 +41,7 @@ public class EarlyRoundExitUI : MonoBehaviour
         buttonRequested = true;
         summaryRequested = false;
         awardRequested = false;
+        exitRequested = false;
         instance.Refresh();
     }
 
@@ -48,15 +53,17 @@ public class EarlyRoundExitUI : MonoBehaviour
         buttonRequested = false;
         summaryRequested = true;
         awardRequested = false;
+        exitRequested = false;
         NetworkManager.MarkCurrentRoundEndedForLocalPlayer(cachedOutcome);
         instance.Refresh();
-        instance.AwardRoundXpIfNeeded();
+        _ = instance.AwardRoundXpIfNeeded();
     }
 
     public static void HideAll()
     {
         buttonRequested = false;
         summaryRequested = false;
+        exitRequested = false;
         if (instance != null)
             instance.Refresh();
     }
@@ -107,6 +114,7 @@ public class EarlyRoundExitUI : MonoBehaviour
         {
             buttonRequested = false;
             summaryRequested = false;
+            exitRequested = false;
             if (buttonObject != null)
                 buttonObject.SetActive(false);
             if (summaryObject != null)
@@ -128,7 +136,11 @@ public class EarlyRoundExitUI : MonoBehaviour
         }
 
         if (buttonObject != null)
+        {
             buttonObject.SetActive(buttonRequested && !summaryRequested);
+            if (buttonRequested && !summaryRequested)
+                UpdateExitButtonState();
+        }
 
         if (summaryObject != null)
         {
@@ -176,9 +188,11 @@ public class EarlyRoundExitUI : MonoBehaviour
             TextMeshProUGUI existingText = buttonObject.GetComponentInChildren<TextMeshProUGUI>(true);
             if (existingText != null)
             {
-                existingText.text = "FINISH ROUND";
-                existingText.fontSize = 22f;
+                existingText.text = exitRequested ? ExitButtonPendingLabel : ExitButtonLabel;
+                existingText.fontSize = exitRequested ? 20f : 26f;
             }
+
+            UpdateExitButtonState();
 
             buttonObject.transform.SetAsLastSibling();
             return;
@@ -202,10 +216,30 @@ public class EarlyRoundExitUI : MonoBehaviour
         button.onClick.RemoveAllListeners();
         button.onClick.AddListener(OnEndRoundClicked);
 
-        TextMeshProUGUI text = CreateText(buttonObject.transform, "EarlyEndRoundButtonText", "FINISH ROUND", 22f, TextAlignmentOptions.Center);
+        TextMeshProUGUI text = CreateText(buttonObject.transform, "EarlyEndRoundButtonText", ExitButtonLabel, 26f, TextAlignmentOptions.Center);
         text.fontStyle = FontStyles.Bold;
         text.characterSpacing = 1.5f;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.overflowMode = TextOverflowModes.Ellipsis;
         text.raycastTarget = false;
+        UpdateExitButtonState();
+    }
+
+    void UpdateExitButtonState()
+    {
+        if (buttonObject == null)
+            return;
+
+        Button button = buttonObject.GetComponent<Button>();
+        if (button != null)
+            button.interactable = !exitRequested;
+
+        TextMeshProUGUI text = buttonObject.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (text != null)
+        {
+            text.text = exitRequested ? ExitButtonPendingLabel : ExitButtonLabel;
+            text.fontSize = exitRequested ? 20f : 26f;
+        }
     }
 
     void EnsureSummary(Transform parent)
@@ -515,22 +549,29 @@ public class EarlyRoundExitUI : MonoBehaviour
         }
     }
 
-    void OnEndRoundClicked()
+    async void OnEndRoundClicked()
     {
-        NetworkManager.MarkCurrentRoundEndedForLocalPlayer(cachedOutcome);
-        buttonRequested = false;
-        summaryRequested = true;
-        Refresh();
-        AwardRoundXpIfNeeded();
-    }
+        if (exitRequested)
+            return;
 
-    void OnBackClicked()
-    {
+        exitRequested = true;
+        UpdateExitButtonState();
+        NetworkManager.MarkCurrentRoundEndedForLocalPlayer(cachedOutcome);
+        await AwardRoundXpIfNeeded();
         HideAll();
         NetworkManager.ReturnToSessionBrowserFromFinishedRound();
     }
 
-    async void AwardRoundXpIfNeeded()
+    void OnBackClicked()
+    {
+        if (string.Equals(cachedOutcome, "extracted", System.StringComparison.OrdinalIgnoreCase))
+            AudioManager.Instance.RequestShipReturnMusicForNextMenu();
+
+        HideAll();
+        NetworkManager.ReturnToSessionBrowserFromFinishedRound();
+    }
+
+    async Task AwardRoundXpIfNeeded()
     {
         if (awardRequested)
             return;
@@ -540,10 +581,11 @@ public class EarlyRoundExitUI : MonoBehaviour
         try
         {
             await PlayerProfileService.Instance.RecordRoundXpAsync(cachedFinalScore, matchToken);
+            await PlayerProfileService.Instance.RecordMapSuccessfulReturnAsync(RoomSettings.GetSelectedLobbyMapId(), cachedOutcome, matchToken);
         }
         catch (System.Exception ex)
         {
-            Debug.LogError("EarlyRoundExitUI: failed to record early round XP: " + ex);
+            Debug.LogError("EarlyRoundExitUI: failed to record early round progress: " + ex);
         }
     }
 
@@ -635,5 +677,299 @@ public class EarlyRoundExitUI : MonoBehaviour
         }
 
         return text;
+    }
+}
+
+public sealed class AstronautKillMeButtonUI : MonoBehaviour
+{
+    const string RootName = "AstronautKillMeButtonUI";
+    const string ButtonName = "AstronautKillMeButton";
+    const string ButtonTextName = "AstronautKillMeButtonText";
+    static readonly Color NormalColor = new Color(0.45f, 0.04f, 0.08f, 0.98f);
+    static readonly Color HighlightedColor = new Color(0.62f, 0.07f, 0.12f, 1f);
+    static readonly Color PressedColor = new Color(0.29f, 0.02f, 0.05f, 1f);
+
+    static AstronautKillMeButtonUI instance;
+
+    GameObject buttonObject;
+    Button killButton;
+    TextMeshProUGUI buttonText;
+    PlayerHealth targetHealth;
+    int pendingRequestViewId = -1;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    static void Bootstrap()
+    {
+        EnsureInstance();
+    }
+
+    static void EnsureInstance()
+    {
+        if (instance != null)
+            return;
+
+        GameObject root = new GameObject(RootName);
+        instance = root.AddComponent<AstronautKillMeButtonUI>();
+        DontDestroyOnLoad(root);
+    }
+
+    void Awake()
+    {
+        if (instance != null && instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        instance = this;
+        DontDestroyOnLoad(gameObject);
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    void OnDestroy()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+        if (instance == this)
+            instance = null;
+    }
+
+    void Update()
+    {
+        Refresh();
+    }
+
+    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        targetHealth = null;
+        pendingRequestViewId = -1;
+        Refresh();
+    }
+
+    void Refresh()
+    {
+        if (!ShouldShowDuringRound())
+        {
+            if (buttonObject != null)
+                buttonObject.SetActive(false);
+
+            targetHealth = null;
+            pendingRequestViewId = -1;
+            return;
+        }
+
+        targetHealth = ResolveLocalAstronaut();
+        if (targetHealth == null)
+        {
+            if (buttonObject != null)
+                buttonObject.SetActive(false);
+
+            pendingRequestViewId = -1;
+            return;
+        }
+
+        Canvas canvas = ResolveCanvas();
+        if (canvas == null)
+            return;
+
+        EnsureButton(canvas.transform);
+        buttonObject.SetActive(true);
+        buttonObject.transform.SetAsLastSibling();
+
+        int viewId = targetHealth.photonView != null ? targetHealth.photonView.ViewID : -1;
+        if (pendingRequestViewId != viewId)
+            pendingRequestViewId = -1;
+
+        if (killButton != null)
+            killButton.interactable = pendingRequestViewId < 0 && targetHealth.CanRequestAstronautKillMeLocally();
+    }
+
+    PlayerHealth ResolveLocalAstronaut()
+    {
+        if (PhotonNetwork.LocalPlayer != null && PhotonNetwork.LocalPlayer.TagObject is GameObject taggedObject)
+        {
+            PlayerHealth taggedHealth = taggedObject.GetComponent<PlayerHealth>();
+            if (IsUsableLocalAstronaut(taggedHealth))
+                return taggedHealth;
+        }
+
+        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < players.Length; i++)
+        {
+            if (IsUsableLocalAstronaut(players[i]))
+                return players[i];
+        }
+
+        return null;
+    }
+
+    bool IsUsableLocalAstronaut(PlayerHealth health)
+    {
+        if (health == null || health.photonView == null || !health.photonView.IsMine)
+            return false;
+
+        return health.CanRequestAstronautKillMeLocally();
+    }
+
+    bool ShouldShowDuringRound()
+    {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null)
+            return false;
+
+        if (RoomSettings.GetSessionState() != RoomSettings.SessionStateInPlay)
+            return false;
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) ||
+            value is not bool started ||
+            !GameplayHudVisibility.IsGameplayHudVisible(started))
+        {
+            return false;
+        }
+
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.RoundResultsKey, out object snapshotValue) &&
+            snapshotValue is string snapshot &&
+            !string.IsNullOrWhiteSpace(snapshot))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    Canvas ResolveCanvas()
+    {
+        GameObject canvasObject = GameObject.Find("Canvas");
+        if (canvasObject != null)
+        {
+            Canvas namedCanvas = canvasObject.GetComponent<Canvas>();
+            if (namedCanvas != null)
+                return namedCanvas;
+        }
+
+        return FindAnyObjectByType<Canvas>();
+    }
+
+    void EnsureButton(Transform parent)
+    {
+        if (buttonObject != null && buttonObject.scene.IsValid())
+        {
+            if (buttonObject.transform.parent != parent)
+                buttonObject.transform.SetParent(parent, false);
+
+            CacheButtonReferences();
+            ApplyButtonStyle();
+            return;
+        }
+
+        buttonObject = new GameObject(ButtonName, typeof(RectTransform), typeof(Image), typeof(Button));
+        buttonObject.transform.SetParent(parent, false);
+
+        RectTransform rect = buttonObject.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(1f, 1f);
+        rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(1f, 1f);
+        rect.anchoredPosition = new Vector2(-22f, -74f);
+        rect.sizeDelta = new Vector2(176f, 54f);
+
+        GameObject textObject = new GameObject(ButtonTextName, typeof(RectTransform), typeof(TextMeshProUGUI));
+        textObject.transform.SetParent(buttonObject.transform, false);
+
+        RectTransform textRect = textObject.GetComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+
+        buttonText = textObject.GetComponent<TextMeshProUGUI>();
+        buttonText.raycastTarget = false;
+
+        TMP_Text reference = FindAnyObjectByType<TMP_Text>();
+        if (reference != null)
+        {
+            buttonText.font = reference.font;
+            buttonText.fontSharedMaterial = reference.fontSharedMaterial;
+        }
+
+        killButton = buttonObject.GetComponent<Button>();
+        killButton.onClick.RemoveAllListeners();
+        killButton.onClick.AddListener(OnKillMeClicked);
+        ApplyButtonStyle();
+    }
+
+    void CacheButtonReferences()
+    {
+        if (buttonObject == null)
+            return;
+
+        killButton = buttonObject.GetComponent<Button>();
+        buttonText = buttonObject.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (killButton != null)
+        {
+            killButton.onClick.RemoveListener(OnKillMeClicked);
+            killButton.onClick.AddListener(OnKillMeClicked);
+        }
+    }
+
+    void ApplyButtonStyle()
+    {
+        if (buttonObject == null)
+            return;
+
+        RectTransform rect = buttonObject.GetComponent<RectTransform>();
+        if (rect != null)
+        {
+            rect.anchorMin = new Vector2(1f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(1f, 1f);
+            rect.anchoredPosition = new Vector2(-22f, -74f);
+            rect.sizeDelta = new Vector2(176f, 54f);
+        }
+
+        Image image = buttonObject.GetComponent<Image>();
+        if (image != null)
+        {
+            image.color = NormalColor;
+            image.type = Image.Type.Sliced;
+            image.raycastTarget = true;
+        }
+
+        if (killButton != null)
+        {
+            killButton.targetGraphic = image;
+            ColorBlock colors = killButton.colors;
+            colors.normalColor = NormalColor;
+            colors.highlightedColor = HighlightedColor;
+            colors.pressedColor = PressedColor;
+            colors.selectedColor = HighlightedColor;
+            colors.disabledColor = new Color(NormalColor.r, NormalColor.g, NormalColor.b, 0.42f);
+            colors.colorMultiplier = 1f;
+            colors.fadeDuration = 0.08f;
+            killButton.colors = colors;
+        }
+
+        if (buttonText != null)
+        {
+            buttonText.text = "KILL ME";
+            buttonText.fontSize = 22f;
+            buttonText.fontStyle = FontStyles.Bold;
+            buttonText.alignment = TextAlignmentOptions.Center;
+            buttonText.color = Color.white;
+            buttonText.characterSpacing = 1.2f;
+            buttonText.textWrappingMode = TextWrappingModes.NoWrap;
+            buttonText.overflowMode = TextOverflowModes.Ellipsis;
+            buttonText.raycastTarget = false;
+        }
+    }
+
+    void OnKillMeClicked()
+    {
+        PlayerHealth health = targetHealth != null ? targetHealth : ResolveLocalAstronaut();
+        if (health == null || !health.CanRequestAstronautKillMeLocally())
+            return;
+
+        pendingRequestViewId = health.photonView != null ? health.photonView.ViewID : -1;
+        if (killButton != null)
+            killButton.interactable = false;
+
+        health.RequestLocalAstronautKillMe();
     }
 }

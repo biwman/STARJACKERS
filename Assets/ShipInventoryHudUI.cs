@@ -19,9 +19,9 @@ public class ShipInventoryHudUI : MonoBehaviourPun
     const float CargoSlotSize = 99f;
     const float CargoSlotSpacing = 10f;
     const int CargoSlotColumns = 5;
-    const int CargoSlotRows = 2;
+    const int CargoSlotRows = 3;
     const float CargoPanelWidth = 5f * CargoSlotSize + 4f * CargoSlotSpacing;
-    const float CargoPanelHeight = 2f * CargoSlotSize + CargoSlotSpacing;
+    const float CargoPanelHeight = CargoSlotRows * CargoSlotSize + (CargoSlotRows - 1) * CargoSlotSpacing;
     const float CargoSlotIconSize = 74f;
 
     GameObject buttonObject;
@@ -36,6 +36,7 @@ public class ShipInventoryHudUI : MonoBehaviourPun
     Button[] slotButtons;
     Image[] slotIcons;
     TMP_Text[] slotLabels;
+    TMP_Text[] slotBlockedMarks;
     GameObject dragVisualObject;
     Image dragVisualIcon;
     TMP_Text dragVisualLabel;
@@ -198,6 +199,7 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         slotButtons = new Button[PlayerInventoryData.ShipSlotCount];
         slotIcons = new Image[PlayerInventoryData.ShipSlotCount];
         slotLabels = new TMP_Text[PlayerInventoryData.ShipSlotCount];
+        slotBlockedMarks = new TMP_Text[PlayerInventoryData.ShipSlotCount];
 
         Vector2 start = Vector2.zero;
 
@@ -260,6 +262,17 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         labelRect.offsetMin = Vector2.zero;
         labelRect.offsetMax = Vector2.zero;
         slotLabels[index].margin = new Vector4(4f, 4f, 4f, 4f);
+
+        slotBlockedMarks[index] = CreateLabel(slotObject.transform, "BlockedMark", "X", Vector2.zero, Vector2.zero, TextAlignmentOptions.Center, 64f);
+        RectTransform blockedRect = slotBlockedMarks[index].GetComponent<RectTransform>();
+        blockedRect.anchorMin = Vector2.zero;
+        blockedRect.anchorMax = Vector2.one;
+        blockedRect.offsetMin = new Vector2(2f, 2f);
+        blockedRect.offsetMax = new Vector2(-2f, -2f);
+        slotBlockedMarks[index].fontStyle = FontStyles.Bold;
+        slotBlockedMarks[index].color = new Color(1f, 0.08f, 0.04f, 0.92f);
+        slotBlockedMarks[index].raycastTarget = false;
+        slotBlockedMarks[index].enabled = false;
     }
 
     TextMeshProUGUI CreateLabel(Transform parent, string name, string value, Vector2 anchoredPosition, Vector2 size, TextAlignmentOptions alignment, float fontSize)
@@ -358,7 +371,7 @@ public class ShipInventoryHudUI : MonoBehaviourPun
 
     void RefreshUi()
     {
-        if (slotButtons == null || slotIcons == null || slotLabels == null)
+        if (slotButtons == null || slotIcons == null || slotLabels == null || slotBlockedMarks == null)
             return;
 
         PlayerInventoryData inventory = PlayerProfileService.Instance.CurrentProfile != null
@@ -367,35 +380,53 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         PlayerInventoryData normalized = inventory != null ? inventory.Clone() : PlayerInventoryData.Default();
         normalized.Normalize();
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
-        int shipCapacity = PlayerProfileService.GetEffectiveShipInventoryCapacity(shipSkinIndex, normalized.EquipmentSlots);
+        int baseShipCapacity = PlayerProfileService.GetEffectiveShipInventoryCapacity(shipSkinIndex, normalized.EquipmentSlots);
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        int shipCapacity = damageState != null ? damageState.GetAdjustedCargoCapacity(baseShipCapacity) : baseShipCapacity;
 
         int filledSlots = 0;
 
         for (int i = 0; i < normalized.ShipSlots.Length && i < slotButtons.Length; i++)
         {
-            bool slotEnabled = i < shipCapacity;
+            bool slotEnabled = i < baseShipCapacity;
+            bool slotBlockedByDamage = slotEnabled && i >= shipCapacity;
             bool isSafePocket = slotEnabled && PlayerProfileService.IsSafePocketIndex(shipSkinIndex, i);
             bool isAstronautSlot = slotEnabled && PlayerProfileService.IsAstronautCargoIndex(shipSkinIndex, shipCapacity, i);
+            bool isDropbotSlot = slotEnabled && PlayerProfileService.IsDropbotCargoIndex(shipSkinIndex, shipCapacity, i, normalized.EquipmentSlots);
             string itemId = normalized.ShipSlots[i];
             bool occupied = slotEnabled && !string.IsNullOrWhiteSpace(itemId);
+            bool isRadioactiveCargo = occupied && InventoryItemCatalog.IsRadioactiveTreasure(itemId);
             Sprite icon = occupied ? InventoryItemCatalog.GetIcon(itemId) : null;
             Image slotImage = slotButtons[i] != null ? slotButtons[i].GetComponent<Image>() : null;
 
-            if (occupied)
+            if (occupied && !slotBlockedByDamage)
                 filledSlots++;
 
             if (slotButtons[i] != null)
+            {
                 slotButtons[i].gameObject.SetActive(slotEnabled);
+                slotButtons[i].interactable = slotEnabled && !slotBlockedByDamage;
+            }
 
             if (slotImage != null)
             {
-                if (occupied)
+                if (slotBlockedByDamage)
+                {
+                    slotImage.color = occupied
+                        ? new Color(0.34f, 0.08f, 0.08f, 0.98f)
+                        : new Color(0.18f, 0.04f, 0.04f, 0.98f);
+                }
+                else if (occupied)
                 {
                     Color baseColor = InventoryItemCatalog.GetRarityColor(itemId);
-                    if (isSafePocket)
+                    if (isRadioactiveCargo)
+                        slotImage.color = Color.Lerp(baseColor, new Color(0.18f, 0.95f, 0.24f, baseColor.a), 0.58f);
+                    else if (isSafePocket)
                         slotImage.color = Color.Lerp(baseColor, new Color(0.24f, 0.74f, 0.66f, baseColor.a), 0.32f);
                     else if (isAstronautSlot)
                         slotImage.color = Color.Lerp(baseColor, new Color(1f, 0.67f, 0.28f, baseColor.a), 0.28f);
+                    else if (isDropbotSlot)
+                        slotImage.color = Color.Lerp(baseColor, new Color(0.18f, 0.72f, 0.94f, baseColor.a), 0.32f);
                     else
                         slotImage.color = baseColor;
                 }
@@ -405,6 +436,8 @@ public class ShipInventoryHudUI : MonoBehaviourPun
                         slotImage.color = new Color(0.09f, 0.23f, 0.22f, 0.98f);
                     else if (isAstronautSlot)
                         slotImage.color = new Color(0.28f, 0.18f, 0.08f, 0.98f);
+                    else if (isDropbotSlot)
+                        slotImage.color = new Color(0.06f, 0.22f, 0.31f, 0.98f);
                     else
                         slotImage.color = new Color(0.11f, 0.16f, 0.22f, 0.98f);
                 }
@@ -419,7 +452,12 @@ public class ShipInventoryHudUI : MonoBehaviourPun
             if (slotLabels[i] != null)
             {
                 bool showText = occupied && icon == null;
-                if (showText)
+                if (slotBlockedByDamage && !occupied)
+                {
+                    slotLabels[i].text = string.Empty;
+                    slotLabels[i].color = new Color(0f, 0f, 0f, 0f);
+                }
+                else if (showText)
                 {
                     slotLabels[i].text = InventoryItemCatalog.GetShortLabel(itemId);
                     slotLabels[i].color = Color.white;
@@ -434,6 +472,11 @@ public class ShipInventoryHudUI : MonoBehaviourPun
                     slotLabels[i].text = "ASTRO";
                     slotLabels[i].color = occupied ? new Color(0f, 0f, 0f, 0f) : new Color(1f, 0.79f, 0.42f, 0.88f);
                 }
+                else if (isDropbotSlot)
+                {
+                    slotLabels[i].text = "DROP";
+                    slotLabels[i].color = occupied ? new Color(0f, 0f, 0f, 0f) : new Color(0.48f, 0.92f, 1f, 0.9f);
+                }
                 else
                 {
                     slotLabels[i].text = string.Empty;
@@ -441,10 +484,29 @@ public class ShipInventoryHudUI : MonoBehaviourPun
                 }
             }
 
+            if (slotBlockedMarks[i] != null)
+                slotBlockedMarks[i].enabled = slotBlockedByDamage;
+
             if (slotButtons[i] != null)
             {
                 Outline outline = slotButtons[i].GetComponent<Outline>();
-                if (isSafePocket)
+                if (slotBlockedByDamage)
+                {
+                    if (outline == null)
+                        outline = slotButtons[i].gameObject.AddComponent<Outline>();
+                    outline.effectColor = new Color(1f, 0.08f, 0.04f, 0.96f);
+                    outline.effectDistance = new Vector2(3f, 3f);
+                    outline.enabled = true;
+                }
+                else if (isRadioactiveCargo)
+                {
+                    if (outline == null)
+                        outline = slotButtons[i].gameObject.AddComponent<Outline>();
+                    outline.effectColor = new Color(0.34f, 1f, 0.2f, 0.98f);
+                    outline.effectDistance = new Vector2(3f, 3f);
+                    outline.enabled = true;
+                }
+                else if (isSafePocket)
                 {
                     if (outline == null)
                         outline = slotButtons[i].gameObject.AddComponent<Outline>();
@@ -457,6 +519,14 @@ public class ShipInventoryHudUI : MonoBehaviourPun
                     if (outline == null)
                         outline = slotButtons[i].gameObject.AddComponent<Outline>();
                     outline.effectColor = new Color(1f, 0.64f, 0.22f, 0.95f);
+                    outline.effectDistance = new Vector2(2f, 2f);
+                    outline.enabled = true;
+                }
+                else if (isDropbotSlot)
+                {
+                    if (outline == null)
+                        outline = slotButtons[i].gameObject.AddComponent<Outline>();
+                    outline.effectColor = new Color(0.36f, 0.88f, 1f, 0.95f);
                     outline.effectDistance = new Vector2(2f, 2f);
                     outline.enabled = true;
                 }
@@ -482,6 +552,9 @@ public class ShipInventoryHudUI : MonoBehaviourPun
     public void BeginSlotDrag(int index, PointerEventData eventData)
     {
         if (!hudVisible || !panelVisible)
+            return;
+
+        if (IsCargoSlotBlockedByDamage(index))
             return;
 
         string itemId = GetShipItemAt(index);
@@ -597,7 +670,9 @@ public class ShipInventoryHudUI : MonoBehaviourPun
             ? PlayerProfileService.Instance.CurrentProfile.Inventory
             : null;
         string[] equipmentSlots = inventory != null ? inventory.EquipmentSlots : null;
-        int shipCapacity = PlayerProfileService.GetEffectiveShipInventoryCapacity(shipSkinIndex, equipmentSlots);
+        int baseCapacity = PlayerProfileService.GetEffectiveShipInventoryCapacity(shipSkinIndex, equipmentSlots);
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        int shipCapacity = damageState != null ? damageState.GetAdjustedCargoCapacity(baseCapacity) : baseCapacity;
 
         for (int i = 0; i < slotButtons.Length && i < shipCapacity; i++)
         {
@@ -610,6 +685,22 @@ public class ShipInventoryHudUI : MonoBehaviourPun
         }
 
         return -1;
+    }
+
+    bool IsCargoSlotBlockedByDamage(int index)
+    {
+        if (index < 0)
+            return true;
+
+        PlayerInventoryData inventory = PlayerProfileService.Instance.CurrentProfile != null
+            ? PlayerProfileService.Instance.CurrentProfile.Inventory
+            : null;
+        string[] equipmentSlots = inventory != null ? inventory.EquipmentSlots : null;
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
+        int baseCapacity = PlayerProfileService.GetEffectiveShipInventoryCapacity(shipSkinIndex, equipmentSlots);
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        int damagedCapacity = damageState != null ? damageState.GetAdjustedCargoCapacity(baseCapacity) : baseCapacity;
+        return index >= damagedCapacity;
     }
 
     async void DropShipItem(int index)

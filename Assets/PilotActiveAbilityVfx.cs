@@ -382,6 +382,109 @@ public sealed class ConfusionWaveVfx : MonoBehaviour
     }
 }
 
+public sealed class AtlasSuppressorWaveVfx : MonoBehaviour
+{
+    const int PointCount = 128;
+    static Material sharedMaterial;
+
+    LineRenderer outerRing;
+    LineRenderer innerRing;
+    float radius;
+    float duration;
+    float age;
+
+    public static void Spawn(Vector3 position, float targetRadius)
+    {
+        if (!RoomSettings.AreVisualEffectsEnabled())
+            return;
+
+        GameObject obj = new GameObject("AtlasSuppressorWaveVfx");
+        AtlasSuppressorWaveVfx vfx = obj.AddComponent<AtlasSuppressorWaveVfx>();
+        vfx.Initialize(position, targetRadius);
+    }
+
+    void Initialize(Vector3 position, float targetRadius)
+    {
+        radius = Mathf.Max(1f, targetRadius);
+        duration = 0.9f;
+        transform.position = new Vector3(position.x, position.y, -0.43f);
+        outerRing = CreateRing("AtlasSuppressorOuterRing", 0.22f, GameVisualTheme.PlayerSortingOrder + 224);
+        innerRing = CreateRing("AtlasSuppressorInnerRing", 0.08f, GameVisualTheme.PlayerSortingOrder + 225);
+    }
+
+    void Update()
+    {
+        age += Time.deltaTime;
+        float t = Mathf.Clamp01(age / duration);
+        float eased = Mathf.SmoothStep(0f, 1f, t);
+        float currentRadius = Mathf.Lerp(0.3f, radius, eased);
+        float innerRadius = Mathf.Lerp(0.1f, radius * 0.62f, eased);
+        float alpha = Mathf.Sin(t * Mathf.PI) * 0.86f;
+
+        UpdateRing(outerRing, currentRadius, alpha, t, 0.02f);
+        UpdateRing(innerRing, innerRadius, alpha * 0.7f, t, 0.035f);
+
+        if (age >= duration)
+            Destroy(gameObject);
+    }
+
+    void UpdateRing(LineRenderer ring, float currentRadius, float alpha, float t, float rippleScale)
+    {
+        if (ring == null)
+            return;
+
+        for (int i = 0; i < ring.positionCount; i++)
+        {
+            float angle = (i / (float)ring.positionCount) * Mathf.PI * 2f;
+            float ripple = 1f + Mathf.Sin(angle * 10f + age * 16f) * rippleScale;
+            ring.SetPosition(i, new Vector3(Mathf.Cos(angle) * currentRadius * ripple, Mathf.Sin(angle) * currentRadius * ripple, 0f));
+        }
+
+        Color hot = new Color(1f, 0.72f, 0.28f, alpha);
+        Color pale = new Color(1f, 0.97f, 0.82f, alpha * 0.72f);
+        Color color = Color.Lerp(hot, pale, Mathf.Sin(age * 18f) * 0.5f + 0.5f);
+        ring.startColor = color;
+        ring.endColor = color;
+        ring.widthMultiplier = Mathf.Lerp(0.18f, 0.03f, t);
+    }
+
+    LineRenderer CreateRing(string objectName, float width, int sortingOrder)
+    {
+        GameObject ringObject = new GameObject(objectName);
+        ringObject.transform.SetParent(transform, false);
+        LineRenderer line = ringObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = false;
+        line.loop = true;
+        line.positionCount = PointCount;
+        line.widthMultiplier = width;
+        line.numCapVertices = 12;
+        line.numCornerVertices = 8;
+        line.alignment = LineAlignment.View;
+        line.material = GetMaterial();
+        line.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        line.sortingOrder = sortingOrder;
+        return line;
+    }
+
+    static Material GetMaterial()
+    {
+        if (sharedMaterial != null)
+            return sharedMaterial;
+
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null)
+            shader = Shader.Find("Unlit/Color");
+
+        sharedMaterial = new Material(shader)
+        {
+            name = "AtlasSuppressorWaveVfxMaterial",
+            color = Color.white
+        };
+        sharedMaterial.renderQueue = 3500;
+        return sharedMaterial;
+    }
+}
+
 public sealed class NovaScavengerBurstVfx : MonoBehaviour
 {
     const float DefaultLifetime = 2.5f;

@@ -35,7 +35,7 @@ public static class NewItemsRuntime
         if (!PhotonNetwork.IsMasterClient || owner == null || owner.photonView == null)
             return false;
 
-        Vector3 spawnPosition = ResolveRearSpawnPosition(owner.transform, 0.95f, 1.45f);
+        Vector3 spawnPosition = ResolveRearSpawnPosition(owner.transform, 0.95f, 1.1f);
         Vector2 forward = owner.transform.up.sqrMagnitude > 0.001f ? (Vector2)owner.transform.up.normalized : Vector2.up;
         GameObject bombObject = PhotonNetwork.InstantiateRoomObject(
             "Player",
@@ -76,6 +76,40 @@ public static class NewItemsRuntime
             return false;
 
         PlayerDeployableRuntime.EnsureAttached(drillObject);
+        return true;
+    }
+
+    public static bool TryLaunchDropbot(PlayerShooting owner, string itemId)
+    {
+        if (!PhotonNetwork.IsMasterClient ||
+            owner == null ||
+            owner.photonView == null ||
+            owner.photonView.Owner == null ||
+            string.IsNullOrWhiteSpace(itemId))
+        {
+            return false;
+        }
+
+        if (!DropbotDeployable.TryFindNearestExtraction(owner.transform.position, out Vector2 extractionPosition))
+            return false;
+
+        Vector3 spawnPosition = owner.transform.position + owner.transform.right * 0.68f - owner.transform.up * 0.12f;
+        Vector2 direction = extractionPosition - (Vector2)spawnPosition;
+        Quaternion rotation = direction.sqrMagnitude > 0.001f
+            ? Quaternion.LookRotation(Vector3.forward, direction.normalized)
+            : owner.transform.rotation;
+
+        GameObject dropbotObject = PhotonNetwork.InstantiateRoomObject(
+            "Player",
+            spawnPosition,
+            rotation,
+            0,
+            new object[] { PlayerDeployableRuntime.DropbotMarker, owner.photonView.ViewID, itemId, extractionPosition.x, extractionPosition.y });
+
+        if (dropbotObject == null)
+            return false;
+
+        PlayerDeployableRuntime.EnsureAttached(dropbotObject);
         return true;
     }
 
@@ -150,26 +184,46 @@ public static class NewItemsRuntime
 
 public static class RuntimeSpriteUtility
 {
+    static readonly Dictionary<string, Sprite> SpriteCacheByKey = new Dictionary<string, Sprite>(StringComparer.Ordinal);
+    static Sprite arrowSprite;
+
     public static Sprite LoadSprite(string resourcePath, string editorAssetPath)
     {
+        string cacheKey = BuildCacheKey(resourcePath, editorAssetPath);
+        if (SpriteCacheByKey.TryGetValue(cacheKey, out Sprite cachedSprite))
+            return cachedSprite;
+
         Sprite sprite = Resources.Load<Sprite>(resourcePath);
-        if (sprite != null)
-            return sprite;
+        if (sprite == null)
+        {
+            Sprite[] sprites = Resources.LoadAll<Sprite>(resourcePath);
+            sprite = GetLargestSprite(sprites);
+        }
 
-        Sprite[] sprites = Resources.LoadAll<Sprite>(resourcePath);
-        sprite = GetLargestSprite(sprites);
-        if (sprite != null)
-            return sprite;
-
-        Texture2D texture = Resources.Load<Texture2D>(resourcePath);
-        if (texture != null)
-            return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), Mathf.Max(100f, Mathf.Max(texture.width, texture.height)));
+        if (sprite == null)
+        {
+            Texture2D texture = Resources.Load<Texture2D>(resourcePath);
+            if (texture != null)
+                sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), Mathf.Max(100f, Mathf.Max(texture.width, texture.height)));
+        }
 
 #if UNITY_EDITOR
-        if (!string.IsNullOrWhiteSpace(editorAssetPath))
+        if (sprite == null && !string.IsNullOrWhiteSpace(editorAssetPath))
             sprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(editorAssetPath);
 #endif
+
+        SpriteCacheByKey[cacheKey] = sprite;
+        PrewarmSpriteTexture(sprite);
         return sprite;
+    }
+
+    public static void PrewarmSprites(params string[] resourcePaths)
+    {
+        if (resourcePaths == null)
+            return;
+
+        for (int i = 0; i < resourcePaths.Length; i++)
+            LoadSprite(resourcePaths[i], string.Empty);
     }
 
     public static void FitRenderer(SpriteRenderer renderer, float targetSize)
@@ -186,8 +240,25 @@ public static class RuntimeSpriteUtility
         renderer.transform.localScale = new Vector3(scale, scale, 1f);
     }
 
+    public static void FitRendererWorldSize(SpriteRenderer renderer, float targetWorldSize)
+    {
+        if (renderer == null || renderer.sprite == null)
+            return;
+
+        Transform parent = renderer.transform.parent;
+        Vector3 parentScale = parent != null ? parent.lossyScale : Vector3.one;
+        float parentMaxScale = Mathf.Max(Mathf.Abs(parentScale.x), Mathf.Abs(parentScale.y));
+        if (parentMaxScale <= 0.0001f)
+            parentMaxScale = 1f;
+
+        FitRenderer(renderer, targetWorldSize / parentMaxScale);
+    }
+
     public static Sprite CreateArrowSprite()
     {
+        if (arrowSprite != null)
+            return arrowSprite;
+
         Texture2D texture = new Texture2D(64, 64, TextureFormat.ARGB32, false);
         Color clear = new Color(1f, 1f, 1f, 0f);
         for (int y = 0; y < texture.height; y++)
@@ -211,7 +282,21 @@ public static class RuntimeSpriteUtility
 
         texture.Apply();
         texture.name = "RuntimeGuidanceArrow";
-        return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 64f);
+        arrowSprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 64f);
+        return arrowSprite;
+    }
+
+    static string BuildCacheKey(string resourcePath, string editorAssetPath)
+    {
+        return (resourcePath ?? string.Empty) + "|" + (editorAssetPath ?? string.Empty);
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
     }
 
     static Sprite GetLargestSprite(Sprite[] sprites)
@@ -337,6 +422,17 @@ public sealed class AstroCutterBeamVfx : MonoBehaviour
         AstroCutterBeamVfx beam = beamObject.AddComponent<AstroCutterBeamVfx>();
         beam.Initialize(sourceView.transform, sourceViewId, beamDirection, beamRange, duration, useFullWidth);
         ActiveBeams[sourceViewId] = new BeamEntry { Beam = beam };
+    }
+
+    public static void ResetForSessionTransition()
+    {
+        List<BeamEntry> active = new List<BeamEntry>(ActiveBeams.Values);
+        ActiveBeams.Clear();
+        for (int i = 0; i < active.Count; i++)
+        {
+            if (active[i]?.Beam != null)
+                Destroy(active[i].Beam.gameObject);
+        }
     }
 
     public static void StopBeam(int sourceViewId)
@@ -747,7 +843,7 @@ public sealed class GuidanceSystemOverlay : MonoBehaviourPun
     Vector2? ResolveClosestHostile()
     {
         Vector2 origin = transform.position;
-        PlayerHealth[] healths = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] healths = UnityEngine.Object.FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         PlayerHealth bestHuman = null;
         PlayerHealth bestBot = null;
         float bestHumanDistance = float.MaxValue;
@@ -807,18 +903,322 @@ public sealed class GuidanceSystemOverlay : MonoBehaviourPun
     }
 }
 
+public static class ValuableCargoCarrierUtility
+{
+    public static int CountCargoItem(Player player, string itemId)
+    {
+        if (player == null || string.IsNullOrWhiteSpace(itemId))
+            return 0;
+
+        string[] slots = PlayerProfileService.GetPlayerShipInventorySlots(player);
+        int capacity = PlayerProfileService.GetPlayerShipInventoryCapacity(player);
+        int count = 0;
+        for (int i = 0; i < slots.Length && i < capacity; i++)
+        {
+            if (string.Equals(slots[i], itemId, StringComparison.Ordinal))
+                count++;
+        }
+
+        return count;
+    }
+
+    public static bool TryGetTrackedCargoMarkerColor(string itemId, out Color color)
+    {
+        if (string.Equals(itemId, InventoryItemCatalog.PirateCaseId, StringComparison.Ordinal))
+        {
+            color = new Color(1f, 0.46f, 0.08f, 0.96f);
+            return true;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.CashSuitcaseId, StringComparison.Ordinal))
+        {
+            color = new Color(1f, 0.86f, 0.18f, 0.96f);
+            return true;
+        }
+
+        color = Color.white;
+        return false;
+    }
+
+    public static PlayerHealth FindActiveHumanShipForPlayer(Player player)
+    {
+        if (player == null)
+            return null;
+
+        PlayerHealth[] healths = UnityEngine.Object.FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < healths.Length; i++)
+        {
+            PlayerHealth candidate = healths[i];
+            if (!IsActiveHumanShip(candidate))
+                continue;
+
+            if (candidate.photonView != null && candidate.photonView.OwnerActorNr == player.ActorNumber)
+                return candidate;
+        }
+
+        return null;
+    }
+
+    public static bool IsPirateCaseCarrier(PlayerHealth candidate)
+    {
+        return IsActiveHumanShip(candidate) &&
+               CountCargoItem(candidate.photonView.Owner, InventoryItemCatalog.PirateCaseId) > 0;
+    }
+
+    public static PlayerHealth FindBestPirateCaseCarrier(Vector2 origin, float maxDistance, PlayerHealth observer = null)
+    {
+        PlayerHealth[] healths = UnityEngine.Object.FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth best = null;
+        int bestCaseCount = 0;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < healths.Length; i++)
+        {
+            PlayerHealth candidate = healths[i];
+            if (!IsActiveHumanShip(candidate) || candidate == observer)
+                continue;
+
+            int caseCount = CountCargoItem(candidate.photonView.Owner, InventoryItemCatalog.PirateCaseId);
+            if (caseCount <= 0)
+                continue;
+
+            float distance = Vector2.Distance(origin, candidate.transform.position);
+            if (distance > maxDistance)
+                continue;
+
+            if (best == null || caseCount > bestCaseCount || (caseCount == bestCaseCount && distance < bestDistance))
+            {
+                best = candidate;
+                bestCaseCount = caseCount;
+                bestDistance = distance;
+            }
+        }
+
+        return best;
+    }
+
+    public static int FindBestPirateCaseCarrierViewId(Vector2 origin, float maxDistance, PlayerHealth observer = null)
+    {
+        PlayerHealth target = FindBestPirateCaseCarrier(origin, maxDistance, observer);
+        return target != null && target.photonView != null ? target.photonView.ViewID : 0;
+    }
+
+    static bool IsActiveHumanShip(PlayerHealth candidate)
+    {
+        return candidate != null &&
+               candidate.photonView != null &&
+               !candidate.IsWreck &&
+               !candidate.IsBotControlled &&
+               !candidate.IsNeutralRiderControlled &&
+               !candidate.IsAstronautControlled &&
+               !candidate.IsEvacuationAnimating;
+    }
+}
+
+public sealed class ValuableCargoCarrierOverlay : MonoBehaviourPun
+{
+    sealed class CargoMarkerTarget
+    {
+        public Transform Target;
+        public Color Color;
+    }
+
+    sealed class CargoMarkerArrow
+    {
+        public GameObject Root;
+        public SpriteRenderer Renderer;
+    }
+
+    const float RefreshInterval = 0.2f;
+    const float ArrowDistance = 2.12f;
+    const float BaseScale = 0.34f;
+    static Sprite arrowSprite;
+
+    readonly List<CargoMarkerTarget> markerTargets = new List<CargoMarkerTarget>();
+    readonly List<CargoMarkerArrow> arrows = new List<CargoMarkerArrow>();
+    float nextRefreshTime;
+
+    void Update()
+    {
+        if (photonView != null && !photonView.IsMine)
+        {
+            SetAllVisible(false);
+            return;
+        }
+
+        if (!PhotonNetwork.InRoom || GameplayHudVisibility.IsExtractionCinematicSuppressed)
+        {
+            SetAllVisible(false);
+            return;
+        }
+
+        if (Time.time >= nextRefreshTime)
+        {
+            nextRefreshTime = Time.time + RefreshInterval;
+            RefreshTargets();
+        }
+
+        UpdateArrows();
+    }
+
+    void RefreshTargets()
+    {
+        markerTargets.Clear();
+
+        Player[] players = PhotonNetwork.PlayerList;
+        Player localPlayer = PhotonNetwork.LocalPlayer;
+        if (players == null || localPlayer == null)
+            return;
+
+        for (int i = 0; i < players.Length; i++)
+        {
+            Player player = players[i];
+            if (player == null || player.ActorNumber == localPlayer.ActorNumber)
+                continue;
+
+            PlayerHealth carrier = ValuableCargoCarrierUtility.FindActiveHumanShipForPlayer(player);
+            if (carrier == null)
+                continue;
+
+            AddCargoMarkersForPlayer(player, carrier.transform, InventoryItemCatalog.PirateCaseId);
+            AddCargoMarkersForPlayer(player, carrier.transform, InventoryItemCatalog.CashSuitcaseId);
+        }
+
+        EnsureArrowCount(markerTargets.Count);
+    }
+
+    void AddCargoMarkersForPlayer(Player player, Transform target, string itemId)
+    {
+        int count = ValuableCargoCarrierUtility.CountCargoItem(player, itemId);
+        if (count <= 0 || target == null)
+            return;
+
+        if (!ValuableCargoCarrierUtility.TryGetTrackedCargoMarkerColor(itemId, out Color color))
+            return;
+
+        for (int i = 0; i < count; i++)
+            markerTargets.Add(new CargoMarkerTarget { Target = target, Color = color });
+    }
+
+    void EnsureArrowCount(int count)
+    {
+        arrowSprite ??= RuntimeSpriteUtility.CreateArrowSprite();
+        while (arrows.Count < count)
+        {
+            GameObject root = new GameObject("ValuableCargoCarrierArrow_" + arrows.Count.ToString("00"));
+            SpriteRenderer renderer = root.AddComponent<SpriteRenderer>();
+            renderer.sprite = arrowSprite;
+            renderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+            renderer.sortingOrder = 94;
+            root.transform.localScale = Vector3.one * BaseScale;
+            root.SetActive(false);
+            arrows.Add(new CargoMarkerArrow { Root = root, Renderer = renderer });
+        }
+    }
+
+    void UpdateArrows()
+    {
+        EnsureArrowCount(markerTargets.Count);
+        int targetCount = markerTargets.Count;
+        Vector2 origin = transform.position;
+
+        for (int i = 0; i < arrows.Count; i++)
+        {
+            CargoMarkerArrow arrow = arrows[i];
+            if (arrow == null || arrow.Root == null)
+                continue;
+
+            bool visible = i < targetCount && markerTargets[i]?.Target != null;
+            arrow.Root.SetActive(visible);
+            if (!visible)
+                continue;
+
+            CargoMarkerTarget target = markerTargets[i];
+            Vector2 direction = (Vector2)target.Target.position - origin;
+            if (direction.sqrMagnitude < 0.001f)
+                direction = Vector2.up;
+
+            direction.Normalize();
+            Vector2 tangent = new Vector2(-direction.y, direction.x);
+            float sideIndex = i - (targetCount - 1) * 0.5f;
+            float sideOffset = Mathf.Clamp(sideIndex * 0.28f, -1.15f, 1.15f);
+            Vector2 position = origin + direction * (ArrowDistance + Mathf.Abs(sideIndex) * 0.015f) + tangent * sideOffset;
+
+            arrow.Root.transform.position = new Vector3(position.x, position.y, -0.36f);
+            float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
+            arrow.Root.transform.rotation = Quaternion.Euler(0f, 0f, angle);
+            float pulse = 0.88f + Mathf.Sin(Time.time * 6.2f + i * 0.73f) * 0.08f;
+            arrow.Root.transform.localScale = Vector3.one * (BaseScale * pulse);
+
+            if (arrow.Renderer != null)
+                arrow.Renderer.color = target.Color;
+        }
+    }
+
+    void SetAllVisible(bool visible)
+    {
+        for (int i = 0; i < arrows.Count; i++)
+        {
+            if (arrows[i]?.Root != null)
+                arrows[i].Root.SetActive(visible);
+        }
+    }
+
+    void OnDestroy()
+    {
+        for (int i = 0; i < arrows.Count; i++)
+        {
+            if (arrows[i]?.Root != null)
+                Destroy(arrows[i].Root);
+        }
+
+        arrows.Clear();
+        markerTargets.Clear();
+    }
+}
+
 public static class PlayerDeployableRuntime
 {
     public const string AutoTurretMarker = "player_auto_turret";
+    public const string ContainerShipAutoCannonMarker = "container_ship_auto_cannon";
     public const string SpaceBombMarker = "player_space_bomb";
     public const string SpaceDrillMarker = "player_space_drill";
+    public const string DropbotMarker = "player_dropbot";
+
+    public static void PrewarmRoundAssets()
+    {
+        RuntimeSpriteUtility.LoadSprite("auto_turret_top_down_resource", "Assets/auto_turret_top_down.png");
+        RuntimeSpriteUtility.LoadSprite("Items/space_bomb_gadget_bullet", "Assets/space_bomb_gadget_bullet.png");
+        RuntimeSpriteUtility.LoadSprite("space_drill_top_down_resource", "Assets/space_drill_top_down.png");
+        RuntimeSpriteUtility.LoadSprite("space_trap_top_down_resource", "Assets/space_trap_top_down.png");
+        RuntimeSpriteUtility.LoadSprite("looting_friend_top_down_resource", "Assets/looting_friend_top_down.png");
+        RuntimeSpriteUtility.LoadSprite("firing_friend_up_resource", "Assets/firing_friend_up.png");
+        RuntimeSpriteUtility.LoadSprite("dropbot_up_resource", "Assets/Resources/dropbot_up_resource.png");
+        RuntimeSpriteUtility.LoadSprite("lure_beacon_onmap_resource", string.Empty);
+        RuntimeSpriteUtility.LoadSprite("Items/escape_pod", string.Empty);
+
+        RuntimeSpriteUtility.CreateArrowSprite();
+    }
 
     public static bool IsInstantiationData(object[] data)
     {
         return data != null &&
                data.Length > 0 &&
                data[0] is string marker &&
-               (marker == AutoTurretMarker || marker == SpaceBombMarker || marker == SpaceDrillMarker);
+               (marker == AutoTurretMarker || marker == ContainerShipAutoCannonMarker || marker == SpaceBombMarker || marker == SpaceDrillMarker || marker == DropbotMarker);
+    }
+
+    public static bool IsContainerShipAutoCannonData(object[] data)
+    {
+        return data != null &&
+               data.Length > 0 &&
+               data[0] is string marker &&
+               marker == ContainerShipAutoCannonMarker;
+    }
+
+    public static bool IsComputerOwnedDeployableData(object[] data)
+    {
+        return IsContainerShipAutoCannonData(data);
     }
 
     public static PlayerDeployableBase EnsureAttached(GameObject target)
@@ -831,7 +1231,7 @@ public static class PlayerDeployableRuntime
         if (data == null || data.Length == 0 || !(data[0] is string marker))
             return null;
 
-        if (marker == AutoTurretMarker)
+        if (marker == AutoTurretMarker || marker == ContainerShipAutoCannonMarker)
         {
             AutoTurretDeployable turret = target.GetComponent<AutoTurretDeployable>();
             if (turret == null)
@@ -861,6 +1261,16 @@ public static class PlayerDeployableRuntime
             return drill;
         }
 
+        if (marker == DropbotMarker)
+        {
+            DropbotDeployable dropbot = target.GetComponent<DropbotDeployable>();
+            if (dropbot == null)
+                dropbot = target.AddComponent<DropbotDeployable>();
+
+            dropbot.InitializeFromPhotonData();
+            return dropbot;
+        }
+
         return null;
     }
 }
@@ -879,6 +1289,12 @@ public abstract class PlayerDeployableBase : MonoBehaviourPun
 
     public bool CanBeTargeted => initialized && !destroyed && currentHp > 0;
     public int OwnerShipViewId => ownerShipViewId;
+    public bool IsComputerOwnedDeployable => PlayerDeployableRuntime.IsComputerOwnedDeployableData(photonView != null ? photonView.InstantiationData : null);
+    public bool CanBeTargetedByEnemyBots => CanBeTargeted && !IsComputerOwnedDeployable;
+    public WeaponHitContext LastDamageContext { get; private set; }
+    public float LastDamageShieldMultiplier { get; private set; } = 1f;
+    public float LastDamageHpMultiplier { get; private set; } = 1f;
+    public string LastDamageDebugSummary => WeaponDamageInteractionCatalog.BuildDebugSummary(LastDamageContext, LastDamageShieldMultiplier, LastDamageHpMultiplier);
     protected abstract int MaxHp { get; }
     protected abstract int MaxShield { get; }
     protected abstract float VisualTargetSize { get; }
@@ -965,11 +1381,43 @@ public abstract class PlayerDeployableBase : MonoBehaviourPun
     [PunRPC]
     public void TakeDeployableDamageAt(int shieldDamage, int hpDamage, int attackerViewId, float impactX, float impactY)
     {
+        TakeDeployableDamageAtInternal(shieldDamage, hpDamage, attackerViewId, impactX, impactY, WeaponHitContext.None);
+    }
+
+    [PunRPC]
+    public void TakeDeployableDamageWithContextAt(
+        int shieldDamage,
+        int hpDamage,
+        int attackerViewId,
+        float impactX,
+        float impactY,
+        int damageType,
+        int deliveryMethod,
+        int deliveryFlags,
+        string damageSource)
+    {
+        TakeDeployableDamageAtInternal(
+            shieldDamage,
+            hpDamage,
+            attackerViewId,
+            impactX,
+            impactY,
+            WeaponHitContext.FromRpc(damageType, deliveryMethod, deliveryFlags, damageSource));
+    }
+
+    void TakeDeployableDamageAtInternal(int shieldDamage, int hpDamage, int attackerViewId, float impactX, float impactY, WeaponHitContext hitContext)
+    {
         if (!PhotonNetwork.IsMasterClient || !CanBeTargeted)
             return;
 
-        int rawShieldDamage = Mathf.Max(0, shieldDamage);
-        int rawHpDamage = Mathf.Max(0, hpDamage);
+        if (IsComputerOwnedDeployable && attackerViewId > 0 && !EnemyBot.IsPlayerControlledDamageSource(attackerViewId))
+            return;
+
+        WeaponDamageMultipliers damageMultipliers = WeaponDamageInteractionCatalog.ResolveMultipliers(hitContext);
+        RememberDamageContext(hitContext, damageMultipliers);
+        int rawShieldDamage = WeaponDamageInteractionCatalog.ApplyMultiplier(Mathf.Max(0, shieldDamage), damageMultipliers.ShieldMultiplier);
+        int rawHpDamage = WeaponDamageInteractionCatalog.ApplyMultiplier(Mathf.Max(0, hpDamage), damageMultipliers.HpMultiplier);
+        WeaponDamageInteractionCatalog.LogDamageContext(this, "deployable-profile", hitContext, damageMultipliers, attackerViewId, rawShieldDamage, rawHpDamage);
         int absorbed = 0;
         int damage = 0;
         if (currentShield > 0)
@@ -1001,16 +1449,53 @@ public abstract class PlayerDeployableBase : MonoBehaviourPun
     [PunRPC]
     public void TakeDeployableShieldOnlyDamageAt(int shieldDamage, int attackerViewId, float impactX, float impactY)
     {
+        TakeDeployableShieldOnlyDamageAtInternal(shieldDamage, attackerViewId, impactX, impactY, WeaponHitContext.None);
+    }
+
+    [PunRPC]
+    public void TakeDeployableShieldOnlyDamageWithContextAt(
+        int shieldDamage,
+        int attackerViewId,
+        float impactX,
+        float impactY,
+        int damageType,
+        int deliveryMethod,
+        int deliveryFlags,
+        string damageSource)
+    {
+        TakeDeployableShieldOnlyDamageAtInternal(
+            shieldDamage,
+            attackerViewId,
+            impactX,
+            impactY,
+            WeaponHitContext.FromRpc(damageType, deliveryMethod, deliveryFlags, damageSource));
+    }
+
+    void TakeDeployableShieldOnlyDamageAtInternal(int shieldDamage, int attackerViewId, float impactX, float impactY, WeaponHitContext hitContext)
+    {
         if (!PhotonNetwork.IsMasterClient || !CanBeTargeted)
             return;
 
-        int damage = Mathf.Max(0, shieldDamage);
+        if (IsComputerOwnedDeployable && attackerViewId > 0 && !EnemyBot.IsPlayerControlledDamageSource(attackerViewId))
+            return;
+
+        WeaponDamageMultipliers damageMultipliers = WeaponDamageInteractionCatalog.ResolveMultipliers(hitContext);
+        RememberDamageContext(hitContext, damageMultipliers);
+        int damage = WeaponDamageInteractionCatalog.ApplyMultiplier(Mathf.Max(0, shieldDamage), damageMultipliers.ShieldMultiplier);
+        WeaponDamageInteractionCatalog.LogDamageContext(this, "deployable-shield", hitContext, damageMultipliers, attackerViewId, damage, 0);
         if (damage <= 0 || currentShield <= 0)
             return;
 
         int absorbed = Mathf.Min(currentShield, damage);
         currentShield -= absorbed;
         photonView.RPC(nameof(PlayDeployableHitRpc), RpcTarget.All, true, impactX, impactY);
+    }
+
+    void RememberDamageContext(WeaponHitContext hitContext, WeaponDamageMultipliers damageMultipliers)
+    {
+        LastDamageContext = hitContext;
+        LastDamageShieldMultiplier = damageMultipliers.ShieldMultiplier;
+        LastDamageHpMultiplier = damageMultipliers.HpMultiplier;
     }
 
     public void PlayDeployableHitRpc(bool shieldHit, float x, float y)
@@ -1184,11 +1669,13 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
     const float FireAngleTolerance = 10f;
     const float RotationSpeedDegreesPerSecond = 180f;
     const string BulletEffectId = "auto_turret";
+    const string ContainerShipBulletEffectId = "container_auto_cannon";
     static readonly Color BulletColor = new Color(1f, 0.62f, 0.12f, 1f);
 
     float nextShotTime;
     int shotsSinceBreak;
     float breakUntil;
+    bool containerShipAutoCannon;
 
     protected override int MaxHp => 50;
     protected override int MaxShield => 50;
@@ -1213,6 +1700,7 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
 
     public void InitializeFromPhotonData()
     {
+        containerShipAutoCannon = PlayerDeployableRuntime.IsContainerShipAutoCannonData(photonView != null ? photonView.InstantiationData : null);
         InitializeCommon();
     }
 
@@ -1277,10 +1765,18 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
             if (candidate.photonView.ViewID == ownerShipViewId || candidate.GetComponent<LureBeaconDecoy>() != null)
                 continue;
 
-            EnemyBot enemyBot = candidate.GetComponent<EnemyBot>();
-            bool hostile = enemyBot != null || candidate.IsBotControlled || (ownerActorNumber > 0 && candidate.photonView.OwnerActorNr != ownerActorNumber);
-            if (!hostile)
-                continue;
+            if (containerShipAutoCannon)
+            {
+                if (!IsPlayerShipTarget(candidate))
+                    continue;
+            }
+            else
+            {
+                EnemyBot enemyBot = candidate.GetComponent<EnemyBot>();
+                bool hostile = enemyBot != null || candidate.IsBotControlled || (ownerActorNumber > 0 && candidate.photonView.OwnerActorNr != ownerActorNumber);
+                if (!hostile)
+                    continue;
+            }
 
             float distance = Vector2.Distance(transform.position, candidate.transform.position);
             if (distance > TargetRange || distance >= bestDistance)
@@ -1291,6 +1787,15 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
         }
 
         return best;
+    }
+
+    static bool IsPlayerShipTarget(PlayerHealth candidate)
+    {
+        return candidate != null &&
+               !candidate.IsBotControlled &&
+               !candidate.IsAstronautControlled &&
+               candidate.GetComponent<PlayerDeployableBase>() == null &&
+               candidate.GetComponent<LureBeaconDecoy>() == null;
     }
 
     void FirePair(Vector2 direction)
@@ -1305,11 +1810,7 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
     void SpawnBullet(Vector2 direction, Vector3 position)
     {
         float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
-        GameObject bullet = PhotonNetwork.Instantiate(
-            "Bullet",
-            position,
-            Quaternion.Euler(0f, 0f, angle),
-            0,
+        object[] data = Bullet.AppendWeaponMetadata(
             new object[]
             {
                 ownerShipViewId,
@@ -1324,9 +1825,19 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
                 Damage,
                 false,
                 0f,
-                BulletEffectId,
+                containerShipAutoCannon ? ContainerShipBulletEffectId : BulletEffectId,
                 10f
-            });
+            },
+            WeaponDamageType.Laser,
+            WeaponDeliveryMethod.DeployableTurret,
+            WeaponDeliveryFlags.Autonomous | WeaponDeliveryFlags.Paired);
+
+        GameObject bullet = PhotonNetwork.Instantiate(
+            "Bullet",
+            position,
+            Quaternion.Euler(0f, 0f, angle),
+            0,
+            data);
 
         if (bullet == null)
             return;
@@ -1396,6 +1907,8 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
     const int ExplosionDamage = 170;
     const int ObstacleDamage = 260;
     const float OwnerCollisionEnablePadding = 0.05f;
+    const float BombColliderWidth = 0.9f;
+    const float BombColliderLength = 3.25f;
     static readonly Collider2D[] ExplosionHits = new Collider2D[160];
 
     Vector2 launchDirection = Vector2.up;
@@ -1406,13 +1919,14 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
     float launchedAt;
     bool launched;
     bool detonationStarted;
+    int dynamicZoomToken;
     TrailRenderer engineTrail;
     SpriteRenderer engineGlowRenderer;
 
     protected override int MaxHp => 80;
     protected override int MaxShield => 40;
     protected override float VisualTargetSize => 3.7f;
-    protected override float CollisionRadius => 1.44f;
+    protected override float CollisionRadius => 0.55f;
     protected override string SpriteResourcePath => "Items/space_bomb_gadget_bullet";
     protected override string EditorSpritePath => "Assets/space_bomb_gadget_bullet.png";
 
@@ -1473,15 +1987,17 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
         }
 
         CircleCollider2D circle = GetComponent<CircleCollider2D>();
-        if (circle == null)
-            circle = gameObject.AddComponent<CircleCollider2D>();
-
-        circle.isTrigger = false;
-        SetWorldRadius(circle, CollisionRadius);
+        if (circle != null)
+            circle.enabled = false;
 
         BoxCollider2D box = GetComponent<BoxCollider2D>();
-        if (box != null)
-            box.enabled = false;
+        if (box == null)
+            box = gameObject.AddComponent<BoxCollider2D>();
+
+        box.enabled = true;
+        box.isTrigger = false;
+        box.offset = Vector2.zero;
+        SetWorldBoxSize(box, new Vector2(BombColliderWidth, BombColliderLength));
     }
 
     protected override void ConfigureVisuals()
@@ -1526,6 +2042,9 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
 
         UpdateRearEjectionMotion();
         UpdateArmingVisual();
+        if (launched && dynamicZoomToken > 0)
+            DynamicCameraZoomController.UpdateWorldPosition(dynamicZoomToken, transform.position);
+
         if (!PhotonNetwork.IsMasterClient)
             return;
 
@@ -1577,6 +2096,7 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
         }
 
         SetEngineActive(true);
+        dynamicZoomToken = DynamicCameraZoomController.Request(DynamicCameraZoomProfiles.SpaceBombFlight, transform.position, MaxFlightLifetime + 0.4f);
         AudioManager.Instance.PlayRocketLaunchAt(transform.position);
     }
 
@@ -1641,13 +2161,27 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
         if (!hit.isTrigger)
             return true;
 
-        return hit.GetComponentInParent<PlayerHealth>() != null ||
-               hit.GetComponentInParent<PlayerDeployableBase>() != null ||
+        if (hit.GetComponentInParent<PlayerHealth>() != null)
+            return false;
+
+        return hit.GetComponentInParent<PlayerDeployableBase>() != null ||
                hit.GetComponentInParent<ObstacleChunk>() != null ||
                hit.GetComponentInParent<MovingSpaceObject>() != null ||
                hit.GetComponentInParent<Treasure>() != null ||
                hit.GetComponentInParent<ShipWreck>() != null ||
                hit.GetComponentInParent<DroppedCargoCrate>() != null;
+    }
+
+    static void SetWorldBoxSize(BoxCollider2D box, Vector2 worldSize)
+    {
+        if (box == null)
+            return;
+
+        float scaleX = Mathf.Max(Mathf.Abs(box.transform.lossyScale.x), 0.001f);
+        float scaleY = Mathf.Max(Mathf.Abs(box.transform.lossyScale.y), 0.001f);
+        box.size = new Vector2(
+            Mathf.Max(0.01f, worldSize.x / scaleX),
+            Mathf.Max(0.01f, worldSize.y / scaleY));
     }
 
     void DetonateOnMaster(Vector3 worldPosition)
@@ -1690,6 +2224,11 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
         int hitCount = Physics2D.OverlapCircle(center, ExplosionRadius, filter, ExplosionHits);
         HashSet<int> damagedViews = new HashSet<int>();
         HashSet<string> damagedObstacles = new HashSet<string>(StringComparer.Ordinal);
+        WeaponHitContext hitContext = new WeaponHitContext(
+            WeaponDamageType.Explosive,
+            WeaponDeliveryMethod.DirectProjectile,
+            WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.Delayed,
+            PlayerHealth.DamageSourceExplosive);
 
         for (int i = 0; i < hitCount; i++)
         {
@@ -1700,7 +2239,18 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
             PlayerDeployableBase deployable = hit.GetComponentInParent<PlayerDeployableBase>();
             if (deployable != null && deployable != this && deployable.photonView != null && deployable.CanBeTargeted && damagedViews.Add(deployable.photonView.ViewID))
             {
-                deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, ExplosionDamage, ExplosionDamage, ownerShipViewId, center.x, center.y);
+                deployable.photonView.RPC(
+                    nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                    RpcTarget.MasterClient,
+                    ExplosionDamage,
+                    ExplosionDamage,
+                    ownerShipViewId,
+                    center.x,
+                    center.y,
+                    (int)hitContext.DamageType,
+                    (int)hitContext.DeliveryMethod,
+                    (int)hitContext.DeliveryFlags,
+                    hitContext.DamageSource ?? string.Empty);
                 continue;
             }
 
@@ -1708,7 +2258,18 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
             if (health != null && health.photonView != null && !health.IsWreck && damagedViews.Add(health.photonView.ViewID))
             {
                 int scaledDamage = Mathf.RoundToInt(ExplosionDamage * ResolveBossDamageMultiplier(health));
-                health.photonView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, scaledDamage, scaledDamage, ownerShipViewId, center.x, center.y);
+                health.photonView.RPC(
+                    nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                    RpcTarget.MasterClient,
+                    scaledDamage,
+                    scaledDamage,
+                    ownerShipViewId,
+                    center.x,
+                    center.y,
+                    (int)hitContext.DamageType,
+                    (int)hitContext.DeliveryMethod,
+                    (int)hitContext.DeliveryFlags,
+                    hitContext.DamageSource ?? string.Empty);
                 continue;
             }
 
@@ -1729,10 +2290,10 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
             }
         }
 
-        TryDamageSpecificView(ownerShipViewId, center, damagedViews);
+        TryDamageSpecificView(ownerShipViewId, center, damagedViews, hitContext);
     }
 
-    void TryDamageSpecificView(int targetViewId, Vector2 center, HashSet<int> damagedViews)
+    void TryDamageSpecificView(int targetViewId, Vector2 center, HashSet<int> damagedViews, WeaponHitContext hitContext)
     {
         if (targetViewId <= 0 || damagedViews.Contains(targetViewId))
             return;
@@ -1743,7 +2304,18 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
 
         PlayerHealth health = targetView.GetComponent<PlayerHealth>();
         if (health != null && health.photonView != null && !health.IsWreck && damagedViews.Add(health.photonView.ViewID))
-            health.photonView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, ExplosionDamage, ExplosionDamage, ownerShipViewId, center.x, center.y);
+            health.photonView.RPC(
+                nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                RpcTarget.MasterClient,
+                ExplosionDamage,
+                ExplosionDamage,
+                ownerShipViewId,
+                center.x,
+                center.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
     }
 
     static float ResolveBossDamageMultiplier(PlayerHealth health)
@@ -1856,6 +2428,8 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
 
     protected override void OnDestroy()
     {
+        DynamicCameraZoomController.Cancel(dynamicZoomToken);
+        dynamicZoomToken = 0;
         SetEngineActive(false);
         base.OnDestroy();
     }
@@ -2094,7 +2668,11 @@ public sealed class SpaceDrillDeployable : PlayerDeployableBase
         bool stored = false;
         try
         {
-            string storedItemId = BlueprintCatalog.ResolveContainerBlueprintDrop(itemId);
+            string storedItemId = BlueprintCatalog.ResolveContainerBlueprintDrop(
+                itemId,
+                PlayerProfileService.HasInstance && PlayerProfileService.Instance.CurrentProfile != null
+                    ? PlayerProfileService.Instance.CurrentProfile.UnlockedBlueprintIds
+                    : new string[0]);
             stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(storedItemId);
         }
         catch (Exception ex)
@@ -2304,6 +2882,230 @@ public sealed class SpaceDrillDeployable : PlayerDeployableBase
     }
 }
 
+public sealed class DropbotDeployable : PlayerDeployableBase
+{
+    const float MoveSpeed = 5f / 3f;
+    const float EscapeRange = 0.72f;
+    const float DeliveryRetryDelay = 0.85f;
+    const float RotationSpeedDegreesPerSecond = 760f;
+
+    string heldItemId;
+    Vector2 extractionPosition;
+    bool deliveryRequested;
+    float nextDeliveryAttemptTime;
+    int deliveryRequestId;
+    int pendingDeliveryRequestId;
+    int pendingDeliveryActorNumber;
+    string pendingDeliveryItemId;
+    TrailRenderer engineTrail;
+
+    protected override int MaxHp => 35;
+    protected override int MaxShield => 0;
+    protected override float VisualTargetSize => 0.72f;
+    protected override float CollisionRadius => 0.32f;
+    protected override string SpriteResourcePath => "dropbot_up_resource";
+    protected override string EditorSpritePath => "Assets/Resources/dropbot_up_resource.png";
+    public bool HasCargoInFlight => initialized && !destroyed && !string.IsNullOrWhiteSpace(heldItemId);
+
+    void Awake()
+    {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+    }
+
+    void Start()
+    {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+        else
+            enabled = false;
+    }
+
+    public void InitializeFromPhotonData()
+    {
+        if (initialized)
+            return;
+
+        object[] data = photonView != null ? photonView.InstantiationData : null;
+        heldItemId = data != null && data.Length > 2 ? data[2] as string : null;
+        float targetX = data != null && data.Length > 3 ? ConvertToFloat(data[3]) : transform.position.x;
+        float targetY = data != null && data.Length > 4 ? ConvertToFloat(data[4]) : transform.position.y;
+        extractionPosition = new Vector2(targetX, targetY);
+        InitializeCommon();
+        ConfigureEngineTrail();
+    }
+
+    public static bool TryFindNearestExtraction(Vector2 origin, out Vector2 position)
+    {
+        ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
+        float bestDistance = float.MaxValue;
+        position = Vector2.zero;
+        bool found = false;
+        for (int i = 0; i < zones.Length; i++)
+        {
+            ExtractionZone zone = zones[i];
+            if (zone == null)
+                continue;
+
+            float distance = Vector2.Distance(origin, zone.transform.position);
+            if (distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            position = zone.transform.position;
+            found = true;
+        }
+
+        return found;
+    }
+
+    void Update()
+    {
+        if (!initialized || destroyed)
+            return;
+
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        if (string.IsNullOrWhiteSpace(heldItemId))
+        {
+            DespawnOnMaster();
+            return;
+        }
+
+        MoveToward(extractionPosition);
+        if (Vector2.Distance(transform.position, extractionPosition) <= EscapeRange)
+            TryDeliverCargo();
+    }
+
+    void MoveToward(Vector2 target)
+    {
+        Vector2 current = transform.position;
+        Vector2 next = Vector2.MoveTowards(current, target, MoveSpeed * Time.deltaTime);
+        transform.position = new Vector3(next.x, next.y, transform.position.z);
+
+        Vector2 direction = target - current;
+        if (direction.sqrMagnitude > 0.001f)
+        {
+            float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.Euler(0f, 0f, angle), RotationSpeedDegreesPerSecond * Time.deltaTime);
+        }
+    }
+
+    void TryDeliverCargo()
+    {
+        if (deliveryRequested || Time.time < nextDeliveryAttemptTime)
+            return;
+
+        PhotonView ownerView = ownerShipViewId > 0 ? PhotonView.Find(ownerShipViewId) : null;
+        if (ownerView == null || ownerView.Owner == null)
+        {
+            DespawnOnMaster();
+            return;
+        }
+
+        deliveryRequested = true;
+        pendingDeliveryRequestId = ++deliveryRequestId;
+        pendingDeliveryActorNumber = ownerView.Owner.ActorNumber;
+        pendingDeliveryItemId = heldItemId;
+        photonView.RPC(nameof(ReceiveDropbotRecoveredCargoRpc), ownerView.Owner, pendingDeliveryRequestId, heldItemId);
+    }
+
+    [PunRPC]
+    async void ReceiveDropbotRecoveredCargoRpc(int requestId, string itemId)
+    {
+        PhotonView cachedView = photonView;
+        bool stored = false;
+        try
+        {
+            stored = await PlayerProfileService.Instance.AddItemToPlayerDeferredSaveAsync(itemId);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Dropbot cargo delivery failed: " + ex);
+        }
+
+        if (cachedView != null)
+            cachedView.RPC(nameof(ResolveDropbotDeliveryRpc), RpcTarget.MasterClient, requestId, itemId, stored);
+    }
+
+    [PunRPC]
+    void ResolveDropbotDeliveryRpc(int requestId, string itemId, bool stored, PhotonMessageInfo messageInfo)
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        if (!deliveryRequested ||
+            requestId != pendingDeliveryRequestId ||
+            messageInfo.Sender == null ||
+            messageInfo.Sender.ActorNumber != pendingDeliveryActorNumber ||
+            !string.Equals(itemId, pendingDeliveryItemId, StringComparison.Ordinal) ||
+            !string.Equals(itemId, heldItemId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (!stored)
+        {
+            deliveryRequested = false;
+            nextDeliveryAttemptTime = Time.time + DeliveryRetryDelay;
+            ClearPendingDelivery();
+            return;
+        }
+
+        heldItemId = null;
+        Vector3 escapedAt = transform.position;
+        photonView.RPC(nameof(PlayDropbotEscapedRpc), RpcTarget.All, escapedAt.x, escapedAt.y, escapedAt.z);
+        ClearPendingDelivery();
+        DespawnOnMaster();
+    }
+
+    void ClearPendingDelivery()
+    {
+        pendingDeliveryRequestId = 0;
+        pendingDeliveryActorNumber = 0;
+        pendingDeliveryItemId = null;
+    }
+
+    void ConfigureEngineTrail()
+    {
+        GameObject trailObject = new GameObject("DropbotEngineTrail");
+        trailObject.transform.SetParent(transform, false);
+        trailObject.transform.localPosition = new Vector3(0f, -0.24f, 0.05f);
+        engineTrail = trailObject.AddComponent<TrailRenderer>();
+        engineTrail.time = 0.34f;
+        engineTrail.minVertexDistance = 0.025f;
+        engineTrail.widthMultiplier = 0.075f;
+        engineTrail.material = new Material(Shader.Find("Sprites/Default"));
+        engineTrail.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        engineTrail.sortingOrder = 31;
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[] { new GradientColorKey(new Color(0.25f, 0.9f, 1f), 0f), new GradientColorKey(new Color(0.1f, 0.38f, 1f), 1f) },
+            new[] { new GradientAlphaKey(0.85f, 0f), new GradientAlphaKey(0f, 1f) });
+        engineTrail.colorGradient = gradient;
+    }
+
+    [PunRPC]
+    void PlayDropbotEscapedRpc(float x, float y, float z)
+    {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayExtractionSequenceAt(new Vector3(x, y, z));
+    }
+
+    [PunRPC]
+    public new void PlayDeployableHitRpc(bool shieldHit, float x, float y)
+    {
+        PlayDeployableHitFeedback(shieldHit, x, y);
+    }
+
+    [PunRPC]
+    public new void PlayDeployableDestroyedRpc()
+    {
+        PlayDeployableDestroyedFeedback();
+    }
+}
+
 public sealed class SpaceTrapTarget : MonoBehaviourPun
 {
     const int TrapDamage = 100;
@@ -2318,6 +3120,17 @@ public sealed class SpaceTrapTarget : MonoBehaviourPun
     SpriteRenderer markerRenderer;
 
     public bool IsArmed => armed;
+
+    public static void ResetForSessionTransition()
+    {
+        ArmedOwnerByTargetView.Clear();
+        SpaceTrapTarget[] targets = FindObjectsByType<SpaceTrapTarget>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < targets.Length; i++)
+        {
+            if (targets[i] != null)
+                targets[i].HideMarker();
+        }
+    }
 
     public static SpaceTrapTarget Attach(GameObject target)
     {
@@ -2561,6 +3374,11 @@ public sealed class SpaceTrapTarget : MonoBehaviourPun
         };
         int hitCount = Physics2D.OverlapCircle(center, TrapRadius, filter, TrapDamageHits);
         HashSet<int> damagedViews = new HashSet<int>();
+        WeaponHitContext hitContext = new WeaponHitContext(
+            WeaponDamageType.Explosive,
+            WeaponDeliveryMethod.Trap,
+            WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.Delayed,
+            PlayerHealth.DamageSourceExplosive);
         for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = TrapDamageHits[i];
@@ -2570,23 +3388,45 @@ public sealed class SpaceTrapTarget : MonoBehaviourPun
             PlayerDeployableBase deployable = hit.GetComponentInParent<PlayerDeployableBase>();
             if (deployable != null && deployable.photonView != null && damagedViews.Add(deployable.photonView.ViewID))
             {
-                deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, TrapDamage, TrapDamage, attackerViewId, center.x, center.y);
+                deployable.photonView.RPC(
+                    nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                    RpcTarget.MasterClient,
+                    TrapDamage,
+                    TrapDamage,
+                    attackerViewId,
+                    center.x,
+                    center.y,
+                    (int)hitContext.DamageType,
+                    (int)hitContext.DeliveryMethod,
+                    (int)hitContext.DeliveryFlags,
+                    hitContext.DamageSource ?? string.Empty);
                 continue;
             }
 
             PlayerHealth health = hit.GetComponentInParent<PlayerHealth>();
             if (health != null && health.photonView != null && !health.IsWreck && damagedViews.Add(health.photonView.ViewID))
             {
-                health.photonView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, TrapDamage, TrapDamage, attackerViewId, center.x, center.y);
+                health.photonView.RPC(
+                    nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                    RpcTarget.MasterClient,
+                    TrapDamage,
+                    TrapDamage,
+                    attackerViewId,
+                    center.x,
+                    center.y,
+                    (int)hitContext.DamageType,
+                    (int)hitContext.DeliveryMethod,
+                    (int)hitContext.DeliveryFlags,
+                    hitContext.DamageSource ?? string.Empty);
                 continue;
             }
         }
 
-        TryDamageViewIfClose(attackerViewId, center, attackerViewId, damagedViews, TrapOwnerDamagePadding);
-        TryDamageViewIfClose(collectorViewId, center, attackerViewId, damagedViews, TrapCollectorDamagePadding);
+        TryDamageViewIfClose(attackerViewId, center, attackerViewId, damagedViews, TrapOwnerDamagePadding, hitContext);
+        TryDamageViewIfClose(collectorViewId, center, attackerViewId, damagedViews, TrapCollectorDamagePadding, hitContext);
     }
 
-    static void TryDamageViewIfClose(int targetViewId, Vector2 center, int attackerViewId, HashSet<int> damagedViews, float padding)
+    static void TryDamageViewIfClose(int targetViewId, Vector2 center, int attackerViewId, HashSet<int> damagedViews, float padding, WeaponHitContext hitContext)
     {
         if (targetViewId <= 0)
             return;
@@ -2598,13 +3438,35 @@ public sealed class SpaceTrapTarget : MonoBehaviourPun
         PlayerDeployableBase deployable = targetView.GetComponent<PlayerDeployableBase>();
         if (deployable != null && deployable.photonView != null && deployable.CanBeTargeted && damagedViews.Add(deployable.photonView.ViewID))
         {
-            deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, TrapDamage, TrapDamage, attackerViewId, center.x, center.y);
+            deployable.photonView.RPC(
+                nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                RpcTarget.MasterClient,
+                TrapDamage,
+                TrapDamage,
+                attackerViewId,
+                center.x,
+                center.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
             return;
         }
 
         PlayerHealth health = targetView.GetComponent<PlayerHealth>();
         if (health != null && health.photonView != null && !health.IsWreck && damagedViews.Add(health.photonView.ViewID))
-            health.photonView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, TrapDamage, TrapDamage, attackerViewId, center.x, center.y);
+            health.photonView.RPC(
+                nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                RpcTarget.MasterClient,
+                TrapDamage,
+                TrapDamage,
+                attackerViewId,
+                center.x,
+                center.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
     }
 }
 
@@ -2615,7 +3477,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
     const float CollectDuration = 6f;
     const float ScanInterval = 0.18f;
     const float CollectRangeMultiplier = 1.3f;
-    const float VisualTargetSize = 1.08f;
+    const float VisualTargetWorldSize = GameVisualTheme.PlayerTargetSize * 0.22f;
 
     SpriteRenderer visualRenderer;
     LineRenderer beam;
@@ -2696,19 +3558,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
         string[] equipment = PlayerProfileService.GetPlayerEquipmentSlots(owner);
-        if (equipment == null)
-            return false;
-
-        for (int i = 6; i <= 7; i++)
-        {
-            if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
-                continue;
-
-            if (i < equipment.Length && string.Equals(equipment[i], InventoryItemCatalog.LootingFriendId, StringComparison.Ordinal))
-                return true;
-        }
-
-        return false;
+        return InventoryItemCatalog.HasEquippedItem(equipment, shipSkinIndex, InventoryItemCatalog.LootingFriendId);
     }
 
     PhotonView FindAutoLootTarget()
@@ -2929,7 +3779,11 @@ public sealed class LootingFriendController : MonoBehaviourPun
         bool stored = false;
         try
         {
-            string storedItemId = BlueprintCatalog.ResolveContainerBlueprintDrop(itemId);
+            string storedItemId = BlueprintCatalog.ResolveContainerBlueprintDrop(
+                itemId,
+                PlayerProfileService.HasInstance && PlayerProfileService.Instance.CurrentProfile != null
+                    ? PlayerProfileService.Instance.CurrentProfile.UnlockedBlueprintIds
+                    : new string[0]);
             stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(storedItemId);
         }
         catch (Exception ex)
@@ -3033,7 +3887,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
         visualRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
         visualRenderer.sortingOrder = 48;
         visualRenderer.color = Color.white;
-        RuntimeSpriteUtility.FitRenderer(visualRenderer, VisualTargetSize);
+        RuntimeSpriteUtility.FitRendererWorldSize(visualRenderer, VisualTargetWorldSize);
         visualActive = true;
         SetupCollectAudio();
     }
@@ -3056,6 +3910,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
         if (visualRenderer == null || !visualActive)
             return;
 
+        RuntimeSpriteUtility.FitRendererWorldSize(visualRenderer, VisualTargetWorldSize);
         visualRenderer.transform.position = transform.position + transform.right * FollowRightOffset + transform.up * FollowBackOffset;
         visualRenderer.transform.rotation = transform.rotation;
     }
@@ -3155,6 +4010,341 @@ public sealed class LootingFriendController : MonoBehaviourPun
             Vector2 point = Vector2.Lerp(start, end, t) + perpendicular * wave;
             beam.SetPosition(i, new Vector3(point.x, point.y, -0.34f));
         }
+    }
+}
+
+public sealed class FiringFriendController : MonoBehaviourPun
+{
+    const float FollowRightOffset = -0.72f;
+    const float FollowBackOffset = -0.05f;
+    const float VisualTargetWorldSize = GameVisualTheme.PlayerTargetSize * 0.22f;
+    const float ScanInterval = 0.12f;
+    const float FireInterval = 1f / 3f;
+    const int ShotsPerBurst = 9;
+    const float ReloadDuration = 3f;
+    const float MaxConfiguredRange = 7f;
+    const float BulletSpeed = 12.5f;
+    const int BulletDamage = 6;
+    const float BulletScale = 0.48f;
+    const float MuzzleOffset = 0.34f;
+    const string BulletEffectId = "pirate_fighter";
+    static readonly Color BulletColor = new Color(0.2f, 0.86f, 1f, 1f);
+
+    SpriteRenderer visualRenderer;
+    float nextScanTime;
+    float nextShotTime;
+    float reloadUntil;
+    int shotsInBurst;
+    bool visualActive;
+    Vector2 recentAimDirection = Vector2.up;
+    float recentAimUntil;
+
+    void Start()
+    {
+        EnsureVisual();
+    }
+
+    void Update()
+    {
+        if (!CanFiringFriendRun())
+        {
+            SetVisualActive(false);
+            ResetCombatState();
+            return;
+        }
+
+        bool equipped = IsFiringFriendEquipped();
+        SetVisualActive(equipped);
+        if (!equipped)
+        {
+            ResetCombatState();
+            return;
+        }
+
+        UpdateVisualTransform();
+
+        if (!photonView.IsMine || !IsGameStarted())
+            return;
+
+        if (Time.time < reloadUntil)
+            return;
+
+        if (shotsInBurst >= ShotsPerBurst)
+        {
+            BeginReload();
+            return;
+        }
+
+        if (Time.time < nextShotTime || Time.time < nextScanTime)
+            return;
+
+        nextScanTime = Time.time + ScanInterval;
+        float targetRange = ResolveEffectiveTargetRange();
+        Transform target = FindNearestTarget(targetRange);
+        if (target == null)
+            return;
+
+        Vector2 origin = ResolveMuzzleOrigin();
+        Vector2 direction = (Vector2)target.position - origin;
+        if (direction.sqrMagnitude <= 0.001f)
+            return;
+
+        direction.Normalize();
+        FireSingleShot(direction, targetRange);
+        recentAimDirection = direction;
+        recentAimUntil = Time.time + 0.55f;
+        shotsInBurst++;
+
+        if (shotsInBurst >= ShotsPerBurst)
+        {
+            BeginReload();
+        }
+        else
+        {
+            nextShotTime = Time.time + FireInterval;
+        }
+    }
+
+    public void DeactivateForShipLoss()
+    {
+        SetVisualActive(false);
+        ResetCombatState();
+        enabled = false;
+    }
+
+    bool CanFiringFriendRun()
+    {
+        PlayerHealth health = GetComponent<PlayerHealth>();
+        return health != null &&
+               health.isActiveAndEnabled &&
+               !health.IsWreck &&
+               !health.IsEvacuationAnimating &&
+               !health.IsAstronautControlled;
+    }
+
+    bool IsFiringFriendEquipped()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        string[] equipment = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        return InventoryItemCatalog.HasEquippedItem(equipment, shipSkinIndex, InventoryItemCatalog.FiringFriendId);
+    }
+
+    bool IsGameStarted()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
+            value is bool started)
+        {
+            return started;
+        }
+
+        return PlayerShooting.gameStarted;
+    }
+
+    Transform FindNearestTarget(float maxRange)
+    {
+        Vector2 origin = visualRenderer != null ? (Vector2)visualRenderer.transform.position : (Vector2)transform.position;
+        int ownerActorNumber = photonView != null ? photonView.OwnerActorNr : -1;
+        PlayerHealth[] healths = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        Transform best = null;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < healths.Length; i++)
+        {
+            PlayerHealth candidate = healths[i];
+            if (!IsValidTarget(candidate, ownerActorNumber))
+                continue;
+
+            float distance = Vector2.Distance(origin, candidate.transform.position);
+            if (distance > maxRange || distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            best = candidate.transform;
+        }
+
+        return best;
+    }
+
+    bool IsValidTarget(PlayerHealth candidate, int ownerActorNumber)
+    {
+        if (candidate == null || candidate.IsWreck || candidate.IsEvacuationAnimating || candidate.photonView == null)
+            return false;
+
+        if (photonView != null && candidate.photonView.ViewID == photonView.ViewID)
+            return false;
+
+        if (candidate.GetComponent<LureBeaconDecoy>() != null || candidate.GetComponent<PlayerDeployableBase>() != null)
+            return false;
+
+        EnemyBot enemyBot = candidate.GetComponent<EnemyBot>();
+        return enemyBot != null ||
+               candidate.IsBotControlled ||
+               (ownerActorNumber > 0 && candidate.photonView.OwnerActorNr != ownerActorNumber);
+    }
+
+    void FireSingleShot(Vector2 direction, float targetRange)
+    {
+        int ownerId = photonView != null ? photonView.ViewID : 0;
+        if (ownerId <= 0)
+            return;
+
+        Vector2 muzzle = ResolveMuzzleOrigin() + direction * MuzzleOffset;
+        float rangeMultiplier = targetRange / ResolveOwnerLength();
+        float flightTime = Mathf.Clamp(targetRange / BulletSpeed + 0.25f, 0.45f, 1.25f);
+        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
+        object[] data = Bullet.AppendWeaponMetadata(
+            new object[]
+            {
+                ownerId,
+                BulletDamage,
+                BulletScale,
+                BulletColor.r,
+                BulletColor.g,
+                BulletColor.b,
+                BulletColor.a,
+                rangeMultiplier,
+                BulletDamage,
+                BulletDamage,
+                false,
+                0f,
+                BulletEffectId,
+                flightTime
+            },
+            WeaponDamageType.Laser,
+            WeaponDeliveryMethod.CompanionDrone,
+            WeaponDeliveryFlags.Autonomous | WeaponDeliveryFlags.MultiStream);
+
+        GameObject bullet = PhotonNetwork.Instantiate(
+            "Bullet",
+            new Vector3(muzzle.x, muzzle.y, 0f),
+            Quaternion.Euler(0f, 0f, angle),
+            0,
+            data);
+
+        if (bullet == null)
+            return;
+
+        Bullet bulletComponent = bullet.GetComponent<Bullet>();
+        if (bulletComponent != null)
+            bulletComponent.ownerViewID = ownerId;
+
+        Rigidbody2D bulletBody = bullet.GetComponent<Rigidbody2D>();
+        if (bulletBody != null)
+            bulletBody.linearVelocity = direction * BulletSpeed;
+
+        Collider2D bulletCollider = bullet.GetComponent<Collider2D>();
+        IgnoreOwnerCollisions(bulletCollider);
+
+        if (photonView != null)
+            photonView.RPC(nameof(PlayFiringFriendShotRpc), RpcTarget.All, muzzle.x, muzzle.y, transform.position.z);
+    }
+
+    void BeginReload()
+    {
+        shotsInBurst = 0;
+        reloadUntil = Time.time + ReloadDuration;
+        nextShotTime = reloadUntil;
+    }
+
+    void ResetCombatState()
+    {
+        shotsInBurst = 0;
+        nextShotTime = 0f;
+        reloadUntil = 0f;
+        nextScanTime = 0f;
+    }
+
+    float ResolveEffectiveTargetRange()
+    {
+        float range = MaxConfiguredRange;
+        Camera mainCamera = Camera.main;
+        if (mainCamera != null && mainCamera.orthographic)
+        {
+            float halfVertical = mainCamera.orthographicSize;
+            float halfHorizontal = halfVertical * mainCamera.aspect;
+            range = Mathf.Min(range, Mathf.Max(0.75f, Mathf.Min(halfVertical, halfHorizontal)));
+        }
+
+        return Mathf.Max(0.75f, range);
+    }
+
+    float ResolveOwnerLength()
+    {
+        SpriteRenderer ownerRenderer = GetComponentInChildren<SpriteRenderer>();
+        if (ownerRenderer != null)
+            return Mathf.Max(0.25f, Mathf.Max(ownerRenderer.bounds.size.x, ownerRenderer.bounds.size.y));
+
+        Collider2D ownerCollider = GetComponentInChildren<Collider2D>();
+        if (ownerCollider != null)
+            return Mathf.Max(0.25f, Mathf.Max(ownerCollider.bounds.size.x, ownerCollider.bounds.size.y));
+
+        return 1f;
+    }
+
+    Vector2 ResolveMuzzleOrigin()
+    {
+        return visualRenderer != null ? (Vector2)visualRenderer.transform.position : (Vector2)transform.position;
+    }
+
+    void IgnoreOwnerCollisions(Collider2D bulletCollider)
+    {
+        if (bulletCollider == null)
+            return;
+
+        Collider2D[] ownerColliders = GetComponentsInChildren<Collider2D>(true);
+        for (int i = 0; i < ownerColliders.Length; i++)
+        {
+            Collider2D ownerCollider = ownerColliders[i];
+            if (ownerCollider != null)
+                Physics2D.IgnoreCollision(ownerCollider, bulletCollider, true);
+        }
+    }
+
+    void EnsureVisual()
+    {
+        if (visualRenderer != null)
+            return;
+
+        GameObject visual = new GameObject("FiringFriendVisual");
+        visual.transform.SetParent(transform, false);
+        visualRenderer = visual.AddComponent<SpriteRenderer>();
+        visualRenderer.sprite = RuntimeSpriteUtility.LoadSprite("firing_friend_up_resource", "Assets/firing_friend_up.png");
+        visualRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        visualRenderer.sortingOrder = 49;
+        visualRenderer.color = Color.white;
+        RuntimeSpriteUtility.FitRendererWorldSize(visualRenderer, VisualTargetWorldSize);
+        visualActive = true;
+    }
+
+    void SetVisualActive(bool active)
+    {
+        EnsureVisual();
+        if (visualRenderer != null)
+            visualRenderer.enabled = active;
+        visualActive = active;
+    }
+
+    void UpdateVisualTransform()
+    {
+        if (visualRenderer == null || !visualActive)
+            return;
+
+        RuntimeSpriteUtility.FitRendererWorldSize(visualRenderer, VisualTargetWorldSize);
+        visualRenderer.transform.position = transform.position + transform.right * FollowRightOffset + transform.up * FollowBackOffset;
+        Vector2 direction = Time.time < recentAimUntil && recentAimDirection.sqrMagnitude > 0.001f
+            ? recentAimDirection.normalized
+            : (Vector2)transform.up;
+        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
+        visualRenderer.transform.rotation = Quaternion.Euler(0f, 0f, angle);
+    }
+
+    [PunRPC]
+    void PlayFiringFriendShotRpc(float x, float y, float z)
+    {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayShootSmallAt(new Vector3(x, y, z));
     }
 }
 

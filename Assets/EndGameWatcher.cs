@@ -523,7 +523,34 @@ public class EndGameWatcher : MonoBehaviour
 
     void OnBackButtonClicked()
     {
+        if (DidLocalPlayerExtract())
+            AudioManager.Instance.RequestShipReturnMusicForNextMenu();
+
         NetworkManager.ReturnToSessionBrowserFromRound();
+    }
+
+    bool DidLocalPlayerExtract()
+    {
+        if (PhotonNetwork.LocalPlayer == null)
+            return false;
+
+        RoundResultsSnapshotData snapshot = GetSnapshotFromRoom();
+        if (snapshot == null || snapshot.entries == null)
+            return false;
+
+        int actorNumber = PhotonNetwork.LocalPlayer.ActorNumber;
+        for (int i = 0; i < snapshot.entries.Length; i++)
+        {
+            RoundResultEntry entry = snapshot.entries[i];
+            if (entry != null &&
+                entry.actorNumber == actorNumber &&
+                string.Equals(entry.outcome, "extracted", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     void PopulateScoreboard(EndScreenUI ui)
@@ -598,6 +625,7 @@ public class EndGameWatcher : MonoBehaviour
             return;
 
         int roundXp = 0;
+        string localOutcome = string.Empty;
         RoundResultsSnapshotData snapshot = GetSnapshotFromRoom();
         if (snapshot != null && snapshot.entries != null)
         {
@@ -606,6 +634,7 @@ public class EndGameWatcher : MonoBehaviour
                 if (snapshot.entries[i].actorNumber == PhotonNetwork.LocalPlayer.ActorNumber)
                 {
                     roundXp = Mathf.Max(0, snapshot.entries[i].finalScore);
+                    localOutcome = snapshot.entries[i].outcome;
                     break;
                 }
             }
@@ -618,9 +647,17 @@ public class EndGameWatcher : MonoBehaviour
         string matchToken = PhotonNetwork.CurrentRoom.Name + "_" +
                             (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("startTime", out object startTime)
                                 ? startTime.ToString()
-                                : "nostart");
+                : "nostart");
 
         await PlayerProfileService.Instance.RecordRoundXpAsync(roundXp, matchToken);
+        try
+        {
+            await PlayerProfileService.Instance.RecordMapSuccessfulReturnAsync(RoomSettings.GetSelectedLobbyMapId(), localOutcome, matchToken);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("EndGameWatcher: failed to record map return progress: " + ex);
+        }
     }
 
     RoundResultsSnapshotData GetSnapshotFromRoom()

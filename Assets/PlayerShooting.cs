@@ -20,14 +20,18 @@ public class PlayerShooting : MonoBehaviourPun
     const float SuperChargeTimeSeconds = 24f;
     const float SuperChargeOnComplexHit = 0.08f;
     const float GadgetMinePlacementCooldown = 0.9f;
+    const float DropbotLaunchRequestTimeout = 5f;
     const int GadgetMineDefaultCharges = 4;
     const int SpaceBombDefaultCharges = 1;
+    const int DropbotDefaultCharges = 1;
     const int BatteryDefaultCharges = 3;
     const int MagneticBeamDefaultCharges = 3;
     const int TractorBeamDefaultCharges = 4;
     const int LureBeaconDefaultCharges = 2;
     const int AutoTurretDefaultCharges = 1;
     const int GuidanceSystemDefaultCharges = 2;
+    const int ShortScannerDefaultCharges = 3;
+    const int CloakDeviceDefaultCharges = 2;
     const int SpaceDrillDefaultCharges = 2;
     const int SpaceTrapDefaultCharges = 1;
     const int SuperBoosterDefaultCharges = 2;
@@ -42,6 +46,8 @@ public class PlayerShooting : MonoBehaviourPun
     const float LureBeaconDeployDistance = 1.15f;
     const float LureBeaconSpawnClearanceRadius = 0.42f;
     const float GuidanceSystemDuration = 9f;
+    const float ShortScannerRevealDuration = 15f;
+    const float CloakDeviceDuration = 7f;
     const float SuperBoosterDuration = 2f;
     const float AstroCutterTickInterval = 0.2f;
     const float AstroCutterBeamRadius = 0.14f;
@@ -49,6 +55,9 @@ public class PlayerShooting : MonoBehaviourPun
     const int AstroCutterObstacleDamageMultiplier = 4;
     const int AstroCutterSuperObstacleDamageMultiplier = 6;
     const float RocketLockDuration = 2f;
+    const float VectorRocketLockDurationMultiplier = 0.5f;
+    const float VectorGuidanceSystemDurationBonus = 15f;
+    const float VectorShortScannerRevealDurationBonus = 10f;
     const float RocketLockLineRadius = 0.64f;
     const float RocketLockBreakAngle = 26f;
     const float RocketHomingTurnRate = 145f;
@@ -130,6 +139,12 @@ public class PlayerShooting : MonoBehaviourPun
     Coroutine authoritativeTractorBeamRoutine;
     int activeTractorBeamTargetViewId;
     string activeTractorBeamItemId;
+    bool pendingDropbotLaunchActive;
+    int pendingDropbotLaunchRequestId;
+    int pendingDropbotCargoSlotIndex = -1;
+    int pendingDropbotOwnerActorNumber;
+    string pendingDropbotCargoItemId;
+    float pendingDropbotLaunchExpiresAt;
     WeaponAttackProfile activeSimpleWeaponProfile;
     WeaponAttackProfile activeComplexWeaponProfile;
     readonly List<ComplexWeaponRuntimeState> complexWeaponStates = new List<ComplexWeaponRuntimeState>();
@@ -166,19 +181,26 @@ public class PlayerShooting : MonoBehaviourPun
     float simpleAreaDamageRadius;
     string simpleHitEffectId = string.Empty;
     float simpleFlightTime = 10f;
+    WeaponDamageType simpleDamageType = WeaponDamageType.Laser;
+    WeaponDeliveryMethod simpleDeliveryMethod = WeaponDeliveryMethod.DirectProjectile;
+    WeaponDeliveryFlags simpleDeliveryFlags = WeaponDeliveryFlags.None;
     readonly HashSet<int> astroCutterDamagedViews = new HashSet<int>();
     readonly HashSet<string> astroCutterDamagedObstacles = new HashSet<string>(StringComparer.Ordinal);
 
     public int CurrentAmmo => IsComplexShootingActive && GetActiveComplexWeaponState() != null ? GetActiveComplexWeaponState().CurrentAmmo : currentAmmo;
     public int MaxAmmo => IsComplexShootingActive && GetActiveComplexWeaponState() != null ? GetActiveComplexWeaponState().MaxAmmo : maxAmmo;
     public bool IsReloading => isReloading;
-    public bool IsComplexShootingActive => GetComponent<EnemyBot>() == null && !AstronautSurvivor.IsAstronautInstantiationData(photonView != null ? photonView.InstantiationData : null);
+    public bool IsComplexShootingActive => GetComponent<EnemyBot>() == null &&
+                                           !IsNeutralRiderShip() &&
+                                           !AstronautSurvivor.IsAstronautInstantiationData(photonView != null ? photonView.InstantiationData : null) &&
+                                           HasMainGunSlotsForCurrentShip();
     public float ComplexAmmoReloadProgress => GetComplexAmmoReloadProgress();
     public float SuperChargeNormalized => Mathf.Clamp01(superCharge);
     public bool IsSuperAttackReady => IsComplexShootingActive && superCharge >= 0.999f;
     public bool CanManualReload => photonView.IsMine && IsGameStarted() && !IsComplexShootingActive && !isReloading && currentAmmo > 0 && currentAmmo < maxAmmo;
     public int ComplexWeaponCount => complexWeaponStates.Count;
     public int ActiveComplexWeaponNumber => complexWeaponStates.Count > 0 ? activeComplexWeaponIndex + 1 : 1;
+    public bool IsComplexWeaponSwitchLockedByDamage => IsShipDamageActive(ShipDamageType.SecondaryWeapon);
     public Sprite NextComplexWeaponIcon
     {
         get
@@ -220,6 +242,12 @@ public class PlayerShooting : MonoBehaviourPun
         }
     }
 
+    bool IsNeutralRiderShip()
+    {
+        return NeutralRiderController.IsNeutralRider(gameObject) ||
+               NeutralRiderController.IsNeutralRiderInstantiationData(photonView != null ? photonView.InstantiationData : null);
+    }
+
     void Start()
     {
         if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
@@ -237,6 +265,11 @@ public class PlayerShooting : MonoBehaviourPun
         }
 
         EnsureBotBootstrap();
+        EnsureNeutralRiderBootstrap();
+
+        if (IsNeutralRiderShip())
+            return;
+
         CaptureBaseWeaponProfile();
         maxAmmo = GetConfiguredMaxAmmo();
         currentAmmo = maxAmmo;
@@ -250,8 +283,14 @@ public class PlayerShooting : MonoBehaviourPun
         if (!AstronautSurvivor.IsAstronautInstantiationData(photonView.InstantiationData) && GetComponent<LootingFriendController>() == null)
             gameObject.AddComponent<LootingFriendController>();
 
+        if (!AstronautSurvivor.IsAstronautInstantiationData(photonView.InstantiationData) && GetComponent<FiringFriendController>() == null)
+            gameObject.AddComponent<FiringFriendController>();
+
         if (GetComponent<GuidanceSystemOverlay>() == null)
             gameObject.AddComponent<GuidanceSystemOverlay>();
+
+        if (GetComponent<TreasureScannerPingController>() == null)
+            gameObject.AddComponent<TreasureScannerPingController>();
 
         if (!photonView.IsMine)
             return;
@@ -286,11 +325,18 @@ public class PlayerShooting : MonoBehaviourPun
     void Update()
     {
         EnsureBotBootstrap();
+        EnsureNeutralRiderBootstrap();
 
         if (!IsGameStarted())
             return;
 
         if (GetComponent<EnemyBot>() != null)
+        {
+            UpdateReload();
+            return;
+        }
+
+        if (IsNeutralRiderShip())
         {
             UpdateReload();
             return;
@@ -308,6 +354,13 @@ public class PlayerShooting : MonoBehaviourPun
 
         SyncEquippedGadgetProfile();
         RefreshAuthoritativeGadgetRuntimeStates();
+
+        if (!HasMainGunSlotsForCurrentShip())
+        {
+            ClearMainGunRuntime();
+            HideAimMarker();
+            return;
+        }
 
         if (IsComplexShootingActive)
         {
@@ -591,7 +644,7 @@ public class PlayerShooting : MonoBehaviourPun
             return;
         }
 
-        if (Time.time - rocketLockStartedAt < RocketLockDuration)
+        if (Time.time - rocketLockStartedAt < GetAdjustedRocketLockDuration())
             return;
 
         rocketLockedTargetViewId = candidateViewId;
@@ -682,6 +735,12 @@ public class PlayerShooting : MonoBehaviourPun
 
         Bounds bounds = targetCollider.bounds;
         return Mathf.Max(RocketLockLineRadius, Mathf.Max(bounds.extents.x, bounds.extents.y) * 0.9f);
+    }
+
+    float GetAdjustedRocketLockDuration()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        return RocketLockDuration * (PilotCatalog.IsSelectedPilot(owner, PilotCatalog.VectorId) ? VectorRocketLockDurationMultiplier : 1f);
     }
 
     void ResetRocketLockState()
@@ -814,7 +873,7 @@ public class PlayerShooting : MonoBehaviourPun
         complexWeaponStates.Clear();
         BuildComplexWeaponStates(equipmentSlots, shipSkinIndex, previousStates);
         activeComplexWeaponIndex = Mathf.Clamp(activeComplexWeaponIndex, 0, Mathf.Max(0, complexWeaponStates.Count - 1));
-        activeComplexWeaponProfile = GetActiveComplexWeaponState()?.Profile ?? WeaponAttackCatalog.GetNormalAttackByWeaponId(WeaponAttackCatalog.SimpleGunId);
+        activeComplexWeaponProfile = GetActiveComplexWeaponState()?.Profile;
         lastAppliedComplexWeaponSignature = signature;
         isReloading = false;
         reloadFinishTime = 0f;
@@ -842,6 +901,8 @@ public class PlayerShooting : MonoBehaviourPun
 
         builder.Append('|');
         builder.Append(WeaponAttackCatalog.GetRoomSetupSignature());
+        builder.Append("|ammoDamage=");
+        builder.Append(GetShipDamageAmmoSignature());
         return builder.ToString();
     }
 
@@ -870,7 +931,7 @@ public class PlayerShooting : MonoBehaviourPun
             complexWeaponStates.Add(state);
         }
 
-        if (complexWeaponStates.Count == 0)
+        if (complexWeaponStates.Count == 0 && ShipCatalog.GetMainGunSlots(shipSkinIndex) > 0)
         {
             WeaponAttackProfile profile = WeaponAttackCatalog.GetNormalAttackByWeaponId(WeaponAttackCatalog.SimpleGunId);
             int max = GetPilotAdjustedWeaponMaxAmmo(profile);
@@ -907,6 +968,29 @@ public class PlayerShooting : MonoBehaviourPun
     string GetWeaponIdForEquipmentSlot(string[] equipmentSlots, int slotIndex)
     {
         return WeaponAttackCatalog.GetWeaponIdForItem(GetEquipmentItem(equipmentSlots, slotIndex));
+    }
+
+    bool HasMainGunSlotsForCurrentShip()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        return ShipCatalog.GetMainGunSlots(shipSkinIndex) > 0;
+    }
+
+    void ClearMainGunRuntime()
+    {
+        if (complexWeaponStates.Count > 0)
+            complexWeaponStates.Clear();
+
+        activeComplexWeaponProfile = null;
+        activeSimpleWeaponProfile = null;
+        currentAmmo = 0;
+        maxAmmo = 0;
+        isReloading = false;
+        reloadFinishTime = 0f;
+        nextComplexAttackTime = 0f;
+        superCharge = 0f;
+        ResetComplexPressState();
     }
 
     ComplexWeaponRuntimeState GetActiveComplexWeaponState()
@@ -1092,6 +1176,43 @@ public class PlayerShooting : MonoBehaviourPun
         return true;
     }
 
+    public bool TryFireVectorBarrage(string targetViewIds)
+    {
+        if (string.IsNullOrWhiteSpace(targetViewIds) || AreShipControlsBlocked())
+            return false;
+
+        WeaponAttackProfile profile = WeaponAttackCatalog.GetSuperAttack(WeaponAttackCatalog.GatlingGunId);
+        if (profile == null)
+            return false;
+
+        string[] ids = targetViewIds.Split(',');
+        int fired = 0;
+        for (int i = 0; i < ids.Length; i++)
+        {
+            if (!int.TryParse(ids[i], out int targetViewId) || targetViewId <= 0)
+                continue;
+
+            PhotonView targetView = PhotonView.Find(targetViewId);
+            PlayerHealth targetHealth = targetView != null ? targetView.GetComponent<PlayerHealth>() : null;
+            if (targetHealth == null || targetHealth.IsWreck || targetHealth.CurrentHP <= 0)
+                continue;
+
+            Vector2 direction = targetHealth.transform.position - transform.position;
+            if (direction.sqrMagnitude <= 0.0001f)
+                continue;
+
+            Vector2 safeDirection = direction.normalized;
+            Vector2 targetPoint = (Vector2)transform.position + (safeDirection * GetComplexRangeWorld(profile));
+            StartCoroutine(FireComplexBurst(profile, safeDirection, targetPoint, 0, false));
+            fired++;
+        }
+
+        if (fired > 0)
+            NotifyShotFiredForUseCancel();
+
+        return fired > 0;
+    }
+
     void ApplyAshEmergencyCapacitor(ComplexWeaponRuntimeState state, WeaponAttackProfile profile)
     {
         if (state == null)
@@ -1117,7 +1238,7 @@ public class PlayerShooting : MonoBehaviourPun
 
     public void SwitchComplexWeapon()
     {
-        if (!photonView.IsMine || !IsComplexShootingActive || complexWeaponStates.Count <= 1)
+        if (!photonView.IsMine || !IsComplexShootingActive || complexWeaponStates.Count <= 1 || IsComplexWeaponSwitchLockedByDamage)
             return;
 
         activeComplexWeaponIndex = (activeComplexWeaponIndex + 1) % complexWeaponStates.Count;
@@ -1418,7 +1539,9 @@ public class PlayerShooting : MonoBehaviourPun
         if (bulletPrefab == null || profile == null)
             return false;
 
-        float clampedFlightTime = Mathf.Clamp(profile.FlightTime, 0.2f, 30f);
+        float projectileSpeedMultiplier = GetProjectileSpeedMultiplier();
+        float projectileSpeed = Mathf.Max(0.1f, profile.ProjectileSpeed * projectileSpeedMultiplier);
+        float clampedFlightTime = Mathf.Clamp(profile.FlightTime / Mathf.Max(0.1f, projectileSpeedMultiplier), 0.2f, 30f);
         float range = GetComplexRangeWorld(profile);
         bool isArcProjectile = IsArcWeaponProfile(profile);
         bool isRocketProjectile = IsRocketWeaponProfile(profile);
@@ -1427,11 +1550,7 @@ public class PlayerShooting : MonoBehaviourPun
             : (Vector2)spawnPos + (direction.normalized * range);
         float arcHeight = ResolveArcHeight(range);
 
-        GameObject bullet = PhotonNetwork.Instantiate(
-            bulletPrefab.name,
-            spawnPos,
-            Quaternion.identity,
-            0,
+        object[] data = Bullet.AppendWeaponMetadata(
             new object[]
             {
                 ownerId,
@@ -1455,10 +1574,20 @@ public class PlayerShooting : MonoBehaviourPun
                 isRocketProjectile ? "rocket" : string.Empty,
                 isRocketProjectile ? homingTargetViewId : 0,
                 isRocketProjectile ? RocketHomingTurnRate : 0f,
-                isRocketProjectile ? profile.ProjectileSpeed : 0f,
+                isRocketProjectile ? projectileSpeed : 0f,
                 isRocketProjectile,
                 pilotBreachProjectile ? PilotBreachProjectileMarker : string.Empty
-            }
+            },
+            profile.DamageType,
+            profile.DeliveryMethod,
+            profile.DeliveryFlags);
+
+        GameObject bullet = PhotonNetwork.Instantiate(
+            bulletPrefab.name,
+            spawnPos,
+            Quaternion.identity,
+            0,
+            data
         );
 
         if (bullet == null)
@@ -1470,7 +1599,7 @@ public class PlayerShooting : MonoBehaviourPun
 
         Rigidbody2D rb = bullet.GetComponent<Rigidbody2D>();
         if (rb != null && !isArcProjectile)
-            rb.linearVelocity = direction.normalized * profile.ProjectileSpeed;
+            rb.linearVelocity = direction.normalized * projectileSpeed;
 
         Collider2D playerCollider = GetComponent<Collider2D>();
         Collider2D bulletCollider = bullet.GetComponent<Collider2D>();
@@ -1529,7 +1658,17 @@ public class PlayerShooting : MonoBehaviourPun
                 if (damagedViews.Add(deployable.photonView.ViewID))
                 {
                     Vector2 point = deployable.transform.position;
-                    deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableShieldOnlyDamageAt), RpcTarget.MasterClient, profile.ShieldDamage, ownerId, point.x, point.y);
+                    deployable.photonView.RPC(
+                        nameof(PlayerDeployableBase.TakeDeployableShieldOnlyDamageWithContextAt),
+                        RpcTarget.MasterClient,
+                        profile.ShieldDamage,
+                        ownerId,
+                        point.x,
+                        point.y,
+                        (int)profile.DamageType,
+                        (int)profile.DeliveryMethod,
+                        (int)profile.DeliveryFlags,
+                        string.Empty);
                     AddSuperChargeForDamage();
                 }
 
@@ -1555,7 +1694,17 @@ public class PlayerShooting : MonoBehaviourPun
             if (damagedViews.Add(hp.photonView.ViewID))
             {
                 Vector2 point = hp.transform.position;
-                hp.photonView.RPC(nameof(PlayerHealth.TakeShieldOnlyDamageAt), RpcTarget.MasterClient, profile.ShieldDamage, ownerId, point.x, point.y);
+                hp.photonView.RPC(
+                    nameof(PlayerHealth.TakeShieldOnlyDamageWithContextAt),
+                    RpcTarget.MasterClient,
+                    profile.ShieldDamage,
+                    ownerId,
+                    point.x,
+                    point.y,
+                    (int)profile.DamageType,
+                    (int)profile.DeliveryMethod,
+                    (int)profile.DeliveryFlags,
+                    string.Empty);
                 AddSuperChargeForDamage();
             }
         }
@@ -1630,7 +1779,18 @@ public class PlayerShooting : MonoBehaviourPun
                 if (astroCutterDamagedViews.Add(deployable.photonView.ViewID))
                 {
                     Vector2 point = hitInfo.point.sqrMagnitude > 0.001f ? hitInfo.point : (Vector2)deployable.transform.position;
-                    deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, profile.ShieldDamage, profile.HpDamage, ownerId, point.x, point.y);
+                    deployable.photonView.RPC(
+                        nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                        RpcTarget.MasterClient,
+                        profile.ShieldDamage,
+                        profile.HpDamage,
+                        ownerId,
+                        point.x,
+                        point.y,
+                        (int)profile.DamageType,
+                        (int)profile.DeliveryMethod,
+                        (int)profile.DeliveryFlags,
+                        string.Empty);
                     AddSuperChargeForDamage();
                 }
 
@@ -1643,7 +1803,18 @@ public class PlayerShooting : MonoBehaviourPun
                 if (astroCutterDamagedViews.Add(hp.photonView.ViewID))
                 {
                     Vector2 point = hitInfo.point.sqrMagnitude > 0.001f ? hitInfo.point : (Vector2)hp.transform.position;
-                    hp.photonView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, profile.ShieldDamage, profile.HpDamage, ownerId, point.x, point.y);
+                    hp.photonView.RPC(
+                        nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                        RpcTarget.MasterClient,
+                        profile.ShieldDamage,
+                        profile.HpDamage,
+                        ownerId,
+                        point.x,
+                        point.y,
+                        (int)profile.DamageType,
+                        (int)profile.DeliveryMethod,
+                        (int)profile.DeliveryFlags,
+                        string.Empty);
                     AddSuperChargeForDamage();
                 }
 
@@ -1836,14 +2007,26 @@ public class PlayerShooting : MonoBehaviourPun
 
     void NotifyShotFiredForUseCancel()
     {
-        if (!photonView.IsMine || GetComponent<EnemyBot>() != null)
+        if (!photonView.IsMine || GetComponent<EnemyBot>() != null || IsNeutralRiderShip())
             return;
 
-        AshPilotRoundTracker.RecordShot();
+        CancelCloakDeviceForLocalOwner();
 
         TreasureCollector collector = GetComponent<TreasureCollector>();
         if (collector != null)
             collector.CancelCollectionForShot();
+    }
+
+    void CancelCloakDeviceForLocalOwner()
+    {
+        if (photonView == null || !photonView.IsMine)
+            return;
+
+        HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>();
+        if (nebulaTarget == null || !nebulaTarget.IsCloaked)
+            return;
+
+        photonView.RPC(nameof(CancelCloakDeviceRpc), RpcTarget.All);
     }
 
     bool ShouldUseSimpleSpreadShot(WeaponAttackProfile profile)
@@ -1900,7 +2083,7 @@ public class PlayerShooting : MonoBehaviourPun
 
     public bool TryFireBot(Vector2 direction)
     {
-        if (GetComponent<EnemyBot>() == null)
+        if (GetComponent<EnemyBot>() == null && !IsNeutralRiderShip())
             return false;
 
         if (!photonView.IsMine || !IsGameStarted())
@@ -1925,7 +2108,7 @@ public class PlayerShooting : MonoBehaviourPun
 
     public bool TryFireBotFromWorld(Vector2 direction, Vector3 spawnPosition, float cooldownOffset = 0f)
     {
-        if (GetComponent<EnemyBot>() == null)
+        if (GetComponent<EnemyBot>() == null && !IsNeutralRiderShip())
             return false;
 
         if (!photonView.IsMine || !IsGameStarted())
@@ -1953,7 +2136,7 @@ public class PlayerShooting : MonoBehaviourPun
 
     public bool TryFireBotVolleyFromWorld(Vector2 direction, Vector3[] spawnPositions, float cooldownOffset = 0f)
     {
-        if (GetComponent<EnemyBot>() == null)
+        if (GetComponent<EnemyBot>() == null && !IsNeutralRiderShip())
             return false;
 
         if (!photonView.IsMine || !IsGameStarted())
@@ -1985,7 +2168,7 @@ public class PlayerShooting : MonoBehaviourPun
 
     public bool FireBotProjectileFromWorld(Vector2 direction, Vector3 spawnPosition)
     {
-        if (GetComponent<EnemyBot>() == null)
+        if (GetComponent<EnemyBot>() == null && !IsNeutralRiderShip())
             return false;
 
         if (!photonView.IsMine || !IsGameStarted() || direction.sqrMagnitude < 0.04f)
@@ -2036,7 +2219,7 @@ public class PlayerShooting : MonoBehaviourPun
 
     void SyncAmmoSetting()
     {
-        if (customAmmoProfileActive && GetComponent<EnemyBot>() != null)
+        if (IsNeutralRiderShip() || (customAmmoProfileActive && GetComponent<EnemyBot>() != null))
             return;
 
         int configuredAmmo = GetConfiguredMaxAmmo();
@@ -2061,7 +2244,7 @@ public class PlayerShooting : MonoBehaviourPun
 
     void CaptureBaseWeaponProfile()
     {
-        if (baseWeaponProfileCaptured || GetComponent<EnemyBot>() != null)
+        if (baseWeaponProfileCaptured || GetComponent<EnemyBot>() != null || IsNeutralRiderShip())
             return;
 
         baseBulletSpeed = bulletSpeed;
@@ -2079,7 +2262,7 @@ public class PlayerShooting : MonoBehaviourPun
 
     void SyncEquippedWeaponProfile()
     {
-        if (!photonView.IsMine || GetComponent<EnemyBot>() != null)
+        if (!photonView.IsMine || GetComponent<EnemyBot>() != null || IsNeutralRiderShip())
             return;
 
         CaptureBaseWeaponProfile();
@@ -2135,6 +2318,9 @@ public class PlayerShooting : MonoBehaviourPun
         simpleAreaDamageRadius = 0f;
         simpleHitEffectId = string.Empty;
         simpleFlightTime = 10f;
+        simpleDamageType = WeaponDamageType.Laser;
+        simpleDeliveryMethod = WeaponDeliveryMethod.DirectProjectile;
+        simpleDeliveryFlags = WeaponDeliveryFlags.None;
 
         if (profile != null && !string.Equals(profile.Id, WeaponAttackCatalog.SimpleGunId, StringComparison.Ordinal))
         {
@@ -2156,6 +2342,9 @@ public class PlayerShooting : MonoBehaviourPun
             simpleAreaDamageRadius = Mathf.Max(0f, profile.AreaDamageRadius);
             simpleHitEffectId = profile.HitEffectId ?? string.Empty;
             simpleFlightTime = Mathf.Clamp(profile.FlightTime, 0.2f, 30f);
+            simpleDamageType = profile.DamageType;
+            simpleDeliveryMethod = profile.DeliveryMethod;
+            simpleDeliveryFlags = profile.DeliveryFlags;
             return;
         }
 
@@ -2185,7 +2374,7 @@ public class PlayerShooting : MonoBehaviourPun
 
     void SyncEquippedGadgetProfile()
     {
-        if (!photonView.IsMine || GetComponent<EnemyBot>() != null)
+        if (!photonView.IsMine || GetComponent<EnemyBot>() != null || IsNeutralRiderShip())
             return;
 
         RefreshAuthoritativeGadgetChargeCache();
@@ -2282,9 +2471,13 @@ public class PlayerShooting : MonoBehaviourPun
         if (equipmentSlots == null)
             return counts;
 
-        for (int i = 6; i <= 7; i++)
+        for (int i = 0; i < equipmentSlots.Length; i++)
         {
             if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
+                continue;
+
+            InventoryItemCategory category = InventoryItemCatalog.GetEquipmentSlotCategory(i);
+            if (category != InventoryItemCategory.Gadget && category != InventoryItemCategory.Support)
                 continue;
 
             string itemId = GetEquipmentItem(equipmentSlots, i);
@@ -2376,6 +2569,9 @@ public class PlayerShooting : MonoBehaviourPun
 
     bool SpawnBullet(Vector2 direction, Vector3 spawnPos, int ownerId, bool pilotBreachProjectile = false)
     {
+        float projectileSpeedMultiplier = GetProjectileSpeedMultiplier();
+        float adjustedBulletSpeed = Mathf.Max(0.1f, bulletSpeed * projectileSpeedMultiplier);
+        float adjustedSimpleFlightTime = simpleFlightTime / Mathf.Max(0.1f, projectileSpeedMultiplier);
         object[] data = simpleUsesDamageProfile
             ? new object[]
             {
@@ -2392,7 +2588,7 @@ public class PlayerShooting : MonoBehaviourPun
                 simplePierces,
                 simpleAreaDamageRadius,
                 simpleHitEffectId ?? string.Empty,
-                simpleFlightTime,
+                adjustedSimpleFlightTime,
                 pilotBreachProjectile ? PilotBreachProjectileMarker : string.Empty
             }
             : new object[]
@@ -2407,6 +2603,7 @@ public class PlayerShooting : MonoBehaviourPun
                 bulletRangeMultiplier,
                 pilotBreachProjectile ? PilotBreachProjectileMarker : string.Empty
             };
+        data = Bullet.AppendWeaponMetadata(data, simpleDamageType, simpleDeliveryMethod, simpleDeliveryFlags);
 
         GameObject bullet = PhotonNetwork.Instantiate(
             bulletPrefab.name,
@@ -2429,7 +2626,7 @@ public class PlayerShooting : MonoBehaviourPun
         Rigidbody2D rb = bullet.GetComponent<Rigidbody2D>();
         if (rb != null)
         {
-            rb.linearVelocity = direction * bulletSpeed;
+            rb.linearVelocity = direction * adjustedBulletSpeed;
         }
         else
         {
@@ -2513,14 +2710,14 @@ public class PlayerShooting : MonoBehaviourPun
 
     int GetConfiguredMaxAmmo()
     {
-        if (customAmmoProfileActive && GetComponent<EnemyBot>() != null)
+        if (IsNeutralRiderShip() || (customAmmoProfileActive && GetComponent<EnemyBot>() != null))
             return maxAmmo;
 
         int configuredAmmo = RoomSettings.GetAmmoCount();
         if (ShouldApplyNovaNoEquipmentAmmoBonus())
             configuredAmmo *= 2;
 
-        return configuredAmmo;
+        return GetDamageAdjustedMaxAmmo(configuredAmmo);
     }
 
     bool ShouldApplyNovaNoEquipmentAmmoBonus()
@@ -2546,6 +2743,24 @@ public class PlayerShooting : MonoBehaviourPun
         return true;
     }
 
+    int GetDamageAdjustedMaxAmmo(int baseMaxAmmo)
+    {
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        return damageState != null ? damageState.GetAdjustedAmmoMax(baseMaxAmmo) : Mathf.Max(1, baseMaxAmmo);
+    }
+
+    string GetShipDamageAmmoSignature()
+    {
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        return damageState != null ? damageState.GetAmmoDamageSignature() : "0";
+    }
+
+    bool IsShipDamageActive(ShipDamageType type)
+    {
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        return damageState != null && damageState.HasDamage(type);
+    }
+
     int GetPilotAdjustedWeaponMaxAmmo(WeaponAttackProfile profile)
     {
         int configuredAmmo = Mathf.Max(1, profile != null ? profile.MaxAmmo : RoomSettings.GetAmmoCount());
@@ -2555,7 +2770,7 @@ public class PlayerShooting : MonoBehaviourPun
         if (ShouldApplyCovaxRocketAmmoBonus(profile))
             configuredAmmo += 1;
 
-        return configuredAmmo;
+        return GetDamageAdjustedMaxAmmo(configuredAmmo);
     }
 
     bool ShouldApplyCovaxRocketAmmoBonus(WeaponAttackProfile profile)
@@ -2574,13 +2789,19 @@ public class PlayerShooting : MonoBehaviourPun
 
     float GetFireIntervalMultiplier()
     {
-        return ElectromagneticShockStatus.GetFireIntervalMultiplier(gameObject) *
-               AshSuperchargeStatus.GetFireIntervalMultiplier(gameObject);
+        float multiplier = ElectromagneticShockStatus.GetFireIntervalMultiplier(gameObject) *
+                           AtlasSuppressionStatus.GetFireIntervalMultiplier(gameObject) *
+                           AshSuperchargeStatus.GetFireIntervalMultiplier(gameObject);
+
+        if (GetComponent<EnemyBot>() != null)
+            multiplier *= RoomSettings.GetEnemyAttackCooldownMultiplier();
+
+        return multiplier;
     }
 
     float GetAdjustedSimpleReloadDuration()
     {
-        return Mathf.Max(0.05f, reloadDuration * AshSuperchargeStatus.GetAmmoReloadMultiplier(gameObject));
+        return Mathf.Max(0.05f, reloadDuration * AtlasSuppressionStatus.GetReloadMultiplier(gameObject) * AshSuperchargeStatus.GetAmmoReloadMultiplier(gameObject));
     }
 
     float GetAdjustedAmmoReloadTime(WeaponAttackProfile profile, bool ashEmergencyReload)
@@ -2595,8 +2816,13 @@ public class PlayerShooting : MonoBehaviourPun
         if (ashEmergencyReload && ShouldApplyAshEmergencyCapacitor(profile))
             reloadTime *= AshEmergencyAmmoReloadMultiplier;
 
-        reloadTime *= AshSuperchargeStatus.GetAmmoReloadMultiplier(gameObject);
+        reloadTime *= AtlasSuppressionStatus.GetReloadMultiplier(gameObject) * AshSuperchargeStatus.GetAmmoReloadMultiplier(gameObject);
         return Mathf.Max(0.001f, reloadTime);
+    }
+
+    float GetProjectileSpeedMultiplier()
+    {
+        return AtlasSuppressionStatus.GetProjectileSpeedMultiplier(gameObject);
     }
 
     bool ShouldApplyAshCapacitorTuning(WeaponAttackProfile profile)
@@ -2686,6 +2912,7 @@ public class PlayerShooting : MonoBehaviourPun
     {
         ResetComplexPressState();
         HideAimMarker();
+        CancelCloakDeviceForLocalOwner();
 
         if (PhotonNetwork.IsMasterClient)
         {
@@ -2702,7 +2929,23 @@ public class PlayerShooting : MonoBehaviourPun
         return string.Equals(itemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal);
     }
 
-    public void ConfigureWeaponProfile(float configuredFireRate, int configuredMaxAmmo, float configuredReloadDuration, int configuredBulletDamage, float configuredBulletScaleMultiplier, Color configuredBulletColor, float configuredMuzzleOffsetDistance, bool configuredInfiniteAmmo, float configuredBulletSpeed = -1f, string configuredShotSoundId = "", float configuredRangeMultiplier = -1f, string configuredHitEffectId = "", float configuredFlightTime = 10f)
+    public void ConfigureWeaponProfile(
+        float configuredFireRate,
+        int configuredMaxAmmo,
+        float configuredReloadDuration,
+        int configuredBulletDamage,
+        float configuredBulletScaleMultiplier,
+        Color configuredBulletColor,
+        float configuredMuzzleOffsetDistance,
+        bool configuredInfiniteAmmo,
+        float configuredBulletSpeed = -1f,
+        string configuredShotSoundId = "",
+        float configuredRangeMultiplier = -1f,
+        string configuredHitEffectId = "",
+        float configuredFlightTime = 10f,
+        WeaponDamageType configuredDamageType = WeaponDamageType.Laser,
+        WeaponDeliveryMethod configuredDeliveryMethod = WeaponDeliveryMethod.DirectProjectile,
+        WeaponDeliveryFlags configuredDeliveryFlags = WeaponDeliveryFlags.None)
     {
         customAmmoProfileActive = true;
         fireRate = Mathf.Max(0.05f, configuredFireRate);
@@ -2728,6 +2971,9 @@ public class PlayerShooting : MonoBehaviourPun
         simpleAreaDamageRadius = 0f;
         simpleHitEffectId = configuredHitEffectId ?? string.Empty;
         simpleFlightTime = Mathf.Clamp(configuredFlightTime, 0.2f, 30f);
+        simpleDamageType = configuredDamageType;
+        simpleDeliveryMethod = configuredDeliveryMethod;
+        simpleDeliveryFlags = configuredDeliveryFlags;
 
         isReloading = false;
         reloadFinishTime = 0f;
@@ -2930,7 +3176,52 @@ public class PlayerShooting : MonoBehaviourPun
             return health != null && health.CanActivateBatteryChargeLocally();
         }
 
+        if (string.Equals(itemId, InventoryItemCatalog.DropbotId, StringComparison.Ordinal))
+            return HasUsableDropbotCargoLocally();
+
+        if (string.Equals(itemId, InventoryItemCatalog.ShortScannerId, StringComparison.Ordinal) &&
+            ShortScannerRevealStatus.IsActive)
+        {
+            return false;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.CloakDeviceId, StringComparison.Ordinal))
+        {
+            HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>();
+            return nebulaTarget == null || !nebulaTarget.IsCloaked;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.SuperBoosterId, StringComparison.Ordinal) &&
+            IsShipDamageActive(ShipDamageType.Booster))
+        {
+            ShipDamageState damageState = GetComponent<ShipDamageState>();
+            if (damageState != null && damageState.IsBoosterDisabled())
+                return false;
+        }
+
         return true;
+    }
+
+    bool HasUsableDropbotCargoLocally()
+    {
+        if (!PlayerProfileService.HasInstance)
+            return false;
+
+        PlayerProfileData profile = PlayerProfileService.Instance.CurrentProfile;
+        PlayerInventoryData inventory = profile != null ? profile.Inventory : null;
+        if (inventory == null || !PlayerProfileService.Instance.HasFreePlayerInventorySlot())
+            return false;
+
+        inventory.Normalize();
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        int baseCapacity = PlayerProfileService.GetEffectiveShipInventoryCapacity(shipSkinIndex, inventory.EquipmentSlots);
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        int shipCapacity = damageState != null ? damageState.GetAdjustedCargoCapacity(baseCapacity) : ShipDamageState.GetLocalCargoAdjustedCapacity(baseCapacity);
+        int dropSlotIndex = PlayerProfileService.GetDropbotCargoSlotIndex(shipSkinIndex, shipCapacity, inventory.EquipmentSlots);
+        return dropSlotIndex >= 0 &&
+               dropSlotIndex < inventory.ShipSlots.Length &&
+               !string.IsNullOrWhiteSpace(inventory.ShipSlots[dropSlotIndex]);
     }
 
     bool AreShipControlsBlocked()
@@ -2986,6 +3277,9 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.SpaceBombId, StringComparison.Ordinal))
             return new Color(0.78f, 0.22f, 0.12f, 0.96f);
 
+        if (string.Equals(itemId, InventoryItemCatalog.DropbotId, StringComparison.Ordinal))
+            return new Color(0.08f, 0.48f, 0.72f, 0.96f);
+
         if (string.Equals(itemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
             return new Color(0.16f, 0.46f, 0.78f, 0.96f);
 
@@ -3003,6 +3297,12 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (string.Equals(itemId, InventoryItemCatalog.GuidanceSystemId, StringComparison.Ordinal))
             return new Color(0.18f, 0.62f, 0.58f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.ShortScannerId, StringComparison.Ordinal))
+            return new Color(0.1f, 0.54f, 0.78f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.CloakDeviceId, StringComparison.Ordinal))
+            return new Color(0.22f, 0.34f, 0.5f, 0.96f);
 
         if (string.Equals(itemId, InventoryItemCatalog.LootingFriendId, StringComparison.Ordinal))
             return new Color(0.74f, 0.58f, 0.12f, 0.96f);
@@ -3024,6 +3324,9 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(gadgetItemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal))
             return GadgetMinePlacementCooldown;
 
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.ShortScannerId, StringComparison.Ordinal))
+            return GetAdjustedShortScannerRevealDuration();
+
         return 0f;
     }
 
@@ -3038,6 +3341,9 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.SpaceBombId, StringComparison.Ordinal))
             return SpaceBombDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.DropbotId, StringComparison.Ordinal))
+            return DropbotDefaultCharges * equippedCount;
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.BatteryId, StringComparison.Ordinal))
         {
@@ -3057,7 +3363,7 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(gadgetItemId, InventoryItemCatalog.LureBeaconId, StringComparison.Ordinal))
         {
             int charges = LureBeaconDefaultCharges * equippedCount;
-            if (ShouldApplyRoburLureBeaconBonus())
+            if (ShouldApplyRoburTrapGadgetBonus())
                 charges *= 2;
 
             return charges;
@@ -3069,11 +3375,23 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(gadgetItemId, InventoryItemCatalog.GuidanceSystemId, StringComparison.Ordinal))
             return GuidanceSystemDefaultCharges * equippedCount;
 
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.ShortScannerId, StringComparison.Ordinal))
+            return ShortScannerDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.CloakDeviceId, StringComparison.Ordinal))
+            return CloakDeviceDefaultCharges * equippedCount;
+
         if (string.Equals(gadgetItemId, InventoryItemCatalog.SpaceDrillId, StringComparison.Ordinal))
             return SpaceDrillDefaultCharges * equippedCount;
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.SpaceTrapId, StringComparison.Ordinal))
-            return SpaceTrapDefaultCharges * equippedCount;
+        {
+            int charges = SpaceTrapDefaultCharges * equippedCount;
+            if (ShouldApplyRoburTrapGadgetBonus())
+                charges *= 2;
+
+            return charges;
+        }
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.SuperBoosterId, StringComparison.Ordinal))
             return SuperBoosterDefaultCharges * equippedCount;
@@ -3128,7 +3446,7 @@ public class PlayerShooting : MonoBehaviourPun
         return true;
     }
 
-    bool ShouldApplyRoburLureBeaconBonus()
+    bool ShouldApplyRoburTrapGadgetBonus()
     {
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
         return PilotCatalog.IsSelectedPilot(owner, PilotCatalog.RoburId);
@@ -3166,10 +3484,161 @@ public class PlayerShooting : MonoBehaviourPun
         if (remainingCharges <= 0)
             return;
 
+        if (string.Equals(itemId, InventoryItemCatalog.DropbotId, StringComparison.Ordinal))
+        {
+            TryBeginDropbotLaunchRequest(owner, itemId);
+            return;
+        }
+
         if (!TryExecuteAuthoritativeGadgetUse(itemId))
             return;
 
         SetAuthoritativeRemainingChargesOnMaster(owner.ActorNumber, itemId, remainingCharges - 1, maxCharges);
+    }
+
+    bool TryBeginDropbotLaunchRequest(Photon.Realtime.Player owner, string itemId)
+    {
+        if (!PhotonNetwork.IsMasterClient ||
+            photonView == null ||
+            owner == null ||
+            !string.Equals(itemId, InventoryItemCatalog.DropbotId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (pendingDropbotLaunchActive)
+        {
+            if (Time.time <= pendingDropbotLaunchExpiresAt)
+                return false;
+
+            ClearPendingDropbotLaunch();
+        }
+
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        int baseCapacity = PlayerProfileService.GetPlayerShipInventoryCapacity(owner);
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        int shipCapacity = damageState != null ? damageState.GetAdjustedCargoCapacity(baseCapacity) : baseCapacity;
+        int dropSlotIndex = PlayerProfileService.GetDropbotCargoSlotIndex(shipSkinIndex, shipCapacity, equipmentSlots);
+        if (dropSlotIndex < 0)
+            return false;
+
+        string[] shipSlots = PlayerProfileService.GetPlayerShipInventorySlots(owner);
+        if (dropSlotIndex >= shipSlots.Length)
+            return false;
+
+        string carriedItemId = shipSlots[dropSlotIndex];
+        if (string.IsNullOrWhiteSpace(carriedItemId))
+            return false;
+
+        pendingDropbotLaunchRequestId++;
+        if (pendingDropbotLaunchRequestId <= 0)
+            pendingDropbotLaunchRequestId = 1;
+
+        pendingDropbotLaunchActive = true;
+        pendingDropbotCargoSlotIndex = dropSlotIndex;
+        pendingDropbotCargoItemId = carriedItemId;
+        pendingDropbotOwnerActorNumber = owner.ActorNumber;
+        pendingDropbotLaunchExpiresAt = Time.time + DropbotLaunchRequestTimeout;
+        photonView.RPC(nameof(PrepareDropbotCargoLaunchRpc), owner, pendingDropbotLaunchRequestId, dropSlotIndex, carriedItemId);
+        return true;
+    }
+
+    [PunRPC]
+    async void PrepareDropbotCargoLaunchRpc(int requestId, int slotIndex, string expectedItemId)
+    {
+        if (photonView == null || !photonView.IsMine)
+            return;
+
+        string removedItemId = null;
+        bool removed = false;
+        try
+        {
+            removedItemId = await PlayerProfileService.Instance.RemoveDropbotCargoItemDeferredSaveAsync(slotIndex, expectedItemId);
+            removed = string.Equals(removedItemId, expectedItemId, StringComparison.Ordinal);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Dropbot cargo pickup failed: " + ex);
+        }
+
+        if (photonView != null)
+            photonView.RPC(nameof(ConfirmDropbotCargoLaunchRpc), RpcTarget.MasterClient, requestId, slotIndex, removedItemId ?? expectedItemId ?? string.Empty, removed);
+    }
+
+    [PunRPC]
+    void ConfirmDropbotCargoLaunchRpc(int requestId, int slotIndex, string itemId, bool removed, PhotonMessageInfo messageInfo)
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView == null)
+            return;
+
+        bool valid =
+            pendingDropbotLaunchActive &&
+            requestId == pendingDropbotLaunchRequestId &&
+            slotIndex == pendingDropbotCargoSlotIndex &&
+            messageInfo.Sender != null &&
+            messageInfo.Sender.ActorNumber == pendingDropbotOwnerActorNumber &&
+            string.Equals(itemId, pendingDropbotCargoItemId, StringComparison.Ordinal);
+
+        if (!valid)
+        {
+            if (removed && messageInfo.Sender != null && !string.IsNullOrWhiteSpace(itemId))
+                photonView.RPC(nameof(RestoreDropbotCargoItemRpc), messageInfo.Sender, slotIndex, itemId);
+            return;
+        }
+
+        if (!removed)
+        {
+            ClearPendingDropbotLaunch();
+            return;
+        }
+
+        Photon.Realtime.Player owner = photonView.Owner;
+        int maxCharges = ResolveEquippedGadgetMaxCharges(owner, InventoryItemCatalog.DropbotId);
+        int remainingCharges = owner != null ? GetAuthoritativeRemainingChargesOnMaster(owner.ActorNumber, InventoryItemCatalog.DropbotId, maxCharges) : 0;
+        if (maxCharges <= 0 || remainingCharges <= 0)
+        {
+            photonView.RPC(nameof(RestoreDropbotCargoItemRpc), messageInfo.Sender, slotIndex, itemId);
+            ClearPendingDropbotLaunch();
+            return;
+        }
+
+        bool launched = NewItemsRuntime.TryLaunchDropbot(this, itemId);
+        if (!launched)
+        {
+            photonView.RPC(nameof(RestoreDropbotCargoItemRpc), messageInfo.Sender, slotIndex, itemId);
+            ClearPendingDropbotLaunch();
+            return;
+        }
+
+        SetAuthoritativeRemainingChargesOnMaster(owner.ActorNumber, InventoryItemCatalog.DropbotId, remainingCharges - 1, maxCharges);
+        RoundXpTracker.RecordGadgetSuccess(owner, InventoryItemCatalog.DropbotId);
+        ClearPendingDropbotLaunch();
+    }
+
+    [PunRPC]
+    async void RestoreDropbotCargoItemRpc(int slotIndex, string itemId)
+    {
+        if (photonView == null || !photonView.IsMine || string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        try
+        {
+            await PlayerProfileService.Instance.RestoreShipItemAtAsync(slotIndex, itemId);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Dropbot cargo restore failed: " + ex);
+        }
+    }
+
+    void ClearPendingDropbotLaunch()
+    {
+        pendingDropbotLaunchActive = false;
+        pendingDropbotCargoSlotIndex = -1;
+        pendingDropbotOwnerActorNumber = 0;
+        pendingDropbotCargoItemId = null;
+        pendingDropbotLaunchExpiresAt = 0f;
     }
 
     [PunRPC]
@@ -3277,7 +3746,25 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (string.Equals(itemId, InventoryItemCatalog.GuidanceSystemId, StringComparison.Ordinal))
         {
-            photonView.RPC(nameof(ActivateGuidanceSystemRpc), photonView.Owner, GuidanceSystemDuration);
+            photonView.RPC(nameof(ActivateGuidanceSystemRpc), photonView.Owner, GetAdjustedGuidanceSystemDuration());
+            RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+            return true;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.ShortScannerId, StringComparison.Ordinal))
+        {
+            photonView.RPC(nameof(ActivateShortScannerRevealRpc), photonView.Owner, GetAdjustedShortScannerRevealDuration());
+            RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+            return true;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.CloakDeviceId, StringComparison.Ordinal))
+        {
+            HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>();
+            if (nebulaTarget != null && nebulaTarget.IsCloaked)
+                return false;
+
+            photonView.RPC(nameof(ActivateCloakDeviceRpc), RpcTarget.All, CloakDeviceDuration);
             RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
             return true;
         }
@@ -3302,6 +3789,10 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (string.Equals(itemId, InventoryItemCatalog.SuperBoosterId, StringComparison.Ordinal))
         {
+            ShipDamageState damageState = GetComponent<ShipDamageState>();
+            if (damageState != null && damageState.IsBoosterDisabled())
+                return false;
+
             photonView.RPC(nameof(ActivateSuperBoosterRpc), photonView.Owner, SuperBoosterDuration);
             RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
             return true;
@@ -3314,6 +3805,39 @@ public class PlayerShooting : MonoBehaviourPun
     void ActivateGuidanceSystemRpc(float duration)
     {
         GuidanceSystemOverlay.EnsureFor(gameObject)?.ActivateGuidance(duration);
+    }
+
+    [PunRPC]
+    void ActivateShortScannerRevealRpc(float duration)
+    {
+        ShortScannerRevealStatus.EnsureFor(gameObject)?.ActivateReveal(duration);
+    }
+
+    [PunRPC]
+    void ActivateCloakDeviceRpc(float duration)
+    {
+        HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>() ?? gameObject.AddComponent<HideInNebulaTarget>();
+        nebulaTarget.ActivateCloak(duration);
+    }
+
+    [PunRPC]
+    void CancelCloakDeviceRpc()
+    {
+        HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>();
+        if (nebulaTarget != null)
+            nebulaTarget.CancelCloak();
+    }
+
+    float GetAdjustedGuidanceSystemDuration()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        return GuidanceSystemDuration + (PilotCatalog.IsSelectedPilot(owner, PilotCatalog.VectorId) ? VectorGuidanceSystemDurationBonus : 0f);
+    }
+
+    float GetAdjustedShortScannerRevealDuration()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        return ShortScannerRevealDuration + (PilotCatalog.IsSelectedPilot(owner, PilotCatalog.VectorId) ? VectorShortScannerRevealDurationBonus : 0f);
     }
 
     [PunRPC]
@@ -3782,6 +4306,18 @@ public class PlayerShooting : MonoBehaviourPun
             bot = gameObject.AddComponent<EnemyBot>();
 
         bot.InitializeFromPhotonData();
+    }
+
+    void EnsureNeutralRiderBootstrap()
+    {
+        if (!NeutralRiderController.IsNeutralRiderInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            return;
+
+        NeutralRiderController rider = GetComponent<NeutralRiderController>();
+        if (rider == null)
+            rider = gameObject.AddComponent<NeutralRiderController>();
+
+        rider.InitializeFromPhotonData();
     }
 }
 

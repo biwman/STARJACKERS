@@ -330,6 +330,30 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         return string.Equals(hiddenTreasureCarrierId, stableId, System.StringComparison.Ordinal);
     }
 
+    public static bool TryGetHiddenTreasureWorldPosition(out Vector2 position)
+    {
+        position = Vector2.zero;
+        return instance != null && instance.TryGetHiddenTreasureWorldPositionInternal(out position);
+    }
+
+    bool TryGetHiddenTreasureWorldPositionInternal(out Vector2 position)
+    {
+        position = Vector2.zero;
+        if (!RoomSettings.IsHiddenTreasureEnabled())
+            return false;
+
+        RestoreHiddenTreasureStateFromRoom();
+        if (hiddenTreasureRevealed || string.IsNullOrWhiteSpace(hiddenTreasureCarrierId))
+            return false;
+
+        ObstacleChunk chunk = ObstacleChunk.Find(hiddenTreasureCarrierId);
+        if (chunk == null || chunk.CurrentHealth <= 0)
+            return false;
+
+        position = chunk.transform.position;
+        return true;
+    }
+
     ObstacleChunk.RuntimeState CreateInitialRuntimeState(int obstacleIndex, Vector2 position)
     {
         string stableId = "obstacle_" + obstacleIndex;
@@ -719,8 +743,8 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         if (candidate.x > halfX - radius || candidate.x < -halfX + radius || candidate.y > halfY - radius || candidate.y < -halfY + radius)
             return false;
 
-        Collider2D[] hits = Physics2D.OverlapCircleAll(candidate, radius);
-        for (int i = 0; i < hits.Length; i++)
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(candidate, radius, out Collider2D[] hits);
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || !hit.enabled)

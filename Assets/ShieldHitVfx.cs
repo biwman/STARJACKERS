@@ -14,6 +14,11 @@ public sealed class ShieldHitVfx : MonoBehaviour
     float baseRadius = 0.65f;
     float age;
 
+    public static void Prewarm()
+    {
+        GetLineMaterial();
+    }
+
     public static void Spawn(Vector3 position, SpriteRenderer referenceRenderer = null)
     {
         GameObject effect = new GameObject("ShieldHitVfx");

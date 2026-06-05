@@ -11,11 +11,13 @@ public class GameManager : MonoBehaviourPunCallbacks
     const string ExtractionLayoutKey = "extractionLayout";
     const string NebulaLayoutKey = "nebulaLayout";
     const string FireNebulaLayoutKey = NebulaSpawner.FireNebulaLayoutKey;
+    const string ToxicNebulaLayoutKey = NebulaSpawner.ToxicNebulaLayoutKey;
     const string CloudLayoutKey = NebulaSpawner.CloudLayoutKey;
     const string CloudDirectionKey = NebulaSpawner.CloudDirectionKey;
     const string RepairBayLayoutKey = "repairBayLayout";
     const string SpaceFactoryLayoutKey = SpaceFactorySpawner.LayoutKey;
     const string ScienceStationLayoutKey = ScienceStationSpawner.LayoutKey;
+    const string ArtifactAsteroidLayoutKey = ArtifactAsteroidSpawner.LayoutKey;
     const string MapSeedKey = "mapSeed";
     const string LoneShipModeStartTimeKey = "loneShipModeStartTime";
     const float RestartCleanupTimeout = 2.5f;
@@ -26,41 +28,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient) return;
 
-        GameplayHudVisibility.ResetSuppression();
-        EarlyRoundExitUI.HideAll();
-        RoundStartCurtainUI.ShowForRoundStart();
-
-        Hashtable props = new Hashtable();
-        float roundDuration = RoomSettings.GetRoundDuration();
-        double roundStartUtcMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        props["gameStarted"] = true;
-        props[RoomSettings.StartTimeKey] = PhotonNetwork.Time;
-        props[RoomSettings.RoundEndUtcMsKey] = roundStartUtcMs + (roundDuration * 1000d);
-        props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateInPlay;
-        props[RoomSettings.CrazyEnemiesActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, roundStartUtcMs);
-        props[RoomSettings.FogOfWarActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, roundStartUtcMs);
-        props[RoomSettings.PirateBaseActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, roundStartUtcMs);
-        props[RoomSettings.AsteroidShowerActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, roundStartUtcMs);
-        props[LoneShipModeStartTimeKey] = -1d;
-        props[GameTimer.EvacuationPauseUntilKey] = -1d;
-        props[GameTimer.EvacuationPauseRemainingKey] = -1f;
-        props[RoomSettings.GadgetChargesStateKey] = string.Empty;
-        props[RoomSettings.RepairBayOccupancyStateKey] = string.Empty;
-        props[RoomSettings.SpaceFactoryStateKey] = string.Empty;
-        props[RoomSettings.SpaceFactoryOccupancyStateKey] = string.Empty;
-        props[RoomSettings.ScienceStationOccupancyStateKey] = string.Empty;
-        props[RoomSettings.RoundResultsKey] = string.Empty;
-        props[RoomSettings.FinishedRoundResultsKey] = string.Empty;
-        props[RoomSettings.RoundEndReasonKey] = string.Empty;
-        props[FireNebulaLayoutKey] = string.Empty;
-        props[CloudLayoutKey] = string.Empty;
-        props[CloudDirectionKey] = string.Empty;
-        props[RepairBayLayoutKey] = string.Empty;
-        props[SpaceFactoryLayoutKey] = string.Empty;
-        props[ScienceStationLayoutKey] = string.Empty;
-
-        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
-        RoundResultsTracker.ResetForCurrentRoom();
+        RoundWarmupService.BeginRoundStartPreparation();
     }
 
     public void RestartGame()
@@ -96,20 +64,28 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         EarlyRoundExitUI.HideAll();
         RoundPilotHudUI.DestroyAllRuntimeObjects();
+        ShipDamageState.ClearAllRuntimeDamage();
+        TreasureCollector.ResetRoundReservations();
+        RoundWarmupService.ResetRoundTransientEffects();
 
         RoundResultsSnapshotData snapshot = RoundResultsTracker.BuildSnapshot(endReason);
 
         Hashtable props = new Hashtable();
         props["gameStarted"] = false;
+        props[RoomSettings.RoundWarmupTokenKey] = string.Empty;
+        props[RoomSettings.RoundWarmupStartedAtKey] = -1d;
         props[ObstacleLayoutKey] = string.Empty;
         props[ExtractionLayoutKey] = string.Empty;
         props[NebulaLayoutKey] = string.Empty;
         props[FireNebulaLayoutKey] = string.Empty;
+        props[ToxicNebulaLayoutKey] = string.Empty;
         props[CloudLayoutKey] = string.Empty;
         props[CloudDirectionKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
         props[SpaceFactoryLayoutKey] = string.Empty;
         props[ScienceStationLayoutKey] = string.Empty;
+        props[ArtifactAsteroidLayoutKey] = string.Empty;
+        props[RoomSettings.ArtifactAsteroidsStateKey] = string.Empty;
         props[MapSeedKey] = -1;
         props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateSummary;
         props[RoomSettings.RoundEndUtcMsKey] = -1d;
@@ -146,6 +122,9 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         PlayerMovement.gameStarted = false;
         PlayerShooting.gameStarted = false;
+        ShipDamageState.ClearAllRuntimeDamage();
+        TreasureCollector.ResetRoundReservations();
+        RoundWarmupService.ResetRoundTransientEffects();
 
         if (!PhotonNetwork.IsConnected)
         {
@@ -176,18 +155,26 @@ public class GameManager : MonoBehaviourPunCallbacks
         restartInProgress = true;
         EarlyRoundExitUI.HideAll();
         RoundPilotHudUI.DestroyAllRuntimeObjects();
+        ShipDamageState.ClearAllRuntimeDamage();
+        TreasureCollector.ResetRoundReservations();
+        RoundWarmupService.ResetRoundTransientEffects();
 
         Hashtable props = new Hashtable();
         props["gameStarted"] = false;
+        props[RoomSettings.RoundWarmupTokenKey] = string.Empty;
+        props[RoomSettings.RoundWarmupStartedAtKey] = -1d;
         props[ObstacleLayoutKey] = string.Empty;
         props[ExtractionLayoutKey] = string.Empty;
         props[NebulaLayoutKey] = string.Empty;
         props[FireNebulaLayoutKey] = string.Empty;
+        props[ToxicNebulaLayoutKey] = string.Empty;
         props[CloudLayoutKey] = string.Empty;
         props[CloudDirectionKey] = string.Empty;
         props[RepairBayLayoutKey] = string.Empty;
         props[SpaceFactoryLayoutKey] = string.Empty;
         props[ScienceStationLayoutKey] = string.Empty;
+        props[ArtifactAsteroidLayoutKey] = string.Empty;
+        props[RoomSettings.ArtifactAsteroidsStateKey] = string.Empty;
         props[MapSeedKey] = -1;
         props[RoomSettings.StartTimeKey] = -1d;
         props[RoomSettings.RoundEndUtcMsKey] = -1d;

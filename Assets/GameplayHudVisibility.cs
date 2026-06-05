@@ -9,6 +9,7 @@ public sealed class GameplayHudVisibility : MonoBehaviour
     static readonly string[] SuppressedObjectNames =
     {
         "JoystickBG",
+        "MovementJoystickBoosterRing",
         "ShootJoystickBG",
         "SuperAttackJoystickBG",
         "CollectButton",
@@ -18,6 +19,7 @@ public sealed class GameplayHudVisibility : MonoBehaviour
         "RoundChatMenu",
         "RoundChatBubble",
         "RoundChatRemoteFeed",
+        "AstronautKillMeButton",
         "ShipInventoryButton",
         "ShipInventoryPanel",
         "ShipInventoryDragVisual",

@@ -22,6 +22,12 @@ public sealed class TractorBeamVfx : MonoBehaviour
     int sortingLayerId;
     int sortingOrder = 2400;
 
+    public static void Prewarm()
+    {
+        GetMaterial();
+        GetTractorBeamClip();
+    }
+
     public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId)
     {
         StopBeam(sourcePhotonViewId);
@@ -35,6 +41,17 @@ public sealed class TractorBeamVfx : MonoBehaviour
         TractorBeamVfx vfx = effect.AddComponent<TractorBeamVfx>();
         vfx.Initialize(sourceView.transform, targetView.transform, sourcePhotonViewId, targetPhotonViewId);
         ActiveBySourceViewId[sourcePhotonViewId] = vfx;
+    }
+
+    public static void ResetForSessionTransition()
+    {
+        List<TractorBeamVfx> active = new List<TractorBeamVfx>(ActiveBySourceViewId.Values);
+        ActiveBySourceViewId.Clear();
+        for (int i = 0; i < active.Count; i++)
+        {
+            if (active[i] != null)
+                Destroy(active[i].gameObject);
+        }
     }
 
     public static void StopBeam(int sourcePhotonViewId)

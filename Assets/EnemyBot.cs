@@ -46,6 +46,12 @@ public sealed class RescueShipBeamVfx : MonoBehaviour
     int sortingLayerId;
     int sortingOrder = 2400;
 
+    public static void Prewarm()
+    {
+        GetMaterial();
+        GetRescueShipBeamClip();
+    }
+
     public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId)
     {
         StopBeam(sourcePhotonViewId);
@@ -312,6 +318,11 @@ public sealed class PirateBaseCollectionBeamVfx : MonoBehaviour
     int sortingLayerId;
     int sortingOrder = 2400;
 
+    public static void Prewarm()
+    {
+        GetMaterial();
+    }
+
     public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId)
     {
         StopBeam(sourcePhotonViewId);
@@ -566,6 +577,11 @@ public sealed class GravitySquidTetherVfx : MonoBehaviour
     int sourceViewId;
     int sortingLayerId;
     int sortingOrder = 2400;
+
+    public static void Prewarm()
+    {
+        GetMaterial();
+    }
 
     public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId)
     {
@@ -824,6 +840,11 @@ public sealed class HunterLanceBeamVfx : MonoBehaviour
     float startedAt;
     bool isShot;
 
+    public static void Prewarm()
+    {
+        GetMaterial();
+    }
+
     public static void SpawnAim(Vector2 start, Vector2 aimDirection, float beamRange, float warningDuration)
     {
         if (!RoomSettings.AreVisualEffectsEnabled())
@@ -997,11 +1018,19 @@ public sealed class SpaceAnimalDeathVfx : MonoBehaviour
     const float FallbackDuration = 0.45f;
     const float EffectZOffset = -0.06f;
 
+    static readonly Dictionary<string, Sprite[]> FrameCacheByResourcePath = new Dictionary<string, Sprite[]>(System.StringComparer.Ordinal);
+
     SpriteRenderer spriteRenderer;
     Sprite[] frames = System.Array.Empty<Sprite>();
     float targetSize = 2.5f;
     float frameCursor;
     float startedAt;
+
+    public static void Prewarm()
+    {
+        LoadFrames(ResolveResourcePath(EnemyBotKind.SpaceManta));
+        LoadFrames(ResolveResourcePath(EnemyBotKind.GravitySquid));
+    }
 
     public static void Play(EnemyBotKind kind, Vector3 position, float rotationZ, float visualTargetSize)
     {
@@ -1065,6 +1094,9 @@ public sealed class SpaceAnimalDeathVfx : MonoBehaviour
         if (string.IsNullOrWhiteSpace(resourcePath))
             return System.Array.Empty<Sprite>();
 
+        if (FrameCacheByResourcePath.TryGetValue(resourcePath, out Sprite[] cachedFrames))
+            return cachedFrames;
+
         List<Sprite> result = new List<Sprite>();
         Sprite[] sprites = Resources.LoadAll<Sprite>(resourcePath);
         if (sprites != null)
@@ -1091,7 +1123,12 @@ public sealed class SpaceAnimalDeathVfx : MonoBehaviour
         }
 
         result.Sort(CompareSpritesForAnimation);
-        return result.ToArray();
+        Sprite[] frames = result.ToArray();
+        for (int i = 0; i < frames.Length; i++)
+            PrewarmSpriteTexture(frames[i]);
+
+        FrameCacheByResourcePath[resourcePath] = frames;
+        return frames;
     }
 
     static Sprite CreateSpriteFromTexture(Texture2D texture)
@@ -1107,6 +1144,14 @@ public sealed class SpaceAnimalDeathVfx : MonoBehaviour
             pixelsPerUnit);
         sprite.name = texture.name;
         return sprite;
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
     }
 
     static int CompareSpritesForAnimation(Sprite a, Sprite b)
@@ -1168,6 +1213,13 @@ public sealed class PirateBaseLaunchVfx : MonoBehaviour
     SpriteRenderer hatchRenderer;
     int sortingLayerId;
     int sortingOrder;
+
+    public static void Prewarm()
+    {
+        Sprite[] frames = GetHatchFrames();
+        for (int i = 0; i < frames.Length; i++)
+            PrewarmSpriteTexture(frames[i]);
+    }
 
     public static void Play(EnemyBot source, EnemyBotKind launchedFighterKind)
     {
@@ -1300,13 +1352,21 @@ public sealed class PirateBaseLaunchVfx : MonoBehaviour
         hatchFrames = frames.ToArray();
         return hatchFrames;
     }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
+    }
 }
 
 public static class EnemyTargetingUtility
 {
     const float BeaconPriorityRangeMultiplier = 1.9f;
 
-    public static Transform FindClosestTarget(Vector2 origin, PlayerHealth observerHealth, float maxDistance, bool requireNebulaVisibility)
+    public static Transform FindClosestTarget(Vector2 origin, PlayerHealth observerHealth, float maxDistance, bool requireNebulaVisibility, bool includeEnemyAstronauts = false)
     {
         Transform bestBeaconTarget = null;
         float bestBeaconDistance = float.MaxValue;
@@ -1353,7 +1413,7 @@ public static class EnemyTargetingUtility
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth candidate = players[i];
-            if (!IsValidPlayerTarget(candidate, observerHealth, origin, maxDistance, requireNebulaVisibility))
+            if (!IsValidPlayerTarget(candidate, observerHealth, origin, maxDistance, requireNebulaVisibility, includeEnemyAstronauts))
                 continue;
 
             float distance = Vector2.Distance(origin, candidate.transform.position);
@@ -1367,7 +1427,7 @@ public static class EnemyTargetingUtility
         return bestTarget;
     }
 
-    public static bool IsTargetValid(Transform target, PlayerHealth observerHealth, Vector2 origin, float maxDistance, bool requireNebulaVisibility)
+    public static bool IsTargetValid(Transform target, PlayerHealth observerHealth, Vector2 origin, float maxDistance, bool requireNebulaVisibility, bool includeEnemyAstronauts = false)
     {
         if (target == null)
             return false;
@@ -1381,7 +1441,7 @@ public static class EnemyTargetingUtility
             if (IsAnyDeployableAvailable(origin, maxDistance))
                 return false;
 
-            return IsValidPlayerTarget(player, observerHealth, origin, maxDistance, requireNebulaVisibility);
+            return IsValidPlayerTarget(player, observerHealth, origin, maxDistance, requireNebulaVisibility, includeEnemyAstronauts);
         }
 
         PlayerDeployableBase deployable = target.GetComponent<PlayerDeployableBase>();
@@ -1402,10 +1462,20 @@ public static class EnemyTargetingUtility
         return FindClosestTarget(origin, observerHealth, radius, false) != null;
     }
 
-    static bool IsValidPlayerTarget(PlayerHealth candidate, PlayerHealth observerHealth, Vector2 origin, float maxDistance, bool requireNebulaVisibility)
+    static bool IsValidPlayerTarget(PlayerHealth candidate, PlayerHealth observerHealth, Vector2 origin, float maxDistance, bool requireNebulaVisibility, bool includeEnemyAstronauts)
     {
         if (candidate == null || candidate == observerHealth || candidate.IsWreck || candidate.IsBotControlled || candidate.IsEvacuationAnimating)
             return false;
+
+        if (includeEnemyAstronauts)
+        {
+            if (!ActorIdentity.CanBeTargetedByMonstersActor(candidate))
+                return false;
+        }
+        else if (!ActorIdentity.CanBeTargetedByEnemyShipsActor(candidate))
+        {
+            return false;
+        }
 
         if (candidate.GetComponent<LureBeaconDecoy>() != null)
             return false;
@@ -1434,7 +1504,7 @@ public static class EnemyTargetingUtility
 
     static bool IsValidDeployableTarget(PlayerDeployableBase deployable, Vector2 origin, float maxDistance)
     {
-        if (deployable == null || !deployable.CanBeTargeted)
+        if (deployable == null || !deployable.CanBeTargetedByEnemyBots)
             return false;
 
         return Vector2.Distance(origin, deployable.transform.position) <= maxDistance;
@@ -1505,6 +1575,9 @@ public class EnemyExplosionProfile
     Sprite[] cachedFrames;
 
     public int Damage;
+    public WeaponDamageType DamageType;
+    public WeaponDeliveryMethod DeliveryMethod;
+    public WeaponDeliveryFlags DeliveryFlags;
     public float TriggerRadius;
     public float VisualTargetSize;
     public float VisualDuration;
@@ -1652,6 +1725,9 @@ public class EnemyWeaponProfile
     public float ReloadDuration;
     public float FireRate;
     public int Damage;
+    public WeaponDamageType DamageType;
+    public WeaponDeliveryMethod DeliveryMethod;
+    public WeaponDeliveryFlags DeliveryFlags;
     public float BulletScaleMultiplier;
     public Color BulletColor;
     public float BulletSpeed;
@@ -1917,6 +1993,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 6f,
                 FireRate = 0.15f,
                 Damage = 10,
+                DamageType = WeaponDamageType.Laser,
+                DeliveryMethod = WeaponDeliveryMethod.BurstProjectile,
+                DeliveryFlags = WeaponDeliveryFlags.None,
                 BulletScaleMultiplier = 1f,
                 BulletColor = Color.white,
                 BulletSpeed = 10f,
@@ -1984,6 +2063,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 0f,
                 FireRate = 1f,
                 Damage = 20,
+                DamageType = WeaponDamageType.Plasma,
+                DeliveryMethod = WeaponDeliveryMethod.DirectProjectile,
+                DeliveryFlags = WeaponDeliveryFlags.None,
                 BulletScaleMultiplier = 2f,
                 BulletColor = new Color(0.15f, 1f, 0.28f, 1f),
                 BulletSpeed = 9f,
@@ -2055,6 +2137,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 0f,
                 FireRate = 0f,
                 Damage = 0,
+                DamageType = WeaponDamageType.None,
+                DeliveryMethod = WeaponDeliveryMethod.None,
+                DeliveryFlags = WeaponDeliveryFlags.None,
                 BulletScaleMultiplier = 1f,
                 BulletColor = Color.white,
                 BulletSpeed = 0f,
@@ -2092,6 +2177,9 @@ public static class EnemyBotCatalog
             Explosion = new EnemyExplosionProfile
             {
                 Damage = 50,
+                DamageType = WeaponDamageType.Explosive,
+                DeliveryMethod = WeaponDeliveryMethod.Mine,
+                DeliveryFlags = WeaponDeliveryFlags.AreaDamage,
                 TriggerRadius = 2.08f,
                 VisualTargetSize = 4.1f,
                 VisualDuration = 1.25f,
@@ -2135,6 +2223,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 0f,
                 FireRate = 0f,
                 Damage = 0,
+                DamageType = WeaponDamageType.None,
+                DeliveryMethod = WeaponDeliveryMethod.None,
+                DeliveryFlags = WeaponDeliveryFlags.None,
                 BulletScaleMultiplier = 1f,
                 BulletColor = Color.white,
                 BulletSpeed = 0f,
@@ -2210,6 +2301,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 0f,
                 FireRate = 0f,
                 Damage = 0,
+                DamageType = WeaponDamageType.None,
+                DeliveryMethod = WeaponDeliveryMethod.None,
+                DeliveryFlags = WeaponDeliveryFlags.None,
                 BulletScaleMultiplier = 1f,
                 BulletColor = Color.white,
                 BulletSpeed = 0f,
@@ -2289,6 +2383,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 4f,
                 FireRate = 0.5f,
                 Damage = 10,
+                DamageType = WeaponDamageType.Laser,
+                DeliveryMethod = WeaponDeliveryMethod.BurstProjectile,
+                DeliveryFlags = WeaponDeliveryFlags.None,
                 BulletScaleMultiplier = 0.58f,
                 BulletColor = new Color(1f, 0.08f, 0.04f, 1f),
                 BulletSpeed = 11.5f,
@@ -2364,6 +2461,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 0f,
                 FireRate = 3f,
                 Damage = 38,
+                DamageType = WeaponDamageType.Explosive,
+                DeliveryMethod = WeaponDeliveryMethod.RemoteStrike,
+                DeliveryFlags = WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.Delayed,
                 BulletScaleMultiplier = 1.8f,
                 BulletColor = new Color(1f, 0.55f, 0.18f, 1f),
                 BulletSpeed = 18f,
@@ -2441,6 +2541,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 0f,
                 FireRate = 4.6f,
                 Damage = 36,
+                DamageType = WeaponDamageType.Laser,
+                DeliveryMethod = WeaponDeliveryMethod.Beam,
+                DeliveryFlags = WeaponDeliveryFlags.ShieldFocused,
                 BulletScaleMultiplier = 0f,
                 BulletColor = new Color(0.36f, 0.9f, 1f, 1f),
                 BulletSpeed = 0f,
@@ -2520,6 +2623,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 4f,
                 FireRate = 0.12f,
                 Damage = 10,
+                DamageType = WeaponDamageType.Laser,
+                DeliveryMethod = WeaponDeliveryMethod.BurstProjectile,
+                DeliveryFlags = WeaponDeliveryFlags.MultiStream,
                 BulletScaleMultiplier = 0.42f,
                 BulletColor = new Color(0.08f, 0.62f, 1f, 1f),
                 BulletSpeed = 18f,
@@ -2600,6 +2706,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 4f,
                 FireRate = 0.12f,
                 Damage = 10,
+                DamageType = WeaponDamageType.Laser,
+                DeliveryMethod = WeaponDeliveryMethod.BurstProjectile,
+                DeliveryFlags = WeaponDeliveryFlags.MultiStream,
                 BulletScaleMultiplier = 0.42f,
                 BulletColor = new Color(1f, 0.08f, 0.03f, 1f),
                 BulletSpeed = 18f,
@@ -2680,6 +2789,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 4f,
                 FireRate = 0.12f,
                 Damage = 10,
+                DamageType = WeaponDamageType.Laser,
+                DeliveryMethod = WeaponDeliveryMethod.BurstProjectile,
+                DeliveryFlags = WeaponDeliveryFlags.MultiStream,
                 BulletScaleMultiplier = 0.42f,
                 BulletColor = new Color(1f, 0.08f, 0.03f, 1f),
                 BulletSpeed = 18f,
@@ -2762,6 +2874,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 0f,
                 FireRate = 3.4f,
                 Damage = 40,
+                DamageType = WeaponDamageType.Kinetic,
+                DeliveryMethod = WeaponDeliveryMethod.ContactDash,
+                DeliveryFlags = WeaponDeliveryFlags.None,
                 BulletScaleMultiplier = 0f,
                 BulletColor = new Color(0.3f, 0.88f, 1f, 1f),
                 BulletSpeed = 0f,
@@ -2845,6 +2960,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 0f,
                 FireRate = 7f,
                 Damage = 8,
+                DamageType = WeaponDamageType.Gravitic,
+                DeliveryMethod = WeaponDeliveryMethod.Tether,
+                DeliveryFlags = WeaponDeliveryFlags.Continuous | WeaponDeliveryFlags.ShieldFocused,
                 BulletScaleMultiplier = 0f,
                 BulletColor = new Color(0.12f, 0.96f, 1f, 1f),
                 BulletSpeed = 0f,
@@ -2923,6 +3041,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 0f,
                 FireRate = 0f,
                 Damage = 0,
+                DamageType = WeaponDamageType.None,
+                DeliveryMethod = WeaponDeliveryMethod.Spawner,
+                DeliveryFlags = WeaponDeliveryFlags.Autonomous,
                 BulletScaleMultiplier = 0f,
                 BulletColor = Color.white,
                 BulletSpeed = 0f,
@@ -3003,6 +3124,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 0f,
                 FireRate = 0f,
                 Damage = 0,
+                DamageType = WeaponDamageType.None,
+                DeliveryMethod = WeaponDeliveryMethod.None,
+                DeliveryFlags = WeaponDeliveryFlags.None,
                 BulletScaleMultiplier = 0f,
                 BulletColor = new Color(0.54f, 0.9f, 1f, 1f),
                 BulletSpeed = 0f,
@@ -3080,6 +3204,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 3f,
                 FireRate = 0.28f,
                 Damage = 10,
+                DamageType = WeaponDamageType.Laser,
+                DeliveryMethod = WeaponDeliveryMethod.BurstProjectile,
+                DeliveryFlags = WeaponDeliveryFlags.MultiStream,
                 BulletScaleMultiplier = 1f,
                 BulletColor = Color.white,
                 BulletSpeed = 10f,
@@ -3165,6 +3292,9 @@ public static class EnemyBotCatalog
                 ReloadDuration = 0f,
                 FireRate = 0.18f,
                 Damage = 18,
+                DamageType = WeaponDamageType.Plasma,
+                DeliveryMethod = WeaponDeliveryMethod.SpreadProjectile,
+                DeliveryFlags = WeaponDeliveryFlags.MultiStream,
                 BulletScaleMultiplier = 1.75f,
                 BulletColor = new Color(0.55f, 0.18f, 1f, 1f),
                 BulletSpeed = 8.6f,
@@ -3213,6 +3343,22 @@ public static class EnemyBotCatalog
 
     public static System.Collections.Generic.IReadOnlyList<EnemyBotDefinition> AllDefinitions => Definitions;
 
+    public static void PrewarmRoundAssets()
+    {
+        for (int i = 0; i < Definitions.Length; i++)
+            PrewarmDefinition(Definitions[i]);
+
+        EnemyContainerShipBehavior.PrewarmCargoSprites();
+        EnemyMothershipBehavior.PrewarmTurretAssets();
+
+        RescueShipBeamVfx.Prewarm();
+        PirateBaseCollectionBeamVfx.Prewarm();
+        GravitySquidTetherVfx.Prewarm();
+        HunterLanceBeamVfx.Prewarm();
+        SpaceAnimalDeathVfx.Prewarm();
+        PirateBaseLaunchVfx.Prewarm();
+    }
+
     public static EnemyBotDefinition GetDefinition(EnemyBotKind kind)
     {
         DefinitionsByKind.TryGetValue(kind, out EnemyBotDefinition definition);
@@ -3245,10 +3391,45 @@ public static class EnemyBotCatalog
 
         return result;
     }
+
+    static void PrewarmDefinition(EnemyBotDefinition definition)
+    {
+        if (definition == null)
+            return;
+
+        PrewarmSpriteTexture(definition.GetVisualSprite());
+        if (!string.IsNullOrWhiteSpace(definition.AnimationResourcePath))
+            PrewarmSprites(EnemySpriteFrameAnimator.PrewarmFrames(definition.AnimationResourcePath));
+
+        if (definition.Wreck != null)
+            PrewarmSpriteTexture(definition.Wreck.GetVisualSprite());
+
+        if (definition.Explosion != null)
+            PrewarmSprites(definition.Explosion.GetVisualFrames());
+    }
+
+    static void PrewarmSprites(Sprite[] sprites)
+    {
+        if (sprites == null)
+            return;
+
+        for (int i = 0; i < sprites.Length; i++)
+            PrewarmSpriteTexture(sprites[i]);
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
+    }
 }
 
 public sealed class EnemySpriteFrameAnimator : MonoBehaviour
 {
+    static readonly System.Collections.Generic.Dictionary<string, Sprite[]> FrameCacheByResourcePath = new System.Collections.Generic.Dictionary<string, Sprite[]>(System.StringComparer.Ordinal);
+
     SpriteRenderer targetRenderer;
     Sprite[] frames = System.Array.Empty<Sprite>();
     string loadedResourcePath;
@@ -3274,6 +3455,11 @@ public sealed class EnemySpriteFrameAnimator : MonoBehaviour
         speedMultiplier = Mathf.Clamp(value, 0.15f, 3.5f);
     }
 
+    public static Sprite[] PrewarmFrames(string resourcePath)
+    {
+        return LoadFrames(resourcePath);
+    }
+
     void LateUpdate()
     {
         if (targetRenderer == null || frames == null || frames.Length == 0)
@@ -3291,6 +3477,9 @@ public sealed class EnemySpriteFrameAnimator : MonoBehaviour
     {
         if (string.IsNullOrWhiteSpace(resourcePath))
             return System.Array.Empty<Sprite>();
+
+        if (FrameCacheByResourcePath.TryGetValue(resourcePath, out Sprite[] cachedFrames))
+            return cachedFrames;
 
         Sprite[] allSprites = Resources.LoadAll<Sprite>(resourcePath);
         System.Collections.Generic.List<Sprite> candidates = new System.Collections.Generic.List<Sprite>();
@@ -3316,7 +3505,12 @@ public sealed class EnemySpriteFrameAnimator : MonoBehaviour
 
         System.Collections.Generic.List<Sprite> selected = flapCandidates.Count > 0 ? flapCandidates : candidates;
         selected.Sort(CompareSpritesForAnimation);
-        return selected.ToArray();
+        Sprite[] frames = selected.ToArray();
+        for (int i = 0; i < frames.Length; i++)
+            PrewarmSpriteTexture(frames[i]);
+
+        FrameCacheByResourcePath[resourcePath] = frames;
+        return frames;
     }
 
     static void AddAnimationCandidate(Sprite sprite, System.Collections.Generic.List<Sprite> candidates, System.Collections.Generic.List<Sprite> flapCandidates)
@@ -3346,6 +3540,14 @@ public sealed class EnemySpriteFrameAnimator : MonoBehaviour
             pixelsPerUnit);
         sprite.name = texture.name;
         return sprite;
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
     }
 
     static int CompareSpritesForAnimation(Sprite a, Sprite b)
@@ -3424,6 +3626,7 @@ public class EnemyBot : MonoBehaviourPun
     int containerShipCargoVariantIndex;
     int pirateBaseLaunchTargetViewId;
     int pirateBaseLaunchSourceViewId;
+    int cosmicWormSwallowZoomToken;
     float confusedUntil;
     float nextConfusedDirectionAt;
     float nextConfusedShotAt;
@@ -3452,7 +3655,7 @@ public class EnemyBot : MonoBehaviourPun
     public bool IsConfused => Time.time < confusedUntil;
     public float VisualTargetSize => Definition != null ? Definition.TargetSize : 1.04f;
     public float EffectiveMoveSpeed => Definition != null && Definition.Movement != null
-        ? Definition.Movement.MoveSpeed * EffectiveSpeedMultiplier * NebulaSpeedMultiplier * ElectromagneticShockStatus.GetSpeedMultiplier(gameObject)
+        ? Definition.Movement.MoveSpeed * EffectiveSpeedMultiplier * NebulaSpeedMultiplier * ElectromagneticShockStatus.GetSpeedMultiplier(gameObject) * AtlasSuppressionStatus.GetSpeedMultiplier(gameObject)
         : 1f;
     public float EffectiveSpeedMultiplier => forcedSpeedMultiplier > 0f && (forcedSpeedMultiplierUntil <= 0f || Time.time < forcedSpeedMultiplierUntil)
         ? forcedSpeedMultiplier
@@ -3464,6 +3667,35 @@ public class EnemyBot : MonoBehaviourPun
             HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>();
             return nebulaTarget != null ? nebulaTarget.CurrentNebulaSpeedMultiplier : 1f;
         }
+    }
+
+    public static bool IsPlayerControlledDamageSource(int attackerViewID)
+    {
+        if (attackerViewID <= 0)
+            return false;
+
+        PhotonView attackerView = PhotonView.Find(attackerViewID);
+        if (attackerView == null)
+            return false;
+
+        PlayerHealth attackerHealth = attackerView.GetComponent<PlayerHealth>();
+        if (attackerHealth != null &&
+            !attackerHealth.IsBotControlled &&
+            !attackerHealth.IsNeutralRiderControlled &&
+            !attackerHealth.IsAstronautControlled &&
+            attackerHealth.GetComponent<PlayerDeployableBase>() == null &&
+            attackerHealth.GetComponent<LureBeaconDecoy>() == null)
+        {
+            return true;
+        }
+
+        PlayerDeployableBase deployable = attackerView.GetComponent<PlayerDeployableBase>();
+        if (deployable != null)
+            return deployable.OwnerShipViewId != attackerViewID &&
+                   IsPlayerControlledDamageSource(deployable.OwnerShipViewId);
+
+        EnemyBot attackerBot = attackerView.GetComponent<EnemyBot>();
+        return attackerBot != null && attackerBot.Kind == EnemyBotKind.SpaceMine && attackerBot.IsPlayerPlacedMine;
     }
 
     public static bool IsPirateFighterKind(EnemyBotKind candidate)
@@ -3964,6 +4196,7 @@ public class EnemyBot : MonoBehaviourPun
         if (explosion == null)
             return;
 
+        WeaponHitContext hitContext = new WeaponHitContext(explosion.DamageType, explosion.DeliveryMethod, explosion.DeliveryFlags, string.Empty);
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         for (int i = 0; i < players.Length; i++)
         {
@@ -3984,7 +4217,15 @@ public class EnemyBot : MonoBehaviourPun
 
             PhotonView targetView = candidate.GetComponent<PhotonView>();
             if (targetView != null)
-                targetView.RPC(nameof(PlayerHealth.TakeDamage), RpcTarget.MasterClient, RoomSettings.GetEnemyDamage(kind), photonView.ViewID);
+                targetView.RPC(
+                    nameof(PlayerHealth.TakeDamageWithContext),
+                    RpcTarget.MasterClient,
+                    RoomSettings.GetEnemyDamage(kind),
+                    photonView.ViewID,
+                    (int)hitContext.DamageType,
+                    (int)hitContext.DeliveryMethod,
+                    (int)hitContext.DeliveryFlags,
+                    hitContext.DamageSource ?? string.Empty);
         }
 
         foreach (LureBeaconDecoy beacon in LureBeaconDecoy.GetActiveBeacons())
@@ -4009,7 +4250,18 @@ public class EnemyBot : MonoBehaviourPun
                 continue;
 
             int damage = RoomSettings.GetEnemyDamage(kind);
-            deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, damage, damage, photonView.ViewID, deployable.transform.position.x, deployable.transform.position.y);
+            deployable.photonView.RPC(
+                nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                RpcTarget.MasterClient,
+                damage,
+                damage,
+                photonView.ViewID,
+                deployable.transform.position.x,
+                deployable.transform.position.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
         }
     }
 
@@ -4332,6 +4584,18 @@ public class EnemyBot : MonoBehaviourPun
         mothershipBehavior?.ConvertTurretsToWreckVisuals();
     }
 
+    public void HideContainerShipCargoVisual()
+    {
+        if (kind != EnemyBotKind.ContainerShip)
+            return;
+
+        EnemyContainerShipBehavior containerShipBehavior = behavior as EnemyContainerShipBehavior;
+        if (containerShipBehavior == null)
+            containerShipBehavior = GetComponent<EnemyContainerShipBehavior>();
+
+        containerShipBehavior?.HideCargoVisual();
+    }
+
     public void NotifyDamageTaken(int previousHp, int currentHp, int shieldDamage, int hpDamage, int attackerViewID)
     {
         if (!PhotonNetwork.IsMasterClient || health == null || health.IsWreck)
@@ -4484,6 +4748,7 @@ public class EnemyBot : MonoBehaviourPun
     public void SpawnHunterLanceAimRpc(float originX, float originY, float directionX, float directionY, float range, float duration)
     {
         HunterLanceBeamVfx.SpawnAim(new Vector2(originX, originY), new Vector2(directionX, directionY), range, duration);
+        DynamicCameraZoomController.Request(DynamicCameraZoomProfiles.HunterLanceLock, new Vector3(originX, originY, 0f), duration);
     }
 
     [PunRPC]
@@ -4509,6 +4774,11 @@ public class EnemyBot : MonoBehaviourPun
     public void SpawnCosmicWormDashWarningRpc(float originX, float originY, float directionX, float directionY, float range, float duration)
     {
         CosmicWormDashWarningVfx.Spawn(new Vector2(originX, originY), new Vector2(directionX, directionY), range, duration);
+        Vector2 direction = new Vector2(directionX, directionY);
+        if (direction.sqrMagnitude > 0.001f)
+            direction.Normalize();
+        Vector2 midpoint = new Vector2(originX, originY) + direction * (Mathf.Max(0f, range) * 0.5f);
+        DynamicCameraZoomController.Request(DynamicCameraZoomProfiles.CosmicWormDanger, new Vector3(midpoint.x, midpoint.y, 0f), duration);
     }
 
     [PunRPC]
@@ -4521,12 +4791,19 @@ public class EnemyBot : MonoBehaviourPun
     public void StartCosmicWormSwallowRpc(float x, float y, float directionX, float directionY, float radius, float duration, int sourceViewId)
     {
         CosmicWormSwallowVfx.StartEffect(sourceViewId, new Vector2(x, y), new Vector2(directionX, directionY), radius, duration);
+        cosmicWormSwallowZoomToken = DynamicCameraZoomController.Refresh(
+            cosmicWormSwallowZoomToken,
+            DynamicCameraZoomProfiles.CosmicWormDanger.WithMultiplier(1.2f),
+            new Vector3(x, y, 0f),
+            duration);
     }
 
     [PunRPC]
     public void StopCosmicWormSwallowRpc(int sourceViewId)
     {
         CosmicWormSwallowVfx.StopEffect(sourceViewId);
+        DynamicCameraZoomController.Cancel(cosmicWormSwallowZoomToken);
+        cosmicWormSwallowZoomToken = 0;
     }
 
     [PunRPC]
@@ -4575,6 +4852,7 @@ public class EnemyBot : MonoBehaviourPun
             return;
 
         PirateBaseLaunchVfx.Play(this, (EnemyBotKind)fighterKindValue);
+        DynamicCameraZoomController.Request(DynamicCameraZoomProfiles.PirateBaseLaunch, transform.position);
     }
 
     public void ForceCombatTarget(int targetViewId)
@@ -4683,6 +4961,16 @@ public abstract class EnemyBotBehaviorBase : MonoBehaviour
         bot = owner;
     }
 
+    protected static float ScaleEnemyAttackWindup(float duration)
+    {
+        return Mathf.Max(0.01f, duration * RoomSettings.GetEnemyAttackWindupMultiplier());
+    }
+
+    protected static float ScaleEnemyAttackCooldown(float cooldown)
+    {
+        return Mathf.Max(0.05f, cooldown * RoomSettings.GetEnemyAttackCooldownMultiplier());
+    }
+
     public abstract void TickBehavior();
 }
 
@@ -4723,7 +5011,12 @@ public class EnemyDroneBehavior : EnemyBotBehaviorBase
                 weapon.InfiniteAmmo,
                 weapon.BulletSpeed,
                 weapon.ShotSoundId,
-                weapon.Range);
+                weapon.Range,
+                string.Empty,
+                10f,
+                weapon.DamageType,
+                weapon.DeliveryMethod,
+                weapon.DeliveryFlags);
         }
     }
 
@@ -4884,7 +5177,12 @@ public class EnemyCorsairBehavior : EnemyBotBehaviorBase
                 weapon.InfiniteAmmo,
                 weapon.BulletSpeed,
                 weapon.ShotSoundId,
-                weapon.Range);
+                weapon.Range,
+                string.Empty,
+                10f,
+                weapon.DamageType,
+                weapon.DeliveryMethod,
+                weapon.DeliveryFlags);
         }
     }
 
@@ -5014,7 +5312,12 @@ public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
                 weapon.InfiniteAmmo,
                 weapon.BulletSpeed,
                 weapon.ShotSoundId,
-                weapon.Range);
+                weapon.Range,
+                string.Empty,
+                10f,
+                weapon.DamageType,
+                weapon.DeliveryMethod,
+                weapon.DeliveryFlags);
         }
     }
 
@@ -5182,8 +5485,8 @@ public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
                 : patrolDirection.normalized;
         Vector2 avoidance = Vector2.zero;
         int closeAvoidedObjects = 0;
-        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
-        for (int i = 0; i < hits.Length; i++)
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(rb.position, AvoidanceScanRadius, out Collider2D[] hits);
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || hit.attachedRigidbody == rb)
@@ -5586,7 +5889,10 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
                 weapon.ShotSoundId,
                 weapon.Range,
                 ResolveProjectileEffectId(owner.Kind),
-                2.4f);
+                2.4f,
+                weapon.DamageType,
+                weapon.DeliveryMethod,
+                weapon.DeliveryFlags);
         }
 
         if (owner.PirateBaseLaunchTargetViewId > 0)
@@ -5676,6 +5982,9 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
             ? movement.DetectionRadius
             : movement.DisengageRadius;
 
+        if (IsValidPirateCaseCarrierTarget(currentTarget))
+            return currentTarget;
+
         if (!IsProtectedCharlieTarget(currentTarget) &&
             EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, validRange, true))
             return currentTarget;
@@ -5705,6 +6014,10 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
         if (bestBeaconTarget != null)
             return bestBeaconTarget;
 
+        PlayerHealth pirateCaseCarrier = ValuableCargoCarrierUtility.FindBestPirateCaseCarrier(rb.position, float.PositiveInfinity, health);
+        if (pirateCaseCarrier != null)
+            return pirateCaseCarrier.transform;
+
         Transform bestTarget = null;
         float bestDistance = float.MaxValue;
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
@@ -5725,9 +6038,15 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
         return bestTarget;
     }
 
+    bool IsValidPirateCaseCarrierTarget(Transform target)
+    {
+        PlayerHealth targetHealth = target != null ? target.GetComponent<PlayerHealth>() : null;
+        return ValuableCargoCarrierUtility.IsPirateCaseCarrier(targetHealth);
+    }
+
     bool IsValidUnprotectedPlayerTarget(PlayerHealth candidate, float maxDistance)
     {
-        if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsBotControlled || candidate.IsEvacuationAnimating)
+        if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsBotControlled || candidate.IsAstronautControlled || candidate.IsEvacuationAnimating)
             return false;
 
         if (candidate.GetComponent<LureBeaconDecoy>() != null)
@@ -5748,6 +6067,9 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
     {
         PlayerHealth targetHealth = target != null ? target.GetComponent<PlayerHealth>() : null;
         if (targetHealth == null || targetHealth.photonView == null)
+            return false;
+
+        if (ValuableCargoCarrierUtility.IsPirateCaseCarrier(targetHealth))
             return false;
 
         if (!PilotCatalog.IsSelectedPilot(targetHealth.photonView.Owner, PilotCatalog.CharlieSmartId))
@@ -5815,7 +6137,8 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
             currentTarget = null;
 
         if (currentTarget != null &&
-            EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, movement.DisengageRadius, true))
+            (IsValidPirateCaseCarrierTarget(currentTarget) ||
+             EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, movement.DisengageRadius, true)))
         {
             if (mode != PirateMode.AttackRun)
                 EnterAttackRun();
@@ -5973,11 +6296,11 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
             return ResolveStuckEscapeDirection(desiredDirection);
 
         Vector2 desired = NormalizeMoveDirection(desiredDirection);
-        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(rb.position, AvoidanceScanRadius, out Collider2D[] hits);
         Vector2 avoidance = Vector2.zero;
         int closeAvoidedObjects = 0;
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || hit.attachedRigidbody == rb)
@@ -6353,7 +6676,7 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
         Recovery
     }
 
-    const float ChargeWindupDuration = 0.82f;
+    const float ChargeWindupDuration = 1.025f;
     const float DashDuration = 0.58f;
     const float RecoveryDuration = 0.68f;
     const float DashSpeedMultiplier = 5.9f;
@@ -6436,6 +6759,10 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
         if (attackerView == null)
             return;
 
+        PlayerHealth attackerHealth = attackerView.GetComponent<PlayerHealth>();
+        if (attackerHealth != null && attackerHealth.IsAstronautControlled && !attackerHealth.IsEnemyAstronautControlled)
+            return;
+
         currentTarget = attackerView.transform;
         nextTargetRefreshTime = Time.time + 0.35f;
         nextChargeTime = Mathf.Min(nextChargeTime, Time.time + 0.25f);
@@ -6503,7 +6830,7 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
         RotateNoseToward(chargeDirection);
         rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, -chargeDirection * (bot.EffectiveMoveSpeed * 0.18f), 0.2f);
 
-        if (Time.time - modeStartedAt >= ChargeWindupDuration)
+        if (Time.time - modeStartedAt >= ScaleEnemyAttackWindup(ChargeWindupDuration))
             BeginDash();
     }
 
@@ -6557,10 +6884,10 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
     Transform ResolveTarget()
     {
         float allowedRange = currentTarget != null ? movement.DisengageRadius : movement.DetectionRadius;
-        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, allowedRange, true))
+        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, allowedRange, true, true))
             return currentTarget;
 
-        return EnemyTargetingUtility.FindClosestTarget(rb.position, health, movement.DetectionRadius, true);
+        return EnemyTargetingUtility.FindClosestTarget(rb.position, health, movement.DetectionRadius, true, true);
     }
 
     Vector2 ResolvePatrolDirection()
@@ -6616,12 +6943,15 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
     {
         float hitRadius = Mathf.Max(0.55f, bot.VisualTargetSize * DashHitRadiusFactor);
         Vector2 hitCenter = rb.position + chargeDirection * Mathf.Max(0.18f, hitRadius * 0.35f);
-        Collider2D[] hits = Physics2D.OverlapCircleAll(hitCenter, hitRadius);
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(hitCenter, hitRadius, out Collider2D[] hits);
         bool appliedHit = false;
         int attackerViewId = bot.photonView != null ? bot.photonView.ViewID : 0;
         int damage = RoomSettings.GetEnemyDamage(bot.Kind);
+        WeaponHitContext hitContext = weapon != null
+            ? new WeaponHitContext(weapon.DamageType, weapon.DeliveryMethod, weapon.DeliveryFlags, string.Empty)
+            : WeaponHitContext.None;
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || hit.attachedRigidbody == rb)
@@ -6632,13 +6962,24 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
             if (candidate == null || targetView == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating)
                 continue;
 
-            if (candidate.IsBotControlled || candidate.IsAstronautControlled || candidate.GetComponent<LureBeaconDecoy>() != null)
+            if (!ActorIdentity.CanBeTargetedByMonstersActor(candidate) || candidate.GetComponent<LureBeaconDecoy>() != null)
                 continue;
 
             if (!damagedThisDash.Add(targetView.ViewID))
                 continue;
 
-            targetView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, damage, damage, attackerViewId, hitCenter.x, hitCenter.y);
+            targetView.RPC(
+                nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                RpcTarget.MasterClient,
+                damage,
+                damage,
+                attackerViewId,
+                hitCenter.x,
+                hitCenter.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
             appliedHit = true;
         }
 
@@ -6668,7 +7009,18 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
             if (!damagedThisDash.Add(deployable.photonView.ViewID))
                 continue;
 
-            deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, damage, damage, attackerViewId, hitCenter.x, hitCenter.y);
+            deployable.photonView.RPC(
+                nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                RpcTarget.MasterClient,
+                damage,
+                damage,
+                attackerViewId,
+                hitCenter.x,
+                hitCenter.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
             appliedHit = true;
         }
 
@@ -6678,10 +7030,10 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
     Vector2 ApplyAvoidance(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
-        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(rb.position, AvoidanceScanRadius, out Collider2D[] hits);
         Vector2 avoidance = Vector2.zero;
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || hit.attachedRigidbody == rb)
@@ -6754,7 +7106,7 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
 
     float ResolveChargeCooldown()
     {
-        return weapon != null && weapon.FireRate > 0f ? weapon.FireRate : 3.4f;
+        return ScaleEnemyAttackCooldown(weapon != null && weapon.FireRate > 0f ? weapon.FireRate : 3.4f);
     }
 
     float ResolveDashSpeed()
@@ -6886,6 +7238,10 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
         if (attackerView == null)
             return;
 
+        PlayerHealth attackerHealth = attackerView.GetComponent<PlayerHealth>();
+        if (attackerHealth != null && attackerHealth.IsAstronautControlled && !attackerHealth.IsEnemyAstronautControlled)
+            return;
+
         currentTarget = attackerView.transform;
         nextTargetRefreshTime = Time.time + 0.35f;
         nextAttackTime = Mathf.Min(nextAttackTime, Time.time + 0.35f);
@@ -6964,7 +7320,7 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
         RotateToward(toTarget);
         rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, -toTarget.normalized * (bot.EffectiveMoveSpeed * 0.12f), 0.18f);
 
-        if (Time.time - modeStartedAt >= WindupDuration)
+        if (Time.time - modeStartedAt >= ScaleEnemyAttackWindup(WindupDuration))
             BeginChannel();
     }
 
@@ -7051,10 +7407,10 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
     Transform ResolveTarget()
     {
         float allowedRange = currentTarget != null ? movement.DisengageRadius : movement.DetectionRadius;
-        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, allowedRange, true))
+        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, allowedRange, true, true))
             return currentTarget;
 
-        return EnemyTargetingUtility.FindClosestTarget(rb.position, health, movement.DetectionRadius, true);
+        return EnemyTargetingUtility.FindClosestTarget(rb.position, health, movement.DetectionRadius, true, true);
     }
 
     Vector2 ResolvePatrolDirection()
@@ -7137,7 +7493,7 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
             return deployable.CanBeTargeted;
 
         PlayerHealth player = targetView.GetComponent<PlayerHealth>();
-        return player != null && player != health && !player.IsWreck && !player.IsBotControlled && !player.IsEvacuationAnimating;
+        return player != null && player != health && !player.IsWreck && !player.IsBotControlled && ActorIdentity.CanBeTargetedByMonstersActor(player) && !player.IsEvacuationAnimating;
     }
 
     Transform ResolveActiveTargetTransform()
@@ -7157,6 +7513,9 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
         int baseDamagePerSecond = Mathf.Max(0, RoomSettings.GetEnemyDamage(bot.Kind));
         int shieldDamage = Mathf.Max(1, Mathf.CeilToInt(baseDamagePerSecond * DamageTickInterval));
         int hpDamage = Mathf.Max(1, Mathf.CeilToInt(baseDamagePerSecond * 0.5f * DamageTickInterval));
+        WeaponHitContext hitContext = weapon != null
+            ? new WeaponHitContext(weapon.DamageType, weapon.DeliveryMethod, weapon.DeliveryFlags, string.Empty)
+            : WeaponHitContext.None;
 
         LureBeaconDecoy beacon = targetView.GetComponent<LureBeaconDecoy>();
         if (beacon != null)
@@ -7170,13 +7529,35 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
         if (deployable != null)
         {
             if (deployable.CanBeTargeted)
-                deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, shieldDamage, hpDamage, attackerViewId, impact.x, impact.y);
+                deployable.photonView.RPC(
+                    nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                    RpcTarget.MasterClient,
+                    shieldDamage,
+                    hpDamage,
+                    attackerViewId,
+                    impact.x,
+                    impact.y,
+                    (int)hitContext.DamageType,
+                    (int)hitContext.DeliveryMethod,
+                    (int)hitContext.DeliveryFlags,
+                    hitContext.DamageSource ?? string.Empty);
             return;
         }
 
         PlayerHealth targetHealth = targetView.GetComponent<PlayerHealth>();
-        if (targetHealth != null && targetHealth != health && !targetHealth.IsWreck && !targetHealth.IsBotControlled && !targetHealth.IsEvacuationAnimating)
-            targetView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, shieldDamage, hpDamage, attackerViewId, impact.x, impact.y);
+        if (targetHealth != null && targetHealth != health && !targetHealth.IsWreck && !targetHealth.IsBotControlled && ActorIdentity.CanBeTargetedByMonstersActor(targetHealth) && !targetHealth.IsEvacuationAnimating)
+            targetView.RPC(
+                nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                RpcTarget.MasterClient,
+                shieldDamage,
+                hpDamage,
+                attackerViewId,
+                impact.x,
+                impact.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
     }
 
     void ApplyTetherPullTick()
@@ -7189,7 +7570,7 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
             return;
 
         PlayerHealth targetHealth = targetView.GetComponent<PlayerHealth>();
-        if (targetHealth == null || targetHealth == health || targetHealth.IsWreck || targetHealth.IsBotControlled || targetHealth.IsEvacuationAnimating)
+        if (targetHealth == null || targetHealth == health || targetHealth.IsWreck || targetHealth.IsBotControlled || !ActorIdentity.CanBeTargetedByMonstersActor(targetHealth) || targetHealth.IsEvacuationAnimating)
             return;
 
         int sourceViewId = bot.photonView != null ? bot.photonView.ViewID : 0;
@@ -7219,10 +7600,10 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
     Vector2 ApplyAvoidance(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
-        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(rb.position, AvoidanceScanRadius, out Collider2D[] hits);
         Vector2 avoidance = Vector2.zero;
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || hit.attachedRigidbody == rb)
@@ -7295,7 +7676,7 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
 
     float ResolveTetherCooldown()
     {
-        return weapon != null && weapon.FireRate > 0f ? weapon.FireRate : 7f;
+        return ScaleEnemyAttackCooldown(weapon != null && weapon.FireRate > 0f ? weapon.FireRate : 7f);
     }
 
     void StopActiveTetherVfx()
@@ -7337,7 +7718,7 @@ public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
         Recovery
     }
 
-    const float LockOnDuration = 0.9f;
+    const float LockOnDuration = 1.125f;
     const float RecoveryDuration = 0.82f;
     const float BeamRadius = 0.46f;
     const float HpDamageMultiplier = 0.48f;
@@ -7479,7 +7860,7 @@ public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
         if (bot.photonView != null)
         {
             bot.photonView.RPC(nameof(EnemyBot.PlayHunterLanceLockRpc), RpcTarget.All, rb.position.x, rb.position.y, transform.position.z);
-            bot.photonView.RPC(nameof(EnemyBot.SpawnHunterLanceAimRpc), RpcTarget.All, origin.x, origin.y, lockedDirection.x, lockedDirection.y, range, LockOnDuration);
+            bot.photonView.RPC(nameof(EnemyBot.SpawnHunterLanceAimRpc), RpcTarget.All, origin.x, origin.y, lockedDirection.x, lockedDirection.y, range, ResolveLockOnDuration());
         }
     }
 
@@ -7495,10 +7876,11 @@ public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
         RotateNoseToward(lockedDirection);
         rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, -lockedDirection * (bot.EffectiveMoveSpeed * LockReverseSpeedMultiplier), 0.18f);
 
-        if (target != null && Time.time - modeStartedAt < LockOnDuration * 0.45f)
+        float lockOnDuration = ResolveLockOnDuration();
+        if (target != null && Time.time - modeStartedAt < lockOnDuration * 0.45f)
             lockedDirection = Vector2.Lerp(lockedDirection, ResolvePredictedAimDirection(target), 0.025f).normalized;
 
-        if (Time.time - modeStartedAt >= LockOnDuration)
+        if (Time.time - modeStartedAt >= lockOnDuration)
             FireLance();
     }
 
@@ -7636,7 +8018,7 @@ public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
             return deployable.CanBeTargeted;
 
         PlayerHealth targetHealth = targetView.GetComponent<PlayerHealth>();
-        return targetHealth != null && targetHealth != health && !targetHealth.IsWreck && !targetHealth.IsBotControlled && !targetHealth.IsEvacuationAnimating;
+        return targetHealth != null && targetHealth != health && !targetHealth.IsWreck && !targetHealth.IsBotControlled && !targetHealth.IsAstronautControlled && !targetHealth.IsEvacuationAnimating;
     }
 
     Vector2 ResolveMuzzlePosition(Vector2 direction)
@@ -7678,6 +8060,9 @@ public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
         int baseDamage = Mathf.Max(0, RoomSettings.GetEnemyDamage(bot.Kind));
         int shieldDamage = Mathf.Max(1, baseDamage);
         int hpDamage = Mathf.Max(1, Mathf.CeilToInt(baseDamage * HpDamageMultiplier));
+        WeaponHitContext hitContext = weapon != null
+            ? new WeaponHitContext(weapon.DamageType, weapon.DeliveryMethod, weapon.DeliveryFlags, string.Empty)
+            : WeaponHitContext.None;
 
         RaycastHit2D[] hits = Physics2D.CircleCastAll(origin, BeamRadius, direction.normalized, range);
         for (int i = 0; i < hits.Length; i++)
@@ -7691,14 +8076,25 @@ public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
             if (candidate == null || targetView == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating)
                 continue;
 
-            if (candidate.IsBotControlled || candidate.GetComponent<LureBeaconDecoy>() != null)
+            if (candidate.IsBotControlled || candidate.IsAstronautControlled || candidate.GetComponent<LureBeaconDecoy>() != null)
                 continue;
 
             if (!damagedThisShot.Add(targetView.ViewID))
                 continue;
 
             Vector2 impact = hits[i].point.sqrMagnitude > 0.001f ? hits[i].point : candidate.transform.position;
-            targetView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, shieldDamage, hpDamage, attackerViewId, impact.x, impact.y);
+            targetView.RPC(
+                nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                RpcTarget.MasterClient,
+                shieldDamage,
+                hpDamage,
+                attackerViewId,
+                impact.x,
+                impact.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
         }
 
         foreach (LureBeaconDecoy beacon in LureBeaconDecoy.GetActiveBeacons())
@@ -7728,7 +8124,18 @@ public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
                 continue;
 
             Vector2 impact = ResolveClosestPointOnBeam(deployable.transform.position, origin, direction, range);
-            deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, shieldDamage, hpDamage, attackerViewId, impact.x, impact.y);
+            deployable.photonView.RPC(
+                nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                RpcTarget.MasterClient,
+                shieldDamage,
+                hpDamage,
+                attackerViewId,
+                impact.x,
+                impact.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
         }
     }
 
@@ -7749,10 +8156,10 @@ public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
     Vector2 ApplyAvoidance(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
-        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(rb.position, AvoidanceScanRadius, out Collider2D[] hits);
         Vector2 avoidance = Vector2.zero;
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || hit.attachedRigidbody == rb)
@@ -7828,9 +8235,14 @@ public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
         return weapon != null && weapon.Range > 0f ? weapon.Range : Mathf.Max(10f, movement.ShootDistance);
     }
 
+    float ResolveLockOnDuration()
+    {
+        return ScaleEnemyAttackWindup(LockOnDuration);
+    }
+
     float ResolveShotCooldown()
     {
-        return weapon != null && weapon.FireRate > 0f ? weapon.FireRate : 4.6f;
+        return ScaleEnemyAttackCooldown(weapon != null && weapon.FireRate > 0f ? weapon.FireRate : 4.6f);
     }
 
     void RotateNoseToward(Vector2 direction)
@@ -7865,6 +8277,12 @@ public class EnemyMothershipBehavior : EnemyBotBehaviorBase
 
     static Sprite cachedTurretSprite;
     static Sprite cachedTurretWreckSprite;
+
+    public static void PrewarmTurretAssets()
+    {
+        PrewarmSpriteTexture(LoadTurretSprite());
+        PrewarmSpriteTexture(LoadTurretWreckSprite());
+    }
 
     readonly TurretRuntime[] turrets = new TurretRuntime[6];
     readonly Vector2[] turretOffsetFactors =
@@ -7925,7 +8343,12 @@ public class EnemyMothershipBehavior : EnemyBotBehaviorBase
                 weapon.InfiniteAmmo,
                 weapon.BulletSpeed,
                 weapon.ShotSoundId,
-                weapon.Range);
+                weapon.Range,
+                string.Empty,
+                10f,
+                weapon.DamageType,
+                weapon.DeliveryMethod,
+                weapon.DeliveryFlags);
         }
 
         EnsureTurrets();
@@ -8177,11 +8600,11 @@ public class EnemyMothershipBehavior : EnemyBotBehaviorBase
             if (shooting.FireBotProjectileFromWorld(muzzleDirection, muzzlePosition))
             {
                 turret.Ammo--;
-                turret.NextFireTime = Time.time + Mathf.Max(0.05f, weapon.FireRate);
+                turret.NextFireTime = Time.time + Mathf.Max(0.05f, weapon.FireRate * AtlasSuppressionStatus.GetFireIntervalMultiplier(gameObject) * RoomSettings.GetEnemyAttackCooldownMultiplier());
                 if (turret.Ammo <= 0)
                 {
                     turret.Reloading = true;
-                    turret.ReloadFinishTime = Time.time + Mathf.Max(0f, weapon.ReloadDuration);
+                    turret.ReloadFinishTime = Time.time + Mathf.Max(0f, weapon.ReloadDuration * AtlasSuppressionStatus.GetReloadMultiplier(gameObject));
                 }
             }
         }
@@ -8266,6 +8689,14 @@ public class EnemyMothershipBehavior : EnemyBotBehaviorBase
 #endif
 
         return null;
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
     }
 }
 
@@ -8368,6 +8799,9 @@ public class EnemyMineBehavior : EnemyBotBehaviorBase
             if (candidateBot != null && candidateBot.Kind == EnemyBotKind.SpaceMine)
                 continue;
 
+            if (candidateBot != null && candidateBot.Kind == EnemyBotKind.ContainerShip && (bot == null || !bot.IsPlayerPlacedMine))
+                continue;
+
             if (Vector2.Distance(transform.position, candidate.transform.position) <= radius)
                 return true;
         }
@@ -8389,15 +8823,29 @@ public class EnemyMineBehavior : EnemyBotBehaviorBase
 public class EnemyContainerShipBehavior : EnemyBotBehaviorBase
 {
     const float SpeedBoostDuration = 5f;
-    const float MineDropCooldown = 5f;
+    const float MineDropCooldown = 15f;
+    const float AutoCannonChance = 0.15f;
     const float MineRearOffset = 1.05f;
     const float MineSideOffset = 0.48f;
+    const float AutoCannonRearOffset = 1.08f;
     const float CargoVisualTargetSize = 1.08f;
     const float MapEdgeMargin = 3.1f;
     const string CargoVisualName = "ContainerShipCargoVisual";
     const string CargoTopResourcePath = "Enemies/ContainerShip/container_set2_top";
 
     static Sprite[] cachedCargoTopSprites;
+
+    public static void PrewarmCargoSprites()
+    {
+        if (cachedCargoTopSprites == null || cachedCargoTopSprites.Length == 0)
+            cachedCargoTopSprites = Resources.LoadAll<Sprite>(CargoTopResourcePath);
+
+        if (cachedCargoTopSprites == null)
+            return;
+
+        for (int i = 0; i < cachedCargoTopSprites.Length; i++)
+            PrewarmSpriteTexture(cachedCargoTopSprites[i]);
+    }
 
     Rigidbody2D rb;
     PhotonView view;
@@ -8467,12 +8915,18 @@ public class EnemyContainerShipBehavior : EnemyBotBehaviorBase
         if (!PhotonNetwork.IsMasterClient || bot == null || health == null || health.IsWreck)
             return;
 
+        if (!EnemyBot.IsPlayerControlledDamageSource(attackerViewID))
+            return;
+
         bot.ActivateTemporarySpeedMultiplier(2f, SpeedBoostDuration);
         if (Time.time < nextMineDropTime)
             return;
 
-        nextMineDropTime = Time.time + MineDropCooldown;
-        SpawnDefensiveMines();
+        nextMineDropTime = Time.time + ScaleEnemyAttackCooldown(MineDropCooldown);
+        if (Random.value < AutoCannonChance)
+            SpawnDefensiveAutoCannon();
+        else
+            SpawnDefensiveMines();
     }
 
     void SpawnDefensiveMines()
@@ -8484,11 +8938,7 @@ public class EnemyContainerShipBehavior : EnemyBotBehaviorBase
         if (mineDefinition == null)
             return;
 
-        Vector2 forward = lastMoveDirection.sqrMagnitude > 0.001f
-            ? lastMoveDirection.normalized
-            : rb != null && rb.linearVelocity.sqrMagnitude > 0.001f
-                ? rb.linearVelocity.normalized
-                : Vector2.left;
+        Vector2 forward = ResolveForwardDirection();
         Vector2 behind = -forward;
         Vector2 side = new Vector2(-forward.y, forward.x);
 
@@ -8517,6 +8967,39 @@ public class EnemyContainerShipBehavior : EnemyBotBehaviorBase
             if (mineBody != null)
                 mineBody.linearVelocity = driftDirection * Mathf.Max(0.25f, mine.EffectiveMoveSpeed);
         }
+    }
+
+    void SpawnDefensiveAutoCannon()
+    {
+        if (!PhotonNetwork.InRoom || view == null)
+            return;
+
+        Vector2 forward = ResolveForwardDirection();
+        Vector2 behind = -forward;
+        Vector2 side = new Vector2(-forward.y, forward.x);
+        float sideOffset = Random.Range(-0.22f, 0.22f);
+        Vector3 spawnPosition = transform.position + (Vector3)(behind * AutoCannonRearOffset + side * sideOffset);
+        float angle = Mathf.Atan2(forward.y, forward.x) * Mathf.Rad2Deg - 90f;
+        GameObject cannonObject = PhotonNetwork.Instantiate(
+            "Player",
+            spawnPosition,
+            Quaternion.Euler(0f, 0f, angle),
+            0,
+            new object[] { PlayerDeployableRuntime.ContainerShipAutoCannonMarker, view.ViewID });
+
+        if (cannonObject != null)
+            PlayerDeployableRuntime.EnsureAttached(cannonObject);
+    }
+
+    Vector2 ResolveForwardDirection()
+    {
+        if (lastMoveDirection.sqrMagnitude > 0.001f)
+            return lastMoveDirection.normalized;
+
+        if (rb != null && rb.linearVelocity.sqrMagnitude > 0.001f)
+            return rb.linearVelocity.normalized;
+
+        return Vector2.left;
     }
 
     Vector2 ApplyMapEdgeSteering(Vector2 desiredVelocity)
@@ -8577,6 +9060,24 @@ public class EnemyContainerShipBehavior : EnemyBotBehaviorBase
         FitCargoSpriteToTargetSize(cargoRenderer, CargoVisualTargetSize);
     }
 
+    public void HideCargoVisual()
+    {
+        Transform cargoTransform = cargoRenderer != null ? cargoRenderer.transform : transform.Find(CargoVisualName);
+        if (cargoTransform == null)
+            return;
+
+        SpriteRenderer[] renderers = cargoTransform.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] != null)
+                renderers[i].enabled = false;
+        }
+
+        cargoTransform.gameObject.SetActive(false);
+        Destroy(cargoTransform.gameObject);
+        cargoRenderer = null;
+    }
+
     static Sprite GetCargoSprite(int variantIndex)
     {
         if (cachedCargoTopSprites == null || cachedCargoTopSprites.Length == 0)
@@ -8595,6 +9096,14 @@ public class EnemyContainerShipBehavior : EnemyBotBehaviorBase
 
         int clampedIndex = Mathf.Clamp(variantIndex, 0, cachedCargoTopSprites.Length - 1);
         return cachedCargoTopSprites[clampedIndex];
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
     }
 
     static void FitCargoSpriteToTargetSize(SpriteRenderer renderer, float targetSize)
@@ -8976,10 +9485,10 @@ public class EnemyRescueShipBehavior : EnemyBotBehaviorBase
     Vector2 ApplyAvoidance(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
-        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(rb.position, AvoidanceScanRadius, out Collider2D[] hits);
         Vector2 avoidance = Vector2.zero;
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || hit.attachedRigidbody == rb)
@@ -9880,7 +10389,7 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
             return 0;
 
         PlayerHealth targetHealth = targetView.GetComponent<PlayerHealth>();
-        if (targetHealth == null || targetHealth.IsWreck || targetHealth.IsBotControlled || targetHealth.IsEvacuationAnimating)
+        if (targetHealth == null || targetHealth.IsWreck || targetHealth.IsBotControlled || targetHealth.IsAstronautControlled || targetHealth.IsEvacuationAnimating)
             return 0;
 
         return targetView.ViewID;
@@ -9888,13 +10397,17 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
 
     static int FindNearestPlayerViewId(Vector2 origin)
     {
+        int pirateCaseCarrierViewId = ValuableCargoCarrierUtility.FindBestPirateCaseCarrierViewId(origin, float.PositiveInfinity);
+        if (pirateCaseCarrierViewId > 0)
+            return pirateCaseCarrierViewId;
+
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         int bestViewId = 0;
         float bestDistance = float.MaxValue;
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth candidate = players[i];
-            if (candidate == null || candidate.IsWreck || candidate.IsBotControlled || candidate.IsEvacuationAnimating)
+            if (candidate == null || candidate.IsWreck || candidate.IsBotControlled || candidate.IsAstronautControlled || candidate.IsEvacuationAnimating)
                 continue;
 
             PhotonView candidateView = candidate.GetComponent<PhotonView>();
@@ -10155,10 +10668,10 @@ public class EnemyRadarShipBehavior : EnemyBotBehaviorBase
     Vector2 ApplyCollectibleAvoidance(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
-        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(rb.position, AvoidanceScanRadius, out Collider2D[] hits);
         Vector2 avoidance = Vector2.zero;
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || hit.attachedRigidbody == rb)
@@ -10248,20 +10761,21 @@ public class EnemyRadarShipBehavior : EnemyBotBehaviorBase
 
         Vector2 strikePoint = currentTarget.position;
         strikePending = true;
-        nextStrikeTime = Time.time + Mathf.Max(0.2f, weapon.FireRate);
+        nextStrikeTime = Time.time + ScaleEnemyAttackCooldown(Mathf.Max(0.2f, weapon.FireRate));
+        float warningDuration = ResolveStrikeWarningDuration();
 
         if (bot.photonView != null)
         {
             bot.photonView.RPC(nameof(EnemyBot.PlayRadarShipIncomingRpc), RpcTarget.All, strikePoint.x, strikePoint.y, 0f);
-            bot.photonView.RPC(nameof(EnemyBot.SpawnRadarStrikeMarkerRpc), RpcTarget.All, strikePoint.x, strikePoint.y, StrikeWarningDuration, StrikeRadius);
+            bot.photonView.RPC(nameof(EnemyBot.SpawnRadarStrikeMarkerRpc), RpcTarget.All, strikePoint.x, strikePoint.y, warningDuration, StrikeRadius);
         }
 
-        StartCoroutine(ExecuteStrikeAfterDelay(strikePoint));
+        StartCoroutine(ExecuteStrikeAfterDelay(strikePoint, warningDuration));
     }
 
-    IEnumerator ExecuteStrikeAfterDelay(Vector2 strikePoint)
+    IEnumerator ExecuteStrikeAfterDelay(Vector2 strikePoint, float warningDuration)
     {
-        yield return new WaitForSeconds(StrikeWarningDuration);
+        yield return new WaitForSeconds(warningDuration);
 
         if (bot == null || bot.photonView == null)
         {
@@ -10275,14 +10789,22 @@ public class EnemyRadarShipBehavior : EnemyBotBehaviorBase
         strikePending = false;
     }
 
+    float ResolveStrikeWarningDuration()
+    {
+        return ScaleEnemyAttackWindup(StrikeWarningDuration);
+    }
+
     void ApplyStrikeDamage(Vector2 strikePoint)
     {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(strikePoint, StrikeRadius);
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(strikePoint, StrikeRadius, out Collider2D[] hits);
         HashSet<int> processedViewIds = new HashSet<int>();
         int attackerViewId = bot.photonView != null ? bot.photonView.ViewID : 0;
         int baseDamage = RoomSettings.GetEnemyDamage(bot.Kind);
+        WeaponHitContext hitContext = weapon != null
+            ? new WeaponHitContext(weapon.DamageType, weapon.DeliveryMethod, weapon.DeliveryFlags, string.Empty)
+            : WeaponHitContext.None;
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
             PlayerHealth candidate = hits[i] != null ? hits[i].GetComponentInParent<PlayerHealth>() : null;
             PhotonView targetView = candidate != null ? candidate.GetComponent<PhotonView>() : null;
@@ -10298,7 +10820,18 @@ public class EnemyRadarShipBehavior : EnemyBotBehaviorBase
             float distance = Vector2.Distance(strikePoint, candidate.transform.position);
             float falloff = Mathf.Lerp(1f, 0.65f, Mathf.Clamp01(distance / StrikeRadius));
             int damage = Mathf.Max(1, Mathf.RoundToInt(baseDamage * falloff));
-            targetView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, damage, damage, attackerViewId, strikePoint.x, strikePoint.y);
+            targetView.RPC(
+                nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                RpcTarget.MasterClient,
+                damage,
+                damage,
+                attackerViewId,
+                strikePoint.x,
+                strikePoint.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
         }
 
         foreach (LureBeaconDecoy beacon in LureBeaconDecoy.GetActiveBeacons())
@@ -10332,7 +10865,18 @@ public class EnemyRadarShipBehavior : EnemyBotBehaviorBase
 
             float falloff = Mathf.Lerp(1f, 0.65f, Mathf.Clamp01(distance / StrikeRadius));
             int damage = Mathf.Max(1, Mathf.RoundToInt(baseDamage * falloff));
-            deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, damage, damage, attackerViewId, strikePoint.x, strikePoint.y);
+            deployable.photonView.RPC(
+                nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                RpcTarget.MasterClient,
+                damage,
+                damage,
+                attackerViewId,
+                strikePoint.x,
+                strikePoint.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
         }
     }
 }

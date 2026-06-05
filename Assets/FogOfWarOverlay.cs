@@ -331,11 +331,7 @@ public class FogOfWarOverlay : MonoBehaviour
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth player = players[i];
-            if (player != null &&
-                !player.IsWreck &&
-                !player.IsBotControlled &&
-                player.photonView != null &&
-                player.photonView.IsMine)
+            if (ActorIdentity.IsLocalHumanPlayerActor(player))
             {
                 if (PhotonNetwork.LocalPlayer != null)
                     PhotonNetwork.LocalPlayer.TagObject = player.gameObject;
@@ -357,10 +353,7 @@ public class FogOfWarOverlay : MonoBehaviour
         if (health == null)
             return true;
 
-        return !health.IsWreck &&
-               !health.IsBotControlled &&
-               health.photonView != null &&
-               health.photonView.IsMine;
+        return ActorIdentity.IsLocalHumanPlayerActor(health);
     }
 
     sealed class FogOfWarGraphic : MaskableGraphic

@@ -100,6 +100,8 @@ MonoBehaviour:
   - RequestAuthoritativeGadgetUse
   - PlayShieldHitVisual
   - TakeDamageAt
+  - TakeDamageWithContext
+  - TakeDamageWithContextAt
   - PlaySpaceTruckAlert
   - PlayShieldFullPowerAudio
   - PlayHpHitVisual
@@ -117,14 +119,18 @@ MonoBehaviour:
   - ForceEndRepairDocking
   - RequestRepairDock
   - RequestRepairLaunch
+  - BeginAlienAegisBarrierRpc
   - NotifyFinalDeath
   - PlayShotSfx
   - TakeDamageProfileAt
+  - TakeDamageProfileWithSourceAt
+  - TakeDamageProfileWithContextAt
   - PlayImpactVfx
   - NotifyFinalEvacuation
   - AwardCharlieLastSecondExtractionBonus
   - UnlockRoburPilotAfterHumanKill
   - RecordPilotDroneKillProgress
+  - RecordAshComputerEnemyKillProgress
   - ApplyNovaKillSpeedBoost
   - PlayRadarShipIncomingRpc
   - PlayRadarShipShootRpc
@@ -170,6 +176,7 @@ MonoBehaviour:
   - SetDrillBeamRpc
   - StartAstroCutterBeamRpc
   - TakeDeployableDamageAt
+  - TakeDeployableDamageWithContextAt
   - SetLootingFriendCollectFxRpc
   - ClearSpaceTrapTargetRpc
   - PlaySpaceDrillDeliverySoundRpc
@@ -196,7 +203,9 @@ MonoBehaviour:
   - StartPulseDisruptorWaveRpc
   - TakeBeaconShieldOnlyDamageAt
   - TakeDeployableShieldOnlyDamageAt
+  - TakeDeployableShieldOnlyDamageWithContextAt
   - TakeShieldOnlyDamageAt
+  - TakeShieldOnlyDamageWithContextAt
   - ApplyAsteroidKnockbackRpc
   - SetBeingCollectedRpc
   - StartPirateBaseCollectionBeamRpc
@@ -215,6 +224,8 @@ MonoBehaviour:
   - ApplyElectromagneticShockRpc
   - PlayCovaxElectromagneticWaveRpc
   - ApplyAshSuperchargeRpc
+  - ApplyAtlasSuppressionRpc
+  - PlayAtlasSuppressorWaveRpc
   - PlayCosmicWormPhaseRpc
   - SpawnCosmicWormDashTrailRpc
   - SpawnCosmicWormDashWarningRpc
@@ -228,6 +239,28 @@ MonoBehaviour:
   - RequestScienceStationLaunch
   - RequestScienceStationReward
   - ShowScienceStationRewardRpc
+  - ClearAllDamageRpc
+  - SyncShipDamageRpc
+  - FireVectorBarrageRpc
+  - BeginEnemyAstronautEvacuationRpc
+  - BecomeNeutralRiderWreck
+  - NeutralRiderEvacuatedRpc
+  - PlayFiringFriendShotRpc
+  - ConfirmDropbotCargoLaunchRpc
+  - PlayDropbotEscapedRpc
+  - PrepareDropbotCargoLaunchRpc
+  - ReceiveDropbotRecoveredCargoRpc
+  - ResolveDropbotDeliveryRpc
+  - RestoreDropbotCargoItemRpc
+  - ActivateShortScannerRevealRpc
+  - ActivateCloakDeviceRpc
+  - CancelCloakDeviceRpc
+  - ShowValuableCargoCollectedRpc
+  - ClearArtifactExamineBeamTargetRpc
+  - RequestActivateArtifactAsteroid
+  - SetArtifactExamineBeamTargetRpc
+  - RequestAstronautKillMe
+  - RecordMothershipKillMapProgress
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

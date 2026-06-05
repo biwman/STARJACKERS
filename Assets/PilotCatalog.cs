@@ -10,7 +10,9 @@ public enum PilotUnlockType
     DroneKills,
     CharlieSmart,
     AsteroidSalvage,
-    OverloadReturns
+    OverloadReturns,
+    CompletedProjects,
+    AtlasMapReturns
 }
 
 public sealed class PilotDefinition
@@ -64,11 +66,16 @@ public static class PilotCatalog
     public const string CharlieSmartId = "charlie_smart";
     public const string CovaxId = "covax";
     public const string AshId = "ash";
+    public const string VectorId = "vector";
+    public const string AtlasId = "atlas";
     public const int CharlieSmartRequiredSoldAstrons = 20000;
     public const int CharlieSmartRequiredLevel = 10;
     public const int CharlieSmartRequiredPirateBayReturns = 5;
     public const int CovaxRequiredAsteroidSalvage = 200;
     public const int AshRequiredOverloadReturns = 3;
+    public const int VectorRequiredCompletedProjects = 2;
+    public const int AtlasRequiredNetCargoAstrons = 1000;
+    public const int AtlasPassiveNetCargoAstrons = 2000;
 
     static readonly PilotDefinition JakeDefinition = new PilotDefinition(
         JakeId,
@@ -186,7 +193,7 @@ public static class PilotCatalog
         "Assets/pilot_07.png",
         PilotUnlockType.AsteroidSalvage,
         CovaxRequiredAsteroidSalvage,
-        "Salvage 200 asteroids.",
+        "Collect 200 asteroids.",
         new[]
         {
             "Collecting an asteroid has a 10% chance to upgrade it by one rarity level before it enters cargo.",
@@ -204,7 +211,7 @@ public static class PilotCatalog
         "Assets/pilot_08.png",
         PilotUnlockType.OverloadReturns,
         AshRequiredOverloadReturns,
-        "Complete 3 Overload Returns: extract with full cargo, cargo worth 800 Astrons, 90 shots fired and 20 seconds of booster use in one run.",
+        "Complete 3 Overload Returns: extract with full cargo, cargo worth 1500 Astrons, 3 computer enemy kills and 20 seconds of booster use in one run.",
         new[]
         {
             "Plasma Gun, Rail Gun and Double Ionizer ammo recharges 10% faster.",
@@ -213,6 +220,42 @@ public static class PilotCatalog
         },
         "Supercharge",
         "Overload the ship for 10 seconds, increasing ship speed, fire rate and ammo recharge speed by 30% with a visible charge effect.");
+
+    static readonly PilotDefinition VectorDefinition = new PilotDefinition(
+        VectorId,
+        "VECTOR",
+        "UI/Pilots/pilot_09",
+        "Assets/Resources/UI/Pilots/pilot_09.png",
+        "Assets/Resources/UI/Pilots/pilot_09.png",
+        PilotUnlockType.CompletedProjects,
+        VectorRequiredCompletedProjects,
+        "Complete any 2 projects.",
+        new[]
+        {
+            "Common and Uncommon resource collection is 3x faster.",
+            "Repeated hits on the same computer-controlled target or obstacle build analysis, increasing damage by 5% per hit up to 20%. The analysis resets after 3 seconds or when changing targets.",
+            "Rocket lock-on is 50% faster and Guidance System lasts 10 seconds longer."
+        },
+        "Multi-Vector Barrage",
+        "Fire Gatling Super-style barrages toward up to 5 nearest enemies.");
+
+    static readonly PilotDefinition AtlasDefinition = new PilotDefinition(
+        AtlasId,
+        "ATLAS",
+        "UI/Pilots/pilot_10",
+        "Assets/Resources/UI/Pilots/pilot_10.png",
+        "Assets/Resources/UI/Pilots/pilot_10.png",
+        PilotUnlockType.AtlasMapReturns,
+        1,
+        "Return safely from each current map with cargo worth at least 1000 Astrons more than at round start.",
+        new[]
+        {
+            "When round-gained cargo is worth at least 2000 Astrons, booster drains 30% slower and extraction zones activate 30% faster.",
+            "When cargo is full, collecting a more valuable round-gained item automatically drops the least valuable round-gained cargo item. Starting cargo is never auto-dropped.",
+            "Shield-slot equipment grants 30% more maximum shield."
+        },
+        "Suppressor Wave",
+        "Emit a wide suppression wave that slows all computer-controlled enemies and enemy players for 5 seconds. Affected targets move slower, fire slower, reload slower and their projectiles travel slower.");
 
     static readonly PilotDefinition[] Definitions =
     {
@@ -223,7 +266,9 @@ public static class PilotCatalog
         RobyDefinition,
         CharlieSmartDefinition,
         CovaxDefinition,
-        AshDefinition
+        AshDefinition,
+        VectorDefinition,
+        AtlasDefinition
     };
 
     static readonly Dictionary<string, PilotDefinition> DefinitionsById = BuildDefinitionsById();
@@ -338,6 +383,15 @@ public static class PilotCatalog
             return overloadReturns >= definition.RequiredLevel;
         }
 
+        if (definition.UnlockType == PilotUnlockType.CompletedProjects)
+        {
+            int completedProjects = profile != null ? ProjectCatalog.CountCompletedProjects(profile.ProjectProgress) : 0;
+            return completedProjects >= definition.RequiredLevel;
+        }
+
+        if (definition.UnlockType == PilotUnlockType.AtlasMapReturns)
+            return CountAtlasMapReturns(profile) >= GetAtlasRequiredMapReturnCount();
+
         string normalized = NormalizePilotId(pilotId);
         string[] unlocked = profile != null ? profile.UnlockedPilotIds : null;
         if (unlocked == null)
@@ -390,14 +444,28 @@ public static class PilotCatalog
         if (definition.UnlockType == PilotUnlockType.AsteroidSalvage)
         {
             int progress = Mathf.Clamp(profile != null ? profile.PilotAsteroidSalvageCount : 0, 0, definition.RequiredLevel);
-            return "Salvage " + definition.RequiredLevel + " asteroids (" + progress + "/" + definition.RequiredLevel + ").";
+            return "Collect " + definition.RequiredLevel + " asteroids (" + progress + "/" + definition.RequiredLevel + ").";
         }
 
         if (definition.UnlockType == PilotUnlockType.OverloadReturns)
         {
             int progress = Mathf.Clamp(profile != null ? profile.PilotAshOverloadReturns : 0, 0, definition.RequiredLevel);
             return "Complete " + definition.RequiredLevel + " Overload Returns (" + progress + "/" + definition.RequiredLevel + ").\n" +
-                   "Each return needs full cargo, 800 Astrons in cargo, 90 shots and 20 seconds of booster use.";
+                   "Each return needs full cargo, 1500 Astrons in cargo, 3 computer enemy kills and 20 seconds of booster use.";
+        }
+
+        if (definition.UnlockType == PilotUnlockType.CompletedProjects)
+        {
+            int progress = Mathf.Clamp(profile != null ? ProjectCatalog.CountCompletedProjects(profile.ProjectProgress) : 0, 0, definition.RequiredLevel);
+            return "Complete any " + definition.RequiredLevel + " projects (" + progress + "/" + definition.RequiredLevel + ").";
+        }
+
+        if (definition.UnlockType == PilotUnlockType.AtlasMapReturns)
+        {
+            int required = GetAtlasRequiredMapReturnCount();
+            int progress = Mathf.Clamp(CountAtlasMapReturns(profile), 0, required);
+            return "Return safely from each current map with cargo worth at least " + AtlasRequiredNetCargoAstrons +
+                   " Astrons more than at round start (" + progress + "/" + required + ").";
         }
 
         return definition.UnlockDescription;
@@ -422,5 +490,74 @@ public static class PilotCatalog
         }
 
         return Mathf.Max(0, total);
+    }
+
+    public static int GetAtlasRequiredMapReturnCount()
+    {
+        return LobbyMapCatalog.AllMaps != null ? LobbyMapCatalog.AllMaps.Count : 0;
+    }
+
+    public static int CountAtlasMapReturns(PlayerProfileData profile)
+    {
+        return NormalizeAtlasMapReturnIds(profile != null ? profile.PilotAtlasMapReturns : null).Length;
+    }
+
+    public static bool IsAtlasMapReturnRecorded(PlayerProfileData profile, string mapId)
+    {
+        string normalized = NormalizeAtlasMapId(mapId);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+
+        string[] completed = NormalizeAtlasMapReturnIds(profile != null ? profile.PilotAtlasMapReturns : null);
+        for (int i = 0; i < completed.Length; i++)
+        {
+            if (string.Equals(completed[i], normalized, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
+    public static string NormalizeAtlasMapId(string mapId)
+    {
+        if (string.IsNullOrWhiteSpace(mapId) || LobbyMapCatalog.AllMaps == null)
+            return string.Empty;
+
+        string normalized = mapId.Trim();
+        for (int i = 0; i < LobbyMapCatalog.AllMaps.Count; i++)
+        {
+            LobbyMapDefinition map = LobbyMapCatalog.AllMaps[i];
+            if (map != null && string.Equals(map.Id, normalized, StringComparison.Ordinal))
+                return map.Id;
+        }
+
+        return string.Empty;
+    }
+
+    public static string[] NormalizeAtlasMapReturnIds(string[] source)
+    {
+        if (LobbyMapCatalog.AllMaps == null || LobbyMapCatalog.AllMaps.Count == 0)
+            return Array.Empty<string>();
+
+        HashSet<string> sourceSet = new HashSet<string>(StringComparer.Ordinal);
+        if (source != null)
+        {
+            for (int i = 0; i < source.Length; i++)
+            {
+                string normalized = NormalizeAtlasMapId(source[i]);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                    sourceSet.Add(normalized);
+            }
+        }
+
+        List<string> ordered = new List<string>();
+        for (int i = 0; i < LobbyMapCatalog.AllMaps.Count; i++)
+        {
+            LobbyMapDefinition map = LobbyMapCatalog.AllMaps[i];
+            if (map != null && sourceSet.Contains(map.Id))
+                ordered.Add(map.Id);
+        }
+
+        return ordered.ToArray();
     }
 }

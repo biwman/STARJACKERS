@@ -13,11 +13,138 @@ public enum ComplexAttackMarkerType
     Arc
 }
 
+public enum WeaponDamageType
+{
+    None,
+    Laser,
+    Plasma,
+    Kinetic,
+    Explosive,
+    Ion,
+    Gravitic,
+    Environmental
+}
+
+public enum WeaponDeliveryMethod
+{
+    None,
+    DirectProjectile,
+    BurstProjectile,
+    SpreadProjectile,
+    PiercingProjectile,
+    ArcProjectile,
+    HomingProjectile,
+    Beam,
+    AreaPulse,
+    Mine,
+    Trap,
+    DeployableTurret,
+    CompanionDrone,
+    RemoteStrike,
+    ContactDash,
+    MeleeBite,
+    Tether,
+    Spawner
+}
+
+[Flags]
+public enum WeaponDeliveryFlags
+{
+    None = 0,
+    AreaDamage = 1 << 0,
+    Piercing = 1 << 1,
+    Homing = 1 << 2,
+    Delayed = 1 << 3,
+    Continuous = 1 << 4,
+    Autonomous = 1 << 5,
+    ShieldFocused = 1 << 6,
+    MultiStream = 1 << 7,
+    Paired = 1 << 8
+}
+
+[Serializable]
+public struct WeaponHitContext
+{
+    public WeaponDamageType DamageType;
+    public WeaponDeliveryMethod DeliveryMethod;
+    public WeaponDeliveryFlags DeliveryFlags;
+    public string DamageSource;
+
+    public bool HasWeaponMetadata
+    {
+        get
+        {
+            return DamageType != WeaponDamageType.None ||
+                   DeliveryMethod != WeaponDeliveryMethod.None ||
+                   DeliveryFlags != WeaponDeliveryFlags.None;
+        }
+    }
+
+    public static WeaponHitContext None
+    {
+        get { return new WeaponHitContext(WeaponDamageType.None, WeaponDeliveryMethod.None, WeaponDeliveryFlags.None, string.Empty); }
+    }
+
+    public WeaponHitContext(
+        WeaponDamageType damageType,
+        WeaponDeliveryMethod deliveryMethod,
+        WeaponDeliveryFlags deliveryFlags,
+        string damageSource)
+    {
+        DamageType = IsDefinedDamageType(damageType) ? damageType : WeaponDamageType.None;
+        DeliveryMethod = IsDefinedDeliveryMethod(deliveryMethod) ? deliveryMethod : WeaponDeliveryMethod.None;
+        DeliveryFlags = (int)deliveryFlags >= 0 ? deliveryFlags : WeaponDeliveryFlags.None;
+        DamageSource = damageSource ?? string.Empty;
+    }
+
+    public static WeaponHitContext FromDamageSource(string damageSource)
+    {
+        return new WeaponHitContext(WeaponDamageType.None, WeaponDeliveryMethod.None, WeaponDeliveryFlags.None, damageSource);
+    }
+
+    public static WeaponHitContext FromRpc(int damageType, int deliveryMethod, int deliveryFlags, string damageSource)
+    {
+        return new WeaponHitContext(
+            ParseDamageType(damageType),
+            ParseDeliveryMethod(deliveryMethod),
+            ParseDeliveryFlags(deliveryFlags),
+            damageSource);
+    }
+
+    static WeaponDamageType ParseDamageType(int value)
+    {
+        return Enum.IsDefined(typeof(WeaponDamageType), value) ? (WeaponDamageType)value : WeaponDamageType.None;
+    }
+
+    static WeaponDeliveryMethod ParseDeliveryMethod(int value)
+    {
+        return Enum.IsDefined(typeof(WeaponDeliveryMethod), value) ? (WeaponDeliveryMethod)value : WeaponDeliveryMethod.None;
+    }
+
+    static WeaponDeliveryFlags ParseDeliveryFlags(int value)
+    {
+        return value >= 0 ? (WeaponDeliveryFlags)value : WeaponDeliveryFlags.None;
+    }
+
+    static bool IsDefinedDamageType(WeaponDamageType value)
+    {
+        return Enum.IsDefined(typeof(WeaponDamageType), value);
+    }
+
+    static bool IsDefinedDeliveryMethod(WeaponDeliveryMethod value)
+    {
+        return Enum.IsDefined(typeof(WeaponDeliveryMethod), value);
+    }
+}
+
 [Serializable]
 public sealed class WeaponAttackProfile
 {
     public string Id;
     public string DisplayName;
+    public WeaponDamageType DamageType;
+    public WeaponDeliveryMethod DeliveryMethod;
+    public WeaponDeliveryFlags DeliveryFlags;
     public int MaxAmmo;
     public float RangeMultiplier;
     public float ProjectileSize;
@@ -177,6 +304,8 @@ public static class WeaponAttackCatalog
         {
             profile.Id = PlasmaGunId + "_super";
             profile.DisplayName = "PLASMA SUPER";
+            profile.DeliveryMethod = WeaponDeliveryMethod.BurstProjectile;
+            profile.DeliveryFlags |= WeaponDeliveryFlags.MultiStream;
             profile.ProjectileCount = 4;
             profile.ProjectileInterval = Mathf.Min(0.06f, Mathf.Max(0f, profile.ProjectileInterval));
             profile.ProjectileSize = Mathf.Max(profile.ProjectileSize, 2.15f);
@@ -187,6 +316,7 @@ public static class WeaponAttackCatalog
         {
             profile.Id = RailGunId + "_super";
             profile.DisplayName = "RAIL SUPER";
+            profile.DeliveryFlags |= WeaponDeliveryFlags.MultiStream;
             profile.ProjectileCount = 3;
             profile.ProjectileInterval = 0.075f;
             profile.ProjectileSpeed = Mathf.Max(profile.ProjectileSpeed, 34f);
@@ -198,6 +328,8 @@ public static class WeaponAttackCatalog
         {
             profile.Id = DoubleIonizerId + "_super";
             profile.DisplayName = "IONIZER SUPER";
+            profile.DeliveryMethod = WeaponDeliveryMethod.BurstProjectile;
+            profile.DeliveryFlags |= WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.ShieldFocused | WeaponDeliveryFlags.MultiStream;
             profile.ProjectileCount = 8;
             profile.ProjectileInterval = 0.035f;
             profile.SpreadAngle = Mathf.Max(profile.SpreadAngle, 14f);
@@ -209,6 +341,7 @@ public static class WeaponAttackCatalog
         {
             profile.Id = TripleGunId + "_super";
             profile.DisplayName = "TRIPLE SUPER";
+            profile.DeliveryFlags |= WeaponDeliveryFlags.MultiStream;
             profile.ProjectileCount = 7;
             profile.SpreadAngle = Mathf.Max(profile.SpreadAngle, 16f);
             profile.ProjectileInterval = 0.03f;
@@ -220,6 +353,7 @@ public static class WeaponAttackCatalog
         {
             profile.Id = GatlingGunId + "_super";
             profile.DisplayName = "GATLING SUPER";
+            profile.DeliveryFlags |= WeaponDeliveryFlags.MultiStream;
             profile.ProjectileCount = 18;
             profile.ProjectileInterval = 0.075f;
             profile.ProjectileSpeed = Mathf.Max(profile.ProjectileSpeed, 19f);
@@ -232,6 +366,7 @@ public static class WeaponAttackCatalog
         {
             profile.Id = ArtilleryGunId + "_super";
             profile.DisplayName = "ARTILLERY SUPER";
+            profile.DeliveryFlags |= WeaponDeliveryFlags.AreaDamage;
             profile.ProjectileCount = 4;
             profile.ProjectileInterval = 0.18f;
             profile.SpreadAngle = Mathf.Max(profile.SpreadAngle, 8f);
@@ -243,6 +378,7 @@ public static class WeaponAttackCatalog
         {
             profile.Id = RocketLauncherId + "_super";
             profile.DisplayName = "ROCKET SUPER";
+            profile.DeliveryFlags |= WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.Homing | WeaponDeliveryFlags.MultiStream;
             profile.ProjectileCount = 3;
             profile.ProjectileInterval = 0.08f;
             profile.SpreadAngle = Mathf.Max(profile.SpreadAngle, 10f);
@@ -254,6 +390,7 @@ public static class WeaponAttackCatalog
         {
             profile.Id = DoubleRocketLauncherId + "_super";
             profile.DisplayName = "DOUBLE ROCKET SUPER";
+            profile.DeliveryFlags |= WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.Homing | WeaponDeliveryFlags.MultiStream | WeaponDeliveryFlags.Paired;
             profile.ProjectileCount = 4;
             profile.ProjectileInterval = 0f;
             profile.SpreadAngle = 0f;
@@ -275,6 +412,8 @@ public static class WeaponAttackCatalog
         {
             profile.Id = PulseDisruptorId + "_super";
             profile.DisplayName = "PULSE DISRUPTOR SUPER";
+            profile.DeliveryMethod = WeaponDeliveryMethod.AreaPulse;
+            profile.DeliveryFlags |= WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.ShieldFocused;
             profile.ProjectileCount = 1;
             profile.ProjectileInterval = 0f;
             profile.SpreadAngle = 0f;
@@ -290,6 +429,8 @@ public static class WeaponAttackCatalog
         {
             profile.Id = SimpleGunId + "_super";
             profile.DisplayName = "SIMPLE GUN SUPER";
+            profile.DeliveryMethod = WeaponDeliveryMethod.BurstProjectile;
+            profile.DeliveryFlags |= WeaponDeliveryFlags.MultiStream;
             profile.ProjectileCount = 10;
             profile.ProjectileInterval = Mathf.Min(0.04f, Mathf.Max(0f, profile.ProjectileInterval));
             profile.AttackCooldown = Mathf.Max(profile.AttackCooldown, 0.4f);
@@ -311,6 +452,200 @@ public static class WeaponAttackCatalog
             return LoadStandaloneWeaponSprite("simple_gun_resource", "simple_gun.png");
 
         return InventoryItemCatalog.GetIcon(weaponId);
+    }
+
+    public static bool TryGetWeaponClassification(
+        string weaponId,
+        out WeaponDamageType damageType,
+        out WeaponDeliveryMethod deliveryMethod,
+        out WeaponDeliveryFlags deliveryFlags)
+    {
+        damageType = WeaponDamageType.None;
+        deliveryMethod = WeaponDeliveryMethod.None;
+        deliveryFlags = WeaponDeliveryFlags.None;
+
+        if (!IsEditableWeaponId(weaponId))
+            return false;
+
+        WeaponAttackProfile profile = GetDefaultNormalAttackByWeaponId(weaponId);
+        if (profile == null)
+            return false;
+
+        damageType = profile.DamageType;
+        deliveryMethod = profile.DeliveryMethod;
+        deliveryFlags = profile.DeliveryFlags;
+        return true;
+    }
+
+    public static bool TryGetEquipmentWeaponClassification(
+        string itemId,
+        out WeaponDamageType damageType,
+        out WeaponDeliveryMethod deliveryMethod,
+        out WeaponDeliveryFlags deliveryFlags)
+    {
+        damageType = WeaponDamageType.None;
+        deliveryMethod = WeaponDeliveryMethod.None;
+        deliveryFlags = WeaponDeliveryFlags.None;
+
+        if (string.Equals(itemId, SimpleGunId, StringComparison.Ordinal) ||
+            IsWeaponItemId(itemId))
+        {
+            return TryGetWeaponClassification(GetWeaponIdForItem(itemId), out damageType, out deliveryMethod, out deliveryFlags);
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal))
+        {
+            damageType = WeaponDamageType.Laser;
+            deliveryMethod = WeaponDeliveryMethod.DeployableTurret;
+            deliveryFlags = WeaponDeliveryFlags.Autonomous | WeaponDeliveryFlags.Paired;
+            return true;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.FiringFriendId, StringComparison.Ordinal))
+        {
+            damageType = WeaponDamageType.Laser;
+            deliveryMethod = WeaponDeliveryMethod.CompanionDrone;
+            deliveryFlags = WeaponDeliveryFlags.Autonomous | WeaponDeliveryFlags.MultiStream;
+            return true;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal))
+        {
+            damageType = WeaponDamageType.Explosive;
+            deliveryMethod = WeaponDeliveryMethod.Mine;
+            deliveryFlags = WeaponDeliveryFlags.AreaDamage;
+            return true;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceBombId, StringComparison.Ordinal))
+        {
+            damageType = WeaponDamageType.Explosive;
+            deliveryMethod = WeaponDeliveryMethod.DirectProjectile;
+            deliveryFlags = WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.Delayed;
+            return true;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceTrapId, StringComparison.Ordinal))
+        {
+            damageType = WeaponDamageType.Explosive;
+            deliveryMethod = WeaponDeliveryMethod.Trap;
+            deliveryFlags = WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.Delayed;
+            return true;
+        }
+
+        return false;
+    }
+
+    public static string BuildEquipmentClassificationSummary(string itemId)
+    {
+        return TryGetEquipmentWeaponClassification(itemId, out WeaponDamageType damageType, out WeaponDeliveryMethod deliveryMethod, out WeaponDeliveryFlags deliveryFlags)
+            ? BuildClassificationSummary(damageType, deliveryMethod, deliveryFlags)
+            : string.Empty;
+    }
+
+    public static string BuildClassificationSummary(
+        WeaponDamageType damageType,
+        WeaponDeliveryMethod deliveryMethod,
+        WeaponDeliveryFlags deliveryFlags)
+    {
+        if (damageType == WeaponDamageType.None &&
+            deliveryMethod == WeaponDeliveryMethod.None &&
+            deliveryFlags == WeaponDeliveryFlags.None)
+        {
+            return string.Empty;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        if (damageType != WeaponDamageType.None)
+        {
+            builder.Append("Damage type: ");
+            builder.Append(GetDamageTypeLabel(damageType));
+        }
+
+        if (deliveryMethod != WeaponDeliveryMethod.None)
+        {
+            if (builder.Length > 0)
+                builder.Append('\n');
+
+            builder.Append("Delivery: ");
+            builder.Append(GetDeliveryMethodLabel(deliveryMethod));
+        }
+
+        string flagsLabel = GetDeliveryFlagsLabel(deliveryFlags);
+        if (!string.IsNullOrWhiteSpace(flagsLabel))
+        {
+            if (builder.Length > 0)
+                builder.Append('\n');
+
+            builder.Append("Traits: ");
+            builder.Append(flagsLabel);
+        }
+
+        return builder.ToString();
+    }
+
+    public static string GetDamageTypeLabel(WeaponDamageType damageType)
+    {
+        switch (damageType)
+        {
+            case WeaponDamageType.Laser: return "Laser";
+            case WeaponDamageType.Plasma: return "Plasma";
+            case WeaponDamageType.Kinetic: return "Kinetic";
+            case WeaponDamageType.Explosive: return "Explosive";
+            case WeaponDamageType.Ion: return "Ion";
+            case WeaponDamageType.Gravitic: return "Gravitic";
+            case WeaponDamageType.Environmental: return "Environmental";
+            default: return "None";
+        }
+    }
+
+    public static string GetDeliveryMethodLabel(WeaponDeliveryMethod deliveryMethod)
+    {
+        switch (deliveryMethod)
+        {
+            case WeaponDeliveryMethod.DirectProjectile: return "Direct projectile";
+            case WeaponDeliveryMethod.BurstProjectile: return "Burst projectile";
+            case WeaponDeliveryMethod.SpreadProjectile: return "Spread projectile";
+            case WeaponDeliveryMethod.PiercingProjectile: return "Piercing projectile";
+            case WeaponDeliveryMethod.ArcProjectile: return "Arc projectile";
+            case WeaponDeliveryMethod.HomingProjectile: return "Homing projectile";
+            case WeaponDeliveryMethod.Beam: return "Beam";
+            case WeaponDeliveryMethod.AreaPulse: return "Area pulse";
+            case WeaponDeliveryMethod.Mine: return "Mine";
+            case WeaponDeliveryMethod.Trap: return "Trap";
+            case WeaponDeliveryMethod.DeployableTurret: return "Deployable turret";
+            case WeaponDeliveryMethod.CompanionDrone: return "Companion drone";
+            case WeaponDeliveryMethod.RemoteStrike: return "Remote strike";
+            case WeaponDeliveryMethod.ContactDash: return "Contact dash";
+            case WeaponDeliveryMethod.MeleeBite: return "Melee bite";
+            case WeaponDeliveryMethod.Tether: return "Tether";
+            case WeaponDeliveryMethod.Spawner: return "Spawner";
+            default: return "None";
+        }
+    }
+
+    public static string GetDeliveryFlagsLabel(WeaponDeliveryFlags deliveryFlags)
+    {
+        if (deliveryFlags == WeaponDeliveryFlags.None)
+            return string.Empty;
+
+        List<string> labels = new List<string>();
+        AppendFlagLabel(labels, deliveryFlags, WeaponDeliveryFlags.AreaDamage, "Area damage");
+        AppendFlagLabel(labels, deliveryFlags, WeaponDeliveryFlags.Piercing, "Piercing");
+        AppendFlagLabel(labels, deliveryFlags, WeaponDeliveryFlags.Homing, "Homing");
+        AppendFlagLabel(labels, deliveryFlags, WeaponDeliveryFlags.Delayed, "Delayed");
+        AppendFlagLabel(labels, deliveryFlags, WeaponDeliveryFlags.Continuous, "Continuous");
+        AppendFlagLabel(labels, deliveryFlags, WeaponDeliveryFlags.Autonomous, "Autonomous");
+        AppendFlagLabel(labels, deliveryFlags, WeaponDeliveryFlags.ShieldFocused, "Shield-focused");
+        AppendFlagLabel(labels, deliveryFlags, WeaponDeliveryFlags.MultiStream, "Multi-stream");
+        AppendFlagLabel(labels, deliveryFlags, WeaponDeliveryFlags.Paired, "Paired");
+        return string.Join(", ", labels);
+    }
+
+    static void AppendFlagLabel(List<string> labels, WeaponDeliveryFlags activeFlags, WeaponDeliveryFlags flag, string label)
+    {
+        if ((activeFlags & flag) == flag)
+            labels.Add(label);
     }
 
     public static bool IsEditableWeaponId(string weaponId)
@@ -588,6 +923,9 @@ public static class WeaponAttackCatalog
         {
             Id = SimpleGunId,
             DisplayName = "SIMPLE GUN",
+            DamageType = WeaponDamageType.Laser,
+            DeliveryMethod = WeaponDeliveryMethod.DirectProjectile,
+            DeliveryFlags = WeaponDeliveryFlags.None,
             MaxAmmo = 4,
             RangeMultiplier = 15f,
             ProjectileSize = 1f,
@@ -617,6 +955,9 @@ public static class WeaponAttackCatalog
         {
             Id = PlasmaGunId,
             DisplayName = "PLASMA GUN",
+            DamageType = WeaponDamageType.Plasma,
+            DeliveryMethod = WeaponDeliveryMethod.DirectProjectile,
+            DeliveryFlags = WeaponDeliveryFlags.None,
             MaxAmmo = 6,
             RangeMultiplier = 26f,
             ProjectileSize = 3f,
@@ -646,6 +987,9 @@ public static class WeaponAttackCatalog
         {
             Id = TripleGunId,
             DisplayName = "TRIPLE GUN",
+            DamageType = WeaponDamageType.Laser,
+            DeliveryMethod = WeaponDeliveryMethod.SpreadProjectile,
+            DeliveryFlags = WeaponDeliveryFlags.MultiStream,
             MaxAmmo = 4,
             RangeMultiplier = 15f,
             ProjectileSize = 0.92f,
@@ -675,6 +1019,9 @@ public static class WeaponAttackCatalog
         {
             Id = GatlingGunId,
             DisplayName = "GATLING GUN",
+            DamageType = WeaponDamageType.Kinetic,
+            DeliveryMethod = WeaponDeliveryMethod.BurstProjectile,
+            DeliveryFlags = WeaponDeliveryFlags.MultiStream,
             MaxAmmo = 4,
             RangeMultiplier = 17f,
             ProjectileSize = 0.38f,
@@ -704,12 +1051,15 @@ public static class WeaponAttackCatalog
         {
             Id = ArtilleryGunId,
             DisplayName = "ARTILLERY GUN",
-            MaxAmmo = 3,
+            DamageType = WeaponDamageType.Explosive,
+            DeliveryMethod = WeaponDeliveryMethod.ArcProjectile,
+            DeliveryFlags = WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.Delayed,
+            MaxAmmo = 4,
             RangeMultiplier = 5f,
             ProjectileSize = 1.65f,
             ProjectileSpeed = 1f,
-            HpDamage = 18,
-            ShieldDamage = 18,
+            HpDamage = 20,
+            ShieldDamage = 20,
             ProjectileCount = 1,
             SpreadAngle = 0f,
             FlightTime = 1.15f,
@@ -733,6 +1083,9 @@ public static class WeaponAttackCatalog
         {
             Id = RocketLauncherId,
             DisplayName = "ROCKET LAUNCHER",
+            DamageType = WeaponDamageType.Explosive,
+            DeliveryMethod = WeaponDeliveryMethod.HomingProjectile,
+            DeliveryFlags = WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.Homing,
             MaxAmmo = 3,
             RangeMultiplier = 24f,
             ProjectileSize = 0.7f,
@@ -762,6 +1115,9 @@ public static class WeaponAttackCatalog
         {
             Id = DoubleRocketLauncherId,
             DisplayName = "DOUBLE ROCKET LAUNCHER",
+            DamageType = WeaponDamageType.Explosive,
+            DeliveryMethod = WeaponDeliveryMethod.HomingProjectile,
+            DeliveryFlags = WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.Homing | WeaponDeliveryFlags.Paired,
             MaxAmmo = 2,
             RangeMultiplier = 24f,
             ProjectileSize = 0.49f,
@@ -791,6 +1147,9 @@ public static class WeaponAttackCatalog
         {
             Id = RailGunId,
             DisplayName = "RAIL GUN",
+            DamageType = WeaponDamageType.Kinetic,
+            DeliveryMethod = WeaponDeliveryMethod.PiercingProjectile,
+            DeliveryFlags = WeaponDeliveryFlags.Piercing,
             MaxAmmo = 3,
             RangeMultiplier = 42f,
             ProjectileSize = 0.65f,
@@ -820,6 +1179,9 @@ public static class WeaponAttackCatalog
         {
             Id = DoubleIonizerId,
             DisplayName = "DOUBLE IONIZER",
+            DamageType = WeaponDamageType.Ion,
+            DeliveryMethod = WeaponDeliveryMethod.SpreadProjectile,
+            DeliveryFlags = WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.ShieldFocused | WeaponDeliveryFlags.Paired,
             MaxAmmo = 8,
             RangeMultiplier = 18f,
             ProjectileSize = 1.15f,
@@ -849,6 +1211,9 @@ public static class WeaponAttackCatalog
         {
             Id = AstroCutterId,
             DisplayName = "ASTRO CUTTER",
+            DamageType = WeaponDamageType.Laser,
+            DeliveryMethod = WeaponDeliveryMethod.Beam,
+            DeliveryFlags = WeaponDeliveryFlags.Continuous | WeaponDeliveryFlags.Piercing,
             MaxAmmo = 3,
             RangeMultiplier = 5.25f,
             ProjectileSize = 0.92f,
@@ -878,6 +1243,9 @@ public static class WeaponAttackCatalog
         {
             Id = PulseDisruptorId,
             DisplayName = "PULSE DISRUPTOR",
+            DamageType = WeaponDamageType.Ion,
+            DeliveryMethod = WeaponDeliveryMethod.DirectProjectile,
+            DeliveryFlags = WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.ShieldFocused,
             MaxAmmo = 4,
             RangeMultiplier = 16f,
             ProjectileSize = 2.25f,

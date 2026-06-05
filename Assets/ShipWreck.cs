@@ -83,7 +83,7 @@ public class ShipWreck : MonoBehaviourPun
 
     public void Highlight()
     {
-        if (!HasLoot || spriteRenderer == null)
+        if (!HasLoot || isBeingCollected || spriteRenderer == null)
             return;
 
         isHighlighted = true;
@@ -111,8 +111,7 @@ public class ShipWreck : MonoBehaviourPun
     public void SetBeingCollectedRpc(bool value)
     {
         isBeingCollected = value;
-        if (!value)
-            isHighlighted = false;
+        isHighlighted = false;
 
         RefreshVisualState();
     }

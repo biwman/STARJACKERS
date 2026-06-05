@@ -17,6 +17,7 @@ public static class RoomSettings
     public const string ObstacleSizePercentKey = "obstacleSizePercent";
     public const string ObstacleNoBordersKey = "obstacleNoBorders";
     public const string TreasureDensityKey = "treasureDensity";
+    public const string RadioactiveTreasureDensityKey = "radioactiveTreasureDensity";
     public const string ResourceRichnessKey = "resourceRichness";
     public const string RandomLootWreckCountKey = "randomLootWreckCount";
     public const string HiddenTreasureEnabledKey = "hiddenTreasureEnabled";
@@ -35,10 +36,14 @@ public static class RoomSettings
     public const string AsteroidShowerActiveKey = "mapEffect.asteroidShower.active";
     public const string SpaceJunkDensityKey = "spaceJunkDensity";
     public const string ContainersDensityKey = "containersDensity";
+    public const string ArtifactAsteroidsDensityKey = "artifactAsteroidsDensity";
+    public const string ArtifactAsteroidsStateKey = "artifactAsteroids.state";
     public const string NebulaDensityKey = "nebulaDensity";
     public const string FireNebulaDensityKey = "fireNebulaDensity";
+    public const string ToxicNebulaDensityKey = "toxicNebulaDensity";
     public const string NebulaSizeKey = "nebulaSize";
     public const string FireNebulaSizeKey = "fireNebulaSize";
+    public const string ToxicNebulaSizeKey = "toxicNebulaSize";
     public const string AdvancedNebulaEnabledKey = "advancedNebulaEnabled";
     public const string CloudsDensityKey = "cloudsDensity";
     public const string CloudsSizeKey = "cloudsSize";
@@ -49,6 +54,7 @@ public static class RoomSettings
     public const string ScienceStationCountKey = "scienceStationCount";
     public const string BoosterSlowdownKey = "boosterSlowdownPercent";
     public const string BoosterRecoveryDelayKey = "boosterRecoveryDelay";
+    public const string AdvancedBoosterEnabledKey = "advancedBoosterEnabled";
     public const string ShipDriftEnabledKey = "shipDriftEnabled";
     public const string LastShipTimerMultiplierKey = "lastShipTimerMultiplier";
     public const string KillRewardPercentKey = "killRewardPercent";
@@ -60,6 +66,8 @@ public static class RoomSettings
     public const string MapBackgroundKey = "mapBackground";
     public const string SelectedMapKey = "selectedMap";
     public const string VisualEffectsEnabledKey = "visualEffectsEnabled";
+    public const string BoomVfxEnabledKey = "boomVfxEnabled";
+    public const string DynamicCameraZoomEnabledKey = "dynamicCameraZoomEnabled";
     public const string ParallaxBackgroundKey = "parallaxBackground";
     public const string BackgroundObjectKey = "backgroundObject";
     public const string GravityWellPhysicsEnabledKey = "gravityWellPhysicsEnabled";
@@ -68,6 +76,12 @@ public static class RoomSettings
     public const string CollectKeepAliveRangeBonusPercentKey = "collectKeepAliveRangeBonusPercent";
     public const string HapticsEnabledKey = "hapticsEnabled";
     public const string FpsCounterEnabledKey = "fpsCounterEnabled";
+    public const string NeutralRidersEnabledKey = "neutralRiders.enabled";
+    public const string NeutralRidersCountKey = "neutralRiders.count";
+    public const string NeutralRidersAggressionKey = "neutralRiders.aggression";
+    public const string EnemyDamageMultiplierPercentKey = "enemyDamageMultiplierPercent";
+    public const string EnemyAttackWindupMultiplierPercentKey = "enemyAttackWindupMultiplierPercent";
+    public const string EnemyAttackCooldownMultiplierPercentKey = "enemyAttackCooldownMultiplierPercent";
     public const string MovingObjectsEnabledKey = "movingObjectsEnabled";
     public const string EnemyBotsEnabledKey = "enemyBotsEnabled";
     public const string CorsairEnabledKey = "corsairEnabled";
@@ -81,6 +95,9 @@ public static class RoomSettings
     public const string RoundResultsKey = "roundResultsSnapshot";
     public const string FinishedRoundResultsKey = "finishedRoundResults";
     public const string RoundEndReasonKey = "roundEndReason";
+    public const string RoundWarmupTokenKey = "roundWarmup.token";
+    public const string RoundWarmupStartedAtKey = "roundWarmup.startedAt";
+    public const string RoundWarmupReadyPlayerKey = "roundWarmup.readyToken";
     public const string ShipSkinKey = "shipSkinIndex";
     public const string PilotIdKey = "pilotId";
     public const string ShipInventoryStateKey = "shipInventoryState";
@@ -95,6 +112,11 @@ public static class RoomSettings
     public const float DefaultRoundDuration = 240f;
     public const string DefaultObstacleDensity = "high";
     public const string DefaultTreasureDensity = "medium";
+    public const string RadioactiveTreasureDensityOff = "off";
+    public const string RadioactiveTreasureDensityLow = "low";
+    public const string RadioactiveTreasureDensityMedium = "medium";
+    public const string RadioactiveTreasureDensityHigh = "high";
+    public const string DefaultRadioactiveTreasureDensity = RadioactiveTreasureDensityOff;
     public const bool DefaultObstacleDestroyEnabled = true;
     public const int DefaultObstacleHp = 400;
     public const int DefaultObstacleSizePercent = 100;
@@ -113,6 +135,7 @@ public static class RoomSettings
     public const int DefaultBoosterSlowdownPercent = 40;
     public const int DefaultAmmoCount = 15;
     public const int DefaultBoosterRecoveryDelay = 5;
+    public const bool DefaultAdvancedBoosterEnabled = true;
     public const int DefaultShipDriftLevel = 1;
     public const float DefaultLastShipTimerMultiplier = 1f;
     public const int DefaultKillRewardPercent = 50;
@@ -125,6 +148,8 @@ public static class RoomSettings
     public const int MaxMapBackground = 21;
     public const string DefaultLobbyMapId = "just_space";
     public const bool DefaultVisualEffectsEnabled = true;
+    public const bool DefaultBoomVfxEnabled = true;
+    public const bool DefaultDynamicCameraZoomEnabled = true;
     public const string ParallaxBackgroundKosmos3 = "kosmos3";
     public const string ParallaxBackgroundKosmos6 = "kosmos6";
     public const string ParallaxBackgroundKosmos8 = "kosmos8";
@@ -134,6 +159,7 @@ public static class RoomSettings
     public const string ParallaxBackgroundKosmos12 = "kosmos12";
     public const string ParallaxBackgroundKosmos13 = "kosmos13";
     public const string ParallaxBackgroundKosmos14 = "kosmos14";
+    public const string ParallaxBackgroundKosmos15 = "kosmos15";
     public const string DefaultParallaxBackground = ParallaxBackgroundKosmos9;
     public const string BackgroundObjectOff = "off";
     public const string BackgroundObject1 = "background_object1";
@@ -154,6 +180,12 @@ public static class RoomSettings
     public const int DefaultCollectKeepAliveRangeBonusPercent = 50;
     public const bool DefaultHapticsEnabled = true;
     public const bool DefaultFpsCounterEnabled = false;
+    public const bool DefaultNeutralRidersEnabled = false;
+    public const int DefaultNeutralRidersCount = 2;
+    public const string NeutralRiderAggressionLow = "low";
+    public const string NeutralRiderAggressionNormal = "normal";
+    public const string NeutralRiderAggressionHigh = "high";
+    public const string DefaultNeutralRiderAggression = NeutralRiderAggressionNormal;
     public const string EndDisasterOff = "off";
     public const string EndDisasterMeteor = "meteor";
     public const string DefaultEndDisasterMode = EndDisasterMeteor;
@@ -174,7 +206,11 @@ public static class RoomSettings
     public const int DefaultEnemyRespawnIntervalSeconds = 60;
     public const int DefaultEnemyShield = 20;
     public const float DefaultEnemySpeedMultiplier = 1f;
+    public const int DefaultEnemyDamageMultiplierPercent = 80;
+    public const int DefaultEnemyAttackWindupMultiplierPercent = 120;
+    public const int DefaultEnemyAttackCooldownMultiplierPercent = 115;
     public const string SessionStateInLobby = "in_lobby";
+    public const string SessionStatePreparing = "preparing";
     public const string SessionStateInPlay = "in_play";
     public const string SessionStateClosingLobby = "closing_lobby";
     public const string SessionStateSummary = "summary";
@@ -206,7 +242,13 @@ public static class RoomSettings
     public const string ContainersDensityHigh = "high";
     public const string ContainersDensityVeryHigh = "very_high";
     public const string DefaultContainersDensity = ContainersDensityNone;
+    public const string ArtifactAsteroidsDensityOff = "off";
+    public const string ArtifactAsteroidsDensityLow = "low";
+    public const string ArtifactAsteroidsDensityMedium = "medium";
+    public const string ArtifactAsteroidsDensityHigh = "high";
+    public const string DefaultArtifactAsteroidsDensity = ArtifactAsteroidsDensityOff;
     public const string DefaultFireNebulaDensity = SpaceJunkDensityNone;
+    public const string DefaultToxicNebulaDensity = SpaceJunkDensityNone;
     public const string NebulaSizeVerySmall = "very_small";
     public const string NebulaSizeSmall = "small";
     public const string NebulaSizeNormal = "normal";
@@ -214,6 +256,7 @@ public static class RoomSettings
     public const string NebulaSizeVeryBig = "very_big";
     public const string DefaultNebulaSize = NebulaSizeNormal;
     public const string DefaultFireNebulaSize = NebulaSizeNormal;
+    public const string DefaultToxicNebulaSize = NebulaSizeNormal;
     public const bool DefaultAdvancedNebulaEnabled = false;
     public const string DefaultCloudsDensity = SpaceJunkDensityNone;
     public const string DefaultCloudsSize = NebulaSizeNormal;
@@ -391,6 +434,18 @@ public static class RoomSettings
         return GetInt(BoosterRecoveryDelayKey, DefaultBoosterRecoveryDelay, 0, 10);
     }
 
+    public static bool IsAdvancedBoosterEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(AdvancedBoosterEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultAdvancedBoosterEnabled;
+    }
+
     public static int GetShipDriftLevel()
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -512,6 +567,30 @@ public static class RoomSettings
         return DefaultVisualEffectsEnabled;
     }
 
+    public static bool AreBoomVfxEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(BoomVfxEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultBoomVfxEnabled;
+    }
+
+    public static bool IsDynamicCameraZoomEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(DynamicCameraZoomEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultDynamicCameraZoomEnabled;
+    }
+
     public static string GetParallaxBackgroundId()
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -537,6 +616,7 @@ public static class RoomSettings
             case ParallaxBackgroundKosmos12:
             case ParallaxBackgroundKosmos13:
             case ParallaxBackgroundKosmos14:
+            case ParallaxBackgroundKosmos15:
                 return backgroundId;
             default:
                 return DefaultParallaxBackground;
@@ -595,6 +675,36 @@ public static class RoomSettings
         return GetInt(CollectKeepAliveRangeBonusPercentKey, DefaultCollectKeepAliveRangeBonusPercent, 0, 200);
     }
 
+    public static int GetEnemyDamageMultiplierPercent()
+    {
+        return GetInt(EnemyDamageMultiplierPercentKey, DefaultEnemyDamageMultiplierPercent, 50, 150);
+    }
+
+    public static float GetEnemyDamageMultiplier()
+    {
+        return GetEnemyDamageMultiplierPercent() / 100f;
+    }
+
+    public static int GetEnemyAttackWindupMultiplierPercent()
+    {
+        return GetInt(EnemyAttackWindupMultiplierPercentKey, DefaultEnemyAttackWindupMultiplierPercent, 50, 150);
+    }
+
+    public static float GetEnemyAttackWindupMultiplier()
+    {
+        return GetEnemyAttackWindupMultiplierPercent() / 100f;
+    }
+
+    public static int GetEnemyAttackCooldownMultiplierPercent()
+    {
+        return GetInt(EnemyAttackCooldownMultiplierPercentKey, DefaultEnemyAttackCooldownMultiplierPercent, 50, 150);
+    }
+
+    public static float GetEnemyAttackCooldownMultiplier()
+    {
+        return GetEnemyAttackCooldownMultiplierPercent() / 100f;
+    }
+
     public static bool AreHapticsEnabled()
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -617,6 +727,54 @@ public static class RoomSettings
         }
 
         return DefaultFpsCounterEnabled;
+    }
+
+    public static bool AreNeutralRidersEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(NeutralRidersEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultNeutralRidersEnabled;
+    }
+
+    public static int GetNeutralRiderCount()
+    {
+        return GetInt(NeutralRidersCountKey, DefaultNeutralRidersCount, 1, 3);
+    }
+
+    public static string GetNeutralRiderAggression()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(NeutralRidersAggressionKey, out object value) &&
+            value is string aggression)
+        {
+            return NormalizeNeutralRiderAggression(aggression);
+        }
+
+        return DefaultNeutralRiderAggression;
+    }
+
+    public static string NormalizeNeutralRiderAggression(string aggression)
+    {
+        string normalized = string.IsNullOrWhiteSpace(aggression)
+            ? DefaultNeutralRiderAggression
+            : aggression.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case "medium":
+                return NeutralRiderAggressionNormal;
+            case NeutralRiderAggressionLow:
+            case NeutralRiderAggressionNormal:
+            case NeutralRiderAggressionHigh:
+                return normalized;
+            default:
+                return DefaultNeutralRiderAggression;
+        }
     }
 
     public static string GetEndDisasterMode()
@@ -678,6 +836,18 @@ public static class RoomSettings
         return IsCrazyEnemiesActive() ? IncreaseTreasureDensity(density) : density;
     }
 
+    public static string GetRadioactiveTreasureDensity()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RadioactiveTreasureDensityKey, out object value) &&
+            value is string density)
+        {
+            return NormalizeRadioactiveTreasureDensity(density);
+        }
+
+        return DefaultRadioactiveTreasureDensity;
+    }
+
     public static string NormalizeTreasureDensity(string density)
     {
         string normalized = string.IsNullOrWhiteSpace(density)
@@ -693,6 +863,26 @@ public static class RoomSettings
                 return normalized;
             default:
                 return DefaultTreasureDensity;
+        }
+    }
+
+    public static string NormalizeRadioactiveTreasureDensity(string density)
+    {
+        string normalized = string.IsNullOrWhiteSpace(density)
+            ? DefaultRadioactiveTreasureDensity
+            : density.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case RadioactiveTreasureDensityOff:
+            case "none":
+                return RadioactiveTreasureDensityOff;
+            case RadioactiveTreasureDensityLow:
+            case RadioactiveTreasureDensityMedium:
+            case RadioactiveTreasureDensityHigh:
+                return normalized;
+            default:
+                return DefaultRadioactiveTreasureDensity;
         }
     }
 
@@ -797,6 +987,8 @@ public static class RoomSettings
 
         switch (normalized)
         {
+            case "off":
+                return SpaceJunkDensityNone;
             case SpaceJunkDensityNone:
             case SpaceJunkDensityLow:
             case SpaceJunkDensityMedium:
@@ -817,6 +1009,18 @@ public static class RoomSettings
         }
 
         return DefaultFireNebulaDensity;
+    }
+
+    public static string GetToxicNebulaDensity()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ToxicNebulaDensityKey, out object value) &&
+            value is string density)
+        {
+            return NormalizeToxicNebulaDensity(density);
+        }
+
+        return DefaultToxicNebulaDensity;
     }
 
     public static string GetCloudsDensity()
@@ -858,6 +1062,26 @@ public static class RoomSettings
                 return normalized;
             default:
                 return DefaultFireNebulaDensity;
+        }
+    }
+
+    public static string NormalizeToxicNebulaDensity(string density)
+    {
+        string normalized = string.IsNullOrWhiteSpace(density)
+            ? DefaultToxicNebulaDensity
+            : density.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case "off":
+                return SpaceJunkDensityNone;
+            case SpaceJunkDensityNone:
+            case SpaceJunkDensityLow:
+            case SpaceJunkDensityMedium:
+            case SpaceJunkDensityHigh:
+                return normalized;
+            default:
+                return DefaultToxicNebulaDensity;
         }
     }
 
@@ -903,6 +1127,18 @@ public static class RoomSettings
         return DefaultFireNebulaSize;
     }
 
+    public static string GetToxicNebulaSize()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ToxicNebulaSizeKey, out object value) &&
+            value is string size)
+        {
+            return NormalizeNebulaSize(size);
+        }
+
+        return DefaultToxicNebulaSize;
+    }
+
     public static string GetCloudsSize()
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -942,6 +1178,11 @@ public static class RoomSettings
     public static float GetFireNebulaSizeMultiplier()
     {
         return GetNebulaSizeMultiplierForValue(GetFireNebulaSize());
+    }
+
+    public static float GetToxicNebulaSizeMultiplier()
+    {
+        return GetNebulaSizeMultiplierForValue(GetToxicNebulaSize());
     }
 
     public static float GetCloudsSizeMultiplier()
@@ -995,6 +1236,53 @@ public static class RoomSettings
                 return normalized;
             default:
                 return DefaultContainersDensity;
+        }
+    }
+
+    public static string GetArtifactAsteroidsDensity()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ArtifactAsteroidsDensityKey, out object value) &&
+            value is string density)
+        {
+            return NormalizeArtifactAsteroidsDensity(density);
+        }
+
+        return DefaultArtifactAsteroidsDensity;
+    }
+
+    public static string NormalizeArtifactAsteroidsDensity(string density)
+    {
+        string normalized = string.IsNullOrWhiteSpace(density)
+            ? DefaultArtifactAsteroidsDensity
+            : density.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case "none":
+                return ArtifactAsteroidsDensityOff;
+            case ArtifactAsteroidsDensityOff:
+            case ArtifactAsteroidsDensityLow:
+            case ArtifactAsteroidsDensityMedium:
+            case ArtifactAsteroidsDensityHigh:
+                return normalized;
+            default:
+                return DefaultArtifactAsteroidsDensity;
+        }
+    }
+
+    public static int GetArtifactAsteroidsCount()
+    {
+        switch (GetArtifactAsteroidsDensity())
+        {
+            case ArtifactAsteroidsDensityLow:
+                return 3;
+            case ArtifactAsteroidsDensityMedium:
+                return 5;
+            case ArtifactAsteroidsDensityHigh:
+                return 8;
+            default:
+                return 0;
         }
     }
 
@@ -1162,24 +1450,31 @@ public static class RoomSettings
         return Mathf.Clamp(definition.DefaultShield, 0, maxShield);
     }
 
-    public static int GetEnemyDamage(EnemyBotKind kind)
+    public static int GetEnemyBaseDamage(EnemyBotKind kind)
     {
         EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
         if (definition == null)
             return 0;
 
-        int damage;
         if (PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.DamageRoomKey))
         {
-            damage = GetInt(definition.DamageRoomKey, definition.DefaultDamage, 0, 200);
-        }
-        else
-        {
-            damage = Mathf.Clamp(definition.DefaultDamage, 0, 200);
+            return GetInt(definition.DamageRoomKey, definition.DefaultDamage, 0, 200);
         }
 
-        return IsCrazyEnemiesActive() ? Mathf.Max(0, damage * 2) : damage;
+        return Mathf.Clamp(definition.DefaultDamage, 0, 200);
+    }
+
+    public static int GetEnemyDamage(EnemyBotKind kind)
+    {
+        int damage = GetEnemyBaseDamage(kind);
+        if (IsCrazyEnemiesActive())
+            damage = Mathf.Max(0, damage * 2);
+
+        if (damage <= 0)
+            return 0;
+
+        return Mathf.Max(1, Mathf.RoundToInt(damage * GetEnemyDamageMultiplier()));
     }
 
     public static float GetEnemySpeedMultiplier(EnemyBotKind kind)
@@ -1441,15 +1736,15 @@ public static class RoomSettings
         switch (GetMapSizeMode())
         {
             case "small":
-                return new Vector2(20f, 20f);
+                return new Vector2(24f, 24f);
             case "large":
-                return new Vector2(32f, 32f);
+                return new Vector2(38.4f, 38.4f);
             case "very_large":
-                return new Vector2(40f, 40f);
+                return new Vector2(48f, 48f);
             case "super_large":
-                return new Vector2(50f, 50f);
+                return new Vector2(60f, 60f);
             default:
-                return new Vector2(25f, 25f);
+                return new Vector2(30f, 30f);
         }
     }
 
@@ -1586,7 +1881,8 @@ public enum ShipType
     Viper = 1,
     Avenger = 2,
     Arrow = 3,
-    Invader = 4
+    Invader = 4,
+    CargoTruck = 5
 }
 
 public sealed class PlayerShipDefinition
@@ -1600,6 +1896,8 @@ public sealed class PlayerShipDefinition
     public int ShieldSlots { get; }
     public int EngineSlots { get; }
     public int GadgetSlots { get; }
+    public int SupportSlots { get; }
+    public int RescueSlots { get; }
     public int BaseHp { get; }
     public int BaseShield { get; }
     public float BaseSpeed { get; }
@@ -1618,6 +1916,8 @@ public sealed class PlayerShipDefinition
         int shieldSlots,
         int engineSlots,
         int gadgetSlots,
+        int supportSlots,
+        int rescueSlots,
         int baseHp,
         int baseShield,
         float baseSpeed,
@@ -1635,6 +1935,8 @@ public sealed class PlayerShipDefinition
         ShieldSlots = shieldSlots;
         EngineSlots = engineSlots;
         GadgetSlots = gadgetSlots;
+        SupportSlots = supportSlots;
+        RescueSlots = rescueSlots;
         BaseHp = baseHp;
         BaseShield = baseShield;
         BaseSpeed = baseSpeed;
@@ -1662,7 +1964,10 @@ public static class ShipCatalog
     public const int InvaderCamoSkinIndex = 12;
     public const int InvaderVolcanicSkinIndex = 13;
     public const int InvaderGoldplateSkinIndex = 14;
-    public const int MaxShipSkinIndex = InvaderGoldplateSkinIndex;
+    public const int CargoTruckGreenTruckSkinIndex = 15;
+    public const int CargoTruckWhitePantherSkinIndex = 16;
+    public const int CargoTruckSandSigmaSkinIndex = 17;
+    public const int MaxShipSkinIndex = CargoTruckSandSigmaSkinIndex;
 
     static readonly PlayerShipDefinition ExplorerDefinition = new PlayerShipDefinition(
         ShipType.Explorer,
@@ -1670,6 +1975,8 @@ public static class ShipCatalog
         new[] { ExplorerBasicSkinIndex, ExplorerSilverSkinIndex, ExplorerGildedSkinIndex },
         8,
         0,
+        1,
+        1,
         1,
         1,
         1,
@@ -1692,6 +1999,8 @@ public static class ShipCatalog
         1,
         2,
         0,
+        1,
+        1,
         60,
         30,
         3.75f,
@@ -1714,6 +2023,8 @@ public static class ShipCatalog
         2,
         0,
         2,
+        1,
+        1,
         98,
         55,
         2.625f,
@@ -1732,6 +2043,8 @@ public static class ShipCatalog
         1,
         2,
         1,
+        0,
+        2,
         63,
         25,
         4.25f,
@@ -1755,6 +2068,8 @@ public static class ShipCatalog
         1,
         0,
         2,
+        2,
+        1,
         72,
         35,
         3.375f,
@@ -1763,13 +2078,39 @@ public static class ShipCatalog
         25,
         new[] { new Vector2(0f, 0.18f) });
 
+    static readonly PlayerShipDefinition CargoTruckDefinition = new PlayerShipDefinition(
+        ShipType.CargoTruck,
+        "BISON",
+        new[] { CargoTruckGreenTruckSkinIndex, CargoTruckWhitePantherSkinIndex, CargoTruckSandSigmaSkinIndex },
+        15,
+        1,
+        0,
+        2,
+        1,
+        2,
+        2,
+        1,
+        140,
+        30,
+        2.15f,
+        0.68f,
+        7f,
+        15,
+        new[]
+        {
+            new Vector2(-1.7f, 0.18f),
+            new Vector2(0f, 0.12f),
+            new Vector2(1.7f, 0.18f)
+        });
+
     static readonly Dictionary<ShipType, PlayerShipDefinition> Definitions = new Dictionary<ShipType, PlayerShipDefinition>
     {
         { ShipType.Explorer, ExplorerDefinition },
         { ShipType.Viper, ViperDefinition },
         { ShipType.Avenger, AvengerDefinition },
         { ShipType.Arrow, ArrowDefinition },
-        { ShipType.Invader, InvaderDefinition }
+        { ShipType.Invader, InvaderDefinition },
+        { ShipType.CargoTruck, CargoTruckDefinition }
     };
 
     public static PlayerShipDefinition GetShipDefinition(int skinIndex)
@@ -1786,6 +2127,7 @@ public static class ShipCatalog
     {
         return skinIndex switch
         {
+            >= CargoTruckGreenTruckSkinIndex => ShipType.CargoTruck,
             >= InvaderCamoSkinIndex => ShipType.Invader,
             >= ArrowSmoothSkinIndex => ShipType.Arrow,
             >= AvengerDarkGreenSkinIndex => ShipType.Avenger,
@@ -1823,6 +2165,9 @@ public static class ShipCatalog
             case InvaderCamoSkinIndex: return "Camo";
             case InvaderVolcanicSkinIndex: return "Volcanic";
             case InvaderGoldplateSkinIndex: return "Goldplate";
+            case CargoTruckGreenTruckSkinIndex: return "Green Truck";
+            case CargoTruckWhitePantherSkinIndex: return "White Panther";
+            case CargoTruckSandSigmaSkinIndex: return "Sand Sigma";
             default: return "Skin";
         }
     }
@@ -1855,6 +2200,16 @@ public static class ShipCatalog
     public static int GetGadgetSlots(int skinIndex)
     {
         return GetShipDefinition(skinIndex).GadgetSlots;
+    }
+
+    public static int GetSupportSlots(int skinIndex)
+    {
+        return GetShipDefinition(skinIndex).SupportSlots;
+    }
+
+    public static int GetRescueSlots(int skinIndex)
+    {
+        return GetShipDefinition(skinIndex).RescueSlots;
     }
 
     public static int GetBaseHp(int skinIndex)
@@ -1904,6 +2259,10 @@ public static class ShipCatalog
             5 => GetEngineSlots(shipSkinIndex) >= 2,
             6 => GetGadgetSlots(shipSkinIndex) >= 1,
             7 => GetGadgetSlots(shipSkinIndex) >= 2,
+            8 => GetSupportSlots(shipSkinIndex) >= 1,
+            9 => GetSupportSlots(shipSkinIndex) >= 2,
+            10 => GetRescueSlots(shipSkinIndex) >= 1,
+            11 => GetRescueSlots(shipSkinIndex) >= 2,
             _ => false
         };
     }
@@ -1920,6 +2279,10 @@ public static class ShipCatalog
             5 => "ENGINE",
             6 => "GADGET",
             7 => "GADGET",
+            8 => "SUPPORT",
+            9 => "SUPPORT",
+            10 => "RESCUE",
+            11 => "RESCUE",
             _ => "SLOT"
         };
     }
@@ -1943,6 +2306,9 @@ public static class ShipCatalog
             InvaderCamoSkinIndex => "Visuals/Ships/invader_camo_resource",
             InvaderVolcanicSkinIndex => "Visuals/Ships/invader_volcanic_resource",
             InvaderGoldplateSkinIndex => "Visuals/Ships/invader_goldplate_resource",
+            CargoTruckGreenTruckSkinIndex => "Visuals/Ships/bison_green_truck",
+            CargoTruckWhitePantherSkinIndex => "Visuals/Ships/bison_white_panther",
+            CargoTruckSandSigmaSkinIndex => "Visuals/Ships/bison_sand_sigma",
             _ => "Visuals/Ships/ship1_resource"
         };
     }
@@ -1966,6 +2332,9 @@ public static class ShipCatalog
             InvaderCamoSkinIndex => "Assets/Resources/Visuals/Ships/invader_camo_resource.png",
             InvaderVolcanicSkinIndex => "Assets/Resources/Visuals/Ships/invader_volcanic_resource.png",
             InvaderGoldplateSkinIndex => "Assets/Resources/Visuals/Ships/invader_goldplate_resource.png",
+            CargoTruckGreenTruckSkinIndex => "Assets/Resources/Visuals/Ships/bison_green_truck.png",
+            CargoTruckWhitePantherSkinIndex => "Assets/Resources/Visuals/Ships/bison_white_panther.png",
+            CargoTruckSandSigmaSkinIndex => "Assets/Resources/Visuals/Ships/bison_sand_sigma.png",
             _ => "Assets/Resources/Visuals/Ships/ship1_resource.png"
         };
     }
@@ -1989,6 +2358,9 @@ public static class ShipCatalog
             InvaderCamoSkinIndex => "Assets/invader_camo.png",
             InvaderVolcanicSkinIndex => "Assets/invader_volcanic.png",
             InvaderGoldplateSkinIndex => "Assets/invader_goldplate.png",
+            CargoTruckGreenTruckSkinIndex => "Assets/Resources/Visuals/Ships/bison_green_truck.png",
+            CargoTruckWhitePantherSkinIndex => "Assets/Resources/Visuals/Ships/bison_white_panther.png",
+            CargoTruckSandSigmaSkinIndex => "Assets/Resources/Visuals/Ships/bison_sand_sigma.png",
             _ => "Assets/ship1.png"
         };
     }
@@ -2001,6 +2373,7 @@ public static class ShipCatalog
             ShipType.Avenger => "wrak3_resource",
             ShipType.Arrow => "Visuals/Ships/arrow_ship_wreck_resource",
             ShipType.Invader => "Visuals/Ships/invader_wreck_resource",
+            ShipType.CargoTruck => "space_truck_wrak_resource",
             _ => "wrak1_resource"
         };
     }
@@ -2013,6 +2386,7 @@ public static class ShipCatalog
             ShipType.Avenger => "Assets/Resources/wrak3_resource.png",
             ShipType.Arrow => "Assets/Resources/Visuals/Ships/arrow_ship_wreck_resource.png",
             ShipType.Invader => "Assets/Resources/Visuals/Ships/invader_wreck_resource.png",
+            ShipType.CargoTruck => "Assets/Resources/space_truck_wrak_resource.png",
             _ => "Assets/Resources/wrak1_resource.png"
         };
     }
@@ -2025,6 +2399,7 @@ public static class ShipCatalog
             ShipType.Avenger => "Assets/wrak3.png",
             ShipType.Arrow => "Assets/arrow_ship_wreck.png",
             ShipType.Invader => "Assets/invader_wreck.png",
+            ShipType.CargoTruck => "Assets/space_truck_wrak.png",
             _ => "Assets/wrak1.png"
         };
     }

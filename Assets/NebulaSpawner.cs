@@ -8,6 +8,7 @@ using UnityEngine;
 public class NebulaSpawner : MonoBehaviour
 {
     public const string FireNebulaLayoutKey = "fireNebulaLayout";
+    public const string ToxicNebulaLayoutKey = "toxicNebulaLayout";
     public const string CloudLayoutKey = "cloudLayout";
     public const string CloudDirectionKey = "cloudDirection";
 
@@ -71,12 +72,14 @@ public class NebulaSpawner : MonoBehaviour
 
         string normalLayout = GetRoomLayout(NebulaLayoutKey);
         string fireLayout = GetRoomLayout(FireNebulaLayoutKey);
+        string toxicLayout = GetRoomLayout(ToxicNebulaLayoutKey);
         string cloudLayout = GetRoomLayout(CloudLayoutKey);
         string cloudDirection = GetRoomLayout(CloudDirectionKey);
 
         if (PhotonNetwork.IsMasterClient &&
             (string.IsNullOrWhiteSpace(normalLayout) ||
              string.IsNullOrWhiteSpace(fireLayout) ||
+             string.IsNullOrWhiteSpace(toxicLayout) ||
              string.IsNullOrWhiteSpace(cloudLayout) ||
              string.IsNullOrWhiteSpace(cloudDirection)))
         {
@@ -101,6 +104,14 @@ public class NebulaSpawner : MonoBehaviour
                 props[FireNebulaLayoutKey] = fireLayout;
             }
 
+            List<Vector2> reservedNebulaPositions = ParseLayout(normalLayout);
+            reservedNebulaPositions.AddRange(ParseLayout(fireLayout));
+            if (string.IsNullOrWhiteSpace(toxicLayout))
+            {
+                toxicLayout = BuildNebulaLayout(RoomSettings.ToxicNebulaDensityKey, reservedNebulaPositions);
+                props[ToxicNebulaLayoutKey] = toxicLayout;
+            }
+
             if (string.IsNullOrWhiteSpace(cloudLayout))
             {
                 cloudLayout = BuildCloudLayout();
@@ -113,20 +124,22 @@ public class NebulaSpawner : MonoBehaviour
 
         if (!string.IsNullOrWhiteSpace(normalLayout) &&
             !string.IsNullOrWhiteSpace(fireLayout) &&
+            !string.IsNullOrWhiteSpace(toxicLayout) &&
             !string.IsNullOrWhiteSpace(cloudLayout) &&
             !string.IsNullOrWhiteSpace(cloudDirection))
         {
-            ApplyLayouts(normalLayout, fireLayout, cloudLayout, ParseDirection(cloudDirection));
+            ApplyLayouts(normalLayout, fireLayout, toxicLayout, cloudLayout, ParseDirection(cloudDirection));
         }
     }
 
-    void ApplyLayouts(string normalLayout, string fireLayout, string cloudLayout, Vector2 cloudDirection)
+    void ApplyLayouts(string normalLayout, string fireLayout, string toxicLayout, string cloudLayout, Vector2 cloudDirection)
     {
         if (layoutApplied)
             return;
 
         ApplyLayerLayout(normalLayout, NebulaFieldKind.Normal, Vector2.zero);
         ApplyLayerLayout(fireLayout, NebulaFieldKind.Fire, Vector2.zero);
+        ApplyLayerLayout(toxicLayout, NebulaFieldKind.Toxic, Vector2.zero);
         ApplyLayerLayout(cloudLayout, NebulaFieldKind.Cloud, cloudDirection);
         layoutApplied = true;
     }
@@ -139,7 +152,7 @@ public class NebulaSpawner : MonoBehaviour
         List<Vector2> positions = ParseLayout(layout);
         for (int i = 0; i < positions.Count; i++)
         {
-            GameObject nebula = new GameObject(kind == NebulaFieldKind.Fire ? "FireNebula" : kind == NebulaFieldKind.Cloud ? "Cloud" : "Nebula");
+            GameObject nebula = new GameObject(kind == NebulaFieldKind.Fire ? "FireNebula" : kind == NebulaFieldKind.Toxic ? "ToxicNebula" : kind == NebulaFieldKind.Cloud ? "Cloud" : "Nebula");
             nebula.transform.position = new Vector3(positions[i].x, positions[i].y, 0f);
             nebula.AddComponent<SpriteRenderer>();
             nebula.AddComponent<CircleCollider2D>();
@@ -333,12 +346,15 @@ public class NebulaSpawner : MonoBehaviour
         {
             string normalized = densityKey == RoomSettings.FireNebulaDensityKey
                 ? RoomSettings.NormalizeFireNebulaDensity(density)
-                : densityKey == RoomSettings.CloudsDensityKey
-                    ? RoomSettings.NormalizeCloudsDensity(density)
-                    : density.Trim().ToLowerInvariant();
+                : densityKey == RoomSettings.ToxicNebulaDensityKey
+                    ? RoomSettings.NormalizeToxicNebulaDensity(density)
+                    : densityKey == RoomSettings.CloudsDensityKey
+                        ? RoomSettings.NormalizeCloudsDensity(density)
+                        : density.Trim().ToLowerInvariant();
 
             switch (normalized)
             {
+                case "off":
                 case "none": return 0f;
                 case "low": return 0.4f;
                 case "high": return 1.2f;
@@ -346,7 +362,11 @@ public class NebulaSpawner : MonoBehaviour
             }
         }
 
-        return densityKey == RoomSettings.FireNebulaDensityKey || densityKey == RoomSettings.CloudsDensityKey ? 0f : 0.5f;
+        return densityKey == RoomSettings.FireNebulaDensityKey ||
+               densityKey == RoomSettings.ToxicNebulaDensityKey ||
+               densityKey == RoomSettings.CloudsDensityKey
+            ? 0f
+            : 0.5f;
     }
 
     bool IsRoundStarted()

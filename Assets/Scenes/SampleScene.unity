@@ -194,18 +194,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 22042929}
   m_CullTransparentMesh: 1
---- !u!62 &261778395
-PhysicsMaterial2D:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: MapBoundarySoft
-  serializedVersion: 2
-  friction: 0
-  bounciness: 0
-  m_FrictionCombine: 1
-  m_BounceCombine: 4
 --- !u!1 &261984987
 GameObject:
   m_ObjectHideFlags: 0
@@ -744,6 +732,7 @@ MonoBehaviour:
   mapSizeSettingText: {fileID: 0}
   mapBackgroundSettingText: {fileID: 0}
   visualEffectsSettingText: {fileID: 0}
+  dynamicCameraZoomSettingText: {fileID: 0}
   advancedBackgroundSettingText: {fileID: 0}
   parallaxBackgroundSettingText: {fileID: 0}
   backgroundObjectSettingText: {fileID: 0}
@@ -757,30 +746,40 @@ MonoBehaviour:
   obstacleSizeSettingText: {fileID: 0}
   obstacleNoBordersSettingText: {fileID: 0}
   treasureSettingText: {fileID: 0}
+  radioactiveTreasureSettingText: {fileID: 0}
   resourceRichnessSettingText: {fileID: 0}
   spaceJunkSettingText: {fileID: 0}
   containersSettingText: {fileID: 0}
+  artifactAsteroidsSettingText: {fileID: 0}
   randomLootWreckSettingText: {fileID: 0}
+  hiddenTreasureSettingText: {fileID: 0}
   nebulaSettingText: {fileID: 0}
   fireNebulaSettingText: {fileID: 0}
+  toxicNebulaSettingText: {fileID: 0}
   nebulaSizeSettingText: {fileID: 0}
   fireNebulaSizeSettingText: {fileID: 0}
+  toxicNebulaSizeSettingText: {fileID: 0}
   advancedNebulaSettingText: {fileID: 0}
   cloudsSettingText: {fileID: 0}
   cloudsSizeSettingText: {fileID: 0}
   extractionSettingText: {fileID: 0}
+  extractionTypeSettingText: {fileID: 0}
   repairBaySettingText: {fileID: 0}
   spaceFactorySettingText: {fileID: 0}
+  scienceStationSettingText: {fileID: 0}
   boosterSettingText: {fileID: 0}
   ammoSettingText: {fileID: 0}
   boosterDelaySettingText: {fileID: 0}
+  advancedBoosterSettingText: {fileID: 0}
   shipDriftSettingText: {fileID: 0}
   deathTimerSettingText: {fileID: 0}
   inventoryLossSettingText: {fileID: 0}
   equipmentLossSettingText: {fileID: 0}
+  cosmicWormSettingText: {fileID: 0}
   crazyEnemiesEffectSettingText: {fileID: 0}
   fogOfWarEffectSettingText: {fileID: 0}
   pirateBaseEffectSettingText: {fileID: 0}
+  asteroidShowerEffectSettingText: {fileID: 0}
   movingObjectsSettingText: {fileID: 0}
   enemyBotsSettingText: {fileID: 0}
   corsairSettingText: {fileID: 0}
@@ -790,6 +789,9 @@ MonoBehaviour:
   obstacleWeightSettingText: {fileID: 0}
   treasureWeightSettingText: {fileID: 0}
   batteringSettingText: {fileID: 0}
+  enemyDamageMultiplierSettingText: {fileID: 0}
+  enemyAttackWindupMultiplierSettingText: {fileID: 0}
+  enemyAttackCooldownMultiplierSettingText: {fileID: 0}
   shootingModelSettingText: {fileID: 0}
   superAttackSettingText: {fileID: 0}
   advancedMovingJoystickSettingText: {fileID: 0}
@@ -798,11 +800,15 @@ MonoBehaviour:
   collectKeepAliveRangeBonusSettingText: {fileID: 0}
   hapticsSettingText: {fileID: 0}
   fpsCounterSettingText: {fileID: 0}
+  neutralRidersEnabledSettingText: {fileID: 0}
+  neutralRidersCountSettingText: {fileID: 0}
+  neutralRidersAggressionSettingText: {fileID: 0}
   gunSetupSettingText: {fileID: 0}
   roundSettingButton: {fileID: 0}
   mapSizeSettingButton: {fileID: 0}
   mapBackgroundSettingButton: {fileID: 0}
   visualEffectsSettingButton: {fileID: 0}
+  dynamicCameraZoomSettingButton: {fileID: 0}
   advancedBackgroundSettingButton: {fileID: 0}
   parallaxBackgroundSettingButton: {fileID: 0}
   backgroundObjectSettingButton: {fileID: 0}
@@ -816,35 +822,48 @@ MonoBehaviour:
   obstacleSizeSettingButton: {fileID: 0}
   obstacleNoBordersSettingButton: {fileID: 0}
   treasureSettingButton: {fileID: 0}
+  radioactiveTreasureSettingButton: {fileID: 0}
   resourceRichnessSettingButton: {fileID: 0}
   spaceJunkSettingButton: {fileID: 0}
   containersSettingButton: {fileID: 0}
+  artifactAsteroidsSettingButton: {fileID: 0}
   randomLootWreckSettingButton: {fileID: 0}
+  hiddenTreasureSettingButton: {fileID: 0}
   nebulaSettingButton: {fileID: 0}
   fireNebulaSettingButton: {fileID: 0}
+  toxicNebulaSettingButton: {fileID: 0}
   nebulaSizeSettingButton: {fileID: 0}
   fireNebulaSizeSettingButton: {fileID: 0}
+  toxicNebulaSizeSettingButton: {fileID: 0}
   advancedNebulaSettingButton: {fileID: 0}
   cloudsSettingButton: {fileID: 0}
   cloudsSizeSettingButton: {fileID: 0}
   extractionSettingButton: {fileID: 0}
+  extractionTypeSettingButton: {fileID: 0}
   repairBaySettingButton: {fileID: 0}
   spaceFactorySettingButton: {fileID: 0}
+  scienceStationSettingButton: {fileID: 0}
   boosterSettingButton: {fileID: 0}
   ammoSettingButton: {fileID: 0}
   boosterDelaySettingButton: {fileID: 0}
+  advancedBoosterSettingButton: {fileID: 0}
   shipDriftSettingButton: {fileID: 0}
   deathTimerSettingButton: {fileID: 0}
   inventoryLossSettingButton: {fileID: 0}
   equipmentLossSettingButton: {fileID: 0}
+  cosmicWormSettingButton: {fileID: 0}
   crazyEnemiesEffectSettingButton: {fileID: 0}
   fogOfWarEffectSettingButton: {fileID: 0}
   pirateBaseEffectSettingButton: {fileID: 0}
+  asteroidShowerEffectSettingButton: {fileID: 0}
   movingObjectsSettingButton: {fileID: 0}
   bulletPushSettingButton: {fileID: 0}
   obstacleWeightSettingButton: {fileID: 0}
   treasureWeightSettingButton: {fileID: 0}
   batteringSettingButton: {fileID: 0}
+  enemyDamageMultiplierSettingButton: {fileID: 0}
+  enemyAttackWindupMultiplierSettingButton: {fileID: 0}
+  enemyAttackCooldownMultiplierSettingButton: {fileID: 0}
   shootingModelSettingButton: {fileID: 0}
   superAttackSettingButton: {fileID: 0}
   advancedMovingJoystickSettingButton: {fileID: 0}
@@ -853,6 +872,9 @@ MonoBehaviour:
   collectKeepAliveRangeBonusSettingButton: {fileID: 0}
   hapticsSettingButton: {fileID: 0}
   fpsCounterSettingButton: {fileID: 0}
+  neutralRidersEnabledSettingButton: {fileID: 0}
+  neutralRidersCountSettingButton: {fileID: 0}
+  neutralRidersAggressionSettingButton: {fileID: 0}
   gunSetupSettingButton: {fileID: 0}
   backToRoundsButton: {fileID: 0}
   backToRoundsText: {fileID: 0}
@@ -1533,6 +1555,216 @@ MonoBehaviour:
   m_OnValueChanged:
     m_PersistentCalls:
       m_Calls: []
+--- !u!213 &699761178
+Sprite:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_Rect:
+    serializedVersion: 2
+    x: 0
+    y: 0
+    width: 1536
+    height: 1024
+  m_Offset: {x: 0, y: 0}
+  m_Border: {x: 0, y: 0, z: 0, w: 0}
+  m_PixelsToUnits: 192
+  m_Pivot: {x: 0.5, y: 0.5}
+  m_Extrude: 0
+  m_IsPolygon: 0
+  m_PackingTag: 
+  m_RenderDataKey:
+    00000000000000000000000000000000: 0
+  m_AtlasTags: []
+  m_SpriteAtlas: {fileID: 0}
+  m_RD:
+    serializedVersion: 3
+    texture: {fileID: 2800000, guid: d740e4af474d02a4792e6ef26e89387d, type: 3}
+    alphaTexture: {fileID: 0}
+    secondaryTextures: []
+    m_SubMeshes:
+    - serializedVersion: 2
+      firstByte: 0
+      indexCount: 6
+      topology: 0
+      baseVertex: 0
+      firstVertex: 0
+      vertexCount: 4
+      localAABB:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 0, y: 0, z: 0}
+    m_IndexBuffer: 030000000100020001000000
+    m_VertexData:
+      serializedVersion: 3
+      m_VertexCount: 4
+      m_Channels:
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 3
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 1
+        offset: 0
+        format: 0
+        dimension: 2
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      m_DataSize: 80
+      _typelessdata: 000080c0abaa2a400000000000008040abaa2ac00000000000008040abaa2a4000000000000080c0abaa2ac0000000000000000000000000000000000000000000000000000000000000000000000000
+    m_Bindpose: []
+    textureRect:
+      serializedVersion: 2
+      x: 0
+      y: 0
+      width: 1536
+      height: 1024
+    textureRectOffset: {x: 0, y: 0}
+    atlasRectOffset: {x: -1, y: -1}
+    settingsRaw: 64
+    uvTransform: {x: 192, y: 768, z: 192, w: 512}
+    downscaleMultiplier: 1
+  m_AtlasRD:
+    serializedVersion: 3
+    texture: {fileID: 2800000, guid: d740e4af474d02a4792e6ef26e89387d, type: 3}
+    alphaTexture: {fileID: 0}
+    secondaryTextures: []
+    m_SubMeshes:
+    - serializedVersion: 2
+      firstByte: 0
+      indexCount: 6
+      topology: 0
+      baseVertex: 0
+      firstVertex: 0
+      vertexCount: 4
+      localAABB:
+        m_Center: {x: 0, y: 0, z: 0}
+        m_Extent: {x: 0, y: 0, z: 0}
+    m_IndexBuffer: 030000000100020001000000
+    m_VertexData:
+      serializedVersion: 3
+      m_VertexCount: 4
+      m_Channels:
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 3
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 1
+        offset: 0
+        format: 0
+        dimension: 2
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      - stream: 0
+        offset: 0
+        format: 0
+        dimension: 0
+      m_DataSize: 80
+      _typelessdata: 000080c0abaa2a400000000000008040abaa2ac00000000000008040abaa2a4000000000000080c0abaa2ac0000000000000000000000000000000000000000000000000000000000000000000000000
+    m_Bindpose: []
+    textureRect:
+      serializedVersion: 2
+      x: 0
+      y: 0
+      width: 1536
+      height: 1024
+    textureRectOffset: {x: 0, y: 0}
+    atlasRectOffset: {x: -1, y: -1}
+    settingsRaw: 64
+    uvTransform: {x: 192, y: 768, z: 192, w: 512}
+    downscaleMultiplier: 1
+  m_PhysicsShape: []
+  m_Bones: []
+  m_ScriptableObjects: []
+  m_SpriteID: 
 --- !u!1 &751932215
 GameObject:
   m_ObjectHideFlags: 0
@@ -1847,7 +2079,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 261778395}
+  m_Material: {fileID: 1806305656}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -1876,12 +2108,12 @@ BoxCollider2D:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
     oldSize: {x: 1, y: 1}
-    newSize: {x: 1, y: 25}
+    newSize: {x: 1, y: 30}
     adaptiveTilingThreshold: 0.5
     drawMode: 1
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 1, y: 25}
+  m_Size: {x: 1, y: 30}
   m_EdgeRadius: 0
 --- !u!212 &858859994
 SpriteRenderer:
@@ -1937,7 +2169,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 1
-  m_Size: {x: 1, y: 25}
+  m_Size: {x: 1, y: 30}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -1951,12 +2183,96 @@ Transform:
   m_GameObject: {fileID: 858859992}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 12.5, y: 0, z: 0}
+  m_LocalPosition: {x: 15, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!225 &900100001
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 264499439}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!225 &900100002
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 922154092}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!225 &900100003
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 647578924}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!225 &900100004
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1087554302}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!225 &900100005
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1130682798}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!225 &900100006
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1437229233}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!225 &900100007
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1437756228}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
 --- !u!1 &922154092
 GameObject:
   m_ObjectHideFlags: 0
@@ -2159,7 +2475,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 261778395}
+  m_Material: {fileID: 1806305656}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -2188,12 +2504,12 @@ BoxCollider2D:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
     oldSize: {x: 1, y: 1}
-    newSize: {x: 25, y: 1}
+    newSize: {x: 30, y: 1}
     adaptiveTilingThreshold: 0.5
     drawMode: 1
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 25, y: 1}
+  m_Size: {x: 30, y: 1}
   m_EdgeRadius: 0
 --- !u!212 &990406113
 SpriteRenderer:
@@ -2249,7 +2565,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 1
-  m_Size: {x: 25, y: 1}
+  m_Size: {x: 30, y: 1}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -2263,7 +2579,7 @@ Transform:
   m_GameObject: {fileID: 990406111}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 12.5, z: 0}
+  m_LocalPosition: {x: 0, y: 15, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2937,6 +3253,7 @@ MonoBehaviour:
   rescaleInputAfterDeadZone: 0
   responseExponent: 1
   recenterOnPointerDown: 0
+  maxRawInputMagnitude: 1
   background: {fileID: 1130682799}
   handle: {fileID: 2091593306}
   inputVector: {x: 0, y: 0}
@@ -3021,7 +3338,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 261778395}
+  m_Material: {fileID: 1806305656}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -3050,12 +3367,12 @@ BoxCollider2D:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
     oldSize: {x: 1, y: 1}
-    newSize: {x: 25, y: 1}
+    newSize: {x: 30, y: 1}
     adaptiveTilingThreshold: 0.5
     drawMode: 1
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 25, y: 1}
+  m_Size: {x: 30, y: 1}
   m_EdgeRadius: 0
 --- !u!212 &1137662031
 SpriteRenderer:
@@ -3111,7 +3428,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 1
-  m_Size: {x: 25, y: 1}
+  m_Size: {x: 30, y: 1}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -3125,7 +3442,7 @@ Transform:
   m_GameObject: {fileID: 1137662029}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -12.5, z: 0}
+  m_LocalPosition: {x: 0, y: -15, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -3334,12 +3651,12 @@ SpriteRenderer:
   m_SortingLayer: 1
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 1529174181}
+  m_Sprite: {fileID: 699761178}
   m_Color: {r: 1, g: 1, b: 1, a: 0}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 2
-  m_Size: {x: 25, y: 25}
+  m_Size: {x: 30, y: 30}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -3736,6 +4053,7 @@ MonoBehaviour:
   rescaleInputAfterDeadZone: 0
   responseExponent: 1
   recenterOnPointerDown: 0
+  maxRawInputMagnitude: 1
   background: {fileID: 1437756229}
   handle: {fileID: 1695922302}
   inputVector: {x: 0, y: 0}
@@ -3792,216 +4110,6 @@ MonoBehaviour:
   m_EffectColor: {r: 1, g: 1, b: 1, a: 0.08}
   m_EffectDistance: {x: 2, y: 2}
   m_UseGraphicAlpha: 1
---- !u!213 &1529174181
-Sprite:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: 
-  m_Rect:
-    serializedVersion: 2
-    x: 0
-    y: 0
-    width: 1536
-    height: 1024
-  m_Offset: {x: 0, y: 0}
-  m_Border: {x: 0, y: 0, z: 0, w: 0}
-  m_PixelsToUnits: 192
-  m_Pivot: {x: 0.5, y: 0.5}
-  m_Extrude: 0
-  m_IsPolygon: 0
-  m_PackingTag: 
-  m_RenderDataKey:
-    00000000000000000000000000000000: 0
-  m_AtlasTags: []
-  m_SpriteAtlas: {fileID: 0}
-  m_RD:
-    serializedVersion: 3
-    texture: {fileID: 2800000, guid: d740e4af474d02a4792e6ef26e89387d, type: 3}
-    alphaTexture: {fileID: 0}
-    secondaryTextures: []
-    m_SubMeshes:
-    - serializedVersion: 2
-      firstByte: 0
-      indexCount: 6
-      topology: 0
-      baseVertex: 0
-      firstVertex: 0
-      vertexCount: 4
-      localAABB:
-        m_Center: {x: 0, y: 0, z: 0}
-        m_Extent: {x: 0, y: 0, z: 0}
-    m_IndexBuffer: 030000000100020001000000
-    m_VertexData:
-      serializedVersion: 3
-      m_VertexCount: 4
-      m_Channels:
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 3
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 1
-        offset: 0
-        format: 0
-        dimension: 2
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      m_DataSize: 80
-      _typelessdata: 000080c0abaa2a400000000000008040abaa2ac00000000000008040abaa2a4000000000000080c0abaa2ac0000000000000000000000000000000000000000000000000000000000000000000000000
-    m_Bindpose: []
-    textureRect:
-      serializedVersion: 2
-      x: 0
-      y: 0
-      width: 1536
-      height: 1024
-    textureRectOffset: {x: 0, y: 0}
-    atlasRectOffset: {x: -1, y: -1}
-    settingsRaw: 64
-    uvTransform: {x: 192, y: 768, z: 192, w: 512}
-    downscaleMultiplier: 1
-  m_AtlasRD:
-    serializedVersion: 3
-    texture: {fileID: 2800000, guid: d740e4af474d02a4792e6ef26e89387d, type: 3}
-    alphaTexture: {fileID: 0}
-    secondaryTextures: []
-    m_SubMeshes:
-    - serializedVersion: 2
-      firstByte: 0
-      indexCount: 6
-      topology: 0
-      baseVertex: 0
-      firstVertex: 0
-      vertexCount: 4
-      localAABB:
-        m_Center: {x: 0, y: 0, z: 0}
-        m_Extent: {x: 0, y: 0, z: 0}
-    m_IndexBuffer: 030000000100020001000000
-    m_VertexData:
-      serializedVersion: 3
-      m_VertexCount: 4
-      m_Channels:
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 3
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 1
-        offset: 0
-        format: 0
-        dimension: 2
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      - stream: 0
-        offset: 0
-        format: 0
-        dimension: 0
-      m_DataSize: 80
-      _typelessdata: 000080c0abaa2a400000000000008040abaa2ac00000000000008040abaa2a4000000000000080c0abaa2ac0000000000000000000000000000000000000000000000000000000000000000000000000
-    m_Bindpose: []
-    textureRect:
-      serializedVersion: 2
-      x: 0
-      y: 0
-      width: 1536
-      height: 1024
-    textureRectOffset: {x: 0, y: 0}
-    atlasRectOffset: {x: -1, y: -1}
-    settingsRaw: 64
-    uvTransform: {x: 192, y: 768, z: 192, w: 512}
-    downscaleMultiplier: 1
-  m_PhysicsShape: []
-  m_Bones: []
-  m_ScriptableObjects: []
-  m_SpriteID: 
 --- !u!1 &1644533087
 GameObject:
   m_ObjectHideFlags: 0
@@ -4506,6 +4614,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1780500627}
   m_CullTransparentMesh: 1
+--- !u!62 &1806305656
+PhysicsMaterial2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: MapBoundarySoft
+  serializedVersion: 2
+  friction: 0
+  bounciness: 0
+  m_FrictionCombine: 1
+  m_BounceCombine: 4
 --- !u!1 &1904454186
 GameObject:
   m_ObjectHideFlags: 0
@@ -4671,7 +4791,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 261778395}
+  m_Material: {fileID: 1806305656}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -4700,12 +4820,12 @@ BoxCollider2D:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
     oldSize: {x: 1, y: 1}
-    newSize: {x: 1, y: 25}
+    newSize: {x: 1, y: 30}
     adaptiveTilingThreshold: 0.5
     drawMode: 1
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 1, y: 25}
+  m_Size: {x: 1, y: 30}
   m_EdgeRadius: 0
 --- !u!212 &1926630415
 SpriteRenderer:
@@ -4761,7 +4881,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 1
-  m_Size: {x: 1, y: 25}
+  m_Size: {x: 1, y: 30}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -4775,7 +4895,7 @@ Transform:
   m_GameObject: {fileID: 1926630413}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -12.5, y: 0, z: 0}
+  m_LocalPosition: {x: -15, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -4951,90 +5071,6 @@ MonoBehaviour:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.28}
   m_EffectDistance: {x: 2, y: -2}
   m_UseGraphicAlpha: 1
---- !u!225 &900100001
-CanvasGroup:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 264499439}
-  m_Enabled: 1
-  m_Alpha: 0
-  m_Interactable: 0
-  m_BlocksRaycasts: 0
-  m_IgnoreParentGroups: 0
---- !u!225 &900100002
-CanvasGroup:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 922154092}
-  m_Enabled: 1
-  m_Alpha: 0
-  m_Interactable: 0
-  m_BlocksRaycasts: 0
-  m_IgnoreParentGroups: 0
---- !u!225 &900100003
-CanvasGroup:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 647578924}
-  m_Enabled: 1
-  m_Alpha: 0
-  m_Interactable: 0
-  m_BlocksRaycasts: 0
-  m_IgnoreParentGroups: 0
---- !u!225 &900100004
-CanvasGroup:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1087554302}
-  m_Enabled: 1
-  m_Alpha: 0
-  m_Interactable: 0
-  m_BlocksRaycasts: 0
-  m_IgnoreParentGroups: 0
---- !u!225 &900100005
-CanvasGroup:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1130682798}
-  m_Enabled: 1
-  m_Alpha: 0
-  m_Interactable: 0
-  m_BlocksRaycasts: 0
-  m_IgnoreParentGroups: 0
---- !u!225 &900100006
-CanvasGroup:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1437229233}
-  m_Enabled: 1
-  m_Alpha: 0
-  m_Interactable: 0
-  m_BlocksRaycasts: 0
-  m_IgnoreParentGroups: 0
---- !u!225 &900100007
-CanvasGroup:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1437756228}
-  m_Enabled: 1
-  m_Alpha: 0
-  m_Interactable: 0
-  m_BlocksRaycasts: 0
-  m_IgnoreParentGroups: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

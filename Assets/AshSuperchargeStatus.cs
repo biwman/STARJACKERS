@@ -53,7 +53,7 @@ public sealed class AshSuperchargeStatus : MonoBehaviour
 
 public struct AshOverloadReturnMetrics
 {
-    public int ShotsFired;
+    public int ComputerEnemyKills;
     public float BoosterSeconds;
     public int CargoValueAstrons;
     public int FilledCargoSlots;
@@ -63,20 +63,20 @@ public struct AshOverloadReturnMetrics
 
 public static class AshPilotRoundTracker
 {
-    public const int RequiredShots = 90;
+    public const int RequiredComputerEnemyKills = 3;
     public const float RequiredBoosterSeconds = 20f;
-    public const int RequiredCargoValueAstrons = 800;
+    public const int RequiredCargoValueAstrons = 1500;
 
     static string trackedRoundKey = string.Empty;
-    static int shotsFired;
+    static int computerEnemyKills;
     static float boosterSeconds;
 
-    public static int ShotsFired
+    public static int ComputerEnemyKills
     {
         get
         {
             EnsureRoundScope();
-            return shotsFired;
+            return computerEnemyKills;
         }
     }
 
@@ -89,10 +89,10 @@ public static class AshPilotRoundTracker
         }
     }
 
-    public static void RecordShot()
+    public static void RecordComputerEnemyKill()
     {
         EnsureRoundScope();
-        shotsFired = Mathf.Max(0, shotsFired + 1);
+        computerEnemyKills = Mathf.Max(0, computerEnemyKills + 1);
     }
 
     public static void RecordBoosterSeconds(float seconds)
@@ -108,7 +108,7 @@ public static class AshPilotRoundTracker
     {
         EnsureRoundScope();
         metrics = BuildMetrics(profile);
-        return metrics.ShotsFired >= RequiredShots &&
+        return metrics.ComputerEnemyKills >= RequiredComputerEnemyKills &&
                metrics.BoosterSeconds >= RequiredBoosterSeconds &&
                metrics.CargoValueAstrons >= RequiredCargoValueAstrons &&
                metrics.CargoFull;
@@ -119,7 +119,7 @@ public static class AshPilotRoundTracker
         EnsureRoundScope();
         AshOverloadReturnMetrics metrics = new AshOverloadReturnMetrics
         {
-            ShotsFired = shotsFired,
+            ComputerEnemyKills = computerEnemyKills,
             BoosterSeconds = boosterSeconds
         };
 
@@ -157,7 +157,7 @@ public static class AshPilotRoundTracker
             return;
 
         trackedRoundKey = roundKey;
-        shotsFired = 0;
+        computerEnemyKills = 0;
         boosterSeconds = 0f;
     }
 

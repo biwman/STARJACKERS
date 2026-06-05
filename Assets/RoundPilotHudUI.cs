@@ -1,4 +1,5 @@
 using Photon.Pun;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -8,11 +9,13 @@ public class RoundPilotHudUI : MonoBehaviourPun
     const string RootName = "RoundPilotHud";
     const string PilotPanelName = "RoundPilotHudPilotPanel";
     const string PilotPortraitName = "RoundPilotHudPilotPortrait";
+    const string DamageIconsName = "RoundPilotHudDamageIcons";
     const string TimerBadgeName = "RoundPilotHudTimerBadge";
     const float LeftInset = 24f;
     const float TopInset = 18f;
     const float PilotPanelSize = 222f;
     const float ScoreGap = 18f;
+    const int MaxDamageIcons = 7;
 
     static Sprite cachedFallbackPortrait;
 
@@ -26,7 +29,12 @@ public class RoundPilotHudUI : MonoBehaviourPun
     TMP_Text scoreText;
     TMP_Text timerText;
     Image timerBadge;
+    RectTransform damageIconsRoot;
+    Image[] damageIconBackgrounds;
+    Image[] damageIconImages;
     PilotActiveAbilityController abilityController;
+    ShipDamageState damageState;
+    readonly List<ShipDamageInfo> activeDamages = new List<ShipDamageInfo>(MaxDamageIcons);
     string displayedPilotId = string.Empty;
 
     void Start()
@@ -42,6 +50,7 @@ public class RoundPilotHudUI : MonoBehaviourPun
         ApplyLayout();
         UpdateVisibility();
         RefreshAbilityState();
+        RefreshDamageIcons();
     }
 
     void Update()
@@ -53,6 +62,7 @@ public class RoundPilotHudUI : MonoBehaviourPun
         ApplyLayout();
         UpdateVisibility();
         RefreshAbilityState();
+        RefreshDamageIcons();
     }
 
     void OnDisable()
@@ -267,7 +277,79 @@ public class RoundPilotHudUI : MonoBehaviourPun
         abilityStatusText.raycastTarget = false;
         ConfigureTextShadow(abilityStatusText.gameObject, new Vector2(1.4f, -1.4f), new Color(0f, 0f, 0f, 0.62f));
 
+        EnsureDamageIconStrip(panelObject.transform);
         rootObject.transform.SetAsLastSibling();
+    }
+
+    void EnsureDamageIconStrip(Transform parent)
+    {
+        Transform existing = parent.Find(DamageIconsName);
+        GameObject stripObject = existing != null ? existing.gameObject : new GameObject(DamageIconsName, typeof(RectTransform));
+        stripObject.transform.SetParent(parent, false);
+
+        damageIconsRoot = stripObject.GetComponent<RectTransform>();
+        damageIconsRoot.anchorMin = new Vector2(0f, 0f);
+        damageIconsRoot.anchorMax = new Vector2(0f, 0f);
+        damageIconsRoot.pivot = new Vector2(0f, 0f);
+        damageIconsRoot.anchoredPosition = new Vector2(13f, 13f);
+        damageIconsRoot.sizeDelta = new Vector2(176f, 82f);
+
+        if (damageIconImages == null || damageIconImages.Length != MaxDamageIcons)
+            damageIconImages = new Image[MaxDamageIcons];
+        if (damageIconBackgrounds == null || damageIconBackgrounds.Length != MaxDamageIcons)
+            damageIconBackgrounds = new Image[MaxDamageIcons];
+
+        for (int i = 0; i < MaxDamageIcons; i++)
+        {
+            string childName = "DamageIcon" + i;
+            Transform iconTransform = stripObject.transform.Find(childName);
+            GameObject iconObject = iconTransform != null
+                ? iconTransform.gameObject
+                : new GameObject(childName, typeof(RectTransform), typeof(Image));
+            iconObject.transform.SetParent(stripObject.transform, false);
+
+            RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+            iconRect.anchorMin = new Vector2(0f, 1f);
+            iconRect.anchorMax = new Vector2(0f, 1f);
+            iconRect.pivot = new Vector2(0f, 1f);
+            int row = i / 4;
+            int col = i % 4;
+            iconRect.anchoredPosition = new Vector2(col * 42f, -row * 40f);
+            iconRect.sizeDelta = new Vector2(38f, 38f);
+
+            Image backgroundImage = iconObject.GetComponent<Image>();
+            backgroundImage.color = new Color(0f, 0f, 0f, 0.62f);
+            backgroundImage.raycastTarget = false;
+            backgroundImage.enabled = false;
+            damageIconBackgrounds[i] = backgroundImage;
+
+            Transform glyphTransform = iconObject.transform.Find("DamageIconGlyph");
+            GameObject glyphObject = glyphTransform != null
+                ? glyphTransform.gameObject
+                : new GameObject("DamageIconGlyph", typeof(RectTransform), typeof(Image));
+            glyphObject.transform.SetParent(iconObject.transform, false);
+
+            RectTransform glyphRect = glyphObject.GetComponent<RectTransform>();
+            glyphRect.anchorMin = Vector2.zero;
+            glyphRect.anchorMax = Vector2.one;
+            glyphRect.offsetMin = new Vector2(3f, 3f);
+            glyphRect.offsetMax = new Vector2(-3f, -3f);
+
+            Image glyphImage = glyphObject.GetComponent<Image>();
+            glyphImage.preserveAspect = true;
+            glyphImage.raycastTarget = false;
+            glyphImage.enabled = false;
+            damageIconImages[i] = glyphImage;
+
+            Outline outline = iconObject.GetComponent<Outline>();
+            if (outline == null)
+                outline = iconObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, 0.72f);
+            outline.effectDistance = new Vector2(1.5f, -1.5f);
+            outline.useGraphicAlpha = true;
+        }
+
+        stripObject.transform.SetAsLastSibling();
     }
 
     void EnsureTimerBadge()
@@ -391,6 +473,9 @@ public class RoundPilotHudUI : MonoBehaviourPun
 
         if (timerBadge != null)
             timerBadge.enabled = visible;
+
+        if (damageIconsRoot != null)
+            damageIconsRoot.gameObject.SetActive(visible);
     }
 
     void RefreshAbilityState()
@@ -426,6 +511,48 @@ public class RoundPilotHudUI : MonoBehaviourPun
                     ? new Color(0.12f, 0.38f, 0.82f, 0.18f)
                     : new Color(0f, 0f, 0f, 0.48f);
         }
+    }
+
+    void RefreshDamageIcons()
+    {
+        if (damageIconImages == null)
+            return;
+
+        if (damageState == null)
+            damageState = GetComponent<ShipDamageState>();
+
+        activeDamages.Clear();
+        if (damageState != null)
+            damageState.CopyActiveDamages(activeDamages);
+
+        for (int i = 0; i < damageIconImages.Length; i++)
+        {
+            Image iconImage = damageIconImages[i];
+            if (iconImage == null)
+                continue;
+
+            bool hasIcon = i < activeDamages.Count;
+            if (damageIconBackgrounds != null && i < damageIconBackgrounds.Length && damageIconBackgrounds[i] != null)
+                damageIconBackgrounds[i].enabled = hasIcon;
+
+            iconImage.enabled = hasIcon;
+            if (!hasIcon)
+                continue;
+
+            ShipDamageInfo info = activeDamages[i];
+            iconImage.sprite = ShipDamageIconFactory.GetIcon(info.Type);
+            iconImage.color = GetDamageSeverityColor(info.Severity);
+        }
+    }
+
+    Color GetDamageSeverityColor(ShipDamageSeverity severity)
+    {
+        if (severity == ShipDamageSeverity.None)
+            return new Color(0.38f, 1f, 0.48f, 0.96f);
+
+        return severity == ShipDamageSeverity.Heavy
+            ? new Color(1f, 0.08f, 0.04f, 0.96f)
+            : new Color(1f, 0.86f, 0.12f, 0.96f);
     }
 
     void OnPilotAbilityClicked()

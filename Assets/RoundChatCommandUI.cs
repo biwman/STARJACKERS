@@ -439,14 +439,14 @@ public sealed class RoundChatCommandUI : MonoBehaviourPun
     {
         GameObject tagged = PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.TagObject as GameObject : null;
         PlayerHealth taggedHealth = tagged != null ? tagged.GetComponent<PlayerHealth>() : null;
-        if (taggedHealth != null && taggedHealth.photonView != null && taggedHealth.photonView.IsMine)
+        if (ActorIdentity.IsLocalHumanPlayerActor(taggedHealth))
             return taggedHealth;
 
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth candidate = players[i];
-            if (candidate != null && candidate.photonView != null && candidate.photonView.IsMine)
+            if (ActorIdentity.IsLocalHumanPlayerActor(candidate))
                 return candidate;
         }
 
@@ -664,7 +664,7 @@ public sealed class RoundChatCommandUI : MonoBehaviourPun
 
     bool IsRealPilotShip()
     {
-        return health != null && !health.IsBotControlled && !health.IsAstronautControlled;
+        return health != null && !health.IsBotControlled && !health.IsNeutralRiderControlled && !health.IsAstronautControlled;
     }
 
     static Vector2 GetCommandButtonOffset(int index)

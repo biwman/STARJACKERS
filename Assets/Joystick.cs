@@ -7,6 +7,7 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
     public bool rescaleInputAfterDeadZone;
     public float responseExponent = 1f;
     public bool recenterOnPointerDown;
+    public float maxRawInputMagnitude = 1f;
     public RectTransform background;
     public RectTransform handle;
 
@@ -149,11 +150,12 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
             eventCamera,
             out pos);
 
-        if (pos.magnitude > background.sizeDelta.x / 2f)
-            pos = pos.normalized * (background.sizeDelta.x / 2f);
-
         pos.x = pos.x / (background.sizeDelta.x / 2f);
         pos.y = pos.y / (background.sizeDelta.y / 2f);
+
+        float rawLimit = Mathf.Max(1f, maxRawInputMagnitude);
+        if (pos.magnitude > rawLimit)
+            pos = pos.normalized * rawLimit;
 
         rawInputVector = new Vector2(pos.x, pos.y);
         inputVector = rawInputVector.magnitude > 1.0f ? rawInputVector.normalized : rawInputVector;
@@ -176,7 +178,8 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
             return;
 
         float radius = (background.sizeDelta.x - handle.sizeDelta.x) / 2f;
-        handle.anchoredPosition = new Vector2(inputVector.x * radius, inputVector.y * radius);
+        Vector2 handleVector = rawInputVector.magnitude > 1f ? rawInputVector : inputVector;
+        handle.anchoredPosition = new Vector2(handleVector.x * radius, handleVector.y * radius);
     }
 
     void CaptureDefaultBackgroundPosition()

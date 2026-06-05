@@ -11,9 +11,13 @@ public class TreasureSpawner : MonoBehaviourPun
     const string ExtractionLayoutKey = "extractionLayout";
     const string NebulaLayoutKey = "nebulaLayout";
     const string FireNebulaLayoutKey = NebulaSpawner.FireNebulaLayoutKey;
+    const string ToxicNebulaLayoutKey = NebulaSpawner.ToxicNebulaLayoutKey;
     const float MinDistanceFromExtraction = 3f;
     const float MinDistanceFromObstacle = 2.6f;
     const float MinDistanceFromNebula = 2.8f;
+    const int RadioactiveTreasureLowCount = 3;
+    const int RadioactiveTreasureMediumCount = 6;
+    const int RadioactiveTreasureHighCount = 10;
     static readonly float[] VeryLowRichnessWeights = { 70f, 21f, 7f, 1f, 0.8f, 0.2f };
     static readonly float[] LowRichnessWeights = { 60f, 25f, 10f, 3f, 1.5f, 0.5f };
     static readonly float[] MediumRichnessWeights = { 50f, 25f, 13f, 7f, 4f, 1f };
@@ -42,7 +46,7 @@ public class TreasureSpawner : MonoBehaviourPun
         while (!IsRoundStarted())
             yield return null;
 
-        while (!HasExtractionLayout() || !HasObstacleLayout() || !HasNebulaLayout() || !HasFireNebulaLayout())
+        while (!HasExtractionLayout() || !HasObstacleLayout() || !HasNebulaLayout() || !HasFireNebulaLayout() || !HasToxicNebulaLayout())
             yield return null;
 
         if (!PhotonNetwork.IsMasterClient)
@@ -61,6 +65,7 @@ public class TreasureSpawner : MonoBehaviourPun
         List<Vector2> extractionPositions = ParseLayout(ExtractionLayoutKey);
         List<Vector2> nebulaPositions = ParseLayout(NebulaLayoutKey);
         nebulaPositions.AddRange(ParseLayout(FireNebulaLayoutKey));
+        nebulaPositions.AddRange(ParseLayout(ToxicNebulaLayoutKey));
         int spawned = 0;
         int attempts = 0;
         int targetCount = Mathf.Max(0, Mathf.RoundToInt(treasureCount * GetDensityMultiplier() * RoomSettings.GetMapAreaMultiplier()));
@@ -91,8 +96,62 @@ public class TreasureSpawner : MonoBehaviourPun
             }
         }
 
-        if (spawned > 0)
+        int radioactiveSpawned = SpawnRadioactiveTreasures(obstaclePositions, extractionPositions, nebulaPositions);
+
+        if (spawned + radioactiveSpawned > 0)
             GameVisualTheme.RequestRuntimeRefresh();
+    }
+
+    int SpawnRadioactiveTreasures(List<Vector2> obstaclePositions, List<Vector2> extractionPositions, List<Vector2> nebulaPositions)
+    {
+        int targetCount = Mathf.Max(0, Mathf.RoundToInt(RollRadioactiveTargetCount(RoomSettings.GetRadioactiveTreasureDensity()) * RoomSettings.GetMapAreaMultiplier()));
+        int spawned = 0;
+        int attempts = 0;
+
+        while (spawned < targetCount && attempts < 300)
+        {
+            attempts++;
+
+            float margin = 2f;
+            float x = Random.Range(-mapSizeX / 2 + margin, mapSizeX / 2 - margin);
+            float y = Random.Range(-mapSizeY / 2 + margin, mapSizeY / 2 - margin);
+            Vector2 pos2D = new Vector2(x, y);
+
+            if (!IsFarEnough(pos2D, extractionPositions, MinDistanceFromExtraction))
+                continue;
+
+            if (!IsFarEnough(pos2D, obstaclePositions, GetMinDistanceFromObstacle()))
+                continue;
+
+            if (!IsFarEnough(pos2D, nebulaPositions, MinDistanceFromNebula))
+                continue;
+
+            Collider2D hit = Physics2D.OverlapCircle(pos2D, 1f);
+            if (hit == null)
+            {
+                PhotonNetwork.Instantiate("TreasureNetwork", new Vector3(x, y, 0f), Quaternion.identity, 0, new object[] { InventoryItemCatalog.RadioactiveTreasureId });
+                spawned++;
+            }
+        }
+
+        return spawned;
+    }
+
+    int RollRadioactiveTargetCount(string density)
+    {
+        switch (RoomSettings.NormalizeRadioactiveTreasureDensity(density))
+        {
+            case RoomSettings.RadioactiveTreasureDensityOff:
+                return 0;
+            case RoomSettings.RadioactiveTreasureDensityLow:
+                return RadioactiveTreasureLowCount;
+            case RoomSettings.RadioactiveTreasureDensityMedium:
+                return RadioactiveTreasureMediumCount;
+            case RoomSettings.RadioactiveTreasureDensityHigh:
+                return RadioactiveTreasureHighCount;
+            default:
+                return 0;
+        }
     }
 
     bool IsFarEnough(Vector2 candidate, List<Vector2> positions, float minDistance)
@@ -252,6 +311,14 @@ public class TreasureSpawner : MonoBehaviourPun
     {
         return PhotonNetwork.CurrentRoom != null &&
                PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(FireNebulaLayoutKey, out object value) &&
+               value is string layout &&
+               !string.IsNullOrWhiteSpace(layout);
+    }
+
+    bool HasToxicNebulaLayout()
+    {
+        return PhotonNetwork.CurrentRoom != null &&
+               PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ToxicNebulaLayoutKey, out object value) &&
                value is string layout &&
                !string.IsNullOrWhiteSpace(layout);
     }

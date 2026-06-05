@@ -2,6 +2,7 @@ using UnityEngine;
 using Photon.Pun;
 using TMPro;
 using ExitGames.Client.Photon;
+using System.Collections.Generic;
 
 public class GameTimer : MonoBehaviourPun
 {
@@ -38,6 +39,7 @@ public class GameTimer : MonoBehaviourPun
         SpaceFactorySpawner.EnsureExists();
         ScienceStationSpawner.EnsureExists();
         FogOfWarOverlay.EnsureExists();
+        NeutralRiderManager.EnsureExists();
 
         GameObject obj = GameObject.Find("TimerText");
 
@@ -81,7 +83,7 @@ public class GameTimer : MonoBehaviourPun
         if (PhotonNetwork.IsMasterClient)
         {
             UpdateLoneShipTimerMode();
-            if (CountActivePlayers() <= 0 && !isEndingRound)
+            if (CountActivePlayers() <= 0 && !HasActiveDropbotCargoInFlight() && !isEndingRound)
             {
                 StartRoundEmptyFieldEnd();
                 return;
@@ -151,7 +153,7 @@ public class GameTimer : MonoBehaviourPun
             PhotonView pv = p.photonView;
             if (pv != null)
             {
-                if (!p.IsBotControlled)
+                if (!p.IsBotControlled && !p.IsNeutralRiderControlled)
                 {
                     if (!p.IsAstronautControlled)
                     {
@@ -169,7 +171,9 @@ public class GameTimer : MonoBehaviourPun
                     int currentScore = RoundResultsTracker.GetKnownScore(pv.Owner, p.gameObject);
                     RoundResultsTracker.RecordOutcome(pv.Owner, currentScore, "lost_in_space");
                 }
-                pv.RPC("OnTimeUp", pv.Owner);
+
+                if (!p.IsNeutralRiderControlled)
+                    pv.RPC("OnTimeUp", pv.Owner);
             }
         }
 
@@ -189,38 +193,7 @@ public class GameTimer : MonoBehaviourPun
         if (!PhotonNetwork.IsMasterClient)
             return;
 
-        GameplayHudVisibility.ResetSuppression();
-        EarlyRoundExitUI.HideAll();
-
-        double roundStartUtcMs = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        Hashtable props = new Hashtable();
-        props["gameStarted"] = true;
-        props[RoomSettings.StartTimeKey] = PhotonNetwork.Time;
-        props[RoomSettings.RoundEndUtcMsKey] = roundStartUtcMs + (RoomSettings.GetRoundDuration() * 1000d);
-        props[RoomSettings.SessionStateKey] = RoomSettings.SessionStateInPlay;
-        props[RoomSettings.CrazyEnemiesActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, roundStartUtcMs);
-        props[RoomSettings.FogOfWarActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, roundStartUtcMs);
-        props[RoomSettings.PirateBaseActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, roundStartUtcMs);
-        props[RoomSettings.AsteroidShowerActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, roundStartUtcMs);
-        props[LoneShipModeStartTimeKey] = -1d;
-        props[EvacuationPauseUntilKey] = -1d;
-        props[EvacuationPauseRemainingKey] = -1f;
-        props[RoomSettings.GadgetChargesStateKey] = string.Empty;
-        props[RoomSettings.RepairBayOccupancyStateKey] = string.Empty;
-        props[RoomSettings.SpaceFactoryStateKey] = string.Empty;
-        props[RoomSettings.SpaceFactoryOccupancyStateKey] = string.Empty;
-        props[RoomSettings.ScienceStationOccupancyStateKey] = string.Empty;
-        props[RoomSettings.RoundResultsKey] = string.Empty;
-        props[RoomSettings.FinishedRoundResultsKey] = string.Empty;
-        props[RoomSettings.RoundEndReasonKey] = string.Empty;
-        props[FireNebulaLayoutKey] = string.Empty;
-        props[CloudLayoutKey] = string.Empty;
-        props[CloudDirectionKey] = string.Empty;
-        props[RepairBayLayoutKey] = string.Empty;
-        props[SpaceFactoryLayoutKey] = string.Empty;
-        props[ScienceStationLayoutKey] = string.Empty;
-        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
-        RoundResultsTracker.ResetForCurrentRoom();
+        RoundWarmupService.BeginRoundStartPreparation();
     }
 
     void UpdateLoneShipTimerMode()
@@ -281,12 +254,25 @@ public class GameTimer : MonoBehaviourPun
         return count;
     }
 
+    bool HasActiveDropbotCargoInFlight()
+    {
+        IReadOnlyCollection<PlayerDeployableBase> deployables = PlayerDeployableBase.GetActiveDeployables();
+        foreach (PlayerDeployableBase deployable in deployables)
+        {
+            if (deployable is DropbotDeployable dropbot && dropbot.HasCargoInFlight)
+                return true;
+        }
+
+        return false;
+    }
+
     public static bool IsActiveRoundPlayer(PlayerHealth player)
     {
         if (player == null ||
             !player.isActiveAndEnabled ||
             player.IsWreck ||
             player.IsBotControlled ||
+            player.IsNeutralRiderControlled ||
             player.IsEvacuationAnimating ||
             player.photonView == null)
         {

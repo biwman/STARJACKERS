@@ -18,6 +18,11 @@ public sealed class EnemySpawnTeleportVfx : MonoBehaviour
     float baseRadius;
     float age;
 
+    public static void Prewarm()
+    {
+        GetLineMaterial();
+    }
+
     public static void Spawn(Vector3 position, SpriteRenderer referenceRenderer = null, float radius = 1f)
     {
         if (!RoomSettings.AreVisualEffectsEnabled())

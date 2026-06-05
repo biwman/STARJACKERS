@@ -51,8 +51,10 @@ public sealed class LobbyMapDefinition
     public string ResourceRichness { get; }
     public string NebulaDensity { get; }
     public string FireNebulaDensity { get; }
+    public string ToxicNebulaDensity { get; }
     public string NebulaSize { get; }
     public string FireNebulaSize { get; }
+    public string ToxicNebulaSize { get; }
     public string CloudsDensity { get; }
     public string CloudsSize { get; }
     public int ExtractionZoneCount { get; }
@@ -189,8 +191,11 @@ public sealed class LobbyMapDefinition
         ResourceRichness = resourceRichness;
         NebulaDensity = nebulaDensity;
         FireNebulaDensity = string.IsNullOrWhiteSpace(fireNebulaDensity) ? RoomSettings.DefaultFireNebulaDensity : fireNebulaDensity;
+        bool usesToxicNebula = string.Equals(id, "toxic_area", System.StringComparison.Ordinal);
+        ToxicNebulaDensity = usesToxicNebula ? RoomSettings.SpaceJunkDensityLow : RoomSettings.DefaultToxicNebulaDensity;
         NebulaSize = RoomSettings.NormalizeNebulaSize(nebulaSize);
         FireNebulaSize = RoomSettings.NormalizeNebulaSize(fireNebulaSize);
+        ToxicNebulaSize = usesToxicNebula ? RoomSettings.NebulaSizeNormal : RoomSettings.DefaultToxicNebulaSize;
         CloudsDensity = RoomSettings.NormalizeCloudsDensity(cloudsDensity);
         CloudsSize = RoomSettings.NormalizeNebulaSize(cloudsSize);
         ExtractionZoneCount = extractionZoneCount;
@@ -221,6 +226,7 @@ public static class LobbyMapCatalog
     public const string AncientSpaceMapId = "ancient_space";
     public const string TheThreatMapId = "mothership";
     public const string GravityWellMapId = "gravity_well";
+    public const string ToxicAreaMapId = "toxic_area";
 
     static readonly LobbyMapDefinition[] Maps =
     {
@@ -263,6 +269,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, false, 30, false, 60, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.ContainerShip, false, 1, false, 140, 90, 1f, 0, 150, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
@@ -310,6 +317,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, false, 30, false, 60, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, true, 1, false, 100, 60, 1.5f, 0, 90, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.ContainerShip, true, 1, true, 140, 90, 1f, 0, 150, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, true, 5, true, 20, 20, 1.5f, 0, 90, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
@@ -357,6 +365,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 30, true, 60, 20, 1f, 0, 90, 50),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.ContainerShip, false, 1, false, 140, 90, 1f, 0, 150, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
@@ -406,6 +415,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 5, false, 60, 20, 1f, 0, 120, 50),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.ContainerShip, false, 1, false, 140, 90, 1f, 0, 150, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, true, 2, true, 20, 20, 1.35f, 0, 90, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
@@ -455,6 +465,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 8, false, 60, 20, 1f, 0, 120, 50),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.ContainerShip, true, 1, true, 140, 90, 1f, 0, 150, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, true, 3, true, 20, 20, 1.5f, 0, 90, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
@@ -502,6 +513,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, true, 1, true, 100, 100, 1f, 0, 120, 20),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 4, true, 60, 20, 1f, 0, 150, 50),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.ContainerShip, true, 1, true, 140, 90, 1f, 0, 150, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, true, 3, true, 50, 50, 2f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 3, true, 66, 66, 2f, 0, 60, 10),
@@ -548,6 +560,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 10, true, 60, 20, 1f, 0, 90, 50),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.ContainerShip, false, 1, false, 140, 90, 1f, 0, 150, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, true, 8, true, 20, 20, 1.5f, 0, 90, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
@@ -595,6 +608,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, true, 250, 20, 1f, 0, 90),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, false, 10, false, 20, 20, 1f, 20, 120),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.ContainerShip, false, 1, false, 140, 90, 1f, 0, 150, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
@@ -605,6 +619,57 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, true, 1, false, 90, 110, 1f, 0, 120, 38),
             new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, true, 1, true, 50, 150, 2f, 0, 120, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, true, 1, false, 200, 200, 1f, 0, 90, 10)),
+        new LobbyMapDefinition(
+            ToxicAreaMapId,
+            "TOXIC AREA",
+            "Radioactive rocks turn open routes into a slow poison trap. Rich scrap is everywhere, but every greedy turn can bleed your ship dry.\n" +
+            "Science Station is active here.\n" +
+            "You lose your inventory and equipment here if you die.",
+            330f,
+            "very_large",
+            1f,
+            "medium",
+            true,
+            500,
+            115,
+            false,
+            "medium",
+            RoomSettings.ResourceRichnessVeryHigh,
+            RoomSettings.SpaceJunkDensityNone,
+            RoomSettings.SpaceJunkDensityNone,
+            RoomSettings.NebulaSizeNormal,
+            RoomSettings.NebulaSizeSmall,
+            RoomSettings.SpaceJunkDensityNone,
+            RoomSettings.NebulaSizeNormal,
+            2,
+            true,
+            12,
+            6,
+            15,
+            true,
+            true,
+            true,
+            RoomSettings.SpaceJunkDensityMedium,
+            RoomSettings.ContainersDensityLow,
+            2,
+            0,
+            1,
+            new LobbyEnemyMapPreset(EnemyBotKind.Drone, false, 1, false, 50, 20, 1f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 8, true, 60, 20, 1f, 0, 120, 50),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, true, 1, true, 100, 60, 1.25f, 0, 120, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 90, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, true, 3, true, 50, 50, 1.75f, 0, 75, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, true, 2, true, 66, 66, 1.75f, 0, 90, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterAce, false, 2, false, 66, 66, 1.5f, 0, 90, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceManta, false, 1, false, 100, 0, 1f, 0, 90, 40),
+            new LobbyEnemyMapPreset(EnemyBotKind.GravitySquid, false, 1, false, 80, 70, 1f, 0, 120, 8),
+            new LobbyEnemyMapPreset(EnemyBotKind.HunterLance, true, 1, true, 85, 115, 1.05f, 0, 120, 36),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateBase, false, 1, false, 500, 1000, 1f, 0, 90, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, true, 1, true, 90, 120, 1.05f, 0, 120, 38),
+            new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.ContainerShip, false, 1, false, 140, 90, 1f, 0, 150, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
         new LobbyMapDefinition(
             GravityWellMapId,
             "GRAVITY WELL",
@@ -643,6 +708,7 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, true, 6, false, 60, 20, 1f, 15, 120, 50),
             new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, true, 1, true, 100, 60, 1.25f, 0, 120, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.ContainerShip, false, 1, false, 140, 90, 1f, 0, 150, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 2, false, 20, 20, 1.5f, 0, 90, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
             new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
@@ -695,6 +761,8 @@ public static class LobbyMapCatalog
                 return RoomSettings.ParallaxBackgroundKosmos13;
             case GravityWellMapId:
                 return RoomSettings.ParallaxBackgroundKosmos14;
+            case ToxicAreaMapId:
+                return RoomSettings.ParallaxBackgroundKosmos15;
             default:
                 return RoomSettings.DefaultParallaxBackground;
         }
@@ -721,6 +789,7 @@ public static class LobbyMapCatalog
             case TheThreatMapId:
                 return RoomSettings.BackgroundObject8;
             case GravityWellMapId:
+            case ToxicAreaMapId:
                 return RoomSettings.BackgroundObject13;
             default:
                 return RoomSettings.DefaultBackgroundObject;
@@ -737,6 +806,7 @@ public static class LobbyMapCatalog
             case AncientSpaceMapId:
             case DeepSpaceMapId:
             case TheThreatMapId:
+            case ToxicAreaMapId:
                 return RoomSettings.ExtractionTypeCarrier;
         }
 
@@ -745,9 +815,66 @@ public static class LobbyMapCatalog
 
     public static int GetDefaultScienceStationCount(string mapId)
     {
-        return string.Equals(mapId, DeepSpaceMapId, System.StringComparison.Ordinal)
+        return string.Equals(mapId, DeepSpaceMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, ToxicAreaMapId, System.StringComparison.Ordinal)
             ? 1
             : RoomSettings.DefaultScienceStationCount;
+    }
+
+    public static bool IsHiddenTreasureEnabledByDefault(string mapId)
+    {
+        switch (mapId)
+        {
+            case DeepSpaceMapId:
+            case PirateBayMapId:
+            case AncientSpaceMapId:
+            case TheThreatMapId:
+            case ToxicAreaMapId:
+            case GravityWellMapId:
+                return true;
+            default:
+                return RoomSettings.DefaultHiddenTreasureEnabled;
+        }
+    }
+
+    public static string GetDefaultRadioactiveTreasureDensity(string mapId)
+    {
+        return string.Equals(mapId, ToxicAreaMapId, System.StringComparison.Ordinal)
+            ? RoomSettings.RadioactiveTreasureDensityMedium
+            : RoomSettings.DefaultRadioactiveTreasureDensity;
+    }
+
+    public static string GetDefaultArtifactAsteroidsDensity(string mapId)
+    {
+        return string.Equals(mapId, DeepSpaceMapId, System.StringComparison.Ordinal)
+            ? RoomSettings.ArtifactAsteroidsDensityLow
+            : RoomSettings.DefaultArtifactAsteroidsDensity;
+    }
+
+    public static bool AreNeutralRidersEnabledByDefault(string mapId)
+    {
+        return !string.Equals(mapId, JustSpaceMapId, System.StringComparison.Ordinal);
+    }
+
+    public static int GetDefaultNeutralRiderCount(string mapId)
+    {
+        return RoomSettings.DefaultNeutralRidersCount;
+    }
+
+    public static string GetDefaultNeutralRiderAggression(string mapId)
+    {
+        switch (mapId)
+        {
+            case NoobHavenMapId:
+            case MinefieldMapId:
+                return RoomSettings.NeutralRiderAggressionLow;
+            case SnowFieldMapId:
+            case DeepSpaceMapId:
+            case PirateBayMapId:
+                return RoomSettings.NeutralRiderAggressionNormal;
+            default:
+                return RoomSettings.NeutralRiderAggressionHigh;
+        }
     }
 
     public static void ApplyToProperties(LobbyMapDefinition map, Hashtable props)
@@ -767,14 +894,18 @@ public static class LobbyMapCatalog
         props[RoomSettings.ObstacleSizePercentKey] = map.ObstacleSizePercent;
         props[RoomSettings.ObstacleNoBordersKey] = map.ObstaclesNoBorders;
         props[RoomSettings.TreasureDensityKey] = map.ResourceDensity;
+        props[RoomSettings.RadioactiveTreasureDensityKey] = GetDefaultRadioactiveTreasureDensity(map.Id);
         props[RoomSettings.ResourceRichnessKey] = map.ResourceRichness;
         props[RoomSettings.SpaceJunkDensityKey] = map.SpaceJunkDensity;
         props[RoomSettings.ContainersDensityKey] = map.ContainersDensity;
+        props[RoomSettings.ArtifactAsteroidsDensityKey] = GetDefaultArtifactAsteroidsDensity(map.Id);
         props[RoomSettings.RandomLootWreckCountKey] = map.RandomLootWreckCount;
         props[RoomSettings.NebulaDensityKey] = map.NebulaDensity;
         props[RoomSettings.FireNebulaDensityKey] = map.FireNebulaDensity;
+        props[RoomSettings.ToxicNebulaDensityKey] = map.ToxicNebulaDensity;
         props[RoomSettings.NebulaSizeKey] = map.NebulaSize;
         props[RoomSettings.FireNebulaSizeKey] = map.FireNebulaSize;
+        props[RoomSettings.ToxicNebulaSizeKey] = map.ToxicNebulaSize;
         props[RoomSettings.CloudsDensityKey] = map.CloudsDensity;
         props[RoomSettings.CloudsSizeKey] = map.CloudsSize;
         props[RoomSettings.ExtractionCountKey] = map.ExtractionZoneCount;
@@ -790,8 +921,11 @@ public static class LobbyMapCatalog
         props[RoomSettings.ParallaxBackgroundKey] = GetDefaultParallaxBackgroundId(map.Id);
         props[RoomSettings.BackgroundObjectKey] = GetDefaultBackgroundObjectId(map.Id);
         props[RoomSettings.GravityWellPhysicsEnabledKey] = map.Id == GravityWellMapId;
-        props[RoomSettings.HiddenTreasureEnabledKey] = map.Id == GravityWellMapId;
+        props[RoomSettings.HiddenTreasureEnabledKey] = IsHiddenTreasureEnabledByDefault(map.Id);
         props[RoomSettings.CosmicWormEnabledKey] = RoomSettings.DefaultCosmicWormEnabled;
+        props[RoomSettings.NeutralRidersEnabledKey] = AreNeutralRidersEnabledByDefault(map.Id);
+        props[RoomSettings.NeutralRidersCountKey] = GetDefaultNeutralRiderCount(map.Id);
+        props[RoomSettings.NeutralRidersAggressionKey] = GetDefaultNeutralRiderAggression(map.Id);
 
         props[RoomSettings.EndDisasterModeKey] = RoomSettings.EndDisasterMeteor;
         props[RoomSettings.EndDisasterWarningSecondsKey] = RoomSettings.DefaultEndDisasterWarningSeconds;
@@ -853,5 +987,231 @@ public static class LobbyMapCatalog
         }
 
         return maps;
+    }
+}
+
+public sealed class LobbyMapUnlockStatus
+{
+    public string MapId { get; }
+    public bool IsUnlocked { get; }
+    public string RequirementText { get; }
+    public int CurrentProgress { get; }
+    public int RequiredProgress { get; }
+
+    public LobbyMapUnlockStatus(string mapId, bool isUnlocked, string requirementText, int currentProgress, int requiredProgress)
+    {
+        MapId = mapId;
+        IsUnlocked = isUnlocked;
+        RequirementText = string.IsNullOrWhiteSpace(requirementText) ? string.Empty : requirementText;
+        CurrentProgress = System.Math.Max(0, currentProgress);
+        RequiredProgress = System.Math.Max(0, requiredProgress);
+    }
+}
+
+public static class LobbyMapUnlockCatalog
+{
+    const int MinefieldRequiredReturns = 3;
+    const int SnowFieldRequiredMediumReturns = 10;
+    const int DeepSpaceRequiredSnowReturns = 5;
+    const int PirateBayRequiredMediumReturns = 20;
+    const int AncientSpaceRequiredHighThreatReturns = 10;
+    const int TheThreatRequiredHighThreatReturns = 15;
+    const int TheThreatRequiredLevel = 15;
+    const int GravityWellRequiredHighThreatReturns = 20;
+    const int GravityWellRequiredLevel = 20;
+
+    public static bool IsStarterMap(string mapId)
+    {
+        return string.Equals(mapId, LobbyMapCatalog.JustSpaceMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, LobbyMapCatalog.NoobHavenMapId, System.StringComparison.Ordinal);
+    }
+
+    public static bool IsHighThreatMap(LobbyMapDefinition map)
+    {
+        return map != null && map.InventoryLossEnabled && map.EquipmentLossEnabled;
+    }
+
+    public static string NormalizeMapId(string mapId)
+    {
+        if (string.IsNullOrWhiteSpace(mapId) || LobbyMapCatalog.AllMaps == null)
+            return string.Empty;
+
+        string normalized = mapId.Trim();
+        for (int i = 0; i < LobbyMapCatalog.AllMaps.Count; i++)
+        {
+            LobbyMapDefinition map = LobbyMapCatalog.AllMaps[i];
+            if (map != null && string.Equals(map.Id, normalized, System.StringComparison.Ordinal))
+                return map.Id;
+        }
+
+        return string.Empty;
+    }
+
+    public static LobbyMapUnlockStatus GetStatus(string mapId, PlayerMapUnlockProgressData progress, int totalXp)
+    {
+        string normalizedMapId = NormalizeMapId(mapId);
+        LobbyMapDefinition map = string.IsNullOrWhiteSpace(normalizedMapId) ? null : LobbyMapCatalog.Get(normalizedMapId);
+        if (map == null)
+            return new LobbyMapUnlockStatus(mapId, false, "Unlock requirement unavailable.", 0, 1);
+
+        progress = PlayerProfileService.NormalizeMapUnlockProgress(progress);
+        int level = RoundXpBalance.GetLevelForTotalXp(totalXp);
+
+        if (IsStarterMap(map.Id))
+            return new LobbyMapUnlockStatus(map.Id, true, "Available from the start.", 1, 1);
+
+        if (progress.CheatUnlockAllMaps)
+            return new LobbyMapUnlockStatus(map.Id, true, "Unlocked by cheat.", 1, 1);
+
+        switch (map.Id)
+        {
+            case LobbyMapCatalog.MinefieldMapId:
+                return BuildReturnStatus(
+                    map.Id,
+                    GetTotalReturnCount(progress),
+                    MinefieldRequiredReturns,
+                    "Unlock: return safely 3 times from any map.");
+
+            case LobbyMapCatalog.SnowFieldMapId:
+                return BuildReturnStatus(
+                    map.Id,
+                    GetReturnCount(progress, LobbyMapCatalog.NoobHavenMapId) + GetReturnCount(progress, LobbyMapCatalog.MinefieldMapId),
+                    SnowFieldRequiredMediumReturns,
+                    "Unlock: return safely 10 times from NOOB HAVEN or MINEFIELD.");
+
+            case LobbyMapCatalog.DeepSpaceMapId:
+                return BuildReturnStatus(
+                    map.Id,
+                    GetReturnCount(progress, LobbyMapCatalog.SnowFieldMapId),
+                    DeepSpaceRequiredSnowReturns,
+                    "Unlock: return safely 5 times from SNOW FIELD.");
+
+            case LobbyMapCatalog.PirateBayMapId:
+                return BuildReturnStatus(
+                    map.Id,
+                    GetReturnCount(progress, LobbyMapCatalog.NoobHavenMapId) +
+                    GetReturnCount(progress, LobbyMapCatalog.MinefieldMapId) +
+                    GetReturnCount(progress, LobbyMapCatalog.SnowFieldMapId),
+                    PirateBayRequiredMediumReturns,
+                    "Unlock: return safely 20 times from NOOB HAVEN, MINEFIELD or SNOW FIELD.");
+
+            case LobbyMapCatalog.AncientSpaceMapId:
+                return BuildReturnStatus(
+                    map.Id,
+                    GetHighThreatReturnCount(progress),
+                    AncientSpaceRequiredHighThreatReturns,
+                    "Unlock: return safely 10 times from high-threat maps.");
+
+            case LobbyMapCatalog.TheThreatMapId:
+                return BuildLevelAndReturnStatus(
+                    map.Id,
+                    GetHighThreatReturnCount(progress),
+                    TheThreatRequiredHighThreatReturns,
+                    level,
+                    TheThreatRequiredLevel,
+                    "Unlock: return safely 15 times from high-threat maps and reach level 15.");
+
+            case LobbyMapCatalog.ToxicAreaMapId:
+                return new LobbyMapUnlockStatus(
+                    map.Id,
+                    progress.MothershipKilled,
+                    progress.MothershipKilled
+                        ? "Unlocked: Mothership destroyed."
+                        : "Unlock: destroy the Mothership once. Progress: 0/1.",
+                    progress.MothershipKilled ? 1 : 0,
+                    1);
+
+            case LobbyMapCatalog.GravityWellMapId:
+                return BuildLevelAndReturnStatus(
+                    map.Id,
+                    GetHighThreatReturnCount(progress),
+                    GravityWellRequiredHighThreatReturns,
+                    level,
+                    GravityWellRequiredLevel,
+                    "Unlock: return safely 20 times from high-threat maps and reach level 20.");
+
+            default:
+                return new LobbyMapUnlockStatus(map.Id, true, string.Empty, 1, 1);
+        }
+    }
+
+    public static int GetReturnCount(PlayerMapUnlockProgressData progress, string mapId)
+    {
+        string normalizedMapId = NormalizeMapId(mapId);
+        if (string.IsNullOrWhiteSpace(normalizedMapId) || progress == null || progress.ReturnCounts == null)
+            return 0;
+
+        for (int i = 0; i < progress.ReturnCounts.Length; i++)
+        {
+            PlayerMapReturnCountEntry entry = progress.ReturnCounts[i];
+            if (entry != null && string.Equals(entry.MapId, normalizedMapId, System.StringComparison.Ordinal))
+                return System.Math.Max(0, entry.Count);
+        }
+
+        return 0;
+    }
+
+    public static int GetTotalReturnCount(PlayerMapUnlockProgressData progress)
+    {
+        if (progress == null || progress.ReturnCounts == null)
+            return 0;
+
+        int total = 0;
+        for (int i = 0; i < progress.ReturnCounts.Length; i++)
+        {
+            PlayerMapReturnCountEntry entry = progress.ReturnCounts[i];
+            if (entry == null || string.IsNullOrWhiteSpace(NormalizeMapId(entry.MapId)))
+                continue;
+
+            total = AddClamped(total, entry.Count);
+        }
+
+        return total;
+    }
+
+    public static int GetHighThreatReturnCount(PlayerMapUnlockProgressData progress)
+    {
+        if (LobbyMapCatalog.AllMaps == null)
+            return 0;
+
+        int total = 0;
+        for (int i = 0; i < LobbyMapCatalog.AllMaps.Count; i++)
+        {
+            LobbyMapDefinition map = LobbyMapCatalog.AllMaps[i];
+            if (IsHighThreatMap(map))
+                total = AddClamped(total, GetReturnCount(progress, map.Id));
+        }
+
+        return total;
+    }
+
+    static LobbyMapUnlockStatus BuildReturnStatus(string mapId, int current, int required, string requirement)
+    {
+        current = System.Math.Max(0, current);
+        required = System.Math.Max(1, required);
+        bool unlocked = current >= required;
+        string text = unlocked
+            ? "Unlocked."
+            : requirement + " Progress: " + current + "/" + required + ".";
+        return new LobbyMapUnlockStatus(mapId, unlocked, text, current, required);
+    }
+
+    static LobbyMapUnlockStatus BuildLevelAndReturnStatus(string mapId, int currentReturns, int requiredReturns, int currentLevel, int requiredLevel, string requirement)
+    {
+        currentReturns = System.Math.Max(0, currentReturns);
+        requiredReturns = System.Math.Max(1, requiredReturns);
+        currentLevel = System.Math.Max(1, currentLevel);
+        requiredLevel = System.Math.Max(1, requiredLevel);
+        bool unlocked = currentReturns >= requiredReturns && currentLevel >= requiredLevel;
+        string text = unlocked
+            ? "Unlocked."
+            : requirement + " Progress: returns " + currentReturns + "/" + requiredReturns + ", level " + currentLevel + "/" + requiredLevel + ".";
+        return new LobbyMapUnlockStatus(mapId, unlocked, text, currentReturns, requiredReturns);
+    }
+
+    static int AddClamped(int current, int amount)
+    {
+        long updated = (long)System.Math.Max(0, current) + System.Math.Max(0, amount);
+        return updated > int.MaxValue ? int.MaxValue : (int)updated;
     }
 }

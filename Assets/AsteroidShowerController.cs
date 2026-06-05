@@ -323,6 +323,7 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
     float rotationSpeed;
     bool impactApplied;
     bool markerHidden;
+    int dynamicZoomToken;
 
     SpriteRenderer asteroidRenderer;
     LineRenderer markerGlow;
@@ -384,6 +385,8 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
             HideMarker();
 
         UpdateVisuals(elapsed);
+        if (elapsed < ImpactTime)
+            dynamicZoomToken = DynamicCameraZoomController.Request(DynamicCameraZoomProfiles.AsteroidShowerWarning, transform.position, ImpactTime - elapsed);
     }
 
     void Update()
@@ -509,6 +512,9 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
 
     void OnDestroy()
     {
+        DynamicCameraZoomController.Cancel(dynamicZoomToken);
+        dynamicZoomToken = 0;
+
         if (ActiveBySeed.TryGetValue(seed, out AsteroidShowerStrikeVfx active) && active == this)
             ActiveBySeed.Remove(seed);
 
@@ -556,16 +562,17 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
         Vector3 world = new Vector3(center.x, center.y, 0f);
         AudioManager.Instance.PlayExplosionAt(world);
         SpaceMineExplosionVfx.Spawn(world, radius, asteroidRenderer);
+        ScreenShakeController.Request(ScreenShakeProfiles.AsteroidShowerImpact, world);
     }
 
     void ApplyImpact()
     {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(center, radius);
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(center, radius, out Collider2D[] hits);
         HashSet<int> processedHealthViews = new HashSet<int>();
         HashSet<string> processedMovingObjects = new HashSet<string>();
         HashSet<Rigidbody2D> processedBodies = new HashSet<Rigidbody2D>();
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || !hit.enabled)
@@ -597,7 +604,25 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
                 continue;
 
             if (processedHealthViews.Add(deployable.photonView.ViewID))
-                deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, Damage, Damage, -1, center.x, center.y);
+            {
+                WeaponHitContext hitContext = new WeaponHitContext(
+                    WeaponDamageType.Explosive,
+                    WeaponDeliveryMethod.RemoteStrike,
+                    WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.Delayed,
+                    PlayerHealth.DamageSourceExplosive);
+                deployable.photonView.RPC(
+                    nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                    RpcTarget.MasterClient,
+                    Damage,
+                    Damage,
+                    -1,
+                    center.x,
+                    center.y,
+                    (int)hitContext.DamageType,
+                    (int)hitContext.DeliveryMethod,
+                    (int)hitContext.DeliveryFlags,
+                    hitContext.DamageSource ?? string.Empty);
+            }
         }
     }
 
@@ -618,7 +643,23 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
         Vector2 direction = ResolveDirection(position);
         float falloff = GetFalloff(position);
         int damage = Mathf.Max(1, Mathf.RoundToInt(Damage * falloff));
-        targetView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, damage, damage, -1, center.x, center.y);
+        WeaponHitContext hitContext = new WeaponHitContext(
+            WeaponDamageType.Explosive,
+            WeaponDeliveryMethod.RemoteStrike,
+            WeaponDeliveryFlags.AreaDamage | WeaponDeliveryFlags.Delayed,
+            PlayerHealth.DamageSourceExplosive);
+        targetView.RPC(
+            nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+            RpcTarget.MasterClient,
+            damage,
+            damage,
+            -1,
+            center.x,
+            center.y,
+            (int)hitContext.DamageType,
+            (int)hitContext.DeliveryMethod,
+            (int)hitContext.DeliveryFlags,
+            hitContext.DamageSource ?? string.Empty);
         targetView.RPC(nameof(PlayerHealth.ApplyAsteroidKnockbackRpc), RpcTarget.All, direction.x, direction.y, ShipKnockbackImpulse * falloff);
     }
 

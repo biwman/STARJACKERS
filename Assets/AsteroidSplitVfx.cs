@@ -47,6 +47,12 @@ public sealed class AsteroidSplitVfx : MonoBehaviour
     readonly Color shardBrown = new Color(0.58f, 0.43f, 0.3f, 1f);
     readonly Color shardGrey = new Color(0.52f, 0.5f, 0.46f, 1f);
 
+    public static void Prewarm()
+    {
+        PrewarmSpriteTexture(GetDustSprite());
+        GetLineMaterial();
+    }
+
     public static void Spawn(Vector3 position, float sourceRadius, SpriteRenderer referenceRenderer = null)
     {
         if (!RoomSettings.AreVisualEffectsEnabled())
@@ -276,5 +282,13 @@ public sealed class AsteroidSplitVfx : MonoBehaviour
     static float Hash01(int index, int salt)
     {
         return Mathf.Repeat(Mathf.Sin((index * 127.1f) + (salt * 311.7f)) * 43758.5453f, 1f);
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
     }
 }

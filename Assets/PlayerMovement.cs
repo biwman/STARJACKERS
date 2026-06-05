@@ -64,6 +64,9 @@ public class PlayerMovement : MonoBehaviourPun
     const float BatteringProbeRadius = 0.82f;
     const float BatteringFrontDotThreshold = 0.34f;
     const float AvengerBatteringFrontDotThreshold = 0.24f;
+    public const float AdvancedBoosterOuterInputLimit = 1.25f;
+    public const float AdvancedBoosterActivationThreshold = 1.23f;
+    const float AdvancedBoosterVisualWakeThreshold = 1f;
     const float MaxEngineSpeedBonus = 0.35f;
     const int MaxEngineBoostPercentBonus = 20;
     const float PowerEngineSpeedBonus = 0.1f;
@@ -83,6 +86,7 @@ public class PlayerMovement : MonoBehaviourPun
     const float DoubleEngineTurnRatePenalty = 0.1f;
     const float AshCleanBurnBoosterDrainMultiplier = 0.88f;
     const float AfterburnerTurnRateBonus = 0.25f;
+    const float AfterburnerBoosterRecoveryDelayMultiplier = 0.5f;
     const float RemotePushNoseProbeRadius = 0.52f;
     const float RemotePushBodyProbeRadius = 0.38f;
     const float RemotePushContactTolerance = 0.12f;
@@ -95,8 +99,16 @@ public class PlayerMovement : MonoBehaviourPun
     float lastBatteringEligibleSpeedTime = -999f;
     readonly Dictionary<int, float> nextLocalBatteringRequestTimeByTargetView = new Dictionary<int, float>();
     readonly Dictionary<int, float> nextAuthoritativeBatteringTimeByTargetView = new Dictionary<int, float>();
-    readonly Dictionary<string, float> nextLocalBatteringRequestTimeByObstacle = new Dictionary<string, float>();
-    readonly Dictionary<string, float> nextAuthoritativeBatteringTimeByObstacle = new Dictionary<string, float>();
+    bool keyboardBoosterRequested;
+    bool advancedBoosterRequested;
+    bool boosterActiveThisFrame;
+    float advancedBoosterInputRatio;
+
+    public static float LocalAdvancedBoosterInputRatio { get; private set; }
+    public static bool LocalAdvancedBoosterActive { get; private set; }
+    public static bool LocalAdvancedBoosterAvailable { get; private set; }
+    public static bool LocalAdvancedBoosterEnabled { get; private set; }
+    public static float AdvancedBoosterVisualThreshold => AdvancedBoosterVisualWakeThreshold;
 
     public float BoosterNormalized => boosterCharge;
     public bool IsBoosterDepleted => boosterExhausted;
@@ -122,8 +134,13 @@ public class PlayerMovement : MonoBehaviourPun
         }
 
         EnsureBotBootstrap();
+        EnsureNeutralRiderBootstrap();
 
-        bool isAstronaut = GetComponent<AstronautSurvivor>() != null || AstronautSurvivor.IsAstronautInstantiationData(photonView.InstantiationData);
+        ActorIdentity identity = ActorIdentity.Ensure(gameObject);
+        bool isAstronaut = identity != null
+            ? identity.IsAstronaut
+            : GetComponent<AstronautSurvivor>() != null || AstronautSurvivor.IsAstronautInstantiationData(photonView != null ? photonView.InstantiationData : null);
+        bool isNeutralRider = NeutralRiderController.IsNeutralRider(gameObject);
         if (isAstronaut)
         {
             AstronautSurvivor astronaut = GetComponent<AstronautSurvivor>();
@@ -131,6 +148,13 @@ public class PlayerMovement : MonoBehaviourPun
                 astronaut = gameObject.AddComponent<AstronautSurvivor>();
 
             astronaut.InitializeFromPhotonData();
+            identity = ActorIdentity.Ensure(gameObject);
+            if (astronaut.IsEnemySurvivor)
+            {
+                StopEngineAudioImmediately();
+                enabled = false;
+                return;
+            }
         }
 
         rb = GetComponent<Rigidbody2D>();
@@ -149,7 +173,7 @@ public class PlayerMovement : MonoBehaviourPun
             gameObject.AddComponent<HideInNebulaTarget>();
         }
 
-        if (!isAstronaut && GetComponent<EnemyBot>() == null && GetComponent<PlayerNicknameUI>() == null)
+        if (!isAstronaut && GetComponent<EnemyBot>() == null && !isNeutralRider && GetComponent<PlayerNicknameUI>() == null)
         {
             gameObject.AddComponent<PlayerNicknameUI>();
         }
@@ -159,12 +183,12 @@ public class PlayerMovement : MonoBehaviourPun
             gameObject.AddComponent<EngineThrusterVFX>();
         }
 
-        if (!isAstronaut && GetComponent<EnemyBot>() == null && GetComponent<FireNebulaShipSparksVfx>() == null)
+        if (!isAstronaut && GetComponent<EnemyBot>() == null && !isNeutralRider && GetComponent<FireNebulaShipSparksVfx>() == null)
         {
             gameObject.AddComponent<FireNebulaShipSparksVfx>();
         }
 
-        if (!isAstronaut && GetComponent<EnemyBot>() == null && GetComponent<StartingShipEntryVfx>() == null)
+        if (!isAstronaut && GetComponent<EnemyBot>() == null && !isNeutralRider && GetComponent<StartingShipEntryVfx>() == null)
         {
             gameObject.AddComponent<StartingShipEntryVfx>();
         }
@@ -176,7 +200,7 @@ public class PlayerMovement : MonoBehaviourPun
         SyncEquippedEngineProfile(forceRefresh: true);
         lastAudioPosition = transform.position;
 
-        if (GetComponent<EnemyBot>() != null)
+        if (GetComponent<EnemyBot>() != null || isNeutralRider)
             return;
 
         if (!photonView.IsMine)
@@ -209,9 +233,16 @@ public class PlayerMovement : MonoBehaviourPun
     void Update()
     {
         EnsureBotBootstrap();
+        EnsureNeutralRiderBootstrap();
         ConfigureNetworkRigidbodyAuthority();
 
         if (GetComponent<EnemyBot>() != null)
+        {
+            UpdateEngineAudio();
+            return;
+        }
+
+        if (NeutralRiderController.IsNeutralRider(gameObject))
         {
             UpdateEngineAudio();
             return;
@@ -227,6 +258,7 @@ public class PlayerMovement : MonoBehaviourPun
                 moveInput = Vector2.zero;
                 shootInput = Vector2.zero;
                 effectiveMoveInput = Vector2.zero;
+                ResetAdvancedBoosterInputState();
                 if (rb != null)
                 {
                     rb.angularVelocity = 0f;
@@ -240,12 +272,14 @@ public class PlayerMovement : MonoBehaviourPun
                 moveInput = Vector2.zero;
                 shootInput = Vector2.zero;
                 effectiveMoveInput = Vector2.zero;
+                ResetAdvancedBoosterInputState();
                 UpdateEngineAudio();
                 return;
             }
 
             ResolveJoysticks();
 
+            keyboardBoosterRequested = false;
             moveInput = joystick != null && joystick.IsPressed ? joystick.inputVector : Vector2.zero;
             if (moveInput == Vector2.zero)
                 moveInput = GetKeyboardMoveInput();
@@ -257,12 +291,15 @@ public class PlayerMovement : MonoBehaviourPun
             if (shootInput.magnitude < 0.3f)
                 shootInput = Vector2.zero;
 
+            UpdateAdvancedBoosterInputState();
             effectiveMoveInput = GetEffectiveMoveInput(moveInput);
 
             if (IsSuperBoosterActive())
             {
                 boosterRecoveryDelayTimer = 0f;
                 continuousBoosterTime = 0f;
+                boosterActiveThisFrame = false;
+                PublishAdvancedBoosterVisualState();
             }
             else
             {
@@ -277,7 +314,7 @@ public class PlayerMovement : MonoBehaviourPun
 
     void FixedUpdate()
     {
-        if (GetComponent<EnemyBot>() != null)
+        if (GetComponent<EnemyBot>() != null || NeutralRiderController.IsNeutralRider(gameObject))
             return;
 
         if (!photonView.IsMine)
@@ -322,6 +359,7 @@ public class PlayerMovement : MonoBehaviourPun
 
     void OnDisable()
     {
+        ResetAdvancedBoosterInputState();
         StopEngineAudioImmediately();
     }
 
@@ -372,10 +410,7 @@ public class PlayerMovement : MonoBehaviourPun
             ? collision.collider.GetComponentInParent<PlayerHealth>()
             : null;
         if (!IsValidBatteringTarget(targetHealth))
-        {
-            TryRequestObstacleBatteringImpact(collision, impactPoint);
             return;
-        }
 
         PhotonView targetView = targetHealth.photonView;
         if (targetView == null || targetView.ViewID == photonView.ViewID)
@@ -394,30 +429,6 @@ public class PlayerMovement : MonoBehaviourPun
             impactPoint.y,
             reportedBoosterSeconds,
             rb.linearVelocity.magnitude);
-        ResetBatteringCharge();
-    }
-
-    void TryRequestObstacleBatteringImpact(Collision2D collision, Vector2 impactPoint)
-    {
-        ObstacleChunk obstacle = collision != null && collision.collider != null
-            ? collision.collider.GetComponentInParent<ObstacleChunk>()
-            : null;
-        if (!IsValidBatteringObstacle(obstacle))
-            return;
-
-        if (nextLocalBatteringRequestTimeByObstacle.TryGetValue(obstacle.StableId, out float nextAllowedTime) && Time.time < nextAllowedTime)
-            return;
-
-        float reportedBoosterSeconds = continuousBoosterTime;
-        nextLocalBatteringRequestTimeByObstacle[obstacle.StableId] = Time.time + BatteringPairCooldown;
-        photonView.RPC(
-            nameof(RequestObstacleBatteringImpact),
-            RpcTarget.MasterClient,
-            obstacle.StableId,
-            impactPoint.x,
-            impactPoint.y,
-            reportedBoosterSeconds,
-            rb != null ? rb.linearVelocity.magnitude : 0f);
         ResetBatteringCharge();
     }
 
@@ -468,28 +479,6 @@ public class PlayerMovement : MonoBehaviourPun
                     return;
                 }
             }
-
-            ObstacleChunk obstacle = hit.GetComponentInParent<ObstacleChunk>();
-            if (IsValidBatteringObstacle(obstacle) &&
-                (!nextLocalBatteringRequestTimeByObstacle.TryGetValue(obstacle.StableId, out float nextObstacleTime) || Time.time >= nextObstacleTime))
-            {
-                Vector2 impactPoint = hit.ClosestPoint(probeCenter);
-                if (!IsBatteringImpactInFront(impactPoint))
-                    continue;
-
-                nextLocalBatteringRequestTimeByObstacle[obstacle.StableId] = Time.time + BatteringPairCooldown;
-                float reportedBoosterSeconds = continuousBoosterTime;
-                photonView.RPC(
-                    nameof(RequestObstacleBatteringImpact),
-                    RpcTarget.MasterClient,
-                    obstacle.StableId,
-                    impactPoint.x,
-                    impactPoint.y,
-                    reportedBoosterSeconds,
-                    rb.linearVelocity.magnitude);
-                ResetBatteringCharge();
-                return;
-            }
         }
     }
 
@@ -528,55 +517,41 @@ public class PlayerMovement : MonoBehaviourPun
         nextAuthoritativeBatteringTimeByTargetView[targetViewId] = Time.time + BatteringPairCooldown;
         int targetDamage = batteringDamage * 2;
         Vector2 impactNormal = ResolveBatteringImpactNormal(new Vector2(impactX, impactY));
+        WeaponHitContext hitContext = new WeaponHitContext(
+            WeaponDamageType.Kinetic,
+            WeaponDeliveryMethod.ContactDash,
+            WeaponDeliveryFlags.None,
+            PlayerHealth.PilotDamageSourceRamming);
         photonView.RPC(nameof(PlayBatteringImpactVisual), RpcTarget.All, impactX, impactY, impactNormal.x, impactNormal.y);
-        targetHealth.photonView.RPC(nameof(PlayerHealth.TakePilotDamageAt), RpcTarget.MasterClient, targetDamage, photonView.ViewID, impactX, impactY, PlayerHealth.PilotDamageSourceRamming);
-        photonView.RPC(nameof(PlayerHealth.TakePilotDamageAt), RpcTarget.MasterClient, batteringDamage, -1, impactX, impactY, PlayerHealth.PilotDamageSourceRamming);
+        targetHealth.photonView.RPC(
+            nameof(PlayerHealth.TakeDamageWithContextAt),
+            RpcTarget.MasterClient,
+            targetDamage,
+            photonView.ViewID,
+            impactX,
+            impactY,
+            (int)hitContext.DamageType,
+            (int)hitContext.DeliveryMethod,
+            (int)hitContext.DeliveryFlags,
+            hitContext.DamageSource ?? string.Empty);
+        photonView.RPC(
+            nameof(PlayerHealth.TakeDamageWithContextAt),
+            RpcTarget.MasterClient,
+            batteringDamage,
+            -1,
+            impactX,
+            impactY,
+            (int)hitContext.DamageType,
+            (int)hitContext.DeliveryMethod,
+            (int)hitContext.DeliveryFlags,
+            hitContext.DamageSource ?? string.Empty);
     }
 
     [PunRPC]
     void RequestObstacleBatteringImpact(string obstacleStableId, float impactX, float impactY, float reportedBoosterSeconds, float reportedSpeed, PhotonMessageInfo messageInfo)
     {
-        if (!PhotonNetwork.IsMasterClient || photonView == null || photonView.Owner == null || messageInfo.Sender == null)
-            return;
-
-        if (messageInfo.Sender.ActorNumber != photonView.Owner.ActorNumber)
-            return;
-
-        int batteringDamage = RoomSettings.GetBatteringDamage();
-        if (batteringDamage <= 0 || reportedBoosterSeconds < BatteringRequiredBoosterSeconds || string.IsNullOrWhiteSpace(obstacleStableId))
-            return;
-
-        PlayerHealth ownHealth = GetComponent<PlayerHealth>();
-        if (ownHealth == null || ownHealth.IsWreck || ownHealth.IsEvacuationAnimating || ownHealth.IsAstronautControlled || ownHealth.CurrentHP <= 0)
-            return;
-
-        ObstacleChunk obstacle = ObstacleChunk.Find(obstacleStableId);
-        if (!IsValidBatteringObstacle(obstacle))
-            return;
-
-        float authoritySpeed = rb != null ? rb.linearVelocity.magnitude : 0f;
-        if (!IsAtBatteringSpeed(Mathf.Max(reportedSpeed, authoritySpeed)) && reportedBoosterSeconds < BatteringRequiredBoosterSeconds + BatteringSpeedGraceSeconds)
-            return;
-
-        if (nextAuthoritativeBatteringTimeByObstacle.TryGetValue(obstacleStableId, out float nextAllowedTime) && Time.time < nextAllowedTime)
-            return;
-
-        nextAuthoritativeBatteringTimeByObstacle[obstacleStableId] = Time.time + BatteringPairCooldown;
-        Vector2 impactNormal = ResolveBatteringImpactNormal(new Vector2(impactX, impactY));
-        photonView.RPC(nameof(PlayBatteringImpactVisual), RpcTarget.All, impactX, impactY, impactNormal.x, impactNormal.y);
-        SpaceObjectMotionSync.RequestObstacleDamage(obstacleStableId, GetPilotObstacleDamage(batteringDamage * 2));
-        photonView.RPC(nameof(PlayerHealth.TakePilotDamageAt), RpcTarget.MasterClient, batteringDamage, -1, impactX, impactY, PlayerHealth.PilotDamageSourceRamming);
-    }
-
-    int GetPilotObstacleDamage(int baseDamage)
-    {
-        if (baseDamage <= 0)
-            return 0;
-
-        if (PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.SirNowitzkyId))
-            return Mathf.Max(1, Mathf.RoundToInt(baseDamage * 1.5f));
-
-        return baseDamage;
+        // Kept as a no-op so stale RPCs cannot damage obstacles or the ramming player.
+        return;
     }
 
     [PunRPC]
@@ -608,14 +583,6 @@ public class PlayerMovement : MonoBehaviourPun
             return false;
 
         return targetHealth.CurrentShield > 0 || targetHealth.CurrentHP > 0;
-    }
-
-    bool IsValidBatteringObstacle(ObstacleChunk obstacle)
-    {
-        return obstacle != null &&
-               !string.IsNullOrWhiteSpace(obstacle.StableId) &&
-               obstacle.CurrentHealth > 0 &&
-               RoomSettings.AreObstaclesDestructible();
     }
 
     void UpdateBatteringSpeedEligibility()
@@ -968,14 +935,39 @@ public class PlayerMovement : MonoBehaviourPun
 
     public bool CanUseAdvancedMoveJoystick()
     {
-        if (!enabled || photonView == null || !photonView.IsMine || GetComponent<EnemyBot>() != null)
+        if (!enabled || photonView == null || !photonView.IsMine || GetComponent<EnemyBot>() != null || NeutralRiderController.IsNeutralRider(gameObject))
             return false;
 
         if (!IsGameStarted() || IsStartingEntryActive())
             return false;
 
         PlayerHealth health = GetComponent<PlayerHealth>();
-        return health == null || (!health.IsWreck && !health.IsEvacuationAnimating);
+        return health == null ||
+               (!health.IsWreck &&
+                !health.IsEvacuationAnimating &&
+                !health.IsAstronautControlled &&
+                health.CurrentHP > 0);
+    }
+
+    bool IsAstronautMovementActor()
+    {
+        ActorIdentity identity = GetComponent<ActorIdentity>();
+        return (identity != null && identity.IsAstronaut) ||
+               GetComponent<AstronautSurvivor>() != null ||
+               AstronautSurvivor.IsAstronautInstantiationData(photonView != null ? photonView.InstantiationData : null);
+    }
+
+    bool IsBoosterSuppressedForLocalActor()
+    {
+        if (IsAstronautMovementActor())
+            return true;
+
+        PlayerHealth health = GetComponent<PlayerHealth>();
+        return health != null &&
+               (health.IsWreck ||
+                health.IsEvacuationAnimating ||
+                health.IsAstronautControlled ||
+                health.CurrentHP <= 0);
     }
 
     bool IsStartingEntryActive()
@@ -984,23 +976,82 @@ public class PlayerMovement : MonoBehaviourPun
         return entry != null && entry.IsControllingMotion;
     }
 
+    void UpdateAdvancedBoosterInputState()
+    {
+        bool advancedEnabled = RoomSettings.IsAdvancedBoosterEnabled() && !IsBoosterSuppressedForLocalActor();
+        advancedBoosterInputRatio = advancedEnabled ? GetAdvancedBoosterInputRatio() : 0f;
+        advancedBoosterRequested = advancedEnabled && advancedBoosterInputRatio >= AdvancedBoosterActivationThreshold;
+        boosterActiveThisFrame = false;
+        PublishAdvancedBoosterVisualState();
+    }
+
+    void ResetAdvancedBoosterInputState()
+    {
+        keyboardBoosterRequested = false;
+        advancedBoosterRequested = false;
+        boosterActiveThisFrame = false;
+        advancedBoosterInputRatio = 0f;
+        PublishAdvancedBoosterVisualState();
+    }
+
+    float GetAdvancedBoosterInputRatio()
+    {
+        if (joystick != null && joystick.IsPressed)
+            return joystick.rawInputVector.magnitude;
+
+        return keyboardBoosterRequested && moveInput.sqrMagnitude > 0.0004f
+            ? AdvancedBoosterOuterInputLimit
+            : 0f;
+    }
+
+    void PublishAdvancedBoosterVisualState()
+    {
+        if (photonView == null || !photonView.IsMine)
+            return;
+
+        bool advancedEnabled = RoomSettings.IsAdvancedBoosterEnabled() && !IsBoosterSuppressedForLocalActor();
+        LocalAdvancedBoosterEnabled = advancedEnabled;
+        LocalAdvancedBoosterInputRatio = advancedEnabled ? advancedBoosterInputRatio : 0f;
+        LocalAdvancedBoosterActive = advancedEnabled && boosterActiveThisFrame;
+        LocalAdvancedBoosterAvailable = advancedEnabled && !boosterExhausted && boosterCharge > 0.001f;
+    }
+
     void UpdateBooster(float deltaTime)
     {
-        if (GetComponent<AstronautSurvivor>() != null)
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        float boosterLimit = damageState != null ? damageState.GetBoosterChargeLimit() : 1f;
+        boosterActiveThisFrame = false;
+        if (damageState != null && damageState.IsBoosterDisabled())
+        {
+            boosterCharge = 0f;
+            boosterExhausted = true;
+            boosterRecoveryDelayTimer = 0f;
+            continuousBoosterTime = 0f;
+            lastBatteringEligibleSpeedTime = -999f;
+            PublishAdvancedBoosterVisualState();
+            return;
+        }
+
+        if (IsBoosterSuppressedForLocalActor())
         {
             boosterCharge = 0f;
             boosterExhausted = false;
             boosterRecoveryDelayTimer = 0f;
             continuousBoosterTime = 0f;
             lastBatteringEligibleSpeedTime = -999f;
+            ResetAdvancedBoosterInputState();
             return;
         }
 
-        bool usingFullAcceleration = effectiveMoveInput.magnitude >= maxSpeedThreshold;
+        bool advancedBoosterEnabled = RoomSettings.IsAdvancedBoosterEnabled();
+        bool usingFullAcceleration = advancedBoosterEnabled
+            ? advancedBoosterRequested
+            : effectiveMoveInput.magnitude >= maxSpeedThreshold;
         bool usingBooster = usingFullAcceleration && !boosterExhausted;
 
         if (usingBooster)
         {
+            boosterActiveThisFrame = true;
             boosterCharge -= (deltaTime * GetBoosterDrainMultiplier()) / boosterDuration;
             boosterRecoveryDelayTimer = GetCurrentBoosterRecoveryDelay();
             continuousBoosterTime += deltaTime;
@@ -1025,7 +1076,7 @@ public class PlayerMovement : MonoBehaviourPun
             lastBatteringEligibleSpeedTime = -999f;
         }
 
-        boosterCharge = Mathf.Clamp01(boosterCharge);
+        boosterCharge = Mathf.Clamp(boosterCharge, 0f, boosterLimit);
 
         if (!boosterExhausted && boosterCharge <= 0.001f)
         {
@@ -1036,6 +1087,8 @@ public class PlayerMovement : MonoBehaviourPun
         {
             boosterExhausted = false;
         }
+
+        PublishAdvancedBoosterVisualState();
     }
 
     Vector2 GetEffectiveMoveInput(Vector2 rawInput)
@@ -1043,8 +1096,24 @@ public class PlayerMovement : MonoBehaviourPun
         if (rawInput == Vector2.zero)
             return Vector2.zero;
 
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        if (damageState != null)
+            rawInput = damageState.ApplySteeringDamage(rawInput);
+
+        if (IsBoosterSuppressedForLocalActor())
+            return rawInput;
+
+        if (RoomSettings.IsAdvancedBoosterEnabled())
+        {
+            return advancedBoosterRequested && rawInput.magnitude >= fullSpeedSnapThreshold
+                ? rawInput.normalized * GetCurrentBoostSpeedMultiplier()
+                : rawInput;
+        }
+
         if (rawInput.magnitude >= fullSpeedSnapThreshold)
+        {
             return rawInput.normalized * GetCurrentBoostSpeedMultiplier();
+        }
 
         return rawInput;
     }
@@ -1067,6 +1136,8 @@ public class PlayerMovement : MonoBehaviourPun
             keyboardInput.y -= 1f;
         if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed)
             keyboardInput.y += 1f;
+        keyboardBoosterRequested = keyboardInput.sqrMagnitude > 0.0001f &&
+                                   (keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed);
 #elif ENABLE_LEGACY_INPUT_MANAGER
         if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
             keyboardInput.x -= 1f;
@@ -1076,6 +1147,8 @@ public class PlayerMovement : MonoBehaviourPun
             keyboardInput.y -= 1f;
         if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow))
             keyboardInput.y += 1f;
+        keyboardBoosterRequested = keyboardInput.sqrMagnitude > 0.0001f &&
+                                   (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
 #endif
 
         return keyboardInput.sqrMagnitude > 1f ? keyboardInput.normalized : keyboardInput;
@@ -1086,6 +1159,10 @@ public class PlayerMovement : MonoBehaviourPun
 
     float GetCurrentBoostSpeedMultiplier()
     {
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        if (damageState != null && damageState.IsBoosterDisabled())
+            return 1f;
+
         if (boosterCharge < 0.01f)
             return 1f;
 
@@ -1100,6 +1177,10 @@ public class PlayerMovement : MonoBehaviourPun
     float GetCurrentMovementSpeed()
     {
         float currentSpeed = IsBoosterDepleted ? speed * CurrentDepletedSpeedMultiplier : speed;
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        if (damageState != null)
+            currentSpeed *= damageState.GetEngineSpeedMultiplier();
+
         HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>();
         if (nebulaTarget != null)
             currentSpeed *= nebulaTarget.CurrentNebulaSpeedMultiplier;
@@ -1221,6 +1302,9 @@ public class PlayerMovement : MonoBehaviourPun
         movementJoystick.rescaleInputAfterDeadZone = true;
         movementJoystick.responseExponent = 1.08f;
         movementJoystick.recenterOnPointerDown = true;
+        movementJoystick.maxRawInputMagnitude = RoomSettings.IsAdvancedBoosterEnabled() && !IsBoosterSuppressedForLocalActor()
+            ? AdvancedBoosterOuterInputLimit
+            : 1f;
     }
 
     void SetupEngineAudio()
@@ -1313,6 +1397,18 @@ public class PlayerMovement : MonoBehaviourPun
         bot.InitializeFromPhotonData();
     }
 
+    void EnsureNeutralRiderBootstrap()
+    {
+        if (!NeutralRiderController.IsNeutralRiderInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            return;
+
+        NeutralRiderController rider = GetComponent<NeutralRiderController>();
+        if (rider == null)
+            rider = gameObject.AddComponent<NeutralRiderController>();
+
+        rider.InitializeFromPhotonData();
+    }
+
     void CaptureBaseMovementProfile()
     {
         if (baseSpeedCaptured)
@@ -1325,7 +1421,7 @@ public class PlayerMovement : MonoBehaviourPun
 
     public void ActivatePilotSpeedBoost(float multiplier, float duration)
     {
-        if (GetComponent<EnemyBot>() != null || GetComponent<AstronautSurvivor>() != null)
+        if (GetComponent<EnemyBot>() != null || NeutralRiderController.IsNeutralRider(gameObject) || GetComponent<AstronautSurvivor>() != null)
             return;
 
         pilotSpeedBoostMultiplier = Mathf.Max(pilotSpeedBoostMultiplier, Mathf.Max(1f, multiplier));
@@ -1335,7 +1431,11 @@ public class PlayerMovement : MonoBehaviourPun
 
     public void ActivateSuperBooster(float duration)
     {
-        if (!photonView.IsMine || GetComponent<EnemyBot>() != null || GetComponent<AstronautSurvivor>() != null)
+        if (!photonView.IsMine || GetComponent<EnemyBot>() != null || NeutralRiderController.IsNeutralRider(gameObject) || GetComponent<AstronautSurvivor>() != null)
+            return;
+
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        if (damageState != null && damageState.IsBoosterDisabled())
             return;
 
         Vector2 forward = transform.up;
@@ -1344,15 +1444,18 @@ public class PlayerMovement : MonoBehaviourPun
 
         superBoosterDirection = forward.normalized;
         superBoosterUntil = Mathf.Max(superBoosterUntil, Time.time + Mathf.Max(0.05f, duration));
+        DynamicCameraZoomController.RequestGlobal(DynamicCameraZoomProfiles.SuperBooster, duration);
     }
 
     public void RefillBooster()
     {
-        if (!photonView.IsMine || GetComponent<EnemyBot>() != null || GetComponent<AstronautSurvivor>() != null)
+        if (!photonView.IsMine || GetComponent<EnemyBot>() != null || NeutralRiderController.IsNeutralRider(gameObject) || GetComponent<AstronautSurvivor>() != null)
             return;
 
-        boosterCharge = 1f;
-        boosterExhausted = false;
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        float boosterLimit = damageState != null ? damageState.GetBoosterChargeLimit() : 1f;
+        boosterCharge = boosterLimit;
+        boosterExhausted = boosterLimit <= 0.001f;
         boosterRecoveryDelayTimer = 0f;
         continuousBoosterTime = 0f;
     }
@@ -1375,12 +1478,20 @@ public class PlayerMovement : MonoBehaviourPun
     float GetBoosterDrainMultiplier()
     {
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
-        return PilotCatalog.IsSelectedPilot(owner, PilotCatalog.AshId) ? AshCleanBurnBoosterDrainMultiplier : 1f;
+        float multiplier = PilotCatalog.IsSelectedPilot(owner, PilotCatalog.AshId) ? AshCleanBurnBoosterDrainMultiplier : 1f;
+        if (PilotCatalog.IsSelectedPilot(owner, PilotCatalog.AtlasId) &&
+            PlayerProfileService.HasInstance &&
+            AtlasPilotRoundTracker.HasCargoRunBonus(PlayerProfileService.Instance.CurrentProfile))
+        {
+            multiplier *= AtlasPilotRoundTracker.BoosterDrainMultiplier;
+        }
+
+        return multiplier;
     }
 
     void SyncEquippedEngineProfile(bool forceRefresh = false)
     {
-        if (GetComponent<EnemyBot>() != null || GetComponent<AstronautSurvivor>() != null)
+        if (GetComponent<EnemyBot>() != null || NeutralRiderController.IsNeutralRider(gameObject) || GetComponent<AstronautSurvivor>() != null)
             return;
 
         CaptureBaseMovementProfile();
@@ -1396,9 +1507,11 @@ public class PlayerMovement : MonoBehaviourPun
         int doubleEngineCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.DoubleEngineId);
         int superBoosterCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.SuperBoosterId);
         int afterburnerStabilizerCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.AfterburnerStabilizerId);
+        int shieldSpeedPenaltyPercent = InventoryItemCatalog.GetEquippedShieldSpeedPenaltyPercent(equipmentSlots, shipSkinIndex);
         string engineTrailItemId = ResolveEngineTrailItemId(equipmentSlots, shipSkinIndex);
         bool hasFusion = fusionCount > 0;
         float shockSpeedMultiplier = ElectromagneticShockStatus.GetSpeedMultiplier(gameObject);
+        float atlasSuppressionSpeedMultiplier = AtlasSuppressionStatus.GetSpeedMultiplier(gameObject);
         float ashSuperchargeSpeedMultiplier = AshSuperchargeStatus.GetSpeedMultiplier(gameObject);
         string signature = shipSkinIndex + ":" +
                            powerCount + ":" +
@@ -1409,8 +1522,10 @@ public class PlayerMovement : MonoBehaviourPun
                            doubleEngineCount + ":" +
                            superBoosterCount + ":" +
                            afterburnerStabilizerCount + ":" +
+                           shieldSpeedPenaltyPercent + ":" +
                            engineTrailItemId + ":" +
                            Mathf.RoundToInt(shockSpeedMultiplier * 1000f) + ":" +
+                           Mathf.RoundToInt(atlasSuppressionSpeedMultiplier * 1000f) + ":" +
                            Mathf.RoundToInt(ashSuperchargeSpeedMultiplier * 1000f);
         if (!forceRefresh && signature == lastAppliedEngineSignature)
             return;
@@ -1448,10 +1563,11 @@ public class PlayerMovement : MonoBehaviourPun
             FuelTankBoosterDurationBonus * equippedFuelTankCount +
             HybridEngineBoosterDurationBonus * equippedHybridEngineCount -
             DoubleEngineBoosterDurationPenalty * equippedDoubleEngineCount;
+        float shieldSpeedMultiplier = Mathf.Clamp(1f - shieldSpeedPenaltyPercent / 100f, 0.25f, 1f);
 
         turnRateMultiplier = Mathf.Max(0.1f, baseShipTurnRate * Mathf.Max(0.1f, 1f + engineTurnRateBonus));
         maxBoostPercent = Mathf.Max(0, baseShipMaxBoostPercent + engineBoostPercentBonus);
-        speed = baseSpeed * (1f + engineSpeedBonus) * GetPilotSpeedMultiplier() * shockSpeedMultiplier * ashSuperchargeSpeedMultiplier;
+        speed = baseSpeed * (1f + engineSpeedBonus) * GetPilotSpeedMultiplier() * shockSpeedMultiplier * atlasSuppressionSpeedMultiplier * ashSuperchargeSpeedMultiplier * shieldSpeedMultiplier;
         boosterDuration = baseBoosterDuration * Mathf.Max(0.25f, 1f + engineBoosterDurationBonus);
         lastAppliedEngineSignature = signature;
         SyncEngineAudioClip();
@@ -1530,6 +1646,10 @@ public class PlayerMovement : MonoBehaviourPun
 
     bool IsSuperBoosterActive()
     {
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        if (damageState != null && damageState.IsBoosterDisabled())
+            return false;
+
         return Time.time < superBoosterUntil;
     }
 
@@ -1560,7 +1680,11 @@ public class PlayerMovement : MonoBehaviourPun
             FusionEngineRecoveryDelayBonus * equippedFusionEngineCount +
             IonEngineRecoveryDelayBonus * equippedIonEngineCount +
             HybridEngineRecoveryDelayBonus * equippedHybridEngineCount;
-        return Mathf.Max(0f, baseDelay - engineBonus - pilotBonus);
+        float delay = Mathf.Max(0f, baseDelay - engineBonus - pilotBonus);
+        if (equippedAfterburnerStabilizerCount > 0)
+            delay *= Mathf.Pow(AfterburnerBoosterRecoveryDelayMultiplier, equippedAfterburnerStabilizerCount);
+
+        return Mathf.Max(0f, delay);
     }
 
     AudioClip ResolveEngineAudioClip()
@@ -1656,6 +1780,18 @@ public class EngineThrusterVFX : MonoBehaviour
     const float PlayerTrailMinVertexDistance = 0.07f;
     const float EnemyTrailMinVertexDistance = 0.08f;
     const float AstronautTrailMinVertexDistance = 0.06f;
+    const float PlayerAstronautMinTrailTime = 0.2f;
+    const float PlayerAstronautMaxTrailTime = 0.42f;
+    const float PlayerAstronautMinTrailWidth = 0.028f;
+    const float PlayerAstronautMaxTrailWidth = 0.085f;
+    const float EnemyAstronautMinTrailTime = 0.18f;
+    const float EnemyAstronautMaxTrailTime = 0.36f;
+    const float EnemyAstronautMinTrailWidth = 0.024f;
+    const float EnemyAstronautMaxTrailWidth = 0.072f;
+    const float EscapePodMinTrailTime = 0.28f;
+    const float EscapePodMaxTrailTime = 0.52f;
+    const float EscapePodMinTrailWidth = 0.06f;
+    const float EscapePodMaxTrailWidth = 0.16f;
 
     static Material sharedSpritesMaterial;
 
@@ -1668,6 +1804,7 @@ public class EngineThrusterVFX : MonoBehaviour
     float referenceSpeed = 5f;
     bool isEnemyBot;
     bool isAstronaut;
+    bool isEnemyAstronaut;
     bool isEscapePod;
     string playerEngineTrailItemId = string.Empty;
     EnemyTrailProfile enemyTrailProfile;
@@ -1689,6 +1826,7 @@ public class EngineThrusterVFX : MonoBehaviour
     public void RefreshMode()
     {
         bool previousIsAstronaut = isAstronaut;
+        bool previousIsEnemyAstronaut = isEnemyAstronaut;
         bool previousIsEscapePod = isEscapePod;
         int previousTrailCount = trailRenderers != null ? trailRenderers.Length : -1;
         EnemyBot enemyBot = GetComponent<EnemyBot>();
@@ -1696,6 +1834,7 @@ public class EngineThrusterVFX : MonoBehaviour
         enemyTrailProfile = enemyBot != null && enemyBot.Definition != null ? enemyBot.Definition.Trails : null;
         AstronautSurvivor astronaut = GetComponent<AstronautSurvivor>();
         isAstronaut = astronaut != null;
+        isEnemyAstronaut = astronaut != null && astronaut.IsEnemySurvivor;
         isEscapePod = astronaut != null && astronaut.IsEscapePodMode;
         if (movement == null)
             movement = GetComponent<PlayerMovement>();
@@ -1715,6 +1854,7 @@ public class EngineThrusterVFX : MonoBehaviour
 
         bool shouldRecreateTrails = trailRenderers != null &&
                                     (previousIsAstronaut != isAstronaut ||
+                                     previousIsEnemyAstronaut != isEnemyAstronaut ||
                                      previousIsEscapePod != isEscapePod ||
                                      previousTrailCount != playerThrusterOffsetFactors.Length);
         if (shouldRecreateTrails)
@@ -1741,7 +1881,7 @@ public class EngineThrusterVFX : MonoBehaviour
             ReapplyTrailAppearance();
         }
 
-        float speedNormalized = Mathf.InverseLerp(0.02f, referenceSpeed, rb.linearVelocity.magnitude);
+        float speedNormalized = Mathf.InverseLerp(0.02f, GetVisualReferenceSpeed(), rb.linearVelocity.magnitude);
         UpdateVisuals(speedNormalized);
     }
 
@@ -1763,12 +1903,14 @@ public class EngineThrusterVFX : MonoBehaviour
             : isEnemyBot
                 ? new Vector3(0f, shipHeight * 0.44f, 0f)
             : isAstronaut
-                ? new Vector3(0f, -shipHeight * (isEscapePod ? 0.42f : 0.34f), 0f)
+                ? new Vector3(0f, shipHeight * (isEnemyAstronaut ? 0.34f : isEscapePod ? -0.42f : -0.34f), 0f)
                 : new Vector3(0f, -shipHeight * 0.46f, 0f);
         rootObject.transform.localRotation = enemyTrailProfile != null
             ? Quaternion.Euler(0f, 0f, enemyTrailProfile.RootRotationZ)
             : isEnemyBot
                 ? Quaternion.identity
+                : isEnemyAstronaut
+                    ? Quaternion.identity
                 : Quaternion.Euler(0f, 0f, 180f);
 
         Vector3[] offsets = enemyTrailProfile != null
@@ -1788,9 +1930,9 @@ public class EngineThrusterVFX : MonoBehaviour
 
     void ConfigureTrail(TrailRenderer trail)
     {
-        trail.time = isAstronaut ? (isEscapePod ? 0.36f : 0.2f) : enemyTrailProfile != null ? Mathf.Min(enemyTrailProfile.MaxTrailTime, 0.58f) : 0.36f;
+        trail.time = isAstronaut ? (isEnemyAstronaut ? EnemyAstronautMaxTrailTime : isEscapePod ? EscapePodMaxTrailTime : PlayerAstronautMaxTrailTime) : enemyTrailProfile != null ? Mathf.Min(enemyTrailProfile.MaxTrailTime, 0.58f) : 0.36f;
         trail.minVertexDistance = isAstronaut ? (isEscapePod ? 0.05f : AstronautTrailMinVertexDistance) : enemyTrailProfile != null ? EnemyTrailMinVertexDistance : PlayerTrailMinVertexDistance;
-        trail.widthMultiplier = isAstronaut ? (isEscapePod ? 0.085f : 0.04f) : enemyTrailProfile != null ? enemyTrailProfile.MaxTrailWidth : 0.08f;
+        trail.widthMultiplier = isAstronaut ? (isEnemyAstronaut ? EnemyAstronautMaxTrailWidth : isEscapePod ? EscapePodMaxTrailWidth : PlayerAstronautMaxTrailWidth) : enemyTrailProfile != null ? enemyTrailProfile.MaxTrailWidth : 0.08f;
         trail.shadowCastingMode = ShadowCastingMode.Off;
         trail.receiveShadows = false;
         trail.alignment = LineAlignment.View;
@@ -1836,7 +1978,25 @@ public class EngineThrusterVFX : MonoBehaviour
             return;
 
         Gradient gradient = new Gradient();
-        if (isAstronaut && isEscapePod)
+        if (isAstronaut && isEnemyAstronaut)
+        {
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(new Color(0.9f, 1f, 1f), 0f),
+                    new GradientColorKey(new Color(0.42f, 0.88f, 1f), 0.22f),
+                    new GradientColorKey(new Color(0.08f, 0.42f, 1f), 0.62f),
+                    new GradientColorKey(new Color(0.02f, 0.08f, 0.28f), 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(1f, 0f),
+                    new GradientAlphaKey(0.72f, 0.24f),
+                    new GradientAlphaKey(0.34f, 0.72f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+        }
+        else if (isAstronaut && isEscapePod)
         {
             gradient.SetKeys(
                 new[]
@@ -1848,9 +2008,9 @@ public class EngineThrusterVFX : MonoBehaviour
                 },
                 new[]
                 {
-                    new GradientAlphaKey(0.95f, 0f),
-                    new GradientAlphaKey(0.66f, 0.24f),
-                    new GradientAlphaKey(0.26f, 0.68f),
+                    new GradientAlphaKey(1f, 0f),
+                    new GradientAlphaKey(0.78f, 0.24f),
+                    new GradientAlphaKey(0.36f, 0.68f),
                     new GradientAlphaKey(0f, 1f)
                 });
         }
@@ -1866,9 +2026,9 @@ public class EngineThrusterVFX : MonoBehaviour
                 },
                 new[]
                 {
-                    new GradientAlphaKey(0.78f, 0f),
-                    new GradientAlphaKey(0.44f, 0.26f),
-                    new GradientAlphaKey(0.18f, 0.7f),
+                    new GradientAlphaKey(1f, 0f),
+                    new GradientAlphaKey(0.72f, 0.24f),
+                    new GradientAlphaKey(0.32f, 0.7f),
                     new GradientAlphaKey(0f, 1f)
                 });
         }
@@ -2003,11 +2163,17 @@ public class EngineThrusterVFX : MonoBehaviour
                 });
         }
         trail.colorGradient = gradient;
-        trail.widthCurve = new AnimationCurve(
-            new Keyframe(0f, 1f),
-            new Keyframe(0.12f, 0.82f),
-            new Keyframe(0.6f, 0.3f),
-            new Keyframe(1f, 0f));
+        trail.widthCurve = isAstronaut
+            ? new AnimationCurve(
+                new Keyframe(0f, 1f),
+                new Keyframe(0.16f, 0.94f),
+                new Keyframe(0.62f, 0.46f),
+                new Keyframe(1f, 0f))
+            : new AnimationCurve(
+                new Keyframe(0f, 1f),
+                new Keyframe(0.12f, 0.82f),
+                new Keyframe(0.6f, 0.3f),
+                new Keyframe(1f, 0f));
 
         if (shipRenderer != null)
         {
@@ -2186,17 +2352,23 @@ public class EngineThrusterVFX : MonoBehaviour
 
             if (isAstronaut)
             {
-                if (isEscapePod)
+                if (isEnemyAstronaut)
                 {
-                    trailRenderer.time = Mathf.Lerp(0.22f, 0.44f, intensity);
-                    trailRenderer.widthMultiplier = Mathf.Lerp(0.04f, 0.12f, intensity);
-                    trailRenderer.emitting = clamped > 0.05f;
+                    trailRenderer.time = Mathf.Lerp(EnemyAstronautMinTrailTime, EnemyAstronautMaxTrailTime, intensity);
+                    trailRenderer.widthMultiplier = Mathf.Lerp(EnemyAstronautMinTrailWidth, EnemyAstronautMaxTrailWidth, intensity);
+                    trailRenderer.emitting = clamped > 0.025f;
+                }
+                else if (isEscapePod)
+                {
+                    trailRenderer.time = Mathf.Lerp(EscapePodMinTrailTime, EscapePodMaxTrailTime, intensity);
+                    trailRenderer.widthMultiplier = Mathf.Lerp(EscapePodMinTrailWidth, EscapePodMaxTrailWidth, intensity);
+                    trailRenderer.emitting = clamped > 0.035f;
                 }
                 else
                 {
-                    trailRenderer.time = Mathf.Lerp(0.12f, 0.28f, intensity);
-                    trailRenderer.widthMultiplier = Mathf.Lerp(0.015f, 0.055f, intensity);
-                    trailRenderer.emitting = clamped > 0.08f;
+                    trailRenderer.time = Mathf.Lerp(PlayerAstronautMinTrailTime, PlayerAstronautMaxTrailTime, intensity);
+                    trailRenderer.widthMultiplier = Mathf.Lerp(PlayerAstronautMinTrailWidth, PlayerAstronautMaxTrailWidth, intensity);
+                    trailRenderer.emitting = clamped > 0.035f;
                 }
             }
             else if (enemyTrailProfile != null)
@@ -2213,6 +2385,14 @@ public class EngineThrusterVFX : MonoBehaviour
                 trailRenderer.emitting = clamped > 0.04f;
             }
         }
+    }
+
+    float GetVisualReferenceSpeed()
+    {
+        if (isEnemyAstronaut)
+            return Mathf.Max(0.65f, referenceSpeed / 3f);
+
+        return Mathf.Max(0.65f, referenceSpeed);
     }
 
     void EnsureTrailSorting()

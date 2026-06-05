@@ -18,6 +18,7 @@ public class UIRuntimeStyler : MonoBehaviour
     static Sprite cachedCraftingIconSprite;
     static Sprite cachedTraderIconSprite;
     static Sprite cachedInventoryIconSprite;
+    static Sprite cachedJoystickBoosterRingSprite;
     static bool styleRefreshQueued;
 
     readonly List<GameObject> sceneObjects = new List<GameObject>(256);
@@ -412,6 +413,8 @@ public class UIRuntimeStyler : MonoBehaviour
                name.StartsWith("Shield", System.StringComparison.Ordinal) ||
                name.StartsWith("Engine", System.StringComparison.Ordinal) ||
                name.StartsWith("Gadget", System.StringComparison.Ordinal) ||
+               name.StartsWith("Support", System.StringComparison.Ordinal) ||
+               name.StartsWith("Rescue", System.StringComparison.Ordinal) ||
                name.StartsWith("ShipInventoryButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShipInventoryHudSlot", System.StringComparison.Ordinal) ||
                name.StartsWith("RoomRow_", System.StringComparison.Ordinal) ||
@@ -428,6 +431,7 @@ public class UIRuntimeStyler : MonoBehaviour
                name.StartsWith("PlayerInventoryFilterButton", System.StringComparison.Ordinal) ||
                name.StartsWith("PlayerInventoryExtendButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShopBuyButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("ShopSortButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShopCloseButton", System.StringComparison.Ordinal) ||
                name.StartsWith("EnemySettingButton_", System.StringComparison.Ordinal) ||
                name.StartsWith("ItemPreviewInfoButton", System.StringComparison.Ordinal) ||
@@ -762,17 +766,21 @@ public class UIRuntimeStyler : MonoBehaviour
             joystick.responseExponent = 1.08f;
         }
 
+        Graphic boosterRing = GetOrCreateMovementJoystickBoosterRing(root.transform);
+
         Image glow = GetOrCreateChildImage(root.transform, "MovementJoystickGlow");
         ConfigureJoystickDisc(glow, joystickSprite, 392f, new Color(0.35f, 0.82f, 1f, 0.05f));
-        glow.transform.SetAsFirstSibling();
+        glow.transform.SetSiblingIndex(Mathf.Min(1, glow.transform.parent.childCount - 1));
 
         Image ring = GetOrCreateChildImage(root.transform, "MovementJoystickRing");
         ConfigureJoystickDisc(ring, joystickSprite, 344f, new Color(0.32f, 0.62f, 0.78f, 0.22f));
-        ring.transform.SetSiblingIndex(Mathf.Min(1, ring.transform.parent.childCount - 1));
+        ring.transform.SetSiblingIndex(Mathf.Min(2, ring.transform.parent.childCount - 1));
 
         Image inner = GetOrCreateChildImage(root.transform, "MovementJoystickInner");
         ConfigureJoystickDisc(inner, joystickSprite, 276f, new Color(0.02f, 0.04f, 0.065f, 0.3f));
-        inner.transform.SetSiblingIndex(Mathf.Min(2, inner.transform.parent.childCount - 1));
+        inner.transform.SetSiblingIndex(Mathf.Min(3, inner.transform.parent.childCount - 1));
+
+        RemoveMovementJoystickBoosterDebug(root.transform);
 
         Image handleImage = joystick != null && joystick.handle != null ? joystick.handle.GetComponent<Image>() : null;
         if (handleImage == null)
@@ -797,7 +805,65 @@ public class UIRuntimeStyler : MonoBehaviour
         MovementJoystickVisualController controller = root.GetComponent<MovementJoystickVisualController>();
         if (controller == null)
             controller = root.AddComponent<MovementJoystickVisualController>();
-        controller.Configure(joystick, rootImage, handleImage, glow, ring, inner);
+        controller.Configure(joystick, rootImage, handleImage, glow, ring, inner, boosterRing);
+    }
+
+    Graphic GetOrCreateMovementJoystickBoosterRing(Transform joystickRoot)
+    {
+        Transform parent = joystickRoot;
+        Transform existing = joystickRoot.Find("MovementJoystickBoosterRing");
+        if (existing == null)
+        {
+            Transform oldSibling = joystickRoot.parent != null
+                ? joystickRoot.parent.Find("MovementJoystickBoosterRing")
+                : null;
+            existing = oldSibling;
+        }
+
+        GameObject ringObject = existing != null
+            ? existing.gameObject
+            : new GameObject("MovementJoystickBoosterRing", typeof(RectTransform), typeof(CanvasRenderer), typeof(JoystickBoosterRingGraphic));
+        if (ringObject.transform.parent != parent)
+            ringObject.transform.SetParent(parent, false);
+
+        Image staleImage = ringObject.GetComponent<Image>();
+        if (staleImage != null)
+        {
+            staleImage.enabled = false;
+            Destroy(staleImage);
+        }
+
+        JoystickBoosterRingGraphic ringGraphic = ringObject.GetComponent<JoystickBoosterRingGraphic>();
+        if (ringGraphic == null)
+            ringGraphic = ringObject.AddComponent<JoystickBoosterRingGraphic>();
+
+        RectTransform rect = ringObject.GetComponent<RectTransform>();
+        RectTransform rootRect = joystickRoot as RectTransform;
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.localRotation = Quaternion.identity;
+        rect.localScale = Vector3.one;
+        rect.sizeDelta = rootRect != null
+            ? rootRect.sizeDelta * PlayerMovement.AdvancedBoosterOuterInputLimit
+            : new Vector2(516f, 516f);
+
+        ringGraphic.color = new Color(1f, 0.04f, 0.02f, 0f);
+        ringGraphic.raycastTarget = false;
+        ringGraphic.maskable = false;
+        ringObject.SetActive(true);
+
+        ringObject.transform.SetAsFirstSibling();
+
+        return ringGraphic;
+    }
+
+    void RemoveMovementJoystickBoosterDebug(Transform parent)
+    {
+        Transform existing = parent.Find("MovementJoystickBoosterDebug");
+        if (existing != null)
+            Destroy(existing.gameObject);
     }
 
     void ConfigureJoystickDisc(Image image, Sprite sprite, float size, Color color)
@@ -1455,6 +1521,41 @@ public class UIRuntimeStyler : MonoBehaviour
         whitePixelSprite.name = "RuntimeWhitePixelSprite";
         whitePixelSprite.hideFlags = HideFlags.HideAndDontSave;
         return whitePixelSprite;
+    }
+
+    static Sprite GetJoystickBoosterRingSprite()
+    {
+        if (cachedJoystickBoosterRingSprite != null)
+            return cachedJoystickBoosterRingSprite;
+
+        int size = 128;
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        texture.name = "RuntimeJoystickBoosterRingTexture";
+        texture.hideFlags = HideFlags.HideAndDontSave;
+
+        float outerRadius = (size - 1) * 0.5f;
+        float innerRadius = outerRadius * (1f / PlayerMovement.AdvancedBoosterOuterInputLimit);
+        float edge = 2.25f;
+        Color32 clear = new Color32(255, 255, 255, 0);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - outerRadius;
+                float dy = y - outerRadius;
+                float distance = Mathf.Sqrt(dx * dx + dy * dy);
+                float outerAlpha = 1f - Mathf.SmoothStep(outerRadius - edge, outerRadius, distance);
+                float innerAlpha = Mathf.SmoothStep(innerRadius - edge, innerRadius + edge, distance);
+                float alpha = Mathf.Clamp01(outerAlpha * innerAlpha);
+                texture.SetPixel(x, y, alpha > 0.001f ? new Color(1f, 1f, 1f, alpha) : clear);
+            }
+        }
+
+        texture.Apply(false, true);
+        cachedJoystickBoosterRingSprite = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f);
+        cachedJoystickBoosterRingSprite.name = "RuntimeJoystickBoosterRingSprite";
+        cachedJoystickBoosterRingSprite.hideFlags = HideFlags.HideAndDontSave;
+        return cachedJoystickBoosterRingSprite;
     }
 
     static Sprite GetPlayButtonShapeSprite()

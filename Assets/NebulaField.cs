@@ -9,6 +9,7 @@ public enum NebulaFieldKind
 {
     Normal,
     Fire,
+    Toxic,
     Cloud
 }
 
@@ -18,6 +19,7 @@ public class NebulaField : MonoBehaviour
 {
     const int NebulaVariantCount = 9;
     const int FireNebulaVariantCount = 4;
+    const int ToxicNebulaVariantCount = 1;
     const float TargetVisualSize = 3.36f;
     const float CloudDriftSpeed = 0.22f;
     const float CloudWrapPadding = 7f;
@@ -32,6 +34,7 @@ public class NebulaField : MonoBehaviour
     const float MaxSizeMultiplier = 4f;
     const int NormalDamagePerTick = 1;
     const int FireDamagePerTick = 3;
+    const int ToxicDamagePerTick = 1;
     const float NormalSpeedMultiplier = 1f;
     const float FireSpeedMultiplier = 0.5f;
     static readonly string[] CloudSpriteResourcePaths =
@@ -45,6 +48,7 @@ public class NebulaField : MonoBehaviour
     static readonly Dictionary<int, NebulaField> FieldsByKey = new Dictionary<int, NebulaField>();
     static Sprite[] cachedNebulaSprites;
     static Sprite[] cachedFireNebulaSprites;
+    static Sprite[] cachedToxicNebulaSprites;
     static Sprite[] cachedCloudSprites;
 
     SpriteRenderer spriteRenderer;
@@ -66,7 +70,7 @@ public class NebulaField : MonoBehaviour
     readonly Dictionary<HideInNebulaTarget, float> nextTriggerStayRefreshByTarget = new Dictionary<HideInNebulaTarget, float>();
 
     public NebulaFieldKind FieldKind => fieldKind;
-    public int DamagePerTick => fieldKind == NebulaFieldKind.Fire ? FireDamagePerTick : fieldKind == NebulaFieldKind.Cloud ? 0 : NormalDamagePerTick;
+    public int DamagePerTick => fieldKind == NebulaFieldKind.Fire ? FireDamagePerTick : fieldKind == NebulaFieldKind.Toxic ? ToxicDamagePerTick : fieldKind == NebulaFieldKind.Cloud ? 0 : NormalDamagePerTick;
     public float SpeedMultiplier => fieldKind == NebulaFieldKind.Fire ? FireSpeedMultiplier : NormalSpeedMultiplier;
 
     void Awake()
@@ -155,6 +159,8 @@ public class NebulaField : MonoBehaviour
         activeSpriteBounds = activeNebulaSprite.bounds;
         spriteRenderer.color = fieldKind == NebulaFieldKind.Fire
             ? new Color(1f, 0.82f, 0.56f, 0.9f)
+            : fieldKind == NebulaFieldKind.Toxic
+                ? new Color(0.88f, 1f, 0.42f, 0.9f)
             : fieldKind == NebulaFieldKind.Cloud
                 ? new Color(1f, 1f, 1f, 0.9f)
                 : new Color(0.9f, 0.97f, 1f, 0.82f);
@@ -165,6 +171,8 @@ public class NebulaField : MonoBehaviour
         {
             float roomSizeMultiplier = fieldKind == NebulaFieldKind.Fire
                 ? RoomSettings.GetFireNebulaSizeMultiplier()
+                : fieldKind == NebulaFieldKind.Toxic
+                    ? RoomSettings.GetToxicNebulaSizeMultiplier()
                 : fieldKind == NebulaFieldKind.Cloud
                     ? RoomSettings.GetCloudsSizeMultiplier()
                 : RoomSettings.GetNebulaSizeMultiplier();
@@ -579,6 +587,14 @@ public class NebulaField : MonoBehaviour
             return cachedCloudSprites;
         }
 
+        if (kind == NebulaFieldKind.Toxic)
+        {
+            if (cachedToxicNebulaSprites == null || cachedToxicNebulaSprites.Length == 0)
+                cachedToxicNebulaSprites = LoadSprites(NebulaFieldKind.Toxic);
+
+            return cachedToxicNebulaSprites;
+        }
+
         if (cachedNebulaSprites == null || cachedNebulaSprites.Length == 0)
             cachedNebulaSprites = LoadSprites(NebulaFieldKind.Normal);
 
@@ -632,8 +648,16 @@ public class NebulaField : MonoBehaviour
             return cloudSprites;
         }
 
-        int variantCount = kind == NebulaFieldKind.Fire ? FireNebulaVariantCount : NebulaVariantCount;
-        string prefix = kind == NebulaFieldKind.Fire ? "fire_nebula_variant_" : "nebula_variant_";
+        int variantCount = kind == NebulaFieldKind.Fire
+            ? FireNebulaVariantCount
+            : kind == NebulaFieldKind.Toxic
+                ? ToxicNebulaVariantCount
+                : NebulaVariantCount;
+        string prefix = kind == NebulaFieldKind.Fire
+            ? "fire_nebula_variant_"
+            : kind == NebulaFieldKind.Toxic
+                ? "toxic_nebula_variant_"
+                : "nebula_variant_";
         Sprite[] sprites = new Sprite[variantCount];
         for (int i = 0; i < sprites.Length; i++)
         {
@@ -641,7 +665,8 @@ public class NebulaField : MonoBehaviour
             sprites[i] = LoadSingleSprite(
                 prefix + suffix,
                 "Assets/Resources/" + prefix + suffix + ".png",
-                null);
+                null,
+                kind == NebulaFieldKind.Toxic);
         }
 
         for (int i = 0; i < sprites.Length; i++)
@@ -650,7 +675,7 @@ public class NebulaField : MonoBehaviour
                 return sprites;
         }
 
-        if (kind == NebulaFieldKind.Fire)
+        if (kind == NebulaFieldKind.Fire || kind == NebulaFieldKind.Toxic)
             return sprites;
 
         Sprite fallback = LoadLegacySprite();
@@ -669,8 +694,15 @@ public class NebulaField : MonoBehaviour
         return LoadSingleSprite("nebula_frayed_resource", "Assets/Resources/nebula_frayed_resource.png", "Assets/nebula_frayed.png");
     }
 
-    static Sprite LoadSingleSprite(string resourcesPath, string editorPreferredPath, string editorFallbackPath)
+    static Sprite LoadSingleSprite(string resourcesPath, string editorPreferredPath, string editorFallbackPath, bool preferFullTexture = false)
     {
+        if (preferFullTexture)
+        {
+            Sprite fullTextureSprite = LoadFullTextureSprite(resourcesPath, editorPreferredPath);
+            if (fullTextureSprite != null)
+                return fullTextureSprite;
+        }
+
         Sprite sprite = Resources.Load<Sprite>(resourcesPath);
         if (sprite != null)
             return sprite;
@@ -691,6 +723,24 @@ public class NebulaField : MonoBehaviour
 
         if (!string.IsNullOrWhiteSpace(editorFallbackPath))
             return LoadEditorSprite(editorFallbackPath);
+#endif
+
+        return null;
+    }
+
+    static Sprite LoadFullTextureSprite(string resourcesPath, string editorPreferredPath)
+    {
+        Texture2D texture = Resources.Load<Texture2D>(resourcesPath);
+        if (texture != null)
+            return CreateSpriteFromTexture(texture);
+
+#if UNITY_EDITOR
+        if (!string.IsNullOrWhiteSpace(editorPreferredPath))
+        {
+            texture = AssetDatabase.LoadAssetAtPath<Texture2D>(editorPreferredPath);
+            if (texture != null)
+                return CreateSpriteFromTexture(texture);
+        }
 #endif
 
         return null;

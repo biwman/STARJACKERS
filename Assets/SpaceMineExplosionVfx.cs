@@ -461,6 +461,7 @@ public sealed class SpaceBombExplosionVfx : MonoBehaviour
         if (!RoomSettings.AreVisualEffectsEnabled())
             return;
 
+        ScreenShakeController.Request(ScreenShakeProfiles.SpaceBombExplosion, position);
         SpaceMineExplosionVfx.Spawn(position, blastRadius);
 
         GameObject effect = new GameObject("SpaceBombExplosionVfx");

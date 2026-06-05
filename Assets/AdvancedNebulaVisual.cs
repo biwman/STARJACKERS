@@ -166,6 +166,10 @@ public class AdvancedNebulaVisual : MonoBehaviour
                 primary = new Color(0.74f, 0.48f, 0.95f, 1f);
                 secondary = new Color(0.24f, 0.12f, 0.34f, 1f);
                 break;
+            case LobbyMapCatalog.ToxicAreaMapId:
+                primary = new Color(0.56f, 1f, 0.26f, 1f);
+                secondary = new Color(0.12f, 0.34f, 0.16f, 1f);
+                break;
             default:
                 primary = new Color(0.48f, 0.9f, 1f, 1f);
                 secondary = new Color(0.16f, 0.34f, 0.56f, 1f);

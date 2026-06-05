@@ -16,6 +16,7 @@ public sealed class ScienceStationSpawner : MonoBehaviourPunCallbacks
     const string SpaceFactoryLayoutKey = SpaceFactorySpawner.LayoutKey;
     const string NebulaLayoutKey = "nebulaLayout";
     const string FireNebulaLayoutKey = NebulaSpawner.FireNebulaLayoutKey;
+    const string ToxicNebulaLayoutKey = NebulaSpawner.ToxicNebulaLayoutKey;
     const string EmptyLayoutSentinel = "__empty__";
     const float Margin = 5.2f;
     const float MinDistanceBetweenStations = 11f;
@@ -112,7 +113,8 @@ public sealed class ScienceStationSpawner : MonoBehaviourPunCallbacks
                    !HasLayout(SpaceFactoryLayoutKey) ||
                    !HasLayout(ObstacleLayoutKey) ||
                    !HasLayout(NebulaLayoutKey) ||
-                   !HasLayout(FireNebulaLayoutKey))
+                   !HasLayout(FireNebulaLayoutKey) ||
+                   !HasLayout(ToxicNebulaLayoutKey))
             {
                 yield return null;
             }
@@ -120,6 +122,7 @@ public sealed class ScienceStationSpawner : MonoBehaviourPunCallbacks
             int seed = ResolveSeed();
             List<Vector2> nebulaPositions = ParsePositionLayout(GetRoomLayout(NebulaLayoutKey), 0, 1);
             nebulaPositions.AddRange(ParsePositionLayout(GetRoomLayout(FireNebulaLayoutKey), 0, 1));
+            nebulaPositions.AddRange(ParsePositionLayout(GetRoomLayout(ToxicNebulaLayoutKey), 0, 1));
             string layout = BuildLayout(
                 seed,
                 ParsePositionLayout(GetRoomLayout(ExtractionLayoutKey), 0, 1),
@@ -274,8 +277,8 @@ public sealed class ScienceStationSpawner : MonoBehaviourPunCallbacks
 
     bool HasBlockingOverlap(Vector2 position, float radius)
     {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(position, radius);
-        for (int i = 0; i < hits.Length; i++)
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(position, radius, out Collider2D[] hits);
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null)

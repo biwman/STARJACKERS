@@ -155,6 +155,8 @@ public sealed class ConcealmentIndicator : MonoBehaviour
         {
             case NebulaFieldKind.Fire:
                 return new Color(1f, 0.58f, 0.2f, 1f);
+            case NebulaFieldKind.Toxic:
+                return new Color(0.7f, 1f, 0.18f, 1f);
             case NebulaFieldKind.Cloud:
                 return new Color(0.92f, 0.96f, 1f, 1f);
             default:

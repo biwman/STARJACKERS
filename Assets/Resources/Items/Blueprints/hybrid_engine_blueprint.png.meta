@@ -4,10 +4,7 @@ TextureImporter:
   internalIDToNameTable:
   - first:
       213: 8435429106735713167
-    second: hybrid_engine_blueprint_0
-  - first:
-      213: -4623840313027225387
-    second: hybrid_engine_blueprint_1
+    second: hybrid_engine_blueprint
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -49,9 +46,9 @@ TextureImporter:
   nPOTScale: 0
   lightmap: 0
   compressionQuality: 50
-  spriteMode: 2
+  spriteMode: 1
   spriteExtrude: 1
-  spriteMeshType: 1
+  spriteMeshType: 0
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
   spritePixelsToUnits: 100
@@ -129,15 +126,15 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: hybrid_engine_0
+      name: hybrid_engine_blueprint
       rect:
         serializedVersion: 2
-        x: 150
-        y: 75
-        width: 473
-        height: 1119
+        x: 0
+        y: 0
+        width: 1024
+        height: 1024
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -150,33 +147,11 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
-    - serializedVersion: 2
-      name: hybrid_engine_1
-      rect:
-        serializedVersion: 2
-        x: 770
-        y: 51
-        width: 299
-        height: 1156
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 5d891e3cbb1d4dfb0800000000000000
-      internalID: -4623840313027225387
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
     outline: []
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: f8b09fa641aa01570800000000000000
     internalID: 0
     vertices: []
     indices: 
@@ -186,8 +161,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      hybrid_engine_0: 8435429106735713167
-      hybrid_engine_1: -4623840313027225387
+      hybrid_engine_blueprint: 8435429106735713167
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

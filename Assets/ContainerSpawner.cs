@@ -11,6 +11,7 @@ public sealed class ContainerSpawner : MonoBehaviourPun
     const string ExtractionLayoutKey = "extractionLayout";
     const string NebulaLayoutKey = "nebulaLayout";
     const string FireNebulaLayoutKey = NebulaSpawner.FireNebulaLayoutKey;
+    const string ToxicNebulaLayoutKey = NebulaSpawner.ToxicNebulaLayoutKey;
     const string RepairBayLayoutKey = "repairBayLayout";
     const string EmptyLayoutSentinel = "__empty__";
     const float MapMargin = 2.4f;
@@ -100,6 +101,7 @@ public sealed class ContainerSpawner : MonoBehaviourPun
                !HasLayout(ObstacleLayoutKey) ||
                !HasLayout(NebulaLayoutKey) ||
                !HasLayout(FireNebulaLayoutKey) ||
+               !HasLayout(ToxicNebulaLayoutKey) ||
                !HasLayout(RepairBayLayoutKey))
         {
             yield return null;
@@ -140,6 +142,7 @@ public sealed class ContainerSpawner : MonoBehaviourPun
         List<Vector2> extractionPositions = ParsePositionLayout(GetRoomLayout(ExtractionLayoutKey), 0, 1);
         List<Vector2> nebulaPositions = ParsePositionLayout(GetRoomLayout(NebulaLayoutKey), 0, 1);
         nebulaPositions.AddRange(ParsePositionLayout(GetRoomLayout(FireNebulaLayoutKey), 0, 1));
+        nebulaPositions.AddRange(ParsePositionLayout(GetRoomLayout(ToxicNebulaLayoutKey), 0, 1));
         List<Vector2> repairBayPositions = ParsePositionLayout(GetRoomLayout(RepairBayLayoutKey), 1, 2);
         List<Vector2> spawnedPositions = new List<Vector2>();
 

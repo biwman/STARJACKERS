@@ -44,7 +44,7 @@ public static class RoundResultsTracker
     }
 
     static readonly Dictionary<int, TrackedRoundResult> TrackedResults = new Dictionary<int, TrackedRoundResult>();
-    static string trackedRoomName;
+    static string trackedRoundScope;
 
     public static void ResetForCurrentRoom()
     {
@@ -428,15 +428,39 @@ public static class RoundResultsTracker
 
     static void EnsureRoomScope()
     {
-        string currentRoomName = PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null
-            ? PhotonNetwork.CurrentRoom.Name ?? string.Empty
-            : string.Empty;
+        string currentRoundScope = BuildCurrentRoundScope();
 
-        if (trackedRoomName == currentRoomName)
+        if (trackedRoundScope == currentRoundScope)
             return;
 
-        trackedRoomName = currentRoomName;
+        trackedRoundScope = currentRoundScope;
         TrackedResults.Clear();
+    }
+
+    static string BuildCurrentRoundScope()
+    {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null)
+            return string.Empty;
+
+        string roomName = PhotonNetwork.CurrentRoom.Name ?? string.Empty;
+        string token = string.Empty;
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.RoundWarmupTokenKey, out object warmupValue) &&
+            warmupValue is string warmupToken &&
+            !string.IsNullOrWhiteSpace(warmupToken))
+        {
+            token = "warmup:" + warmupToken;
+        }
+        else if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.StartTimeKey, out object startValue) &&
+                 startValue != null)
+        {
+            token = "start:" + startValue;
+        }
+        else
+        {
+            token = "nostart";
+        }
+
+        return roomName + "|" + token;
     }
 
     static string GetDisplayName(Player player)

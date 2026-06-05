@@ -94,6 +94,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RoomSettings.SessionLabelKey,
         RoomSettings.SessionHostNameKey,
         RoomSettings.SessionCreatedAtKey,
+        RoomSettings.RoundWarmupTokenKey,
         RoomSettings.RoundDurationKey,
         RoomSettings.StartTimeKey,
         RoomSettings.RoundEndUtcMsKey,
@@ -726,6 +727,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                 LeaveCurrentRoomToSessionBrowser(status);
                 return;
             }
+
+            if (sessionState == RoomSettings.SessionStatePreparing)
+            {
+                RoundStartCurtainUI.ShowForRoundStart();
+                return;
+            }
         }
 
         if (!propertiesThatChanged.ContainsKey("gameStarted"))
@@ -733,7 +740,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         bool started = IsRoundStarted();
         if (started)
+        {
+            AtlasPilotRoundTracker.RecordRoundStart(PlayerProfileService.Instance.CurrentProfile);
             RoundStartCurtainUI.ShowForRoundStart();
+        }
         else
         {
             RoundStartCurtainUI.HideImmediate();
@@ -742,6 +752,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         EnsureDroppedCargoManagerExists();
         EnsureEnemyBotManagerExists();
+        EnsureNeutralRiderManagerExists();
         EnsureNebulaSpawnerExists();
         RepairBaySpawner.EnsureExists();
         SpaceJunkSpawner.EnsureExists();
@@ -749,6 +760,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RandomLootWreckSpawner.EnsureExists();
         SpaceFactorySpawner.EnsureExists();
         ScienceStationSpawner.EnsureExists();
+        ArtifactAsteroidSpawner.EnsureExists();
         FogOfWarOverlay.EnsureExists();
         AsteroidShowerController.EnsureExists();
         if (started)
@@ -862,6 +874,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return false;
 
         string state = GetSessionState(info);
+        if (state == RoomSettings.SessionStatePreparing)
+        {
+            reason = "ROUND STARTING";
+            return true;
+        }
+
         float? remainingTime = GetRemainingTime(info, state);
         if (state == RoomSettings.SessionStateInPlay &&
             remainingTime.HasValue &&
@@ -904,6 +922,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.RoundDurationKey] = RoomSettings.DefaultRoundDuration,
             [RoomSettings.EndDisasterWarningSecondsKey] = RoomSettings.DefaultEndDisasterWarningSeconds,
             [RoomSettings.TreasureDensityKey] = RoomSettings.DefaultTreasureDensity,
+            [RoomSettings.RadioactiveTreasureDensityKey] = RoomSettings.DefaultRadioactiveTreasureDensity,
             [RoomSettings.ResourceRichnessKey] = RoomSettings.DefaultResourceRichness,
             [RoomSettings.CrazyEnemiesModeKey] = RoomSettings.DefaultMapEffectMode,
             [RoomSettings.CrazyEnemiesStartUtcMsKey] = -1d,
@@ -922,6 +941,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.NebulaSizeKey] = RoomSettings.DefaultNebulaSize,
             [RoomSettings.FireNebulaDensityKey] = RoomSettings.DefaultFireNebulaDensity,
             [RoomSettings.FireNebulaSizeKey] = RoomSettings.DefaultFireNebulaSize,
+            [RoomSettings.ToxicNebulaDensityKey] = RoomSettings.DefaultToxicNebulaDensity,
+            [RoomSettings.ToxicNebulaSizeKey] = RoomSettings.DefaultToxicNebulaSize,
             [RoomSettings.CloudsDensityKey] = RoomSettings.DefaultCloudsDensity,
             [RoomSettings.CloudsSizeKey] = RoomSettings.DefaultCloudsSize,
             [RoomSettings.RandomLootWreckCountKey] = RoomSettings.DefaultRandomLootWreckCount,
@@ -929,6 +950,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.ScienceStationCountKey] = RoomSettings.DefaultScienceStationCount,
             [RoomSettings.StartTimeKey] = -1d,
             [RoomSettings.RoundEndUtcMsKey] = -1d,
+            [RoomSettings.RoundWarmupTokenKey] = string.Empty,
+            [RoomSettings.RoundWarmupStartedAtKey] = -1d,
             ["gameStarted"] = false,
             [RoomSettings.GadgetChargesStateKey] = string.Empty,
             [RoomSettings.RepairBayOccupancyStateKey] = string.Empty,
@@ -940,10 +963,17 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.RoundEndReasonKey] = string.Empty,
             [RoomSettings.InventoryLossEnabledKey] = RoomSettings.DefaultInventoryLossEnabled,
             [RoomSettings.EquipmentLossEnabledKey] = RoomSettings.DefaultEquipmentLossEnabled,
+            [RoomSettings.BoomVfxEnabledKey] = RoomSettings.DefaultBoomVfxEnabled,
             [RoomSettings.ParallaxBackgroundKey] = RoomSettings.DefaultParallaxBackground,
             [RoomSettings.BackgroundObjectKey] = RoomSettings.DefaultBackgroundObject,
             [RoomSettings.HapticsEnabledKey] = RoomSettings.DefaultHapticsEnabled,
-            [RoomSettings.FpsCounterEnabledKey] = RoomSettings.DefaultFpsCounterEnabled
+            [RoomSettings.FpsCounterEnabledKey] = RoomSettings.DefaultFpsCounterEnabled,
+            [RoomSettings.NeutralRidersEnabledKey] = RoomSettings.DefaultNeutralRidersEnabled,
+            [RoomSettings.NeutralRidersCountKey] = RoomSettings.DefaultNeutralRidersCount,
+            [RoomSettings.NeutralRidersAggressionKey] = RoomSettings.DefaultNeutralRiderAggression,
+            [RoomSettings.EnemyDamageMultiplierPercentKey] = RoomSettings.DefaultEnemyDamageMultiplierPercent,
+            [RoomSettings.EnemyAttackWindupMultiplierPercentKey] = RoomSettings.DefaultEnemyAttackWindupMultiplierPercent,
+            [RoomSettings.EnemyAttackCooldownMultiplierPercentKey] = RoomSettings.DefaultEnemyAttackCooldownMultiplierPercent
         };
 
         HashSet<string> rememberedKeys = ApplyRememberedLobbySettings(props);
@@ -1043,11 +1073,17 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (!rememberedKeys.Contains(RoomSettings.FireNebulaDensityKey))
             props[RoomSettings.FireNebulaDensityKey] = map.FireNebulaDensity;
 
+        if (!rememberedKeys.Contains(RoomSettings.ToxicNebulaDensityKey))
+            props[RoomSettings.ToxicNebulaDensityKey] = map.ToxicNebulaDensity;
+
         if (!rememberedKeys.Contains(RoomSettings.NebulaSizeKey))
             props[RoomSettings.NebulaSizeKey] = map.NebulaSize;
 
         if (!rememberedKeys.Contains(RoomSettings.FireNebulaSizeKey))
             props[RoomSettings.FireNebulaSizeKey] = map.FireNebulaSize;
+
+        if (!rememberedKeys.Contains(RoomSettings.ToxicNebulaSizeKey))
+            props[RoomSettings.ToxicNebulaSizeKey] = map.ToxicNebulaSize;
 
         if (!rememberedKeys.Contains(RoomSettings.CloudsDensityKey))
             props[RoomSettings.CloudsDensityKey] = map.CloudsDensity;
@@ -1142,6 +1178,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.MapSizeKey:
             case RoomSettings.MapBackgroundKey:
             case RoomSettings.VisualEffectsEnabledKey:
+            case RoomSettings.BoomVfxEnabledKey:
             case RoomSettings.ParallaxBackgroundKey:
             case RoomSettings.BackgroundObjectKey:
             case RoomSettings.EndDisasterModeKey:
@@ -1152,6 +1189,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.ObstacleSizePercentKey:
             case RoomSettings.ObstacleNoBordersKey:
             case RoomSettings.TreasureDensityKey:
+            case RoomSettings.RadioactiveTreasureDensityKey:
             case RoomSettings.ResourceRichnessKey:
             case RoomSettings.CrazyEnemiesModeKey:
             case RoomSettings.CrazyEnemiesStartUtcMsKey:
@@ -1164,8 +1202,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.SpaceJunkDensityKey:
             case RoomSettings.ContainersDensityKey:
             case RoomSettings.FireNebulaDensityKey:
+            case RoomSettings.ToxicNebulaDensityKey:
             case RoomSettings.NebulaSizeKey:
             case RoomSettings.FireNebulaSizeKey:
+            case RoomSettings.ToxicNebulaSizeKey:
             case RoomSettings.CloudsDensityKey:
             case RoomSettings.CloudsSizeKey:
             case RoomSettings.RandomLootWreckCountKey:
@@ -1176,6 +1216,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.ScienceStationCountKey:
             case RoomSettings.BoosterSlowdownKey:
             case RoomSettings.BoosterRecoveryDelayKey:
+            case RoomSettings.AdvancedBoosterEnabledKey:
             case RoomSettings.ShipDriftEnabledKey:
             case RoomSettings.LastShipTimerMultiplierKey:
             case RoomSettings.InventoryLossEnabledKey:
@@ -1190,6 +1231,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.TreasureWeightFactorKey:
             case RoomSettings.HapticsEnabledKey:
             case RoomSettings.FpsCounterEnabledKey:
+            case RoomSettings.NeutralRidersEnabledKey:
+            case RoomSettings.NeutralRidersCountKey:
+            case RoomSettings.NeutralRidersAggressionKey:
+            case RoomSettings.EnemyDamageMultiplierPercentKey:
+            case RoomSettings.EnemyAttackWindupMultiplierPercentKey:
+            case RoomSettings.EnemyAttackCooldownMultiplierPercentKey:
                 return true;
             default:
                 return false;
@@ -1230,6 +1277,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             bool tooLateToJoin = state == RoomSettings.SessionStateInPlay &&
                                  remainingTime.HasValue &&
                                  remainingTime.Value < LateJoinBlockThresholdSeconds;
+            bool roundStarting = state == RoomSettings.SessionStatePreparing;
             bool baseCanJoin = info.IsOpen && !info.RemovedFromList && info.PlayerCount < info.MaxPlayers;
             SessionRoomEntry entry = new SessionRoomEntry
             {
@@ -1243,9 +1291,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                 MapName = GetMapDisplayName(info),
                 ActiveEffectsLabel = GetActiveEffectsLabel(info, state),
                 RemainingTimeSeconds = remainingTime,
-                CanJoin = baseCanJoin && !blockedByLocalDeath && !tooLateToJoin,
+                CanJoin = baseCanJoin && !blockedByLocalDeath && !tooLateToJoin && !roundStarting,
                 BlockedByLocalDeath = blockedByLocalDeath,
-                BlockReason = tooLateToJoin ? "TOO LATE TO JOIN" : localFinishReason
+                BlockReason = roundStarting ? "ROUND STARTING" : tooLateToJoin ? "TOO LATE TO JOIN" : localFinishReason
             };
 
             entries.Add(entry);
@@ -1303,7 +1351,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                    ShouldRoomEffectActivateAt(info, modeKey, startKey, roundStartUtcMs);
         }
 
-        if (state == RoomSettings.SessionStateInLobby)
+        if (state == RoomSettings.SessionStateInLobby || state == RoomSettings.SessionStatePreparing)
             return ShouldRoomEffectActivateAt(info, modeKey, startKey, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
         return false;
@@ -1638,13 +1686,16 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (state == RoomSettings.SessionStateInLobby)
             return 0;
 
-        if (state == RoomSettings.SessionStateInPlay)
+        if (state == RoomSettings.SessionStatePreparing)
             return 1;
 
-        if (state == RoomSettings.SessionStateClosingLobby)
+        if (state == RoomSettings.SessionStateInPlay)
             return 2;
 
-        return 3;
+        if (state == RoomSettings.SessionStateClosingLobby)
+            return 3;
+
+        return 4;
     }
 
     static float ConvertToFloat(object value, float fallback)
@@ -1685,11 +1736,21 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     public void RestoreRoomStateAfterSceneLoad()
     {
         PlayerProfileService.Instance.ApplyProfileToPhoton();
-        if (IsRoundStarted())
+        if (RoomSettings.GetSessionState() == RoomSettings.SessionStatePreparing)
+        {
             RoundStartCurtainUI.ShowForRoundStart();
+            return;
+        }
+
+        if (IsRoundStarted())
+        {
+            AtlasPilotRoundTracker.RecordRoundStart(PlayerProfileService.Instance.CurrentProfile);
+            RoundStartCurtainUI.ShowForRoundStart();
+        }
 
         EnsureDroppedCargoManagerExists();
         EnsureEnemyBotManagerExists();
+        EnsureNeutralRiderManagerExists();
         EnsureNebulaSpawnerExists();
         RepairBaySpawner.EnsureExists();
         SpaceJunkSpawner.EnsureExists();
@@ -1697,6 +1758,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RandomLootWreckSpawner.EnsureExists();
         SpaceFactorySpawner.EnsureExists();
         ScienceStationSpawner.EnsureExists();
+        ArtifactAsteroidSpawner.EnsureExists();
         FogOfWarOverlay.EnsureExists();
         AsteroidShowerController.EnsureExists();
 
@@ -1734,8 +1796,14 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         if (PhotonNetwork.LocalPlayer.TagObject is GameObject taggedObject)
         {
-            if (taggedObject != null && taggedObject.scene.IsValid())
+            PlayerHealth taggedHealth = taggedObject != null ? taggedObject.GetComponent<PlayerHealth>() : null;
+            if (taggedObject != null &&
+                taggedObject.scene.IsValid() &&
+                taggedHealth != null &&
+                ActorIdentity.IsLocalHumanPlayerActor(taggedHealth))
+            {
                 return;
+            }
 
             PhotonNetwork.LocalPlayer.TagObject = null;
         }
@@ -1743,11 +1811,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         foreach (PlayerHealth player in players)
         {
-            if (player != null &&
-                !player.IsWreck &&
-                !player.IsBotControlled &&
-                player.photonView != null &&
-                player.photonView.IsMine)
+            if (ActorIdentity.IsLocalHumanPlayerActor(player))
             {
                 PhotonNetwork.LocalPlayer.TagObject = player.gameObject;
                 return;
@@ -1888,8 +1952,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                 return false;
         }
 
-        Collider2D[] hits = Physics2D.OverlapCircleAll(candidate, PlayerSpawnClearanceRadius);
-        for (int i = 0; i < hits.Length; i++)
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(candidate, PlayerSpawnClearanceRadius, out Collider2D[] hits);
+        for (int i = 0; i < hitCount; i++)
         {
             if (IsBlockingPlayerSpawnCollider(hits[i]))
                 return false;
@@ -2003,6 +2067,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     void EnsureEnemyBotManagerExists()
     {
         EnemyBotManager.EnsureExists();
+    }
+
+    void EnsureNeutralRiderManagerExists()
+    {
+        NeutralRiderManager.EnsureExists();
     }
 
     void ReturnToSessionBrowserFromCurrentLobby()
@@ -2265,6 +2334,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         PlayerShooting.gameStarted = false;
         EarlyRoundExitUI.HideAll();
         RoundPilotHudUI.DestroyAllRuntimeObjects();
+        ShipDamageState.ClearAllRuntimeDamage();
+        RoundWarmupService.ResetRoundTransientEffects();
         RoundResultsTracker.ResetForCurrentRoom();
         TreasureCollector.ResetRoundReservations();
         ObstacleSpawner.ResetForSessionTransition();
@@ -2274,6 +2345,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RandomLootWreckSpawner.ResetForSessionTransition();
         SpaceFactorySpawner.ResetForSessionTransition();
         ScienceStationSpawner.ResetForSessionTransition();
+        ArtifactAsteroidSpawner.ResetForSessionTransition();
 
         HashSet<GameObject> queued = new HashSet<GameObject>();
         QueueDestroyFromComponents<PlayerHealth>(queued);
@@ -2288,6 +2360,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         QueueDestroyFromComponents<RepairBay>(queued);
         QueueDestroyFromComponents<SpaceFactory>(queued);
         QueueDestroyFromComponents<ScienceStation>(queued);
+        QueueDestroyFromComponents<ArtifactAsteroid>(queued);
         QueueDestroyFromComponents<EnemyBotManager>(queued);
         QueueDestroyFromComponents<DroppedCargoManager>(queued);
 

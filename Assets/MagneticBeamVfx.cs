@@ -18,6 +18,11 @@ public sealed class MagneticBeamVfx : MonoBehaviour
     int sortingOrder = 2400;
     float age;
 
+    public static void Prewarm()
+    {
+        GetMaterial();
+    }
+
     public static void Spawn(Transform sourceTransform)
     {
         if (sourceTransform == null)

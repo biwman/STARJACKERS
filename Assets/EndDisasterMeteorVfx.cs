@@ -11,6 +11,8 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
     const int SortingOrderAboveBackgroundFx = 6;
     const string MapSeedKey = "mapSeed";
     const string MeteorAlarmResourcePath = "Audio/meteor_alarm";
+    const float DynamicZoomStartCountdownSeconds = 30f;
+    const float DynamicZoomMultiplierPerElapsedSecond = 0.02f;
 
     static readonly string[] ObstacleSpriteResourcePaths =
     {
@@ -38,6 +40,7 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
     GameObject warningMessageObject;
     CanvasGroup warningCanvasGroup;
     TextMeshProUGUI warningMessageText;
+    int dynamicZoomToken;
 
     public static void EnsureExists()
     {
@@ -67,6 +70,7 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
 
     void OnDestroy()
     {
+        CancelDynamicZoom();
         StopMeteorAlarm();
         HideWarningMessage();
 
@@ -134,6 +138,7 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
         {
             UpdateMeteorAlarm(progress);
             UpdateWarningMessage(progress);
+            UpdateDynamicZoom(remaining);
         }
 
         meteorVisible = true;
@@ -167,6 +172,7 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
 
         StopMeteorAlarm();
         HideWarningMessage();
+        CancelDynamicZoom();
         meteorVisible = false;
     }
 
@@ -180,7 +186,25 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
         spriteRenderer.enabled = true;
         StopMeteorAlarm();
         HideWarningMessage();
+        CancelDynamicZoom();
         return true;
+    }
+
+    void UpdateDynamicZoom(float remainingSeconds)
+    {
+        float elapsedCountdownSeconds = Mathf.Clamp(
+            DynamicZoomStartCountdownSeconds - Mathf.Max(0f, remainingSeconds),
+            0f,
+            DynamicZoomStartCountdownSeconds);
+        float multiplier = 1f + elapsedCountdownSeconds * DynamicZoomMultiplierPerElapsedSecond;
+        DynamicCameraZoomProfile profile = DynamicCameraZoomProfiles.EndDisasterMeteor.WithMultiplier(multiplier);
+        dynamicZoomToken = DynamicCameraZoomController.RefreshGlobal(dynamicZoomToken, profile, 0.35f);
+    }
+
+    void CancelDynamicZoom()
+    {
+        DynamicCameraZoomController.Cancel(dynamicZoomToken);
+        dynamicZoomToken = 0;
     }
 
     void UpdateMeteorAlarm(float progress)

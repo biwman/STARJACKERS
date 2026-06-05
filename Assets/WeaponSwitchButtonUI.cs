@@ -125,6 +125,16 @@ public sealed class WeaponSwitchButtonUI : MonoBehaviourPun
         if (!visible)
             return;
 
+        bool lockedByDamage = shooting.IsComplexWeaponSwitchLockedByDamage;
+        if (button != null)
+            button.interactable = !lockedByDamage;
+
+        if (backgroundImage != null)
+            backgroundImage.color = lockedByDamage ? new Color(0.48f, 0.08f, 0.08f, 0.92f) : new Color(1f, 0.1f, 0.48f, 0.98f);
+
+        if (innerBackgroundImage != null)
+            innerBackgroundImage.color = lockedByDamage ? new Color(0.12f, 0.02f, 0.02f, 0.98f) : new Color(0.29f, 0.03f, 0.1f, 0.98f);
+
         ResolveShootJoystickReference();
         if (shootJoystickRect != null && buttonRect != null)
         {
@@ -156,7 +166,9 @@ public sealed class WeaponSwitchButtonUI : MonoBehaviourPun
         nextWeaponIconImage.sprite = icon;
         nextWeaponIconImage.enabled = icon != null;
         if (icon != null)
-            nextWeaponIconImage.color = new Color(1f, 1f, 1f, 0.92f);
+            nextWeaponIconImage.color = shooting.IsComplexWeaponSwitchLockedByDamage
+                ? new Color(1f, 0.25f, 0.2f, 0.52f)
+                : new Color(1f, 1f, 1f, 0.92f);
     }
 
     void HandleClicked()

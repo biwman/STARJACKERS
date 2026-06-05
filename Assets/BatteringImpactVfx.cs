@@ -31,6 +31,12 @@ public sealed class BatteringImpactVfx : MonoBehaviour
     readonly Color amber = new Color(1f, 0.46f, 0.08f, 1f);
     readonly Color ember = new Color(0.92f, 0.16f, 0.04f, 1f);
 
+    public static void Prewarm()
+    {
+        GetMaterial();
+        PrewarmSpriteTexture(GetGlowSprite());
+    }
+
     public static void Spawn(Vector3 position, Vector2 normal, SpriteRenderer referenceRenderer = null)
     {
         if (!RoomSettings.AreVisualEffectsEnabled())
@@ -302,5 +308,13 @@ public sealed class BatteringImpactVfx : MonoBehaviour
     static float Hash01(int index, int salt)
     {
         return Mathf.Repeat(Mathf.Sin((index * 91.73f) + (salt * 417.19f)) * 52342.127f, 1f);
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
     }
 }

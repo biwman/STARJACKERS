@@ -28,6 +28,11 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
 
     static Sprite cachedCrateSprite;
 
+    public static void PrewarmRoundAssets()
+    {
+        PrewarmSpriteTexture(LoadCrateSprite());
+    }
+
     SpriteRenderer spriteRenderer;
     BoxCollider2D bodyCollider;
     Rigidbody2D rb;
@@ -377,7 +382,7 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
 
     public void Highlight()
     {
-        if (!HasLoot || spriteRenderer == null)
+        if (!HasLoot || isBeingCollected || spriteRenderer == null)
             return;
 
         spriteRenderer.color = Color.green;
@@ -405,6 +410,8 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
     public void SetBeingCollectedRpc(bool value)
     {
         isBeingCollected = value;
+        if (value)
+            Unhighlight();
     }
 
     void RequestImpulseFromClient(Vector2 impulse)
@@ -571,6 +578,14 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
 #endif
 
         return cachedCrateSprite;
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
     }
 
     static Sprite GetLargestSprite(Sprite[] sprites)

@@ -25,71 +25,6 @@ public static class PlayerProfileCraftingCatalog
     {
         new PlayerProfileCraftingRecipe
         {
-            Id = "common_to_uncommon_asteroid",
-            Inputs = new[]
-            {
-                InventoryItemCatalog.AsteroidResourceId,
-                InventoryItemCatalog.AsteroidResourceId,
-                InventoryItemCatalog.AsteroidResourceId,
-                InventoryItemCatalog.AsteroidResourceId
-            },
-            OutputItemId = InventoryItemCatalog.AsteroidGoldId,
-            OutputCount = 1
-        },
-        new PlayerProfileCraftingRecipe
-        {
-            Id = "uncommon_to_rare_asteroid",
-            Inputs = new[]
-            {
-                InventoryItemCatalog.AsteroidGoldId,
-                InventoryItemCatalog.AsteroidGoldId,
-                InventoryItemCatalog.AsteroidGoldId,
-                InventoryItemCatalog.AsteroidGoldId
-            },
-            OutputItemId = InventoryItemCatalog.AsteroidRareId,
-            OutputCount = 1
-        },
-        new PlayerProfileCraftingRecipe
-        {
-            Id = "rare_to_very_rare_asteroid",
-            Inputs = new[]
-            {
-                InventoryItemCatalog.AsteroidRareId,
-                InventoryItemCatalog.AsteroidRareId,
-                InventoryItemCatalog.AsteroidRareId,
-                InventoryItemCatalog.AsteroidRareId
-            },
-            OutputItemId = InventoryItemCatalog.RichAsteroidId,
-            OutputCount = 1
-        },
-        new PlayerProfileCraftingRecipe
-        {
-            Id = "very_rare_to_epic_asteroid",
-            Inputs = new[]
-            {
-                InventoryItemCatalog.RichAsteroidId,
-                InventoryItemCatalog.RichAsteroidId,
-                InventoryItemCatalog.RichAsteroidId,
-                InventoryItemCatalog.RichAsteroidId
-            },
-            OutputItemId = InventoryItemCatalog.AsteroidEpicId,
-            OutputCount = 1
-        },
-        new PlayerProfileCraftingRecipe
-        {
-            Id = "epic_to_legendary_asteroid",
-            Inputs = new[]
-            {
-                InventoryItemCatalog.AsteroidEpicId,
-                InventoryItemCatalog.AsteroidEpicId,
-                InventoryItemCatalog.AsteroidEpicId,
-                InventoryItemCatalog.AsteroidEpicId
-            },
-            OutputItemId = InventoryItemCatalog.AsteroidLegendaryId,
-            OutputCount = 1
-        },
-        new PlayerProfileCraftingRecipe
-        {
             Id = "plasma_gun_from_corsair_salvage",
             Inputs = new[]
             {
@@ -412,6 +347,45 @@ public static class PlayerProfileCraftingCatalog
         },
         new PlayerProfileCraftingRecipe
         {
+            Id = "treasure_scanner_from_radar_salvage",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.RadarShipSalvageId,
+                InventoryItemCatalog.SpaceJunkStandardId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.AsteroidGoldId
+            },
+            OutputItemId = InventoryItemCatalog.TreasureScannerId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "short_scanner_from_radar_salvage",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.RadarShipSalvageId,
+                InventoryItemCatalog.SpaceJunkStandardId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.DroidScrapId
+            },
+            OutputItemId = InventoryItemCatalog.ShortScannerId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "cloak_device_from_short_scanner",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.ShortScannerId,
+                InventoryItemCatalog.RadarShipSalvageId,
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.CloakDeviceId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
             Id = "looting_friend_from_tractor_beam",
             Inputs = new[]
             {
@@ -421,6 +395,32 @@ public static class PlayerProfileCraftingCatalog
                 InventoryItemCatalog.AsteroidRareId
             },
             OutputItemId = InventoryItemCatalog.LootingFriendId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "firing_friend_from_auto_turret",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.AutoTurretId,
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.NeutralFighterSalvageId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.FiringFriendId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "dropbot_from_rescue_cargo_parts",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.RescueShipSalvageId,
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.SpaceTruckWreckId,
+                InventoryItemCatalog.AsteroidEpicId
+            },
+            OutputItemId = InventoryItemCatalog.DropbotId,
             OutputCount = 1
         },
         new PlayerProfileCraftingRecipe
@@ -506,8 +506,6 @@ public static class PlayerProfileCraftingCatalog
             Inputs = new[]
             {
                 InventoryItemCatalog.SpaceTruckWreckId,
-                InventoryItemCatalog.AsteroidGoldId,
-                InventoryItemCatalog.AsteroidGoldId,
                 InventoryItemCatalog.AsteroidGoldId
             },
             OutputItemId = InventoryItemCatalog.ShieldReactorId,
@@ -519,8 +517,6 @@ public static class PlayerProfileCraftingCatalog
             Inputs = new[]
             {
                 InventoryItemCatalog.SpaceMineWreckId,
-                InventoryItemCatalog.NeutralFighterSalvageId,
-                InventoryItemCatalog.AsteroidRareId,
                 InventoryItemCatalog.SpaceJunkStandardId
             },
             OutputItemId = InventoryItemCatalog.KineticDampenerId,
@@ -532,9 +528,7 @@ public static class PlayerProfileCraftingCatalog
             Inputs = new[]
             {
                 InventoryItemCatalog.ShieldReactorId,
-                InventoryItemCatalog.RadarShipSalvageId,
-                InventoryItemCatalog.RichAsteroidId,
-                InventoryItemCatalog.AsteroidRareId
+                InventoryItemCatalog.RadarShipSalvageId
             },
             OutputItemId = InventoryItemCatalog.PhaseShieldId,
             OutputCount = 1
@@ -545,9 +539,7 @@ public static class PlayerProfileCraftingCatalog
             Inputs = new[]
             {
                 InventoryItemCatalog.SpaceTruckWreckId,
-                InventoryItemCatalog.SpaceJunkStandardId,
-                InventoryItemCatalog.AsteroidGoldId,
-                InventoryItemCatalog.AsteroidRareId
+                InventoryItemCatalog.SpaceJunkStandardId
             },
             OutputItemId = InventoryItemCatalog.CargoBayExtensionId,
             OutputCount = 1
@@ -558,11 +550,66 @@ public static class PlayerProfileCraftingCatalog
             Inputs = new[]
             {
                 InventoryItemCatalog.RescueShipSalvageId,
-                InventoryItemCatalog.SpaceTruckWreckId,
-                InventoryItemCatalog.AsteroidEpicId,
-                InventoryItemCatalog.SpaceJunkStandardId
+                InventoryItemCatalog.AsteroidRareId
             },
             OutputItemId = InventoryItemCatalog.StrongPlatingId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "shield_capacitor_from_battery_core",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.BatteryId,
+                InventoryItemCatalog.AsteroidGoldId
+            },
+            OutputItemId = InventoryItemCatalog.ShieldCapacitorId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "aegis_battery_from_reactor",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.BatteryId,
+                InventoryItemCatalog.ShieldReactorId
+            },
+            OutputItemId = InventoryItemCatalog.AegisBatteryId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "regenerative_shield_matrix_from_radar",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.BatteryId,
+                InventoryItemCatalog.RadarShipSalvageId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.RegenerativeShieldMatrixId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "bulwark_projector_from_plating",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.StrongPlatingId,
+                InventoryItemCatalog.ShieldCapacitorId
+            },
+            OutputItemId = InventoryItemCatalog.BulwarkProjectorId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "alien_aegis_core_from_remains",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceAnimalRemainsId,
+                InventoryItemCatalog.ShieldReactorId,
+                InventoryItemCatalog.AsteroidEpicId
+            },
+            OutputItemId = InventoryItemCatalog.AlienAegisCoreId,
             OutputCount = 1
         }
     };

@@ -23,6 +23,11 @@ public sealed class BulletImpactVfx : MonoBehaviour
     int sortingLayerId;
     int sortingOrder;
 
+    public static void Prewarm()
+    {
+        GetSharedLineMaterial();
+    }
+
     public static void Spawn(string effectId, Vector3 position, Vector2 direction, float scale)
     {
         GameObject root = new GameObject("BulletImpactVfx_" + (string.IsNullOrWhiteSpace(effectId) ? "default" : effectId));

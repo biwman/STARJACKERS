@@ -50,9 +50,17 @@ public class PlayerProfilePanelUI : MonoBehaviour
     {
         None,
         IronJoe,
-        MrGadget,
+        MissGadget,
         DirtySam,
         MissEnigma
+    }
+
+    enum ShopSortMode
+    {
+        Alphabetical,
+        Price,
+        Type,
+        Rarity
     }
 
     enum PlayerInventoryFilterMode
@@ -124,6 +132,22 @@ public class PlayerProfilePanelUI : MonoBehaviour
         public ShopCardView Right;
     }
 
+    sealed class ShopOfferViewModel
+    {
+        public InventoryItemDefinition Definition;
+        public int Price;
+        public bool CanAfford;
+    }
+
+    sealed class MissEnigmaOfferViewModel
+    {
+        public BlueprintTradeOffer Offer;
+        public bool CanAfford;
+        public InventoryItemDefinition BlueprintDefinition;
+        public InventoryItemDefinition TargetDefinition;
+        public int EstimatedTradeValue;
+    }
+
     sealed class MissEnigmaCardView
     {
         public GameObject Root;
@@ -165,28 +189,38 @@ public class PlayerProfilePanelUI : MonoBehaviour
         ShipType.Viper,
         ShipType.Avenger,
         ShipType.Arrow,
-        ShipType.Invader
+        ShipType.Invader,
+        ShipType.CargoTruck
     };
 
     static readonly Vector2 ShipPreviewImagePosition = new Vector2(0f, 22f);
     static readonly Vector2 PlayerInventoryGridPosition = new Vector2(-938f, -578f);
     static readonly Vector2 PlayerInventoryViewportSize = new Vector2(830f, 362f);
+    static readonly Vector2 PlayerInventoryFilterButtonSize = new Vector2(206f, 56f);
+    static readonly Vector2 PlayerInventoryExtendButtonSize = new Vector2(172f, 56f);
     const int PlayerInventoryGridColumns = 6;
     const float InventoryUtilityButtonLift = 24f;
     const float InventoryExtendButtonLeftShift = 24f;
+    const float PlayerInventoryUtilityButtonFontSize = 18f;
     const float InventoryDropTargetPadding = 28f;
     static readonly Vector2[] EquipmentSlotLayoutPositions =
     {
-        new Vector2(-258f, -22f),
-        new Vector2(258f, -22f),
-        new Vector2(-258f, -138f),
-        new Vector2(258f, -138f),
-        new Vector2(-58f, -268f),
-        new Vector2(58f, -268f),
-        new Vector2(-258f, -254f),
-        new Vector2(258f, -254f)
+        new Vector2(-520f, -28f),
+        new Vector2(-386f, -28f),
+        new Vector2(-520f, -144f),
+        new Vector2(-386f, -144f),
+        new Vector2(-520f, -260f),
+        new Vector2(-386f, -260f),
+        new Vector2(-520f, -608f),
+        new Vector2(-386f, -608f),
+        new Vector2(-520f, -376f),
+        new Vector2(-386f, -376f),
+        new Vector2(-520f, -492f),
+        new Vector2(-386f, -492f)
     };
     const float EquipmentSlotPreviewSize = 104f;
+    const float EquipmentSlotPreviewIconSize = 88f;
+    const float EquipmentSlotPreviewFontSize = 17f;
     static readonly string[] ShipStatLabels =
     {
         "HP",
@@ -198,6 +232,31 @@ public class PlayerProfilePanelUI : MonoBehaviour
         "CARGO",
         "SAFE"
     };
+    static readonly Vector2 PilotSelectionLeftPosition = new Vector2(-560f, -190f);
+    static readonly Vector2 PilotSelectionCenterPosition = new Vector2(0f, -162f);
+    static readonly Vector2 PilotSelectionRightPosition = new Vector2(560f, -190f);
+    static readonly Vector2 PilotSelectionSideSize = new Vector2(440f, 540f);
+    static readonly Vector2 PilotSelectionCenterSize = new Vector2(560f, 620f);
+    static readonly Vector2 PilotSelectionSideImageOffsetMin = new Vector2(18f, 50f);
+    static readonly Vector2 PilotSelectionSideImageOffsetMax = new Vector2(-18f, -24f);
+    static readonly Vector2 PilotSelectionCenterImageOffsetMin = new Vector2(22f, 58f);
+    static readonly Vector2 PilotSelectionCenterImageOffsetMax = new Vector2(-22f, -28f);
+    static readonly Vector2 ShipSelectionLeftPosition = new Vector2(-590f, -88f);
+    static readonly Vector2 ShipSelectionCenterPosition = new Vector2(0f, -72f);
+    static readonly Vector2 ShipSelectionRightPosition = new Vector2(590f, -88f);
+    static readonly Vector2 ShipSelectionSideSize = new Vector2(640f, 800f);
+    static readonly Vector2 ShipSelectionCenterSize = new Vector2(920f, 920f);
+    static readonly Vector2 ShipSelectionSideImagePosition = new Vector2(30f, -48f);
+    static readonly Vector2 ShipSelectionCenterImagePosition = new Vector2(48f, -64f);
+    static readonly Vector2 ShipSelectionSideImageSize = new Vector2(470f, 540f);
+    static readonly Vector2 ShipSelectionCenterImageSize = new Vector2(680f, 760f);
+    const float SelectionCarouselSnapDuration = 0.16f;
+    const float SelectionCarouselAxisThreshold = 12f;
+    const float SelectionCarouselClickCancelThreshold = 18f;
+    const float SelectionCarouselSnapThreshold = 0.32f;
+    const float SelectionCarouselEdgeResistance = 0.32f;
+    const float SelectionCarouselMaxOffset = 1.08f;
+    const int SelectionCarouselClickSuppressFrames = 2;
 
     static readonly TraderDefinition[] TraderDefinitions =
     {
@@ -209,8 +268,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
             "Assets/military_trader.png",
             true),
         new TraderDefinition(
-            TraderShopKind.MrGadget,
-            "MR GADGET",
+            TraderShopKind.MissGadget,
+            "MISS GADGET",
             "UI/Traders/gadget_trader",
             "Assets/Resources/UI/Traders/gadget_trader.png",
             "Assets/gadget_trader.png",
@@ -224,7 +283,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             false),
         new TraderDefinition(
             TraderShopKind.MissEnigma,
-            "MISS ENIGMA",
+            "ENIGMA",
             "UI/Traders/exotic_trader",
             "Assets/Resources/UI/Traders/exotic_trader.png",
             "Assets/exotic_trader.png",
@@ -328,6 +387,11 @@ public class PlayerProfilePanelUI : MonoBehaviour
     GameObject craftingBlueprintBrowserObject;
     ScrollRect craftingBlueprintScrollRect;
     RectTransform craftingBlueprintContentRect;
+    RectTransform craftingBlueprintBrowserPanelRect;
+    RectTransform craftingBlueprintViewportRect;
+    RectTransform craftingBlueprintScrollbarRect;
+    GridLayoutGroup craftingBlueprintGridLayout;
+    TMP_Text craftingBlueprintTitleText;
     Button craftingBlueprintCloseButton;
     readonly List<GameObject> craftingRecipeRowObjects = new List<GameObject>();
     readonly List<Button> craftingRecipeResultButtons = new List<Button>();
@@ -343,12 +407,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
     RectTransform shopContentRect;
     TMP_Text shopAstronsText;
     Button shopCloseButton;
+    Button shopSortButton;
     readonly List<GameObject> shopRowObjects = new List<GameObject>();
     readonly List<ShopRowView> shopRowPool = new List<ShopRowView>();
     readonly List<MissEnigmaRowView> missEnigmaShopRowPool = new List<MissEnigmaRowView>();
     GameObject missEnigmaEmptyRowObject;
     TMP_Text missEnigmaEmptyText;
     TraderShopKind selectedTraderShop = TraderShopKind.None;
+    readonly Dictionary<TraderShopKind, ShopSortMode> shopSortModesByTrader = new Dictionary<TraderShopKind, ShopSortMode>();
     readonly Dictionary<TraderShopKind, Button> traderButtonsByKind = new Dictionary<TraderShopKind, Button>();
     readonly Dictionary<TraderShopKind, Image> traderCardImagesByKind = new Dictionary<TraderShopKind, Image>();
     readonly Dictionary<TraderShopKind, Outline> traderOutlinesByKind = new Dictionary<TraderShopKind, Outline>();
@@ -360,6 +426,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
     Button cheatAddXpButton;
     Button cheatUnlockBlueprintsButton;
     Button cheatLockBlueprintsButton;
+    Button cheatUnlockMapsButton;
+    Button cheatLockMapsButton;
     Button cheatResetAccountButton;
     Button cheatCloseButton;
     GameObject cheatResetConfirmObject;
@@ -410,6 +478,17 @@ public class PlayerProfilePanelUI : MonoBehaviour
     int shipSelectionCenterIndex;
     ShipType shipSelectionCenterType = ShipType.Explorer;
     readonly Dictionary<ShipType, int> shipSelectionSkinByType = new Dictionary<ShipType, int>();
+    bool shipSelectionDragActive;
+    bool shipSelectionDragHorizontal;
+    Vector2 shipSelectionDragStartLocal;
+    float shipSelectionDragStartOffset;
+    float shipSelectionVisualOffset;
+    bool shipSelectionSnapActive;
+    float shipSelectionSnapElapsed;
+    float shipSelectionSnapStartOffset;
+    float shipSelectionSnapTargetOffset;
+    int shipSelectionSnapIndexDelta;
+    int shipSelectionSuppressClickUntilFrame;
     GameObject pilotPortraitRootObject;
     Button pilotPortraitButton;
     Image pilotPortraitImage;
@@ -431,6 +510,17 @@ public class PlayerProfilePanelUI : MonoBehaviour
     TMP_Text[] pilotSelectionCardLockTexts;
     int pilotSelectionCenterIndex;
     string selectedPilotId = PilotCatalog.JakeId;
+    bool pilotSelectionDragActive;
+    bool pilotSelectionDragHorizontal;
+    Vector2 pilotSelectionDragStartLocal;
+    float pilotSelectionDragStartOffset;
+    float pilotSelectionVisualOffset;
+    bool pilotSelectionSnapActive;
+    float pilotSelectionSnapElapsed;
+    float pilotSelectionSnapStartOffset;
+    float pilotSelectionSnapTargetOffset;
+    int pilotSelectionSnapIndexDelta;
+    int pilotSelectionSuppressClickUntilFrame;
     readonly Dictionary<string, Sprite> spriteCacheByResourcePath = new Dictionary<string, Sprite>(StringComparer.Ordinal);
     readonly HashSet<string> missingSpriteResources = new HashSet<string>(StringComparer.Ordinal);
     readonly Dictionary<string, Sprite> grayscalePilotPortraitCache = new Dictionary<string, Sprite>(StringComparer.Ordinal);
@@ -616,6 +706,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             RefreshShipSelectionView();
         if (currentScreen == ProfileScreen.PilotSelection && pilotSelectionDirty)
             RefreshPilotSelectionView();
+        UpdateSelectionCarouselAnimations();
         if (currentScreen == ProfileScreen.Projects && projectsDirty)
             RefreshProjectsView();
         if (currentScreen == ProfileScreen.ProjectDetails && projectDetailsDirty)
@@ -624,7 +715,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     bool IsSplashShowing()
     {
-        return splashScreenObject != null && splashHideTime > 0f && Time.unscaledTime < splashHideTime;
+        bool profileLoading = PlayerProfileService.HasInstance && !PlayerProfileService.Instance.IsInitialized;
+        return splashScreenObject != null && (profileLoading || splashHideTime > 0f && Time.unscaledTime < splashHideTime);
     }
 
     void MarkAllProfileUiDirty()
@@ -753,25 +845,29 @@ public class PlayerProfilePanelUI : MonoBehaviour
         shipTypeLabelText = CreateText(panelObject.transform, "ShipTypeLabel", "SHIP", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-304f, -176f), new Vector2(260f, 24f), 18f, TextAlignmentOptions.Left);
 
         shipTypeButtons = new Button[SelectableShipTypes.Length];
-        shipTypeButtons[0] = CreateButton(panelObject.transform, "ExplorerShipButton", "EXPLORER", new Vector2(356f, -204f), new Vector2(136f, 40f), () =>
+        shipTypeButtons[0] = CreateButton(panelObject.transform, "ExplorerShipButton", "EXPLORER", new Vector2(326f, -204f), new Vector2(122f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Explorer);
         });
-        shipTypeButtons[1] = CreateButton(panelObject.transform, "ViperShipButton", "VIPER", new Vector2(490f, -204f), new Vector2(126f, 40f), () =>
+        shipTypeButtons[1] = CreateButton(panelObject.transform, "ViperShipButton", "VIPER", new Vector2(448f, -204f), new Vector2(112f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Viper);
         });
-        shipTypeButtons[2] = CreateButton(panelObject.transform, "AvengerShipButton", "AVENGER", new Vector2(630f, -204f), new Vector2(126f, 40f), () =>
+        shipTypeButtons[2] = CreateButton(panelObject.transform, "AvengerShipButton", "AVENGER", new Vector2(570f, -204f), new Vector2(112f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Avenger);
         });
-        shipTypeButtons[3] = CreateButton(panelObject.transform, "ArrowShipButton", "ARROW", new Vector2(770f, -204f), new Vector2(126f, 40f), () =>
+        shipTypeButtons[3] = CreateButton(panelObject.transform, "ArrowShipButton", "ARROW", new Vector2(692f, -204f), new Vector2(112f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Arrow);
         });
-        shipTypeButtons[4] = CreateButton(panelObject.transform, "InvaderShipButton", "INVADER", new Vector2(910f, -204f), new Vector2(126f, 40f), () =>
+        shipTypeButtons[4] = CreateButton(panelObject.transform, "InvaderShipButton", "INVADER", new Vector2(814f, -204f), new Vector2(112f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Invader);
+        });
+        shipTypeButtons[5] = CreateButton(panelObject.transform, "CargoTruckShipButton", "BISON", new Vector2(936f, -204f), new Vector2(112f, 40f), () =>
+        {
+            SetSelectedShipType(ShipType.CargoTruck);
         });
 
         shipSkinLabelText = CreateText(panelObject.transform, "SkinLabel", "SHIP SKIN", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-304f, -256f), new Vector2(300f, 24f), 18f, TextAlignmentOptions.Left);
@@ -799,15 +895,15 @@ public class PlayerProfilePanelUI : MonoBehaviour
         shipInventoryUnloadButton = CreateButton(panelObject.transform, "ShipInventoryUnloadButton", "UNLOAD", new Vector2(-278f, -222f + InventoryUtilityButtonLift), new Vector2(128f, 36f), OnShipInventoryUnloadClicked);
         ConfigureNoBlinkInventoryActionButton(shipInventoryUnloadButton);
         StyleCompactBackLikeButton(shipInventoryUnloadButton);
-        CreateInventoryGrid(panelObject.transform, false, new Vector2(-878f, -254f), 10, 5, out shipInventoryButtons, out shipInventoryTexts, out shipInventoryIcons);
+        CreateInventoryGrid(panelObject.transform, false, new Vector2(-878f, -254f), PlayerInventoryData.ShipSlotCount, 5, out shipInventoryButtons, out shipInventoryTexts, out shipInventoryIcons);
 
         playerInventoryLabelText = CreateText(panelObject.transform, "PlayerInventoryLabel", "PLAYER INVENTORY (" + GetPlayerInventorySlotCount() + ")", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-574f, -546f), new Vector2(430f, 24f), 18f, TextAlignmentOptions.Center);
-        playerInventoryFilterButton = CreateButton(panelObject.transform, "PlayerInventoryFilterButton", "ALL", new Vector2(-902f, -542f + InventoryUtilityButtonLift), new Vector2(166f, 42f), OnPlayerInventoryFilterClicked);
+        playerInventoryFilterButton = CreateButton(panelObject.transform, "PlayerInventoryFilterButton", "ALL", new Vector2(-902f, -542f + InventoryUtilityButtonLift), PlayerInventoryFilterButtonSize, OnPlayerInventoryFilterClicked);
         ConfigureNoBlinkInventoryActionButton(playerInventoryFilterButton);
-        StyleCompactBackLikeButton(playerInventoryFilterButton);
-        playerInventoryExtendButton = CreateButton(panelObject.transform, "PlayerInventoryExtendButton", "EXTEND", new Vector2(-278f - InventoryExtendButtonLeftShift, -542f + InventoryUtilityButtonLift), new Vector2(132f, 42f), OnPlayerInventoryExtendClicked);
+        StylePlayerInventoryUtilityButton(playerInventoryFilterButton);
+        playerInventoryExtendButton = CreateButton(panelObject.transform, "PlayerInventoryExtendButton", "EXTEND", new Vector2(-278f - InventoryExtendButtonLeftShift, -542f + InventoryUtilityButtonLift), PlayerInventoryExtendButtonSize, OnPlayerInventoryExtendClicked);
         ConfigureNoBlinkInventoryActionButton(playerInventoryExtendButton);
-        StyleCompactBackLikeButton(playerInventoryExtendButton);
+        StylePlayerInventoryUtilityButton(playerInventoryExtendButton);
         RebuildPlayerInventoryGrid(GetPlayerInventorySlotCount());
 
         CreateItemPreview(panelObject.transform);
@@ -1137,8 +1233,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 return definition.Category == InventoryItemCategory.Weapon ||
                     definition.Category == InventoryItemCategory.Shield ||
                     definition.Category == InventoryItemCategory.Engine;
-            case TraderShopKind.MrGadget:
-                return definition.Category == InventoryItemCategory.Gadget;
+            case TraderShopKind.MissGadget:
+                return definition.Category == InventoryItemCategory.Gadget ||
+                    definition.Category == InventoryItemCategory.Support ||
+                    definition.Category == InventoryItemCategory.Rescue;
             default:
                 return false;
         }
@@ -1542,11 +1640,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
         ProfilePilotSelectionSwipeHandler swipeHandler = pilotSelectionViewObject.AddComponent<ProfilePilotSelectionSwipeHandler>();
         swipeHandler.owner = this;
 
-        pilotSelectionBackButton = CreateButton(pilotSelectionViewObject.transform, "PilotSelectionBackButton", "BACK", new Vector2(-806f, -46f), new Vector2(214f, 62f), () =>
+        pilotSelectionBackButton = CreateButton(pilotSelectionViewObject.transform, "PilotSelectionBackButton", "BACK", new Vector2(-116f, -106f), new Vector2(216f, 62f), () =>
         {
             SwitchToScreen(ProfileScreen.Home);
         });
         StyleButton(pilotSelectionBackButton, new Color(0.14f, 0.19f, 0.28f, 0.98f), new Color(0.22f, 0.3f, 0.42f, 1f));
+        pilotSelectionBackButton.gameObject.SetActive(false);
 
         pilotSelectionTitleText = CreateText(pilotSelectionViewObject.transform, "PilotSelectionTitle", "JAKE", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -118f), new Vector2(720f, 56f), 42f, TextAlignmentOptions.Center);
         pilotSelectionTitleText.raycastTarget = false;
@@ -1621,6 +1720,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
         int capturedCardIndex = cardIndex;
         button.onClick.AddListener(() =>
         {
+            if (ConsumePilotSelectionClickSuppression())
+                return;
+
             AudioManager.Instance?.PlayClick();
             OnPilotSelectionCardClicked(capturedCardIndex);
         });
@@ -1673,6 +1775,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
         int capturedCardIndex = cardIndex;
         button.onClick.AddListener(() =>
         {
+            if (ConsumeShipSelectionClickSuppression())
+                return;
+
             AudioManager.Instance?.PlayClick();
             OnShipSelectionCardClicked(capturedCardIndex);
         });
@@ -1699,22 +1804,26 @@ public class PlayerProfilePanelUI : MonoBehaviour
         Vector2[] slotLayout = BuildShipSelectionSlotLayout(centerCard);
         for (int i = 0; i < slotObjects.Length; i++)
         {
-            GameObject slot = new GameObject("Slot" + i, typeof(RectTransform), typeof(Image));
+            GameObject slot = new GameObject("Slot" + i, typeof(RectTransform), typeof(Image), typeof(Outline));
             slot.transform.SetParent(card.transform, false);
             RectTransform slotRect = slot.GetComponent<RectTransform>();
             slotRect.anchorMin = new Vector2(0.5f, 0.5f);
             slotRect.anchorMax = new Vector2(0.5f, 0.5f);
             slotRect.pivot = new Vector2(0.5f, 0.5f);
             slotRect.anchoredPosition = slotLayout[i];
-            slotRect.sizeDelta = centerCard ? new Vector2(82f, 82f) : new Vector2(64f, 64f);
+            slotRect.sizeDelta = GetShipSelectionSlotSize(centerCard);
             Image slotImage = slot.GetComponent<Image>();
-            slotImage.color = new Color(0.18f, 0.24f, 0.31f, 0.92f);
+            slotImage.color = GetShipSelectionSlotColor(i);
             slotImage.raycastTarget = false;
-            TMP_Text slotText = CreateText(slot.transform, "SlotText", GetShipSelectionSlotLabel(i), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, centerCard ? 9f : 8f, TextAlignmentOptions.Center);
-            slotText.textWrappingMode = TextWrappingModes.Normal;
-            slotText.margin = new Vector4(4f, 4f, 4f, 4f);
-            slotText.enableAutoSizing = false;
-            slotText.fontSize = centerCard ? 9f : 8f;
+            Outline outline = slot.GetComponent<Outline>();
+            if (outline != null)
+            {
+                outline.effectColor = GetShipSelectionSlotOutlineColor(i);
+                outline.effectDistance = new Vector2(2.2f, -2.2f);
+            }
+
+            TMP_Text slotText = CreateText(slot.transform, "SlotText", GetShipSelectionSlotLabel(i), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, EquipmentSlotPreviewFontSize, TextAlignmentOptions.Center);
+            ApplyEquipmentSlotPreviewTextStyle(slotText);
             slotText.raycastTarget = false;
             RectTransform slotTextRect = slotText.rectTransform;
             slotTextRect.anchorMin = Vector2.zero;
@@ -1733,18 +1842,26 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     Vector2[] BuildShipSelectionSlotLayout(bool centerCard)
     {
-        float leftColumnX = centerCard ? -324f : -244f;
-        float rightColumnX = centerCard ? -216f : -164f;
-        float topY = centerCard ? 236f : 190f;
-        float rowSpacing = centerCard ? 126f : 98f;
+        return BuildShipSelectionSlotLayout(centerCard ? 1f : 0f);
+    }
+
+    Vector2[] BuildShipSelectionSlotLayout(float centerAmount)
+    {
+        centerAmount = Mathf.Clamp01(centerAmount);
+        float leftColumnX = Mathf.Lerp(-250f, -346f, centerAmount);
+        float rightColumnX = Mathf.Lerp(-130f, -208f, centerAmount);
+        float topY = Mathf.Lerp(252f, 300f, centerAmount);
+        float rowSpacing = EquipmentSlotPreviewSize + 12f;
 
         Vector2[] result = new Vector2[PlayerInventoryData.EquipmentSlotCount];
         int[][] rowOrder =
         {
             new[] { 0, 1 },
             new[] { 2, 3 },
-            new[] { 6, 7 },
-            new[] { 4, 5 }
+            new[] { 4, 5 },
+            new[] { 8, 9 },
+            new[] { 10, 11 },
+            new[] { 6, 7 }
         };
 
         for (int row = 0; row < rowOrder.Length; row++)
@@ -1759,15 +1876,51 @@ public class PlayerProfilePanelUI : MonoBehaviour
         return result;
     }
 
+    Vector2 GetShipSelectionSlotSize(bool centerCard)
+    {
+        float size = EquipmentSlotPreviewSize;
+        return new Vector2(size, size);
+    }
+
     string GetShipSelectionSlotLabel(int slotIndex)
     {
         return slotIndex switch
         {
-            0 or 1 => "GUN",
-            2 or 3 => "SHLD",
-            4 or 5 => "ENG",
-            6 or 7 => "GAD",
+            0 or 1 => "MAIN GUN",
+            2 or 3 => "SHIELD",
+            4 or 5 => "ENGINE",
+            6 or 7 => "GADGET",
+            8 or 9 => "SUPPORT",
+            10 or 11 => "RESCUE",
             _ => "SLOT"
+        };
+    }
+
+    Color GetShipSelectionSlotColor(int slotIndex)
+    {
+        return InventoryItemCatalog.GetEquipmentSlotCategory(slotIndex) switch
+        {
+            InventoryItemCategory.Weapon => new Color(0.19f, 0.22f, 0.34f, 0.96f),
+            InventoryItemCategory.Shield => new Color(0.17f, 0.29f, 0.28f, 0.96f),
+            InventoryItemCategory.Engine => new Color(0.24f, 0.29f, 0.18f, 0.96f),
+            InventoryItemCategory.Support => new Color(0.13f, 0.31f, 0.32f, 0.96f),
+            InventoryItemCategory.Rescue => new Color(0.34f, 0.19f, 0.2f, 0.96f),
+            InventoryItemCategory.Gadget => new Color(0.24f, 0.21f, 0.31f, 0.96f),
+            _ => new Color(0.17f, 0.22f, 0.28f, 0.96f)
+        };
+    }
+
+    Color GetShipSelectionSlotOutlineColor(int slotIndex)
+    {
+        return InventoryItemCatalog.GetEquipmentSlotCategory(slotIndex) switch
+        {
+            InventoryItemCategory.Weapon => new Color(0.5f, 0.56f, 0.78f, 0.9f),
+            InventoryItemCategory.Shield => new Color(0.43f, 0.68f, 0.64f, 0.9f),
+            InventoryItemCategory.Engine => new Color(0.62f, 0.7f, 0.42f, 0.9f),
+            InventoryItemCategory.Support => new Color(0.34f, 0.72f, 0.7f, 0.9f),
+            InventoryItemCategory.Rescue => new Color(0.74f, 0.45f, 0.46f, 0.9f),
+            InventoryItemCategory.Gadget => new Color(0.61f, 0.51f, 0.72f, 0.9f),
+            _ => new Color(0.55f, 0.63f, 0.7f, 0.82f)
         };
     }
 
@@ -1888,6 +2041,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
         equipmentSlotButtons[5] = CreateEquipmentSlotButton(previewRoot.transform, "EngineB", Vector2.zero, 5, "ENGINE", out equipmentSlotPreviewTexts[5], out equipmentSlotPreviewIcons[5]);
         equipmentSlotButtons[6] = CreateEquipmentSlotButton(previewRoot.transform, "GadgetA", Vector2.zero, 6, "GADGET", out equipmentSlotPreviewTexts[6], out equipmentSlotPreviewIcons[6]);
         equipmentSlotButtons[7] = CreateEquipmentSlotButton(previewRoot.transform, "GadgetB", Vector2.zero, 7, "GADGET", out equipmentSlotPreviewTexts[7], out equipmentSlotPreviewIcons[7]);
+        equipmentSlotButtons[8] = CreateEquipmentSlotButton(previewRoot.transform, "SupportA", Vector2.zero, 8, "SUPPORT", out equipmentSlotPreviewTexts[8], out equipmentSlotPreviewIcons[8]);
+        equipmentSlotButtons[9] = CreateEquipmentSlotButton(previewRoot.transform, "SupportB", Vector2.zero, 9, "SUPPORT", out equipmentSlotPreviewTexts[9], out equipmentSlotPreviewIcons[9]);
+        equipmentSlotButtons[10] = CreateEquipmentSlotButton(previewRoot.transform, "RescueA", Vector2.zero, 10, "RESCUE", out equipmentSlotPreviewTexts[10], out equipmentSlotPreviewIcons[10]);
+        equipmentSlotButtons[11] = CreateEquipmentSlotButton(previewRoot.transform, "RescueB", Vector2.zero, 11, "RESCUE", out equipmentSlotPreviewTexts[11], out equipmentSlotPreviewIcons[11]);
 
         for (int i = 0; i < equipmentSlotButtons.Length; i++)
         {
@@ -2577,10 +2734,11 @@ public class PlayerProfilePanelUI : MonoBehaviour
         GameObject panel = new GameObject("CraftingBlueprintBrowserPanel", typeof(RectTransform), typeof(Image));
         panel.transform.SetParent(craftingBlueprintBrowserObject.transform, false);
         RectTransform panelRect = panel.GetComponent<RectTransform>();
+        craftingBlueprintBrowserPanelRect = panelRect;
         panelRect.anchorMin = new Vector2(0.5f, 0.5f);
         panelRect.anchorMax = new Vector2(0.5f, 0.5f);
         panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.anchoredPosition = new Vector2(44f, -8f);
+        panelRect.anchoredPosition = Vector2.zero;
         panelRect.sizeDelta = new Vector2(1800f, 1080f);
 
         Image panelImage = panel.GetComponent<Image>();
@@ -2590,8 +2748,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         panelOutline.effectColor = new Color(0.45f, 0.58f, 0.74f, 0.62f);
         panelOutline.effectDistance = new Vector2(4f, -4f);
 
-        TMP_Text title = CreateText(panel.transform, "CraftingBlueprintBrowserTitle", "BLUEPRINTS", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -76f), new Vector2(520f, 44f), 32f, TextAlignmentOptions.Center);
-        title.characterSpacing = 2f;
+        craftingBlueprintTitleText = CreateText(panel.transform, "CraftingBlueprintBrowserTitle", "BLUEPRINTS 0/0", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -76f), new Vector2(520f, 44f), 32f, TextAlignmentOptions.Center);
+        craftingBlueprintTitleText.characterSpacing = 2f;
 
         craftingBlueprintCloseButton = CreateButton(panel.transform, "CraftingBlueprintCloseButton", "CLOSE", new Vector2(650f, -62f), new Vector2(260f, 70f), HideCraftingBlueprintBrowser);
         StyleCompactBackLikeButton(craftingBlueprintCloseButton);
@@ -2605,6 +2763,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         GameObject viewportObject = new GameObject("CraftingBlueprintViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
         viewportObject.transform.SetParent(panel.transform, false);
         RectTransform viewportRect = viewportObject.GetComponent<RectTransform>();
+        craftingBlueprintViewportRect = viewportRect;
         viewportRect.anchorMin = new Vector2(0.5f, 0.5f);
         viewportRect.anchorMax = new Vector2(0.5f, 0.5f);
         viewportRect.pivot = new Vector2(0.5f, 0.5f);
@@ -2624,6 +2783,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         craftingBlueprintContentRect.sizeDelta = Vector2.zero;
 
         GridLayoutGroup layout = contentObject.GetComponent<GridLayoutGroup>();
+        craftingBlueprintGridLayout = layout;
         layout.padding = new RectOffset(14, 14, 14, 14);
         layout.spacing = new Vector2(12f, 12f);
         layout.cellSize = new Vector2(520f, 480f);
@@ -2638,6 +2798,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         GameObject scrollbarObject = new GameObject("CraftingBlueprintScrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
         scrollbarObject.transform.SetParent(panel.transform, false);
         RectTransform scrollbarRect = scrollbarObject.GetComponent<RectTransform>();
+        craftingBlueprintScrollbarRect = scrollbarRect;
         scrollbarRect.anchorMin = new Vector2(0.5f, 0.5f);
         scrollbarRect.anchorMax = new Vector2(0.5f, 0.5f);
         scrollbarRect.pivot = new Vector2(0.5f, 0.5f);
@@ -2681,7 +2842,126 @@ public class PlayerProfilePanelUI : MonoBehaviour
         craftingBlueprintScrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
         craftingBlueprintScrollRect.scrollSensitivity = 30f;
 
+        LayoutCraftingBlueprintBrowser();
         craftingBlueprintBrowserObject.SetActive(false);
+    }
+
+    void LayoutCraftingBlueprintBrowser()
+    {
+        if (craftingBlueprintBrowserObject == null || craftingBlueprintBrowserPanelRect == null)
+            return;
+
+        float availableWidth = 1920f;
+        float availableHeight = 1080f;
+        RectTransform overlayRect = craftingBlueprintBrowserObject.GetComponent<RectTransform>();
+        if (overlayRect != null && overlayRect.rect.width > 1f && overlayRect.rect.height > 1f)
+        {
+            availableWidth = overlayRect.rect.width;
+            availableHeight = overlayRect.rect.height;
+        }
+        else if (panelObject != null)
+        {
+            RectTransform panelRect = panelObject.GetComponent<RectTransform>();
+            if (panelRect != null && panelRect.rect.width > 1f && panelRect.rect.height > 1f)
+            {
+                availableWidth = panelRect.rect.width;
+                availableHeight = panelRect.rect.height;
+            }
+        }
+
+        float marginX = Mathf.Clamp(availableWidth * 0.035f, 18f, 54f);
+        float marginY = Mathf.Clamp(availableHeight * 0.035f, 18f, 42f);
+        float panelWidth = Mathf.Min(1800f, Mathf.Max(240f, availableWidth - marginX * 2f));
+        float panelHeight = Mathf.Min(1080f, Mathf.Max(360f, availableHeight - marginY * 2f));
+
+        craftingBlueprintBrowserPanelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        craftingBlueprintBrowserPanelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        craftingBlueprintBrowserPanelRect.pivot = new Vector2(0.5f, 0.5f);
+        craftingBlueprintBrowserPanelRect.anchoredPosition = Vector2.zero;
+        craftingBlueprintBrowserPanelRect.sizeDelta = new Vector2(panelWidth, panelHeight);
+
+        float sidePadding = Mathf.Clamp(panelWidth * 0.045f, 20f, 56f);
+        float topPadding = Mathf.Clamp(panelHeight * 0.13f, 82f, 142f);
+        float bottomPadding = Mathf.Clamp(panelHeight * 0.05f, 22f, 54f);
+        float scrollbarWidth = Mathf.Clamp(panelWidth * 0.035f, 30f, 58f);
+        float gap = Mathf.Clamp(panelWidth * 0.012f, 10f, 18f);
+        float viewportWidth = Mathf.Max(160f, panelWidth - sidePadding * 2f - scrollbarWidth - gap);
+        float viewportHeight = Mathf.Max(140f, panelHeight - topPadding - bottomPadding);
+
+        if (craftingBlueprintTitleText != null)
+        {
+            RectTransform titleRect = craftingBlueprintTitleText.rectTransform;
+            float closeWidth = Mathf.Clamp(panelWidth * 0.2f, 140f, 260f);
+            float titleWidth = Mathf.Min(520f, Mathf.Max(160f, panelWidth - closeWidth - sidePadding * 3f));
+            float titleX = panelWidth < 980f ? -(closeWidth + sidePadding) * 0.22f : 0f;
+            titleRect.anchorMin = new Vector2(0.5f, 1f);
+            titleRect.anchorMax = new Vector2(0.5f, 1f);
+            titleRect.pivot = new Vector2(0.5f, 0.5f);
+            titleRect.anchoredPosition = new Vector2(titleX, -Mathf.Clamp(panelHeight * 0.07f, 34f, 76f));
+            titleRect.sizeDelta = new Vector2(titleWidth, 44f);
+            craftingBlueprintTitleText.enableAutoSizing = true;
+            craftingBlueprintTitleText.fontSizeMin = 20f;
+            craftingBlueprintTitleText.fontSizeMax = 32f;
+        }
+
+        if (craftingBlueprintCloseButton != null)
+        {
+            RectTransform closeRect = craftingBlueprintCloseButton.GetComponent<RectTransform>();
+            if (closeRect != null)
+            {
+                closeRect.anchorMin = new Vector2(1f, 1f);
+                closeRect.anchorMax = new Vector2(1f, 1f);
+                closeRect.pivot = new Vector2(1f, 1f);
+                closeRect.anchoredPosition = new Vector2(-sidePadding, -Mathf.Clamp(panelHeight * 0.035f, 20f, 42f));
+                closeRect.sizeDelta = new Vector2(Mathf.Clamp(panelWidth * 0.2f, 140f, 260f), Mathf.Clamp(panelHeight * 0.065f, 48f, 70f));
+            }
+
+            TMP_Text closeText = craftingBlueprintCloseButton.GetComponentInChildren<TMP_Text>(true);
+            if (closeText != null)
+            {
+                closeText.enableAutoSizing = true;
+                closeText.fontSizeMin = 14f;
+                closeText.fontSizeMax = 20f;
+            }
+        }
+
+        if (craftingBlueprintViewportRect != null)
+        {
+            craftingBlueprintViewportRect.anchorMin = new Vector2(0f, 1f);
+            craftingBlueprintViewportRect.anchorMax = new Vector2(0f, 1f);
+            craftingBlueprintViewportRect.pivot = new Vector2(0f, 1f);
+            craftingBlueprintViewportRect.anchoredPosition = new Vector2(sidePadding, -topPadding);
+            craftingBlueprintViewportRect.sizeDelta = new Vector2(viewportWidth, viewportHeight);
+        }
+
+        if (craftingBlueprintScrollbarRect != null)
+        {
+            craftingBlueprintScrollbarRect.anchorMin = new Vector2(1f, 1f);
+            craftingBlueprintScrollbarRect.anchorMax = new Vector2(1f, 1f);
+            craftingBlueprintScrollbarRect.pivot = new Vector2(1f, 1f);
+            craftingBlueprintScrollbarRect.anchoredPosition = new Vector2(-sidePadding, -topPadding);
+            craftingBlueprintScrollbarRect.sizeDelta = new Vector2(scrollbarWidth, viewportHeight);
+        }
+
+        if (craftingBlueprintGridLayout != null)
+        {
+            int columnCount = viewportWidth >= 1320f ? 3 : viewportWidth >= 760f ? 2 : 1;
+            float gridPadding = Mathf.Clamp(viewportWidth * 0.018f, 10f, 18f);
+            float gridSpacing = Mathf.Clamp(viewportWidth * 0.012f, 8f, 12f);
+            float usableGridWidth = Mathf.Max(1f, viewportWidth - gridPadding * 2f - gridSpacing * (columnCount - 1));
+            float cellWidth = Mathf.Clamp(Mathf.Floor(usableGridWidth / columnCount), 220f, 520f);
+            float cellHeight = Mathf.Clamp(cellWidth * 0.92f, 260f, 480f);
+            int roundedPadding = Mathf.RoundToInt(gridPadding);
+
+            craftingBlueprintGridLayout.padding = new RectOffset(roundedPadding, roundedPadding, roundedPadding, roundedPadding);
+            craftingBlueprintGridLayout.spacing = new Vector2(gridSpacing, gridSpacing);
+            craftingBlueprintGridLayout.cellSize = new Vector2(cellWidth, cellHeight);
+            craftingBlueprintGridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            craftingBlueprintGridLayout.constraintCount = columnCount;
+        }
+
+        foreach (KeyValuePair<string, GameObject> row in craftingBlueprintRowsById)
+            ApplyCraftingBlueprintRowLayout(row.Value);
     }
 
     Button CreateCraftingSlotButton(Transform parent, string objectName, Vector2 anchoredPosition, int slotIndex, out TMP_Text label, out Image icon)
@@ -2757,8 +3037,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
             return;
 
         HideItemPreview();
+        LayoutCraftingBlueprintBrowser();
         RefreshCraftingBlueprintBrowser();
         craftingBlueprintBrowserObject.SetActive(true);
+        LayoutCraftingBlueprintBrowser();
         craftingBlueprintBrowserObject.transform.SetAsLastSibling();
     }
 
@@ -2804,11 +3086,17 @@ public class PlayerProfilePanelUI : MonoBehaviour
             if (craftingBlueprintContentRect == null)
                 return;
 
+            LayoutCraftingBlueprintBrowser();
             ClearCraftingBlueprintRows();
 
             string[] blueprintItemIds = InventoryItemCatalog.GetAllBlueprintItemIds();
+            if (blueprintItemIds == null)
+                blueprintItemIds = Array.Empty<string>();
+
             Array.Sort(blueprintItemIds, CompareBlueprintItemNames);
 
+            int unlockedBlueprintCount = 0;
+            int totalBlueprintCount = 0;
             for (int i = 0; i < blueprintItemIds.Length; i++)
             {
                 string blueprintItemId = blueprintItemIds[i];
@@ -2817,6 +3105,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
                     continue;
 
                 bool unlocked = PlayerProfileService.Instance.IsBlueprintUnlocked(blueprintItemId);
+                totalBlueprintCount++;
+                if (unlocked)
+                    unlockedBlueprintCount++;
+
                 GameObject rowObject = CreateCraftingBlueprintRow(blueprintItemId, targetItemId, unlocked);
                 if (rowObject != null)
                 {
@@ -2826,12 +3118,25 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 }
             }
 
+            UpdateCraftingBlueprintTitle(unlockedBlueprintCount, totalBlueprintCount);
+
             if (craftingBlueprintScrollRect != null)
             {
                 Canvas.ForceUpdateCanvases();
                 craftingBlueprintScrollRect.verticalNormalizedPosition = 1f;
             }
         }
+    }
+
+    void UpdateCraftingBlueprintTitle(int unlockedBlueprintCount, int totalBlueprintCount)
+    {
+        if (craftingBlueprintTitleText == null)
+            return;
+
+        craftingBlueprintTitleText.text = "BLUEPRINTS " +
+                                          Mathf.Max(0, unlockedBlueprintCount) +
+                                          "/" +
+                                          Mathf.Max(0, totalBlueprintCount);
     }
 
     int CompareBlueprintItemNames(string leftBlueprintItemId, string rightBlueprintItemId)
@@ -2858,6 +3163,62 @@ public class PlayerProfilePanelUI : MonoBehaviour
         craftingBlueprintRowObjects.Clear();
     }
 
+    Vector2 GetCraftingBlueprintCellSize()
+    {
+        if (craftingBlueprintGridLayout != null && craftingBlueprintGridLayout.cellSize.x > 1f && craftingBlueprintGridLayout.cellSize.y > 1f)
+            return craftingBlueprintGridLayout.cellSize;
+
+        return new Vector2(520f, 480f);
+    }
+
+    void ApplyCraftingBlueprintRowLayout(GameObject rowObject)
+    {
+        if (rowObject == null)
+            return;
+
+        Vector2 cellSize = GetCraftingBlueprintCellSize();
+
+        RectTransform rowRect = rowObject.GetComponent<RectTransform>();
+        if (rowRect != null)
+            rowRect.sizeDelta = cellSize;
+
+        LayoutElement rowLayout = rowObject.GetComponent<LayoutElement>();
+        if (rowLayout != null)
+        {
+            rowLayout.preferredWidth = cellSize.x;
+            rowLayout.preferredHeight = cellSize.y;
+        }
+
+        float labelHeight = Mathf.Clamp(cellSize.y * 0.105f, 30f, 44f);
+        float iconWidth = Mathf.Max(160f, cellSize.x - 42f);
+        float iconHeight = Mathf.Max(160f, cellSize.y - labelHeight - 18f);
+        float iconSize = Mathf.Clamp(Mathf.Min(iconWidth, iconHeight), 160f, 444f);
+
+        RectTransform iconRect = rowObject.transform.Find("BlueprintIcon")?.GetComponent<RectTransform>();
+        if (iconRect != null)
+        {
+            iconRect.anchorMin = new Vector2(0.5f, 1f);
+            iconRect.anchorMax = new Vector2(0.5f, 1f);
+            iconRect.pivot = new Vector2(0.5f, 1f);
+            iconRect.anchoredPosition = new Vector2(0f, -2f);
+            iconRect.sizeDelta = new Vector2(iconSize, iconSize);
+        }
+
+        TMP_Text nameText = rowObject.transform.Find("BlueprintItemName")?.GetComponent<TMP_Text>();
+        if (nameText != null)
+        {
+            RectTransform nameRect = nameText.rectTransform;
+            nameRect.anchorMin = new Vector2(0.5f, 0f);
+            nameRect.anchorMax = new Vector2(0.5f, 0f);
+            nameRect.pivot = new Vector2(0.5f, 0.5f);
+            nameRect.anchoredPosition = new Vector2(0f, labelHeight * 0.5f);
+            nameRect.sizeDelta = new Vector2(Mathf.Max(160f, cellSize.x - 36f), labelHeight);
+            nameText.enableAutoSizing = true;
+            nameText.fontSizeMin = 12f;
+            nameText.fontSizeMax = Mathf.Clamp(cellSize.x * 0.05f, 16f, 26f);
+        }
+    }
+
     GameObject CreateCraftingBlueprintRow(string blueprintItemId, string targetItemId, bool unlocked)
     {
         if (craftingBlueprintRowsById.TryGetValue(blueprintItemId, out GameObject cachedRow) && cachedRow != null)
@@ -2870,11 +3231,11 @@ public class PlayerProfilePanelUI : MonoBehaviour
         rowObject.transform.SetParent(craftingBlueprintContentRect, false);
 
         RectTransform rowRect = rowObject.GetComponent<RectTransform>();
-        rowRect.sizeDelta = new Vector2(520f, 480f);
+        rowRect.sizeDelta = GetCraftingBlueprintCellSize();
 
         LayoutElement rowLayout = rowObject.GetComponent<LayoutElement>();
-        rowLayout.preferredWidth = 520f;
-        rowLayout.preferredHeight = 480f;
+        rowLayout.preferredWidth = rowRect.sizeDelta.x;
+        rowLayout.preferredHeight = rowRect.sizeDelta.y;
 
         Image rowImage = rowObject.GetComponent<Image>();
         rowImage.color = new Color(0f, 0f, 0f, 0f);
@@ -2890,7 +3251,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         iconRect.sizeDelta = new Vector2(444f, 444f);
 
         Image iconImage = iconObject.GetComponent<Image>();
-        iconImage.sprite = InventoryItemCatalog.GetIcon(blueprintItemId) ?? InventoryItemCatalog.GetIcon(targetItemId);
+        iconImage.sprite = InventoryItemCatalog.GetIcon(blueprintItemId);
+        iconImage.enabled = iconImage.sprite != null;
         iconImage.preserveAspect = true;
         iconImage.raycastTarget = false;
         iconImage.color = unlocked
@@ -2903,6 +3265,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         nameText.enableAutoSizing = true;
         nameText.fontSizeMin = 15f;
         nameText.fontSizeMax = 26f;
+        ApplyCraftingBlueprintRowLayout(rowObject);
         UpdateCraftingBlueprintRow(rowObject, blueprintItemId, targetItemId, unlocked);
 
         craftingBlueprintRowsById[blueprintItemId] = rowObject;
@@ -2914,10 +3277,13 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (rowObject == null)
             return;
 
+        ApplyCraftingBlueprintRowLayout(rowObject);
+
         Image iconImage = rowObject.transform.Find("BlueprintIcon")?.GetComponent<Image>();
         if (iconImage != null)
         {
-            iconImage.sprite = InventoryItemCatalog.GetIcon(blueprintItemId) ?? InventoryItemCatalog.GetIcon(targetItemId);
+            iconImage.sprite = InventoryItemCatalog.GetIcon(blueprintItemId);
+            iconImage.enabled = iconImage.sprite != null;
             iconImage.color = unlocked
                 ? Color.white
                 : new Color(0.38f, 0.38f, 0.38f, 0.9f);
@@ -2965,6 +3331,18 @@ public class PlayerProfilePanelUI : MonoBehaviour
         shopAstronsText = CreateText(panel.transform, "ShopAstronsText", "Astrons: 0", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -76f), new Vector2(440f, 28f), 20f, TextAlignmentOptions.Center);
         shopAstronsText.fontStyle = FontStyles.Normal;
         shopAstronsText.color = new Color(0.94f, 0.84f, 0.44f, 1f);
+
+        shopSortButton = CreateButton(panel.transform, "ShopSortButton", "SORT: A-Z", new Vector2(352f, -68f), new Vector2(246f, 52f), OnShopSortClicked);
+        StyleButton(shopSortButton, new Color(0.14f, 0.19f, 0.28f, 0.98f), new Color(0.22f, 0.3f, 0.42f, 1f));
+        TMP_Text sortText = shopSortButton.GetComponentInChildren<TMP_Text>(true);
+        if (sortText != null)
+        {
+            sortText.fontSize = 18f;
+            sortText.enableAutoSizing = true;
+            sortText.fontSizeMin = 12f;
+            sortText.fontSizeMax = 18f;
+            sortText.margin = new Vector4(10f, 4f, 10f, 4f);
+        }
 
         shopCloseButton = CreateButton(panel.transform, "ShopCloseButton", "CLOSE", new Vector2(0f, -722f), new Vector2(220f, 58f), HideShopBrowser);
         StyleButton(shopCloseButton, new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f));
@@ -3071,6 +3449,68 @@ public class PlayerProfilePanelUI : MonoBehaviour
             shopBrowserObject.SetActive(false);
     }
 
+    void OnShopSortClicked()
+    {
+        if (inventoryActionInProgress || dragInProgress || !TraderOpensShop(selectedTraderShop))
+            return;
+
+        shopSortModesByTrader[selectedTraderShop] = GetNextShopSortMode(GetShopSortMode(selectedTraderShop));
+        HideItemPreview();
+        RefreshShopBrowser();
+    }
+
+    ShopSortMode GetShopSortMode(TraderShopKind traderKind)
+    {
+        if (shopSortModesByTrader.TryGetValue(traderKind, out ShopSortMode mode))
+            return mode;
+
+        return ShopSortMode.Alphabetical;
+    }
+
+    ShopSortMode GetNextShopSortMode(ShopSortMode mode)
+    {
+        switch (mode)
+        {
+            case ShopSortMode.Alphabetical:
+                return ShopSortMode.Price;
+            case ShopSortMode.Price:
+                return ShopSortMode.Type;
+            case ShopSortMode.Type:
+                return ShopSortMode.Rarity;
+            default:
+                return ShopSortMode.Alphabetical;
+        }
+    }
+
+    string GetShopSortLabel(ShopSortMode mode)
+    {
+        switch (mode)
+        {
+            case ShopSortMode.Price:
+                return "PRICE";
+            case ShopSortMode.Type:
+                return "TYPE";
+            case ShopSortMode.Rarity:
+                return "RARITY";
+            default:
+                return "A-Z";
+        }
+    }
+
+    void RefreshShopSortButton()
+    {
+        if (shopSortButton == null)
+            return;
+
+        bool show = TraderOpensShop(selectedTraderShop);
+        shopSortButton.gameObject.SetActive(show);
+        shopSortButton.interactable = show && inventoryControlsInteractable && !inventoryActionInProgress && !dragInProgress;
+
+        TMP_Text text = shopSortButton.GetComponentInChildren<TMP_Text>(true);
+        if (text != null)
+            text.text = "SORT: " + GetShopSortLabel(GetShopSortMode(selectedTraderShop));
+    }
+
     void CreateCheatBrowser(Transform parent)
     {
         cheatBrowserObject = new GameObject("CheatBrowser", typeof(RectTransform), typeof(Image));
@@ -3092,7 +3532,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         panelRect.anchorMax = new Vector2(0.5f, 0.5f);
         panelRect.pivot = new Vector2(0.5f, 0.5f);
         panelRect.anchoredPosition = new Vector2(0f, 6f);
-        panelRect.sizeDelta = new Vector2(620f, 700f);
+        panelRect.sizeDelta = new Vector2(620f, 840f);
 
         Image panelImage = panel.GetComponent<Image>();
         panelImage.color = new Color(0.11f, 0.1f, 0.14f, 0.98f);
@@ -3125,14 +3565,20 @@ public class PlayerProfilePanelUI : MonoBehaviour
         cheatLockBlueprintsButton = CreateButton(panel.transform, "CheatLockBlueprintsButton", "LOCK ALL BLUEPRINTS", new Vector2(0f, -424f), new Vector2(340f, 54f), OnCheatLockBlueprintsClicked);
         StyleButton(cheatLockBlueprintsButton, new Color(0.42f, 0.23f, 0.13f, 1f), new Color(0.58f, 0.34f, 0.18f, 1f));
 
-        cheatResetAccountButton = CreateButton(panel.transform, "CheatResetAccountButton", "RESET ACCOUNT", new Vector2(0f, -492f), new Vector2(260f, 54f), OnCheatResetAccountClicked);
+        cheatUnlockMapsButton = CreateButton(panel.transform, "CheatUnlockMapsButton", "UNLOCK ALL MAPS", new Vector2(0f, -486f), new Vector2(340f, 54f), OnCheatUnlockMapsClicked);
+        StyleButton(cheatUnlockMapsButton, new Color(0.14f, 0.36f, 0.26f, 1f), new Color(0.2f, 0.54f, 0.38f, 1f));
+
+        cheatLockMapsButton = CreateButton(panel.transform, "CheatLockMapsButton", "LOCK ALL MAPS", new Vector2(0f, -548f), new Vector2(340f, 54f), OnCheatLockMapsClicked);
+        StyleButton(cheatLockMapsButton, new Color(0.36f, 0.28f, 0.16f, 1f), new Color(0.5f, 0.4f, 0.22f, 1f));
+
+        cheatResetAccountButton = CreateButton(panel.transform, "CheatResetAccountButton", "RESET ACCOUNT", new Vector2(0f, -616f), new Vector2(260f, 54f), OnCheatResetAccountClicked);
         StyleButton(cheatResetAccountButton, new Color(0.52f, 0.14f, 0.18f, 1f), new Color(0.72f, 0.2f, 0.25f, 1f));
 
-        cheatStatusText = CreateText(panel.transform, "CheatStatusText", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -564f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
+        cheatStatusText = CreateText(panel.transform, "CheatStatusText", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -686f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
         cheatStatusText.fontStyle = FontStyles.Normal;
         cheatStatusText.color = new Color(0.74f, 0.86f, 0.94f, 0.96f);
 
-        cheatCloseButton = CreateButton(panel.transform, "CheatCloseButton", "CLOSE", new Vector2(0f, -614f), new Vector2(220f, 52f), HideCheatBrowser);
+        cheatCloseButton = CreateButton(panel.transform, "CheatCloseButton", "CLOSE", new Vector2(0f, -734f), new Vector2(220f, 52f), HideCheatBrowser);
         StyleButton(cheatCloseButton, new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f));
 
         cheatBrowserObject.SetActive(false);
@@ -3165,7 +3611,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         panelImage.color = new Color(0.13f, 0.09f, 0.11f, 0.98f);
 
         CreateText(panel.transform, "CheatResetTitle", "RESET ACCOUNT", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -36f), new Vector2(560f, 36f), 26f, TextAlignmentOptions.Center);
-        cheatResetConfirmText = CreateText(panel.transform, "CheatResetText", "This will reset XP, level, Astrons, inventory, equipment, blueprints and unlocked pilots. Continue?", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -102f), new Vector2(560f, 96f), 20f, TextAlignmentOptions.Center);
+        cheatResetConfirmText = CreateText(panel.transform, "CheatResetText", "This will reset XP, level, Astrons to " + PlayerProfileService.DefaultStartingAstrons + ", inventory, equipment, blueprints, unlocked pilots and map progress. Continue?", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -102f), new Vector2(560f, 96f), 20f, TextAlignmentOptions.Center);
         cheatResetConfirmText.fontStyle = FontStyles.Normal;
         cheatResetConfirmText.textWrappingMode = TextWrappingModes.Normal;
 
@@ -3228,6 +3674,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
             cheatUnlockBlueprintsButton.interactable = !inventoryActionInProgress;
         if (cheatLockBlueprintsButton != null)
             cheatLockBlueprintsButton.interactable = !inventoryActionInProgress;
+        if (cheatUnlockMapsButton != null)
+            cheatUnlockMapsButton.interactable = !inventoryActionInProgress;
+        if (cheatLockMapsButton != null)
+            cheatLockMapsButton.interactable = !inventoryActionInProgress;
         if (cheatResetAccountButton != null)
             cheatResetAccountButton.interactable = !inventoryActionInProgress;
         if (cheatCloseButton != null)
@@ -3338,8 +3788,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         try
         {
             await PlayerProfileService.Instance.LockAllBlueprintsAsync();
-            SetStatus("All blueprints locked.");
-            RefreshCheatBrowser("All blueprints locked.");
+            SetStatus("Optional blueprints locked.");
+            RefreshCheatBrowser("Optional blueprints locked.");
             RefreshCraftingRecipeBrowser(true);
         }
         catch (Exception ex)
@@ -3347,6 +3797,66 @@ public class PlayerProfilePanelUI : MonoBehaviour
             Debug.LogError("Cheat lock blueprints failed: " + ex);
             SetStatus("Cheat failed.");
             RefreshCheatBrowser("Could not lock blueprints.");
+        }
+        finally
+        {
+            inventoryActionInProgress = false;
+            SetInventoryInteractable(true);
+            RefreshCheatBrowser();
+        }
+    }
+
+    async void OnCheatUnlockMapsClicked()
+    {
+        if (inventoryActionInProgress || cheatBrowserObject == null)
+            return;
+
+        inventoryActionInProgress = true;
+        SetInventoryInteractable(false);
+        RefreshCheatBrowser("Unlocking maps...");
+
+        try
+        {
+            await PlayerProfileService.Instance.UnlockAllMapsAsync();
+            SetStatus("All maps unlocked.");
+            RefreshCheatBrowser("All maps unlocked.");
+            RefreshView();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Cheat unlock maps failed: " + ex);
+            SetStatus("Cheat failed.");
+            RefreshCheatBrowser("Could not unlock maps.");
+        }
+        finally
+        {
+            inventoryActionInProgress = false;
+            SetInventoryInteractable(true);
+            RefreshCheatBrowser();
+        }
+    }
+
+    async void OnCheatLockMapsClicked()
+    {
+        if (inventoryActionInProgress || cheatBrowserObject == null)
+            return;
+
+        inventoryActionInProgress = true;
+        SetInventoryInteractable(false);
+        RefreshCheatBrowser("Locking maps...");
+
+        try
+        {
+            await PlayerProfileService.Instance.LockAllMapsAsync();
+            SetStatus("Optional maps locked.");
+            RefreshCheatBrowser("Optional maps locked.");
+            RefreshView();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Cheat lock maps failed: " + ex);
+            SetStatus("Cheat failed.");
+            RefreshCheatBrowser("Could not lock maps.");
         }
         finally
         {
@@ -3409,6 +3919,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             HideActiveShopRows();
 
             UpdateShopBrowserTitle();
+            RefreshShopSortButton();
             if (!TraderOpensShop(selectedTraderShop))
             {
                 shopBrowserObject.SetActive(false);
@@ -3427,9 +3938,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 shopAstronsText.gameObject.SetActive(false);
 
             IReadOnlyList<InventoryItemDefinition> definitions = InventoryItemCatalog.GetAllDefinitions();
-            List<InventoryItemDefinition> shopItems = new List<InventoryItemDefinition>();
-            List<int> shopPrices = new List<int>();
-            List<bool> affordability = new List<bool>();
+            List<ShopOfferViewModel> shopOffers = new List<ShopOfferViewModel>();
 
             for (int i = 0; i < definitions.Count; i++)
             {
@@ -3441,19 +3950,26 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 if (price <= 0)
                     continue;
 
-                shopItems.Add(definition);
-                shopPrices.Add(price);
-                affordability.Add(astrons >= price);
+                shopOffers.Add(new ShopOfferViewModel
+                {
+                    Definition = definition,
+                    Price = price,
+                    CanAfford = astrons >= price
+                });
             }
 
-            for (int i = 0; i < shopItems.Count; i += 2)
+            SortShopOffers(shopOffers);
+
+            for (int i = 0; i < shopOffers.Count; i += 2)
             {
-                InventoryItemDefinition leftDefinition = shopItems[i];
-                int leftPrice = shopPrices[i];
-                bool leftCanAfford = affordability[i];
-                InventoryItemDefinition rightDefinition = i + 1 < shopItems.Count ? shopItems[i + 1] : null;
-                int rightPrice = i + 1 < shopPrices.Count ? shopPrices[i + 1] : 0;
-                bool rightCanAfford = i + 1 < affordability.Count && affordability[i + 1];
+                ShopOfferViewModel leftOffer = shopOffers[i];
+                ShopOfferViewModel rightOffer = i + 1 < shopOffers.Count ? shopOffers[i + 1] : null;
+                InventoryItemDefinition leftDefinition = leftOffer.Definition;
+                int leftPrice = leftOffer.Price;
+                bool leftCanAfford = leftOffer.CanAfford;
+                InventoryItemDefinition rightDefinition = rightOffer != null ? rightOffer.Definition : null;
+                int rightPrice = rightOffer != null ? rightOffer.Price : 0;
+                bool rightCanAfford = rightOffer != null && rightOffer.CanAfford;
 
                 GameObject row = CreateShopRow(shopRowObjects.Count, leftDefinition, leftPrice, leftCanAfford, rightDefinition, rightPrice, rightCanAfford);
                 if (row != null)
@@ -3480,8 +3996,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
     void RefreshMissEnigmaShopBrowser()
     {
         BlueprintTradeOffer[] offers = BlueprintCatalog.GetMissEnigmaOffers();
-        List<BlueprintTradeOffer> visibleOffers = new List<BlueprintTradeOffer>();
-        List<bool> affordability = new List<bool>();
+        List<MissEnigmaOfferViewModel> visibleOffers = new List<MissEnigmaOfferViewModel>();
 
         for (int i = 0; i < offers.Length; i++)
         {
@@ -3495,8 +4010,20 @@ public class PlayerProfilePanelUI : MonoBehaviour
             if (PlayerProfileService.Instance.IsMissEnigmaBlueprintPurchased(offer.BlueprintItemId))
                 continue;
 
-            visibleOffers.Add(offer);
-            affordability.Add(PlayerProfileService.Instance.CanAffordItemTrade(offer.CostItemIds));
+            InventoryItemDefinition blueprintDefinition = InventoryItemCatalog.GetDefinition(offer.BlueprintItemId);
+            if (blueprintDefinition == null)
+                continue;
+
+            string targetItemId = InventoryItemCatalog.GetBlueprintTargetItemId(offer.BlueprintItemId);
+            InventoryItemDefinition targetDefinition = InventoryItemCatalog.GetDefinition(targetItemId);
+            visibleOffers.Add(new MissEnigmaOfferViewModel
+            {
+                Offer = offer,
+                CanAfford = PlayerProfileService.Instance.CanAffordItemTrade(offer.CostItemIds),
+                BlueprintDefinition = blueprintDefinition,
+                TargetDefinition = targetDefinition,
+                EstimatedTradeValue = GetMissEnigmaTradeValue(offer.CostItemIds)
+            });
         }
 
         if (visibleOffers.Count == 0)
@@ -3512,14 +4039,19 @@ public class PlayerProfilePanelUI : MonoBehaviour
             return;
         }
 
+        SortMissEnigmaOffers(visibleOffers);
+
         for (int i = 0; i < visibleOffers.Count; i += 2)
         {
-            BlueprintTradeOffer leftOffer = visibleOffers[i];
-            bool leftCanAfford = i < affordability.Count && affordability[i];
-            BlueprintTradeOffer rightOffer = i + 1 < visibleOffers.Count ? visibleOffers[i + 1] : null;
-            bool rightCanAfford = i + 1 < affordability.Count && affordability[i + 1];
+            MissEnigmaOfferViewModel leftOffer = visibleOffers[i];
+            MissEnigmaOfferViewModel rightOffer = i + 1 < visibleOffers.Count ? visibleOffers[i + 1] : null;
 
-            GameObject row = CreateMissEnigmaShopRow(shopRowObjects.Count, leftOffer, leftCanAfford, rightOffer, rightCanAfford);
+            GameObject row = CreateMissEnigmaShopRow(
+                shopRowObjects.Count,
+                leftOffer.Offer,
+                leftOffer.CanAfford,
+                rightOffer != null ? rightOffer.Offer : null,
+                rightOffer != null && rightOffer.CanAfford);
             if (row != null)
                 shopRowObjects.Add(row);
         }
@@ -3527,6 +4059,152 @@ public class PlayerProfilePanelUI : MonoBehaviour
         Canvas.ForceUpdateCanvases();
         if (shopScrollRect != null)
             shopScrollRect.verticalNormalizedPosition = 1f;
+    }
+
+    void SortShopOffers(List<ShopOfferViewModel> offers)
+    {
+        if (offers == null || offers.Count <= 1)
+            return;
+
+        ShopSortMode mode = GetShopSortMode(selectedTraderShop);
+        offers.Sort((a, b) => CompareShopOffers(a, b, mode));
+    }
+
+    int CompareShopOffers(ShopOfferViewModel a, ShopOfferViewModel b, ShopSortMode mode)
+    {
+        if (ReferenceEquals(a, b))
+            return 0;
+        if (a == null)
+            return 1;
+        if (b == null)
+            return -1;
+
+        int result;
+        switch (mode)
+        {
+            case ShopSortMode.Price:
+                result = a.Price.CompareTo(b.Price);
+                if (result != 0)
+                    return result;
+                break;
+            case ShopSortMode.Type:
+                result = GetItemSortCategory(a.Definition).CompareTo(GetItemSortCategory(b.Definition));
+                if (result != 0)
+                    return result;
+                break;
+            case ShopSortMode.Rarity:
+                result = ((int)GetItemSortRarity(b.Definition)).CompareTo((int)GetItemSortRarity(a.Definition));
+                if (result != 0)
+                    return result;
+                result = GetItemSortCategory(a.Definition).CompareTo(GetItemSortCategory(b.Definition));
+                if (result != 0)
+                    return result;
+                break;
+        }
+
+        return CompareItemDefinitionNames(a.Definition, b.Definition);
+    }
+
+    void SortMissEnigmaOffers(List<MissEnigmaOfferViewModel> offers)
+    {
+        if (offers == null || offers.Count <= 1)
+            return;
+
+        ShopSortMode mode = GetShopSortMode(selectedTraderShop);
+        offers.Sort((a, b) => CompareMissEnigmaOffers(a, b, mode));
+    }
+
+    int CompareMissEnigmaOffers(MissEnigmaOfferViewModel a, MissEnigmaOfferViewModel b, ShopSortMode mode)
+    {
+        if (ReferenceEquals(a, b))
+            return 0;
+        if (a == null)
+            return 1;
+        if (b == null)
+            return -1;
+
+        InventoryItemDefinition aDefinition = GetMissEnigmaSortDefinition(a);
+        InventoryItemDefinition bDefinition = GetMissEnigmaSortDefinition(b);
+
+        int result;
+        switch (mode)
+        {
+            case ShopSortMode.Price:
+                result = a.EstimatedTradeValue.CompareTo(b.EstimatedTradeValue);
+                if (result != 0)
+                    return result;
+                break;
+            case ShopSortMode.Type:
+                result = GetItemSortCategory(aDefinition).CompareTo(GetItemSortCategory(bDefinition));
+                if (result != 0)
+                    return result;
+                break;
+            case ShopSortMode.Rarity:
+                result = ((int)GetItemSortRarity(bDefinition)).CompareTo((int)GetItemSortRarity(aDefinition));
+                if (result != 0)
+                    return result;
+                result = GetItemSortCategory(aDefinition).CompareTo(GetItemSortCategory(bDefinition));
+                if (result != 0)
+                    return result;
+                break;
+        }
+
+        return CompareItemDefinitionNames(aDefinition, bDefinition);
+    }
+
+    InventoryItemDefinition GetMissEnigmaSortDefinition(MissEnigmaOfferViewModel offer)
+    {
+        if (offer == null)
+            return null;
+
+        return offer.TargetDefinition ?? offer.BlueprintDefinition;
+    }
+
+    int GetMissEnigmaTradeValue(string[] costItemIds)
+    {
+        if (costItemIds == null || costItemIds.Length == 0)
+            return 0;
+
+        int value = 0;
+        for (int i = 0; i < costItemIds.Length; i++)
+        {
+            string itemId = costItemIds[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            int itemValue = InventoryItemCatalog.GetSellValueAstrons(itemId);
+            if (itemValue <= 0)
+                itemValue = InventoryItemCatalog.GetShopBuyValueAstrons(itemId);
+            value += Mathf.Max(1, itemValue);
+        }
+
+        return value;
+    }
+
+    InventoryItemCategory GetItemSortCategory(InventoryItemDefinition definition)
+    {
+        return definition != null ? definition.Category : InventoryItemCategory.Misc;
+    }
+
+    InventoryItemRarity GetItemSortRarity(InventoryItemDefinition definition)
+    {
+        return definition != null ? definition.Rarity : InventoryItemRarity.Common;
+    }
+
+    int CompareItemDefinitionNames(InventoryItemDefinition a, InventoryItemDefinition b)
+    {
+        if (ReferenceEquals(a, b))
+            return 0;
+        if (a == null)
+            return 1;
+        if (b == null)
+            return -1;
+
+        int result = string.Compare(a.DisplayName ?? string.Empty, b.DisplayName ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        if (result != 0)
+            return result;
+
+        return string.CompareOrdinal(a.Id ?? string.Empty, b.Id ?? string.Empty);
     }
 
     GameObject GetOrCreateMissEnigmaEmptyRow()
@@ -3629,10 +4307,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
         view.NameText.overflowMode = TextOverflowModes.Truncate;
         view.NameText.raycastTarget = false;
 
-        view.CostText = CreateText(view.CardButton.transform, "ShopItemCost", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -170f), new Vector2(186f, 36f), 13f, TextAlignmentOptions.Center);
+        view.CostText = CreateText(view.CardButton.transform, "ShopItemCost", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -178f), new Vector2(198f, 58f), 20f, TextAlignmentOptions.Center);
         view.CostText.enableAutoSizing = true;
-        view.CostText.fontSizeMin = 9f;
-        view.CostText.fontSizeMax = 13f;
+        view.CostText.fontSizeMin = 14f;
+        view.CostText.fontSizeMax = 20f;
         view.CostText.textWrappingMode = TextWrappingModes.Normal;
         view.CostText.raycastTarget = false;
 
@@ -3731,10 +4409,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
         nameText.overflowMode = TextOverflowModes.Truncate;
         nameText.raycastTarget = false;
 
-        TMP_Text costText = CreateText(itemCardButton.transform, "ShopItemCost", FormatTradeCost(offer.CostItemIds), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -170f), new Vector2(186f, 36f), 13f, TextAlignmentOptions.Center);
+        TMP_Text costText = CreateText(itemCardButton.transform, "ShopItemCost", FormatTradeCost(offer.CostItemIds), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -172f), new Vector2(190f, 42f), 16f, TextAlignmentOptions.Center);
         costText.enableAutoSizing = true;
-        costText.fontSizeMin = 9f;
-        costText.fontSizeMax = 13f;
+        costText.fontSizeMin = 11f;
+        costText.fontSizeMax = 16f;
         costText.textWrappingMode = TextWrappingModes.Normal;
         costText.color = canAfford ? new Color(0.94f, 0.84f, 0.44f, 1f) : new Color(0.78f, 0.46f, 0.46f, 1f);
         costText.raycastTarget = false;
@@ -4964,7 +5642,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     Button CreateEquipmentSlotButton(Transform parent, string name, Vector2 anchoredPosition, int slotIndex, string label, out TMP_Text text, out Image icon)
     {
-        GameObject slotObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+        GameObject slotObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button), typeof(Outline));
         slotObject.transform.SetParent(parent, false);
         RectTransform rect = slotObject.GetComponent<RectTransform>();
         rect.anchorMin = new Vector2(0.5f, 1f);
@@ -4974,7 +5652,16 @@ public class PlayerProfilePanelUI : MonoBehaviour
         rect.sizeDelta = new Vector2(120f, 120f);
 
         Image bg = slotObject.GetComponent<Image>();
-        bg.color = new Color(0.17f, 0.22f, 0.28f, 0.88f);
+        bg.color = GetShipSelectionSlotColor(slotIndex);
+        bg.raycastTarget = true;
+
+        Outline outline = slotObject.GetComponent<Outline>();
+        if (outline != null)
+        {
+            outline.effectColor = GetShipSelectionSlotOutlineColor(slotIndex);
+            outline.effectDistance = new Vector2(2.2f, -2.2f);
+            outline.useGraphicAlpha = true;
+        }
 
         Button button = slotObject.GetComponent<Button>();
         ConfigureInventorySlotButtonTransition(button);
@@ -4991,15 +5678,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
         iconRect.anchorMax = new Vector2(0.5f, 0.5f);
         iconRect.pivot = new Vector2(0.5f, 0.5f);
         iconRect.anchoredPosition = Vector2.zero;
-        iconRect.sizeDelta = new Vector2(86f, 86f);
+        iconRect.sizeDelta = new Vector2(EquipmentSlotPreviewIconSize, EquipmentSlotPreviewIconSize);
         icon = iconObject.GetComponent<Image>();
         icon.preserveAspect = true;
         icon.enabled = false;
 
-        text = CreateText(slotObject.transform, name + "Text", label, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, 12f, TextAlignmentOptions.Center);
-        text.fontStyle = FontStyles.Bold;
-        text.textWrappingMode = TextWrappingModes.Normal;
-        text.margin = new Vector4(4f, 4f, 4f, 4f);
+        text = CreateText(slotObject.transform, name + "Text", label, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, EquipmentSlotPreviewFontSize, TextAlignmentOptions.Center);
+        ApplyEquipmentSlotPreviewTextStyle(text);
+        icon.transform.SetAsLastSibling();
         return button;
     }
 
@@ -5455,6 +6141,15 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
     }
 
+    void StylePlayerInventoryUtilityButton(Button button)
+    {
+        StyleCompactBackLikeButton(button);
+
+        TMP_Text text = button != null ? button.GetComponentInChildren<TMP_Text>(true) : null;
+        if (text != null)
+            text.fontSize = PlayerInventoryUtilityButtonFontSize;
+    }
+
     void SetButtonLabel(Button button, string label)
     {
         if (button == null)
@@ -5689,6 +6384,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
             RefreshShopBrowser();
         if (cheatBrowserObject != null && cheatBrowserObject.activeSelf)
             RefreshCheatBrowser();
+
+        ApplyProfileScreenLayoutAfterRefresh();
     }
 
     void RefreshProfileSummaryAndInventory()
@@ -5726,6 +6423,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
             RefreshCraftingBlueprintBrowser();
         if (shopBrowserObject != null && shopBrowserObject.activeSelf)
             RefreshShopBrowser();
+
+        ApplyProfileScreenLayoutAfterRefresh();
+    }
+
+    void ApplyProfileScreenLayoutAfterRefresh()
+    {
+        ApplyProfileScreenLayout();
+        profileLayoutDirty = false;
     }
 
     ShipType GetSelectedShipType()
@@ -5969,6 +6674,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
             rect.anchoredPosition = EquipmentSlotLayoutPositions[i];
             rect.sizeDelta = new Vector2(EquipmentSlotPreviewSize, EquipmentSlotPreviewSize);
         }
+
+        ApplyEquipmentSlotPreviewSizing();
     }
 
     void LayoutEquipmentSlotsColumn(float leftX, float rightX, float topY, float rowSpacing, float slotSize)
@@ -5980,8 +6687,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
         {
             new[] { 0, 1 },
             new[] { 2, 3 },
-            new[] { 6, 7 },
-            new[] { 4, 5 }
+            new[] { 4, 5 },
+            new[] { 8, 9 },
+            new[] { 10, 11 },
+            new[] { 6, 7 }
         };
 
         for (int row = 0; row < rowOrder.Length; row++)
@@ -6003,6 +6712,60 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 rect.sizeDelta = new Vector2(slotSize, slotSize);
             }
         }
+
+        ApplyEquipmentSlotPreviewSizing();
+    }
+
+    void ApplyEquipmentSlotPreviewSizing()
+    {
+        if (equipmentSlotPreviewIcons != null)
+        {
+            for (int i = 0; i < equipmentSlotPreviewIcons.Length; i++)
+            {
+                Image icon = equipmentSlotPreviewIcons[i];
+                if (icon == null)
+                    continue;
+
+                RectTransform iconRect = icon.rectTransform;
+                if (iconRect != null)
+                    iconRect.sizeDelta = new Vector2(EquipmentSlotPreviewIconSize, EquipmentSlotPreviewIconSize);
+            }
+        }
+
+        if (equipmentSlotPreviewTexts != null)
+        {
+            for (int i = 0; i < equipmentSlotPreviewTexts.Length; i++)
+                ApplyEquipmentSlotPreviewTextStyle(equipmentSlotPreviewTexts[i]);
+        }
+
+        KeepEquipmentSlotItemsAboveLabels();
+    }
+
+    void KeepEquipmentSlotItemsAboveLabels()
+    {
+        if (equipmentSlotPreviewIcons == null)
+            return;
+
+        for (int i = 0; i < equipmentSlotPreviewIcons.Length; i++)
+        {
+            if (equipmentSlotPreviewIcons[i] != null)
+                equipmentSlotPreviewIcons[i].transform.SetAsLastSibling();
+        }
+    }
+
+    void ApplyEquipmentSlotPreviewTextStyle(TMP_Text text)
+    {
+        if (text == null)
+            return;
+
+        text.fontSize = EquipmentSlotPreviewFontSize;
+        text.fontSizeMin = 9f;
+        text.fontSizeMax = EquipmentSlotPreviewFontSize;
+        text.enableAutoSizing = true;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.fontStyle = FontStyles.Bold;
+        text.color = new Color(0.92f, 0.96f, 0.98f, 0.98f);
+        text.margin = new Vector4(6f, 4f, 6f, 4f);
     }
 
     void LayoutShipStatsVertical(float x, float topY, Vector2 cardSize, float spacing)
@@ -6239,12 +7002,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
             if (screen == ProfileScreen.ShipSelection)
             {
+                ResetShipSelectionCarouselMotion();
                 shipSelectionCenterType = GetSelectedShipType();
                 shipSelectionCenterIndex = Mathf.Clamp(Array.IndexOf(SelectableShipTypes, shipSelectionCenterType), 0, SelectableShipTypes.Length - 1);
                 RefreshShipSelectionView();
             }
             else if (screen == ProfileScreen.PilotSelection)
             {
+                ResetPilotSelectionCarouselMotion();
                 pilotSelectionCenterIndex = PilotCatalog.GetPilotIndex(selectedPilotId);
                 RefreshPilotSelectionView();
             }
@@ -6255,6 +7020,11 @@ public class PlayerProfilePanelUI : MonoBehaviour
             else if (screen == ProfileScreen.ProjectDetails)
             {
                 RefreshProjectDetailsView();
+            }
+            else
+            {
+                ResetShipSelectionCarouselMotion();
+                ResetPilotSelectionCarouselMotion();
             }
 
             ApplyProfileScreenLayout();
@@ -6297,9 +7067,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
         LayoutRightActions();
         LayoutLeftNavigation();
         ConfigureEmbeddedCraftingRecipeBrowser();
+        LayoutCraftingBlueprintBrowser();
         ConfigureEmbeddedTraderBrowser();
 
-        bool splashShowing = splashScreenObject != null && splashHideTime > 0f && Time.unscaledTime < splashHideTime;
+        bool splashShowing = IsSplashShowing();
 
         bool showHome = currentScreen == ProfileScreen.Home;
         bool showInventory = currentScreen == ProfileScreen.Inventory;
@@ -6310,6 +7081,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         bool showProjects = currentScreen == ProfileScreen.Projects;
         bool showProjectDetails = currentScreen == ProfileScreen.ProjectDetails;
         bool showFullscreenSelection = showShipSelection || showPilotSelection;
+        bool showSharedNavigation = !showFullscreenSelection || showPilotSelection;
 
         if (homeViewRootObject != null)
             homeViewRootObject.SetActive(showHome);
@@ -6331,7 +7103,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (topBarRootObject != null)
             topBarRootObject.SetActive(!showFullscreenSelection);
         if (leftNavigationRootObject != null)
-            leftNavigationRootObject.SetActive(!showFullscreenSelection);
+            leftNavigationRootObject.SetActive(showSharedNavigation);
         if (rightActionRootObject != null)
             rightActionRootObject.SetActive(showHome);
         if (homeViewRootObject != null)
@@ -6905,7 +7677,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
 
         if (equipmentSlotRects != null)
-            LayoutEquipmentSlotsColumn(-520f, -386f, -64f, 142f, 112f);
+            LayoutEquipmentSlotsColumn(-520f, -386f, -28f, 116f, 104f);
 
         if (shipStatsPanelObject != null)
         {
@@ -7365,10 +8137,31 @@ public class PlayerProfilePanelUI : MonoBehaviour
             lines.Add(stage.Reward.Astrons + " Astrons");
 
         string[] itemIds = stage.Reward.ItemIds ?? Array.Empty<string>();
+        List<string> orderedItemIds = new List<string>();
+        Dictionary<string, int> itemCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         for (int i = 0; i < itemIds.Length; i++)
         {
-            if (!string.IsNullOrWhiteSpace(itemIds[i]))
-                lines.Add(InventoryItemCatalog.GetDisplayName(itemIds[i]));
+            string itemId = itemIds[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            if (itemCounts.ContainsKey(itemId))
+            {
+                itemCounts[itemId]++;
+            }
+            else
+            {
+                orderedItemIds.Add(itemId);
+                itemCounts[itemId] = 1;
+            }
+        }
+
+        for (int i = 0; i < orderedItemIds.Count; i++)
+        {
+            string itemId = orderedItemIds[i];
+            int count = itemCounts.TryGetValue(itemId, out int storedCount) ? storedCount : 1;
+            string itemName = InventoryItemCatalog.GetDisplayName(itemId);
+            lines.Add(count > 1 ? count + "x " + itemName : itemName);
         }
 
         if (rewardClaimed)
@@ -7471,35 +8264,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
             rect.sizeDelta = new Vector2(1340f, 880f);
         }
 
-        LayoutEquipmentSlotsColumn(-470f, -320f, -54f, 164f, 128f);
+        LayoutEquipmentSlotsColumn(-520f, -386f, -28f, 116f, 104f);
         LayoutShipStatsVertical(486f, -52f, new Vector2(278f, 72f), 12f);
-
-        if (equipmentSlotPreviewIcons != null)
-        {
-            for (int i = 0; i < equipmentSlotPreviewIcons.Length; i++)
-            {
-                Image icon = equipmentSlotPreviewIcons[i];
-                if (icon == null)
-                    continue;
-
-                RectTransform iconRect = icon.rectTransform;
-                iconRect.sizeDelta = new Vector2(112f, 112f);
-            }
-        }
-
-        if (equipmentSlotPreviewTexts != null)
-        {
-            for (int i = 0; i < equipmentSlotPreviewTexts.Length; i++)
-            {
-                TMP_Text text = equipmentSlotPreviewTexts[i];
-                if (text == null)
-                    continue;
-
-                text.fontSize = 22f;
-                text.fontSizeMin = 12f;
-                text.fontSizeMax = 22f;
-            }
-        }
+        ApplyEquipmentSlotPreviewSizing();
     }
 
     void LayoutStoragePanel(float centerX, float playerScrollWidth = 830f)
@@ -7513,8 +8280,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
         if (shipInventoryButtons != null)
         {
-            const float slotSize = 120f;
-            const float slotSpacing = 12f;
+            const float slotSize = 96f;
+            const float slotSpacing = 8f;
+            float firstSlotX = centerX - (((slotSize * 5f) + (slotSpacing * 4f)) * 0.5f) + (slotSize * 0.5f);
             for (int i = 0; i < shipInventoryButtons.Length; i++)
             {
                 if (shipInventoryButtons[i] == null)
@@ -7522,30 +8290,30 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
                 int row = i / 5;
                 int col = i % 5;
-                Vector2 position = new Vector2(centerX - 264f + col * (slotSize + slotSpacing), -212f - row * (slotSize + slotSpacing));
+                Vector2 position = new Vector2(firstSlotX + col * (slotSize + slotSpacing), -212f - row * (slotSize + slotSpacing));
                 SetAnchoredRect(shipInventoryButtons[i].GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), position, new Vector2(slotSize, slotSize));
             }
         }
 
         if (playerInventoryLabelText != null)
-            SetAnchoredRect(playerInventoryLabelText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX, -508f), new Vector2(430f, 24f));
+            SetAnchoredRect(playerInventoryLabelText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX, -548f), new Vector2(430f, 24f));
         if (playerInventoryFilterButton != null)
-            SetAnchoredRect(playerInventoryFilterButton.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX - 320f, -504f + InventoryUtilityButtonLift), new Vector2(166f, 42f));
+            SetAnchoredRect(playerInventoryFilterButton.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX - 320f, -544f + InventoryUtilityButtonLift), PlayerInventoryFilterButtonSize);
         if (playerInventoryExtendButton != null)
-            SetAnchoredRect(playerInventoryExtendButton.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX + 322f - InventoryExtendButtonLeftShift, -504f + InventoryUtilityButtonLift), new Vector2(132f, 42f));
+            SetAnchoredRect(playerInventoryExtendButton.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX + 322f - InventoryExtendButtonLeftShift, -544f + InventoryUtilityButtonLift), PlayerInventoryExtendButtonSize);
 
         if (playerInventoryScrollRect != null)
-            SetAnchoredRect(playerInventoryScrollRect.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX - 10f, -538f), new Vector2(playerScrollWidth, 362f));
+            SetAnchoredRect(playerInventoryScrollRect.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX - 10f, -578f), new Vector2(playerScrollWidth, 362f));
         if (playerInventoryScrollbarObject != null)
-            SetAnchoredRect(playerInventoryScrollbarObject.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX + (playerScrollWidth * 0.5f) + 28f, -538f), new Vector2(56f, 362f));
+            SetAnchoredRect(playerInventoryScrollbarObject.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX + (playerScrollWidth * 0.5f) + 28f, -578f), new Vector2(56f, 362f));
     }
 
     void LayoutCraftingStoragePanel()
     {
         const float leftEdge = -1018f;
         const float playerScrollWidth = 770f;
-        const float shipSlotSize = 120f;
-        const float shipSlotSpacing = 12f;
+        const float shipSlotSize = 96f;
+        const float shipSlotSpacing = 8f;
         float shipWidth = (shipSlotSize * 5f) + (shipSlotSpacing * 4f);
         float shipCenterX = leftEdge + (shipWidth * 0.5f);
         float playerCenterX = leftEdge + (playerScrollWidth * 0.5f);
@@ -7569,25 +8337,25 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
                 int row = i / 5;
                 int col = i % 5;
-                Vector2 position = new Vector2(leftEdge + 60f + col * (shipSlotSize + shipSlotSpacing), -212f - row * (shipSlotSize + shipSlotSpacing));
+                Vector2 position = new Vector2(leftEdge + (shipSlotSize * 0.5f) + col * (shipSlotSize + shipSlotSpacing), -212f - row * (shipSlotSize + shipSlotSpacing));
                 SetAnchoredRect(shipInventoryButtons[i].GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), position, new Vector2(shipSlotSize, shipSlotSize));
             }
         }
 
         if (playerInventoryLabelText != null)
-            SetAnchoredRect(playerInventoryLabelText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(playerCenterX, -508f), new Vector2(430f, 24f));
+            SetAnchoredRect(playerInventoryLabelText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(playerCenterX, -548f), new Vector2(430f, 24f));
 
         if (playerInventoryFilterButton != null)
-            SetAnchoredRect(playerInventoryFilterButton.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(leftEdge + 83f, -504f + InventoryUtilityButtonLift), new Vector2(166f, 42f));
+            SetAnchoredRect(playerInventoryFilterButton.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(leftEdge + 83f, -544f + InventoryUtilityButtonLift), PlayerInventoryFilterButtonSize);
 
         if (playerInventoryExtendButton != null)
-            SetAnchoredRect(playerInventoryExtendButton.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(playerRightEdge - 66f - InventoryExtendButtonLeftShift, -504f + InventoryUtilityButtonLift), new Vector2(132f, 42f));
+            SetAnchoredRect(playerInventoryExtendButton.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(playerRightEdge - 66f - InventoryExtendButtonLeftShift, -544f + InventoryUtilityButtonLift), PlayerInventoryExtendButtonSize);
 
         if (playerInventoryScrollRect != null)
-            SetAnchoredRect(playerInventoryScrollRect.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(playerCenterX, -538f), new Vector2(playerScrollWidth, 362f));
+            SetAnchoredRect(playerInventoryScrollRect.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(playerCenterX, -578f), new Vector2(playerScrollWidth, 362f));
 
         if (playerInventoryScrollbarObject != null)
-            SetAnchoredRect(playerInventoryScrollbarObject.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(playerRightEdge + 28f, -538f), new Vector2(56f, 362f));
+            SetAnchoredRect(playerInventoryScrollbarObject.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(playerRightEdge + 28f, -578f), new Vector2(56f, 362f));
     }
 
     void ConfigureStorageBackdrop(bool visible, float centerX, float topY, float width, float height)
@@ -7781,7 +8549,24 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
         TMP_Text title = shopBrowserObject.transform.Find("ShopBrowserPanel/ShopBrowserTitle")?.GetComponent<TMP_Text>();
         if (title != null)
+        {
             title.text = TraderOpensShop(selectedTraderShop) ? GetTraderDisplayName(selectedTraderShop) : "TRADER";
+            RectTransform titleRect = title.rectTransform;
+            titleRect.anchoredPosition = new Vector2(-92f, -32f);
+            titleRect.sizeDelta = new Vector2(300f, 34f);
+        }
+
+        if (shopSortButton != null)
+        {
+            RectTransform sortRect = shopSortButton.GetComponent<RectTransform>();
+            sortRect.anchorMin = new Vector2(0.5f, 1f);
+            sortRect.anchorMax = new Vector2(0.5f, 1f);
+            sortRect.pivot = new Vector2(0.5f, 1f);
+            sortRect.anchoredPosition = new Vector2(186f, -28f);
+            sortRect.sizeDelta = new Vector2(236f, 48f);
+            shopSortButton.transform.SetAsLastSibling();
+        }
+        RefreshShopSortButton();
 
         RectTransform viewportRect = shopBrowserObject.transform.Find("ShopBrowserPanel/ShopViewport")?.GetComponent<RectTransform>();
         if (viewportRect != null)
@@ -8012,20 +8797,532 @@ public class PlayerProfilePanelUI : MonoBehaviour
             projectStatusText.text = value ?? string.Empty;
     }
 
-    void MovePilotSelectionLeft()
+    void UpdateSelectionCarouselAnimations()
     {
-        if (inventoryActionInProgress)
+        if (currentScreen == ProfileScreen.ShipSelection)
+            UpdateShipSelectionSnap();
+        else if (shipSelectionSnapActive || shipSelectionDragActive || Mathf.Abs(shipSelectionVisualOffset) > 0.001f)
+            ResetShipSelectionCarouselMotion();
+
+        if (currentScreen == ProfileScreen.PilotSelection)
+            UpdatePilotSelectionSnap();
+        else if (pilotSelectionSnapActive || pilotSelectionDragActive || Mathf.Abs(pilotSelectionVisualOffset) > 0.001f)
+            ResetPilotSelectionCarouselMotion();
+    }
+
+    void ResetShipSelectionCarouselMotion()
+    {
+        shipSelectionDragActive = false;
+        shipSelectionDragHorizontal = false;
+        shipSelectionSnapActive = false;
+        shipSelectionSnapElapsed = 0f;
+        shipSelectionSnapIndexDelta = 0;
+        shipSelectionVisualOffset = 0f;
+    }
+
+    void ResetPilotSelectionCarouselMotion()
+    {
+        pilotSelectionDragActive = false;
+        pilotSelectionDragHorizontal = false;
+        pilotSelectionSnapActive = false;
+        pilotSelectionSnapElapsed = 0f;
+        pilotSelectionSnapIndexDelta = 0;
+        pilotSelectionVisualOffset = 0f;
+    }
+
+    public void BeginShipSelectionDrag(PointerEventData eventData, Vector2 startScreenPosition)
+    {
+        if (inventoryActionInProgress || currentScreen != ProfileScreen.ShipSelection || shipSelectionCardObjects == null)
             return;
 
+        if (!TryGetSelectionLocalPoint(shipSelectionViewObject, eventData, startScreenPosition, out shipSelectionDragStartLocal))
+            return;
+
+        shipSelectionDragActive = true;
+        shipSelectionDragHorizontal = false;
+        shipSelectionSnapActive = false;
+        shipSelectionDragStartOffset = shipSelectionVisualOffset;
+    }
+
+    public void UpdateShipSelectionDrag(PointerEventData eventData)
+    {
+        if (!shipSelectionDragActive || inventoryActionInProgress || currentScreen != ProfileScreen.ShipSelection)
+            return;
+
+        if (!TryGetSelectionLocalPoint(shipSelectionViewObject, eventData, eventData.position, out Vector2 localPoint))
+            return;
+
+        Vector2 delta = localPoint - shipSelectionDragStartLocal;
+        if (!shipSelectionDragHorizontal)
+        {
+            if (delta.magnitude < SelectionCarouselAxisThreshold)
+                return;
+
+            if (Mathf.Abs(delta.x) <= Mathf.Abs(delta.y))
+                return;
+
+            shipSelectionDragHorizontal = true;
+        }
+
+        shipSelectionVisualOffset = shipSelectionDragStartOffset + delta.x / GetShipSelectionSwipeDistance();
+        if (NormalizeContinuousSelectionDrag(ref shipSelectionCenterIndex, ref shipSelectionVisualOffset, ref shipSelectionDragStartOffset, SelectableShipTypes.Length))
+        {
+            shipSelectionCenterType = SelectableShipTypes[shipSelectionCenterIndex];
+            RefreshShipSelectionView();
+            return;
+        }
+
+        ApplyShipSelectionCarouselVisuals();
+    }
+
+    public void EndShipSelectionDrag(PointerEventData eventData)
+    {
+        if (!shipSelectionDragActive)
+            return;
+
+        shipSelectionDragActive = false;
+        Vector2 delta = Vector2.zero;
+        if (TryGetSelectionLocalPoint(shipSelectionViewObject, eventData, eventData.position, out Vector2 localPoint))
+            delta = localPoint - shipSelectionDragStartLocal;
+
+        if (shipSelectionDragHorizontal && Mathf.Abs(delta.x) >= SelectionCarouselClickCancelThreshold)
+            shipSelectionSuppressClickUntilFrame = Time.frameCount + SelectionCarouselClickSuppressFrames;
+
+        int indexDelta = shipSelectionDragHorizontal
+            ? ResolveSelectionCarouselSnapIndexDelta(shipSelectionVisualOffset, shipSelectionCenterIndex, SelectableShipTypes.Length)
+            : 0;
+
+        StartShipSelectionSnap(indexDelta);
+    }
+
+    public void BeginPilotSelectionDrag(PointerEventData eventData, Vector2 startScreenPosition)
+    {
+        if (inventoryActionInProgress || currentScreen != ProfileScreen.PilotSelection || pilotSelectionCardObjects == null)
+            return;
+
+        if (!TryGetSelectionLocalPoint(pilotSelectionViewObject, eventData, startScreenPosition, out pilotSelectionDragStartLocal))
+            return;
+
+        pilotSelectionDragActive = true;
+        pilotSelectionDragHorizontal = false;
+        pilotSelectionSnapActive = false;
+        pilotSelectionDragStartOffset = pilotSelectionVisualOffset;
+    }
+
+    public void UpdatePilotSelectionDrag(PointerEventData eventData)
+    {
+        if (!pilotSelectionDragActive || inventoryActionInProgress || currentScreen != ProfileScreen.PilotSelection)
+            return;
+
+        if (!TryGetSelectionLocalPoint(pilotSelectionViewObject, eventData, eventData.position, out Vector2 localPoint))
+            return;
+
+        Vector2 delta = localPoint - pilotSelectionDragStartLocal;
+        if (!pilotSelectionDragHorizontal)
+        {
+            if (delta.magnitude < SelectionCarouselAxisThreshold)
+                return;
+
+            if (Mathf.Abs(delta.x) <= Mathf.Abs(delta.y))
+                return;
+
+            pilotSelectionDragHorizontal = true;
+        }
+
+        pilotSelectionVisualOffset = pilotSelectionDragStartOffset + delta.x / GetPilotSelectionSwipeDistance();
+        if (NormalizeContinuousSelectionDrag(ref pilotSelectionCenterIndex, ref pilotSelectionVisualOffset, ref pilotSelectionDragStartOffset, PilotCatalog.AllDefinitions.Count))
+        {
+            RefreshPilotSelectionView();
+            return;
+        }
+
+        ApplyPilotSelectionCarouselVisuals();
+    }
+
+    public void EndPilotSelectionDrag(PointerEventData eventData)
+    {
+        if (!pilotSelectionDragActive)
+            return;
+
+        pilotSelectionDragActive = false;
+        Vector2 delta = Vector2.zero;
+        if (TryGetSelectionLocalPoint(pilotSelectionViewObject, eventData, eventData.position, out Vector2 localPoint))
+            delta = localPoint - pilotSelectionDragStartLocal;
+
+        if (pilotSelectionDragHorizontal && Mathf.Abs(delta.x) >= SelectionCarouselClickCancelThreshold)
+            pilotSelectionSuppressClickUntilFrame = Time.frameCount + SelectionCarouselClickSuppressFrames;
+
+        int indexDelta = pilotSelectionDragHorizontal
+            ? ResolveSelectionCarouselSnapIndexDelta(pilotSelectionVisualOffset, pilotSelectionCenterIndex, PilotCatalog.AllDefinitions.Count)
+            : 0;
+
+        StartPilotSelectionSnap(indexDelta);
+    }
+
+    bool TryGetSelectionLocalPoint(GameObject viewObject, PointerEventData eventData, Vector2 screenPosition, out Vector2 localPoint)
+    {
+        localPoint = Vector2.zero;
+        RectTransform rect = viewObject != null ? viewObject.GetComponent<RectTransform>() : null;
+        if (rect == null || eventData == null)
+            return false;
+
+        Camera eventCamera = eventData.pressEventCamera != null ? eventData.pressEventCamera : eventData.enterEventCamera;
+        return RectTransformUtility.ScreenPointToLocalPointInRectangle(rect, screenPosition, eventCamera, out localPoint);
+    }
+
+    float GetShipSelectionSwipeDistance()
+    {
+        return Mathf.Max(1f, ShipSelectionRightPosition.x - ShipSelectionCenterPosition.x);
+    }
+
+    float GetPilotSelectionSwipeDistance()
+    {
+        return Mathf.Max(1f, PilotSelectionRightPosition.x - PilotSelectionCenterPosition.x);
+    }
+
+    float ApplySelectionCarouselDragBounds(float offset, int centerIndex, int itemCount)
+    {
+        if (offset > 0f && centerIndex <= 0)
+            offset *= SelectionCarouselEdgeResistance;
+        else if (offset < 0f && centerIndex >= itemCount - 1)
+            offset *= SelectionCarouselEdgeResistance;
+
+        return Mathf.Clamp(offset, -SelectionCarouselMaxOffset, SelectionCarouselMaxOffset);
+    }
+
+    bool NormalizeContinuousSelectionDrag(ref int centerIndex, ref float offset, ref float dragStartOffset, int itemCount)
+    {
+        bool changed = false;
+        while (offset <= -1f && centerIndex < itemCount - 1)
+        {
+            centerIndex++;
+            offset += 1f;
+            dragStartOffset += 1f;
+            changed = true;
+        }
+
+        while (offset >= 1f && centerIndex > 0)
+        {
+            centerIndex--;
+            offset -= 1f;
+            dragStartOffset -= 1f;
+            changed = true;
+        }
+
+        offset = ApplySelectionCarouselDragBounds(offset, centerIndex, itemCount);
+        return changed;
+    }
+
+    int ResolveSelectionCarouselSnapIndexDelta(float offset, int centerIndex, int itemCount)
+    {
+        if (Mathf.Abs(offset) < SelectionCarouselSnapThreshold)
+            return 0;
+
+        if (offset > 0f && centerIndex > 0)
+            return -1;
+        if (offset < 0f && centerIndex < itemCount - 1)
+            return 1;
+
+        return 0;
+    }
+
+    void StartShipSelectionSnap(int indexDelta)
+    {
+        shipSelectionSnapActive = true;
+        shipSelectionSnapElapsed = 0f;
+        shipSelectionSnapStartOffset = shipSelectionVisualOffset;
+        shipSelectionSnapIndexDelta = indexDelta;
+        shipSelectionSnapTargetOffset = indexDelta == 0 ? 0f : -indexDelta;
+    }
+
+    void StartPilotSelectionSnap(int indexDelta)
+    {
+        pilotSelectionSnapActive = true;
+        pilotSelectionSnapElapsed = 0f;
+        pilotSelectionSnapStartOffset = pilotSelectionVisualOffset;
+        pilotSelectionSnapIndexDelta = indexDelta;
+        pilotSelectionSnapTargetOffset = indexDelta == 0 ? 0f : -indexDelta;
+    }
+
+    void UpdateShipSelectionSnap()
+    {
+        if (!shipSelectionSnapActive || shipSelectionDragActive)
+            return;
+
+        shipSelectionSnapElapsed += Time.unscaledDeltaTime;
+        float t = SelectionCarouselSnapDuration > 0f ? Mathf.Clamp01(shipSelectionSnapElapsed / SelectionCarouselSnapDuration) : 1f;
+        float eased = t * t * (3f - 2f * t);
+        shipSelectionVisualOffset = Mathf.Lerp(shipSelectionSnapStartOffset, shipSelectionSnapTargetOffset, eased);
+        ApplyShipSelectionCarouselVisuals();
+
+        if (t >= 1f)
+            FinishShipSelectionSnap();
+    }
+
+    void UpdatePilotSelectionSnap()
+    {
+        if (!pilotSelectionSnapActive || pilotSelectionDragActive)
+            return;
+
+        pilotSelectionSnapElapsed += Time.unscaledDeltaTime;
+        float t = SelectionCarouselSnapDuration > 0f ? Mathf.Clamp01(pilotSelectionSnapElapsed / SelectionCarouselSnapDuration) : 1f;
+        float eased = t * t * (3f - 2f * t);
+        pilotSelectionVisualOffset = Mathf.Lerp(pilotSelectionSnapStartOffset, pilotSelectionSnapTargetOffset, eased);
+        ApplyPilotSelectionCarouselVisuals();
+
+        if (t >= 1f)
+            FinishPilotSelectionSnap();
+    }
+
+    void FinishShipSelectionSnap()
+    {
+        int indexDelta = shipSelectionSnapIndexDelta;
+        shipSelectionSnapActive = false;
+        shipSelectionVisualOffset = 0f;
+        shipSelectionSnapIndexDelta = 0;
+
+        if (indexDelta != 0)
+        {
+            shipSelectionCenterIndex = Mathf.Clamp(shipSelectionCenterIndex + indexDelta, 0, SelectableShipTypes.Length - 1);
+            shipSelectionCenterType = SelectableShipTypes[shipSelectionCenterIndex];
+            RefreshShipSelectionView();
+        }
+        else
+        {
+            ApplyShipSelectionCarouselVisuals();
+        }
+    }
+
+    void FinishPilotSelectionSnap()
+    {
+        int indexDelta = pilotSelectionSnapIndexDelta;
+        pilotSelectionSnapActive = false;
+        pilotSelectionVisualOffset = 0f;
+        pilotSelectionSnapIndexDelta = 0;
+
+        if (indexDelta != 0)
+        {
+            pilotSelectionCenterIndex = Mathf.Clamp(pilotSelectionCenterIndex + indexDelta, 0, PilotCatalog.AllDefinitions.Count - 1);
+            RefreshPilotSelectionView();
+        }
+        else
+        {
+            ApplyPilotSelectionCarouselVisuals();
+        }
+    }
+
+    bool ConsumeShipSelectionClickSuppression()
+    {
+        if (Time.frameCount > shipSelectionSuppressClickUntilFrame)
+            return false;
+
+        shipSelectionSuppressClickUntilFrame = 0;
+        return true;
+    }
+
+    bool ConsumePilotSelectionClickSuppression()
+    {
+        if (Time.frameCount > pilotSelectionSuppressClickUntilFrame)
+            return false;
+
+        pilotSelectionSuppressClickUntilFrame = 0;
+        return true;
+    }
+
+    void ApplyShipSelectionCarouselVisuals()
+    {
+        if (shipSelectionCardObjects == null)
+            return;
+
+        for (int i = 0; i < shipSelectionCardObjects.Length; i++)
+        {
+            if (shipSelectionCardObjects[i] == null || !shipSelectionCardObjects[i].activeSelf)
+                continue;
+
+            ApplyShipSelectionCardVisualState(i, (i - 1) + shipSelectionVisualOffset);
+        }
+
+        UpdateShipSelectionCardLayering();
+    }
+
+    void ApplyPilotSelectionCarouselVisuals()
+    {
+        if (pilotSelectionCardObjects == null)
+            return;
+
+        for (int i = 0; i < pilotSelectionCardObjects.Length; i++)
+        {
+            if (pilotSelectionCardObjects[i] == null || !pilotSelectionCardObjects[i].activeSelf)
+                continue;
+
+            ApplyPilotSelectionCardVisualState(i, (i - 1) + pilotSelectionVisualOffset);
+        }
+
+        UpdatePilotSelectionCardLayering();
+    }
+
+    void ApplyShipSelectionCardVisualState(int cardIndex, float slot)
+    {
+        GameObject cardObject = shipSelectionCardObjects != null && cardIndex >= 0 && cardIndex < shipSelectionCardObjects.Length
+            ? shipSelectionCardObjects[cardIndex]
+            : null;
+        if (cardObject == null)
+            return;
+
+        float centerAmount = GetSelectionCarouselCenterAmount(slot);
+        RectTransform cardRect = cardObject.GetComponent<RectTransform>();
+        if (cardRect != null)
+        {
+            cardRect.anchoredPosition = EvaluateSelectionCarouselPosition(slot, ShipSelectionLeftPosition, ShipSelectionCenterPosition, ShipSelectionRightPosition);
+            cardRect.sizeDelta = EvaluateSelectionCarouselSize(slot, ShipSelectionSideSize, ShipSelectionCenterSize);
+        }
+
+        Image previewImage = shipSelectionCardImages != null && cardIndex < shipSelectionCardImages.Length
+            ? shipSelectionCardImages[cardIndex]
+            : null;
+        if (previewImage != null)
+        {
+            RectTransform imageRect = previewImage.rectTransform;
+            imageRect.anchoredPosition = Vector2.Lerp(ShipSelectionSideImagePosition, ShipSelectionCenterImagePosition, centerAmount);
+            imageRect.sizeDelta = Vector2.Lerp(ShipSelectionSideImageSize, ShipSelectionCenterImageSize, centerAmount);
+        }
+
+        Image cardImage = cardObject.GetComponent<Image>();
+        if (cardImage != null)
+            cardImage.color = Color.Lerp(new Color(0.07f, 0.1f, 0.15f, 0.68f), new Color(0.08f, 0.11f, 0.16f, 0.76f), centerAmount);
+
+        LayoutShipSelectionStats(cardIndex, centerAmount);
+
+        GameObject[] slotObjects = shipSelectionCardSlotObjects != null && cardIndex < shipSelectionCardSlotObjects.Length
+            ? shipSelectionCardSlotObjects[cardIndex]
+            : null;
+        if (slotObjects == null)
+            return;
+
+        Vector2[] slotLayout = BuildShipSelectionSlotLayout(centerAmount);
+        for (int i = 0; i < slotObjects.Length && i < slotLayout.Length; i++)
+        {
+            if (slotObjects[i] == null)
+                continue;
+
+            RectTransform slotRect = slotObjects[i].GetComponent<RectTransform>();
+            if (slotRect == null)
+                continue;
+
+            slotRect.anchoredPosition = slotLayout[i];
+            slotRect.sizeDelta = GetShipSelectionSlotSize(centerAmount >= 0.5f);
+        }
+    }
+
+    void ApplyPilotSelectionCardVisualState(int cardIndex, float slot)
+    {
+        GameObject cardObject = pilotSelectionCardObjects != null && cardIndex >= 0 && cardIndex < pilotSelectionCardObjects.Length
+            ? pilotSelectionCardObjects[cardIndex]
+            : null;
+        if (cardObject == null)
+            return;
+
+        float centerAmount = GetSelectionCarouselCenterAmount(slot);
+        RectTransform cardRect = cardObject.GetComponent<RectTransform>();
+        if (cardRect != null)
+        {
+            cardRect.anchoredPosition = EvaluateSelectionCarouselPosition(slot, PilotSelectionLeftPosition, PilotSelectionCenterPosition, PilotSelectionRightPosition);
+            cardRect.sizeDelta = EvaluateSelectionCarouselSize(slot, PilotSelectionSideSize, PilotSelectionCenterSize);
+        }
+
+        Image previewImage = pilotSelectionCardImages != null && cardIndex < pilotSelectionCardImages.Length
+            ? pilotSelectionCardImages[cardIndex]
+            : null;
+        if (previewImage != null)
+        {
+            RectTransform imageRect = previewImage.rectTransform;
+            imageRect.offsetMin = Vector2.Lerp(PilotSelectionSideImageOffsetMin, PilotSelectionCenterImageOffsetMin, centerAmount);
+            imageRect.offsetMax = Vector2.Lerp(PilotSelectionSideImageOffsetMax, PilotSelectionCenterImageOffsetMax, centerAmount);
+        }
+
+        int targetIndex = pilotSelectionCenterIndex + cardIndex - 1;
+        bool selected = targetIndex >= 0 &&
+                        targetIndex < PilotCatalog.AllDefinitions.Count &&
+                        string.Equals(selectedPilotId, PilotCatalog.AllDefinitions[targetIndex].Id, StringComparison.Ordinal);
+        Image cardImage = cardObject.GetComponent<Image>();
+        if (cardImage != null)
+        {
+            Color sideColor = selected ? new Color(0.12f, 0.25f, 0.22f, 0.9f) : new Color(0.08f, 0.11f, 0.16f, 0.86f);
+            Color centerColor = selected ? new Color(0.12f, 0.25f, 0.22f, 0.98f) : new Color(0.11f, 0.16f, 0.22f, 0.96f);
+            cardImage.color = Color.Lerp(sideColor, centerColor, centerAmount);
+        }
+
+        TMP_Text lockText = pilotSelectionCardLockTexts != null && cardIndex < pilotSelectionCardLockTexts.Length
+            ? pilotSelectionCardLockTexts[cardIndex]
+            : null;
+        if (lockText != null)
+            lockText.fontSize = Mathf.Lerp(16f, 22f, centerAmount);
+    }
+
+    static Vector2 EvaluateSelectionCarouselPosition(float slot, Vector2 left, Vector2 center, Vector2 right)
+    {
+        if (slot <= -1f)
+            return new Vector2(left.x - ((center.x - left.x) * (-slot - 1f)), left.y);
+        if (slot < 0f)
+            return Vector2.Lerp(left, center, slot + 1f);
+        if (slot <= 1f)
+            return Vector2.Lerp(center, right, slot);
+
+        return new Vector2(right.x + ((right.x - center.x) * (slot - 1f)), right.y);
+    }
+
+    static Vector2 EvaluateSelectionCarouselSize(float slot, Vector2 side, Vector2 center)
+    {
+        return Vector2.Lerp(side, center, GetSelectionCarouselCenterAmount(slot));
+    }
+
+    static float GetSelectionCarouselCenterAmount(float slot)
+    {
+        return Mathf.Clamp01(1f - Mathf.Abs(slot));
+    }
+
+    static void SortSelectionCardsByCenter(GameObject[] cardObjects, float visualOffset)
+    {
+        if (cardObjects == null)
+            return;
+
+        int[] order = { 0, 1, 2 };
+        Array.Sort(order, (a, b) =>
+        {
+            float aCenterAmount = GetSelectionCarouselCenterAmount((a - 1) + visualOffset);
+            float bCenterAmount = GetSelectionCarouselCenterAmount((b - 1) + visualOffset);
+            return aCenterAmount.CompareTo(bCenterAmount);
+        });
+
+        for (int i = 0; i < order.Length; i++)
+        {
+            int cardIndex = order[i];
+            if (cardIndex >= 0 &&
+                cardIndex < cardObjects.Length &&
+                cardObjects[cardIndex] != null &&
+                cardObjects[cardIndex].activeSelf)
+            {
+                cardObjects[cardIndex].transform.SetSiblingIndex(i);
+            }
+        }
+    }
+
+    void MovePilotSelectionLeft()
+    {
+        if (inventoryActionInProgress || pilotSelectionDragActive || pilotSelectionSnapActive)
+            return;
+
+        ResetPilotSelectionCarouselMotion();
         pilotSelectionCenterIndex = Mathf.Max(0, pilotSelectionCenterIndex - 1);
         RefreshPilotSelectionView();
     }
 
     void MovePilotSelectionRight()
     {
-        if (inventoryActionInProgress)
+        if (inventoryActionInProgress || pilotSelectionDragActive || pilotSelectionSnapActive)
             return;
 
+        ResetPilotSelectionCarouselMotion();
         pilotSelectionCenterIndex = Mathf.Min(PilotCatalog.AllDefinitions.Count - 1, pilotSelectionCenterIndex + 1);
         RefreshPilotSelectionView();
     }
@@ -8046,7 +9343,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void OnPilotSelectionCardClicked(int cardIndex)
     {
-        if (inventoryActionInProgress || pilotSelectionCardObjects == null)
+        if (inventoryActionInProgress || pilotSelectionDragActive || pilotSelectionSnapActive || pilotSelectionCardObjects == null)
             return;
 
         if (cardIndex < 0 || cardIndex >= pilotSelectionCardObjects.Length)
@@ -8122,6 +9419,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
             if (pilotSelectionTitleText != null)
                 pilotSelectionTitleText.text = centerDefinition.DisplayName;
 
+            if (pilotSelectionBackButton != null)
+                LayoutSharedProfileBackButton(pilotSelectionBackButton.GetComponent<RectTransform>());
+
             if (!inventoryActionInProgress && pilotSelectionStatusText != null)
             {
                 pilotSelectionStatusText.text = centerUnlocked
@@ -8149,7 +9449,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             if (pilotSelectionNextButton != null)
                 pilotSelectionNextButton.gameObject.SetActive(pilotSelectionCenterIndex < PilotCatalog.AllDefinitions.Count - 1);
 
-            UpdatePilotSelectionCardLayering();
+            ApplyPilotSelectionCarouselVisuals();
             pilotSelectionDirty = false;
         }
     }
@@ -8219,12 +9519,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (pilotSelectionCardObjects == null)
             return;
 
-        if (pilotSelectionCardObjects.Length > 0 && pilotSelectionCardObjects[0] != null && pilotSelectionCardObjects[0].activeSelf)
-            pilotSelectionCardObjects[0].transform.SetSiblingIndex(0);
-        if (pilotSelectionCardObjects.Length > 2 && pilotSelectionCardObjects[2] != null && pilotSelectionCardObjects[2].activeSelf)
-            pilotSelectionCardObjects[2].transform.SetSiblingIndex(1);
-        if (pilotSelectionCardObjects.Length > 1 && pilotSelectionCardObjects[1] != null && pilotSelectionCardObjects[1].activeSelf)
-            pilotSelectionCardObjects[1].transform.SetSiblingIndex(2);
+        SortSelectionCardsByCenter(pilotSelectionCardObjects, pilotSelectionVisualOffset);
 
         if (pilotSelectionBackButton != null)
             pilotSelectionBackButton.transform.SetAsLastSibling();
@@ -8280,9 +9575,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void MoveShipSelectionLeft()
     {
-        if (inventoryActionInProgress)
+        if (inventoryActionInProgress || shipSelectionDragActive || shipSelectionSnapActive)
             return;
 
+        ResetShipSelectionCarouselMotion();
         shipSelectionCenterIndex = Mathf.Max(0, shipSelectionCenterIndex - 1);
         shipSelectionCenterType = SelectableShipTypes[shipSelectionCenterIndex];
         RefreshShipSelectionView();
@@ -8290,9 +9586,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void MoveShipSelectionRight()
     {
-        if (inventoryActionInProgress)
+        if (inventoryActionInProgress || shipSelectionDragActive || shipSelectionSnapActive)
             return;
 
+        ResetShipSelectionCarouselMotion();
         shipSelectionCenterIndex = Mathf.Min(SelectableShipTypes.Length - 1, shipSelectionCenterIndex + 1);
         shipSelectionCenterType = SelectableShipTypes[shipSelectionCenterIndex];
         RefreshShipSelectionView();
@@ -8314,7 +9611,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void OnShipSelectionCardClicked(int cardIndex)
     {
-        if (inventoryActionInProgress)
+        if (inventoryActionInProgress || shipSelectionDragActive || shipSelectionSnapActive)
             return;
 
         if (cardIndex < 0 || cardIndex >= shipSelectionCardObjects.Length)
@@ -8455,7 +9752,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
                     selected ? new Color(0.28f, 0.5f, 0.74f, 1f) : new Color(0.22f, 0.3f, 0.42f, 1f));
             }
 
-            UpdateShipSelectionCardLayering();
+            ApplyShipSelectionCarouselVisuals();
             shipSelectionDirty = false;
         }
     }
@@ -8465,12 +9762,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (shipSelectionCardObjects == null)
             return;
 
-        if (shipSelectionCardObjects.Length > 0 && shipSelectionCardObjects[0] != null && shipSelectionCardObjects[0].activeSelf)
-            shipSelectionCardObjects[0].transform.SetSiblingIndex(0);
-        if (shipSelectionCardObjects.Length > 2 && shipSelectionCardObjects[2] != null && shipSelectionCardObjects[2].activeSelf)
-            shipSelectionCardObjects[2].transform.SetSiblingIndex(1);
-        if (shipSelectionCardObjects.Length > 1 && shipSelectionCardObjects[1] != null && shipSelectionCardObjects[1].activeSelf)
-            shipSelectionCardObjects[1].transform.SetSiblingIndex(2);
+        SortSelectionCardsByCenter(shipSelectionCardObjects, shipSelectionVisualOffset);
 
         if (shipSelectionBackButton != null)
             shipSelectionBackButton.transform.SetAsLastSibling();
@@ -8575,13 +9867,32 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 if (slotRect != null)
                 {
                     slotRect.anchoredPosition = slotLayout[i];
-                    slotRect.sizeDelta = centerCard ? new Vector2(92f, 92f) : new Vector2(72f, 72f);
+                    slotRect.sizeDelta = GetShipSelectionSlotSize(centerCard);
                 }
+
+                Image slotImage = slotObjects[i].GetComponent<Image>();
+                if (slotImage != null)
+                    slotImage.color = GetShipSelectionSlotColor(i);
+
+                Outline outline = slotObjects[i].GetComponent<Outline>();
+                if (outline != null)
+                {
+                    outline.effectColor = GetShipSelectionSlotOutlineColor(i);
+                    outline.effectDistance = new Vector2(2.2f, -2.2f);
+                }
+
+                TMP_Text slotText = slotObjects[i].GetComponentInChildren<TMP_Text>(true);
+                ApplyEquipmentSlotPreviewTextStyle(slotText);
             }
         }
     }
 
     void LayoutShipSelectionStats(int cardIndex, bool centerCard)
+    {
+        LayoutShipSelectionStats(cardIndex, centerCard ? 1f : 0f);
+    }
+
+    void LayoutShipSelectionStats(int cardIndex, float centerAmount)
     {
         TMP_Text[] statLabels = shipSelectionCardStatLabelTexts != null && cardIndex < shipSelectionCardStatLabelTexts.Length
             ? shipSelectionCardStatLabelTexts[cardIndex]
@@ -8589,10 +9900,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (statLabels == null)
             return;
 
-        float x = centerCard ? 260f : 186f;
-        float topY = centerCard ? -144f : -130f;
-        Vector2 cardSize = centerCard ? new Vector2(236f, 58f) : new Vector2(182f, 46f);
-        float spacing = centerCard ? 12f : 10f;
+        centerAmount = Mathf.Clamp01(centerAmount);
+        float x = Mathf.Lerp(186f, 260f, centerAmount);
+        float topY = Mathf.Lerp(-130f, -144f, centerAmount);
+        Vector2 cardSize = Vector2.Lerp(new Vector2(182f, 46f), new Vector2(236f, 58f), centerAmount);
+        float spacing = Mathf.Lerp(10f, 12f, centerAmount);
+        float labelTop = Mathf.Lerp(-10f, -12f, centerAmount);
+        float textHeight = Mathf.Lerp(16f, 20f, centerAmount);
+        float statFontSize = Mathf.Lerp(14f, 18f, centerAmount);
 
         for (int i = 0; i < statLabels.Length; i++)
         {
@@ -8617,9 +9932,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
             labelRect.anchorMin = new Vector2(0f, 1f);
             labelRect.anchorMax = new Vector2(0f, 1f);
             labelRect.pivot = new Vector2(0f, 1f);
-            labelRect.anchoredPosition = new Vector2(12f, centerCard ? -12f : -10f);
-            labelRect.sizeDelta = new Vector2(cardSize.x * 0.48f, centerCard ? 20f : 16f);
-            label.fontSize = centerCard ? 18f : 14f;
+            labelRect.anchoredPosition = new Vector2(12f, labelTop);
+            labelRect.sizeDelta = new Vector2(cardSize.x * 0.48f, textHeight);
+            label.fontSize = statFontSize;
 
             if (value != null)
             {
@@ -8627,9 +9942,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 valueRect.anchorMin = new Vector2(1f, 1f);
                 valueRect.anchorMax = new Vector2(1f, 1f);
                 valueRect.pivot = new Vector2(1f, 1f);
-                valueRect.anchoredPosition = new Vector2(centerCard ? -10f : -8f, centerCard ? -12f : -10f);
-                valueRect.sizeDelta = new Vector2(cardSize.x * 0.42f, centerCard ? 20f : 16f);
-                value.fontSize = centerCard ? 18f : 14f;
+                valueRect.anchoredPosition = new Vector2(Mathf.Lerp(-8f, -10f, centerAmount), labelTop);
+                valueRect.sizeDelta = new Vector2(cardSize.x * 0.42f, textHeight);
+                value.fontSize = statFontSize;
             }
 
             Transform barBgTransform = cardRect.Find("BarBg");
@@ -8641,8 +9956,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
                     barBgRect.anchorMin = new Vector2(0f, 0f);
                     barBgRect.anchorMax = new Vector2(1f, 0f);
                     barBgRect.pivot = new Vector2(0.5f, 0f);
-                    barBgRect.anchoredPosition = new Vector2(0f, centerCard ? 10f : 8f);
-                    barBgRect.sizeDelta = new Vector2(-18f, centerCard ? 14f : 10f);
+                    barBgRect.anchoredPosition = new Vector2(0f, Mathf.Lerp(8f, 10f, centerAmount));
+                    barBgRect.sizeDelta = new Vector2(-18f, Mathf.Lerp(10f, 14f, centerAmount));
                 }
             }
         }
@@ -8726,19 +10041,25 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (text == null)
             return;
 
+        ApplyEquipmentSlotPreviewTextStyle(text);
+
         bool occupied = enabled && !string.IsNullOrWhiteSpace(itemId);
         Sprite itemSprite = occupied ? InventoryItemCatalog.GetIcon(itemId) : null;
         bool showDefaultWeaponPlaceholder = !occupied && InventoryItemCatalog.GetEquipmentSlotCategory(slotIndex) == InventoryItemCategory.Weapon;
         Sprite placeholderSprite = showDefaultWeaponPlaceholder ? WeaponAttackCatalog.GetWeaponIcon(WeaponAttackCatalog.SimpleGunId) : null;
 
         text.text = occupied && itemSprite == null ? InventoryItemCatalog.GetShortLabel(itemId) : label;
-        text.color = Color.white;
+        text.color = new Color(0.92f, 0.96f, 0.98f, 0.98f);
         Image bg = text.transform.parent != null ? text.transform.parent.GetComponent<Image>() : null;
         if (bg != null)
+            bg.color = GetShipSelectionSlotColor(slotIndex);
+
+        Outline outline = text.transform.parent != null ? text.transform.parent.GetComponent<Outline>() : null;
+        if (outline != null)
         {
-            bg.color = occupied
-                ? InventoryItemCatalog.GetRarityColor(itemId)
-                : new Color(0.17f, 0.22f, 0.28f, 0.88f);
+            outline.effectColor = GetShipSelectionSlotOutlineColor(slotIndex);
+            outline.effectDistance = new Vector2(2.2f, -2.2f);
+            outline.enabled = true;
         }
 
         if (icon != null)
@@ -8748,6 +10069,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 ? itemSprite != null
                 : placeholderSprite != null;
             icon.color = occupied ? Color.white : new Color(1f, 1f, 1f, 0.28f);
+            icon.transform.SetAsLastSibling();
         }
 
         if (button != null)
@@ -8846,6 +10168,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         LoadStandaloneSprite("PROJECTS_SCREEN.png");
         LoadStandaloneSprite("SUPPLY_TO_SURVIVE_PROJECT.png");
         LoadStandaloneSprite("SPACE_MAYHEM.png");
+        LoadStandaloneSprite("omerta_screen.png");
 
         for (int skinIndex = 0; skinIndex <= ShipCatalog.MaxShipSkinIndex; skinIndex++)
             LoadShipPreviewSprite(skinIndex);
@@ -8889,6 +10212,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             "PROJECTS_SCREEN.png" => "PROJECTS_SCREEN",
             "SUPPLY_TO_SURVIVE_PROJECT.png" => "SUPPLY_TO_SURVIVE_PROJECT",
             "SPACE_MAYHEM.png" => "SPACE_MAYHEM",
+            "omerta_screen.png" => "omerta_screen",
             _ => null
         };
 
@@ -8904,6 +10228,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             "PROJECTS_SCREEN.png" => "Assets/Resources/PROJECTS_SCREEN.png",
             "SUPPLY_TO_SURVIVE_PROJECT.png" => "Assets/Resources/SUPPLY_TO_SURVIVE_PROJECT.png",
             "SPACE_MAYHEM.png" => "Assets/Resources/SPACE_MAYHEM.png",
+            "omerta_screen.png" => "Assets/Resources/omerta_screen.png",
             _ => null
         };
 
@@ -9429,6 +10754,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             shipInventoryStartConfirmNoButton.interactable = interactable;
         if (shopCloseButton != null)
             shopCloseButton.interactable = interactable;
+        RefreshShopSortButton();
         RefreshTraderSelectionVisuals();
         if (cheatAddMoneyButton != null)
             cheatAddMoneyButton.interactable = interactable && !inventoryActionInProgress;
@@ -9438,6 +10764,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
             cheatUnlockBlueprintsButton.interactable = interactable && !inventoryActionInProgress;
         if (cheatLockBlueprintsButton != null)
             cheatLockBlueprintsButton.interactable = interactable && !inventoryActionInProgress;
+        if (cheatUnlockMapsButton != null)
+            cheatUnlockMapsButton.interactable = interactable && !inventoryActionInProgress;
+        if (cheatLockMapsButton != null)
+            cheatLockMapsButton.interactable = interactable && !inventoryActionInProgress;
         if (cheatResetAccountButton != null)
             cheatResetAccountButton.interactable = interactable && !inventoryActionInProgress;
         if (cheatResetConfirmYesButton != null)
@@ -9716,39 +11046,44 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
         if (TryGetEquipmentItemId(slotIndex, out string itemId))
         {
-            if (IsPreviewingSameItem(ProfileItemSource.EquipmentSlot, slotIndex, itemId))
-            {
-                HideItemPreview();
-                SetStatus(string.Empty);
-                return;
-            }
-
             ShowItemPreview(ProfileItemSource.EquipmentSlot, slotIndex, itemId);
+            if (ApplyEquipmentSlotPlayerInventoryFilter(slotIndex))
+                return;
+
             SetStatus("Equipment item selected.");
         }
         else
         {
             HideItemPreview();
-            if (ShipCatalog.IsEquipmentSlotEnabled(slotIndex, selectedSkin))
-            {
-                SetPlayerInventoryFilter(PlayerInventoryFilterMode.CustomEquipmentSlot, slotIndex);
-                resetPlayerInventoryScrollOnNextRefresh = true;
-                InventoryItemCategory category = InventoryItemCatalog.GetEquipmentSlotCategory(slotIndex);
-                SetStatus("Showing " + FormatInventoryFilterCategory(category) + " items.");
-
-                if (currentScreen != ProfileScreen.Inventory)
-                {
-                    SwitchToScreen(ProfileScreen.Inventory, false);
-                    RefreshView();
-                    return;
-                }
-
-                RefreshView();
+            if (ApplyEquipmentSlotPlayerInventoryFilter(slotIndex))
                 return;
-            }
 
             SetStatus(string.Empty);
         }
+    }
+
+    bool ApplyEquipmentSlotPlayerInventoryFilter(int slotIndex)
+    {
+        if (!ShipCatalog.IsEquipmentSlotEnabled(slotIndex, selectedSkin))
+            return false;
+
+        SetPlayerInventoryFilter(PlayerInventoryFilterMode.CustomEquipmentSlot, slotIndex);
+        resetPlayerInventoryScrollOnNextRefresh = true;
+        InventoryItemCategory category = InventoryItemCatalog.GetEquipmentSlotCategory(slotIndex);
+        SetStatus("Showing " + FormatInventoryFilterCategory(category) + " items.");
+
+        if (currentScreen != ProfileScreen.Inventory)
+        {
+            SwitchToScreen(ProfileScreen.Inventory, false);
+            RefreshView();
+            return true;
+        }
+
+        PlayerProfileData profile = PlayerProfileService.Instance.CurrentProfile;
+        if (profile != null)
+            RefreshInventoryView(profile.Inventory);
+
+        return true;
     }
 
     string FormatInventoryFilterCategory(InventoryItemCategory category)
@@ -9759,6 +11094,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
             InventoryItemCategory.Shield => "shield",
             InventoryItemCategory.Engine => "engine",
             InventoryItemCategory.Gadget => "gadget",
+            InventoryItemCategory.Support => "support",
+            InventoryItemCategory.Rescue => "rescue",
             _ => "compatible"
         };
     }
@@ -9934,7 +11271,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
             }
             else
             {
-                itemInfoSalvageText.text = "SALVAGE\n" + FormatItemIdList(InventoryItemCatalog.GetSalvageOutputs(itemId), "No salvage output.");
+                itemInfoSalvageText.text = "SALVAGE\n" + (InventoryItemCatalog.HasRandomSalvageOutputs(itemId)
+                    ? InventoryItemCatalog.GetRandomSalvageDescription(itemId)
+                    : FormatItemIdList(InventoryItemCatalog.GetSalvageOutputs(itemId), "No salvage output."));
             }
         }
 
@@ -10030,10 +11369,22 @@ public class PlayerProfilePanelUI : MonoBehaviour
     string BuildItemInfoDescription(string itemId, InventoryItemDefinition definition)
     {
         if (definition != null && definition.ItemType == InventoryItemType.Equipment)
-            return GetEquipmentGameplayDescription(itemId, definition.Category);
+            return AppendWeaponClassificationDescription(itemId, GetEquipmentGameplayDescription(itemId, definition.Category));
 
         string description = definition != null ? definition.Description : InventoryItemCatalog.GetDescription(itemId);
         return string.IsNullOrWhiteSpace(description) ? "No additional description." : description;
+    }
+
+    string AppendWeaponClassificationDescription(string itemId, string description)
+    {
+        string classification = WeaponAttackCatalog.BuildEquipmentClassificationSummary(itemId);
+        if (string.IsNullOrWhiteSpace(classification))
+            return description;
+
+        if (string.IsNullOrWhiteSpace(description))
+            return classification;
+
+        return description + "\n\n" + classification;
     }
 
     string GetEquipmentGameplayDescription(string itemId, InventoryItemCategory category)
@@ -10089,15 +11440,21 @@ public class PlayerProfilePanelUI : MonoBehaviour
             case InventoryItemCatalog.AutoTurretId:
                 return "A deployable turret that supports the pilot by firing at nearby enemies.";
             case InventoryItemCatalog.GuidanceSystemId:
-                return "A navigation gadget that points the pilot toward useful objectives and threats.";
+                return "A support system that points the pilot toward useful objectives and threats.";
+            case InventoryItemCatalog.CloakDeviceId:
+                return "A stealth gadget that hides the ship for a short time, but breaks immediately when the pilot fires.";
             case InventoryItemCatalog.LootingFriendId:
-                return "A companion drone that helps collect nearby loot while the pilot focuses on flying.";
+                return "A support drone that helps collect nearby loot while the pilot focuses on flying.";
+            case InventoryItemCatalog.FiringFriendId:
+                return "A support drone that follows the ship and fires short-range laser bursts at nearby enemies.";
             case InventoryItemCatalog.SpaceDrillId:
                 return "A mining drone that extracts loot from a nearby asteroid and brings it back.";
             case InventoryItemCatalog.SpaceTrapId:
                 return "A sabotage kit that turns a loot object into a dangerous surprise.";
             case InventoryItemCatalog.EmergencySuitBeaconId:
-                return "A survival beacon that helps the astronaut immediately after losing the ship.";
+                return "A rescue beacon that helps the astronaut immediately after losing the ship.";
+            case InventoryItemCatalog.EscapePodId:
+                return "A rescue capsule that replaces the astronaut after losing the ship.";
             case InventoryItemCatalog.SalvageMagnetArrayId:
                 return "A salvage aid that makes wreck loot and random salvage easier to collect.";
             case InventoryItemCatalog.ShieldReactorId:
@@ -10110,6 +11467,16 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 return "A cargo module installed in a shield slot to carry more ship inventory.";
             case InventoryItemCatalog.StrongPlatingId:
                 return "A hull protection module for safer travel through dangerous environmental effects.";
+            case InventoryItemCatalog.ShieldCapacitorId:
+                return "A compact shield capacitor that adds a large protective energy reserve.";
+            case InventoryItemCatalog.AegisBatteryId:
+                return "A shield battery bank that makes Battery gadgets rebuild shields much faster.";
+            case InventoryItemCatalog.RegenerativeShieldMatrixId:
+                return "A regenerative shield module that slowly restores active shields after the ship avoids damage.";
+            case InventoryItemCatalog.BulwarkProjectorId:
+                return "A heavy shield projector that shrugs off laser and autocannon fire.";
+            case InventoryItemCatalog.AlienAegisCoreId:
+                return "An alien shield core that briefly hardens the ship after its shield collapses.";
         }
 
         return category switch
@@ -10117,7 +11484,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
             InventoryItemCategory.Weapon => "A weapon module that changes how the ship attacks enemies.",
             InventoryItemCategory.Engine => "An engine module that changes how the ship moves and escapes.",
             InventoryItemCategory.Shield => "A defensive module that changes how the ship survives damage.",
-            InventoryItemCategory.Gadget => "A utility gadget that adds a special tactical action or passive support.",
+            InventoryItemCategory.Gadget => "A utility gadget that adds a special tactical action.",
+            InventoryItemCategory.Support => "A support module that adds a tactical action or automatic helper system.",
+            InventoryItemCategory.Rescue => "A rescue module that improves survival after the ship is lost.",
             _ => "An equipment module that changes the ship's capabilities."
         };
     }
@@ -10637,6 +12006,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
         switch (targetSource)
         {
             case ProfileItemSource.PlayerInventory:
+                if (source == ProfileItemSource.EquipmentSlot)
+                    return TryPlaceEquipmentItemIntoPlayerInventory(inventory, targetIndex, itemId, sourceIndex);
+
                 return TryPlaceItemIntoIndexedSlot(inventory.PlayerSlots, inventory.PlayerSlots != null ? inventory.PlayerSlots.Length : 0, targetIndex, itemId, inventory, source, sourceIndex);
 
             case ProfileItemSource.ShipInventory:
@@ -10680,6 +12052,38 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
 
         return false;
+    }
+
+    bool TryPlaceEquipmentItemIntoPlayerInventory(PlayerInventoryData inventory, int targetIndex, string itemId, int equipmentSlotIndex)
+    {
+        if (inventory == null ||
+            inventory.PlayerSlots == null ||
+            targetIndex < 0 ||
+            targetIndex >= inventory.PlayerSlots.Length ||
+            !inventory.IsEquipmentSlotEnabled(equipmentSlotIndex, selectedSkin))
+        {
+            return false;
+        }
+
+        string targetItem = inventory.PlayerSlots[targetIndex];
+        if (string.IsNullOrWhiteSpace(targetItem))
+        {
+            inventory.PlayerSlots[targetIndex] = itemId;
+            return true;
+        }
+
+        if (TryReturnItemToSourceSlot(inventory, ProfileItemSource.EquipmentSlot, equipmentSlotIndex, targetItem))
+        {
+            inventory.PlayerSlots[targetIndex] = itemId;
+            return true;
+        }
+
+        int fallbackIndex = inventory.GetFirstEmptyPlayerSlot();
+        if (fallbackIndex < 0)
+            return false;
+
+        inventory.PlayerSlots[fallbackIndex] = itemId;
+        return true;
     }
 
     bool TryPlaceItemIntoIndexedSlot(string[] slots, int capacity, int targetIndex, string itemId, PlayerInventoryData inventory, ProfileItemSource source, int sourceIndex)
@@ -11086,6 +12490,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
             InventoryItemCategory.Shield => true,
             InventoryItemCategory.Engine => true,
             InventoryItemCategory.Gadget => true,
+            InventoryItemCategory.Support => true,
+            InventoryItemCategory.Rescue => true,
             _ => false
         };
     }
@@ -11113,6 +12519,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
             string itemId = slots[slotIndex];
             bool occupied = !string.IsNullOrWhiteSpace(itemId);
+            bool isRadioactiveCargo = isShipInventory && occupied && InventoryItemCatalog.IsRadioactiveTreasure(itemId);
             bool isSafePocket = isShipInventory && IsActiveShipSafePocketIndex(i);
             bool isAstronautSlot = isShipInventory && IsActiveShipAstronautCargoIndex(i);
             Image image = buttons[i] != null ? buttons[i].GetComponent<Image>() : null;
@@ -11152,13 +12559,21 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
             if (image != null)
             {
-                image.color = GetInventorySlotColor(itemId, occupied, isSafePocket, isAstronautSlot);
+                image.color = GetInventorySlotColor(itemId, occupied, isSafePocket, isAstronautSlot, isRadioactiveCargo);
             }
 
             if (buttons[i] != null)
             {
                 Outline outline = buttons[i].GetComponent<Outline>();
-                if (isSafePocket)
+                if (isRadioactiveCargo)
+                {
+                    if (outline == null)
+                        outline = buttons[i].gameObject.AddComponent<Outline>();
+                    outline.effectColor = new Color(0.34f, 1f, 0.2f, 0.98f);
+                    outline.effectDistance = new Vector2(3f, 3f);
+                    outline.enabled = true;
+                }
+                else if (isSafePocket)
                 {
                     if (outline == null)
                         outline = buttons[i].gameObject.AddComponent<Outline>();
@@ -11214,11 +12629,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
     }
 
-    Color GetInventorySlotColor(string itemId, bool occupied, bool isSafePocket, bool isAstronautSlot)
+    Color GetInventorySlotColor(string itemId, bool occupied, bool isSafePocket, bool isAstronautSlot, bool isRadioactiveCargo)
     {
         if (occupied)
         {
             Color baseColor = InventoryItemCatalog.GetRarityColor(itemId);
+            if (isRadioactiveCargo)
+                return Color.Lerp(baseColor, new Color(0.18f, 0.95f, 0.24f, baseColor.a), 0.58f);
+
             if (isSafePocket)
                 return Color.Lerp(baseColor, new Color(0.24f, 0.74f, 0.66f, baseColor.a), 0.32f);
 
@@ -11537,20 +12955,20 @@ public class SessionBrowserPanelUI : MonoBehaviour
         Image background = panelObject.GetComponent<Image>();
         background.color = new Color(0.03f, 0.05f, 0.08f, 0.98f);
 
-        CreateText(panelObject.transform, "BrowserTitle", "ACTIVE ROUNDS", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -48f), new Vector2(700f, 40f), 34f, TextAlignmentOptions.Center);
-        CreateText(panelObject.transform, "BrowserSubtitle", "Choose an existing session or create a new multiplayer round.", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -92f), new Vector2(920f, 28f), 18f, TextAlignmentOptions.Center);
+        CreateText(panelObject.transform, "BrowserTitle", "ACTIVE ROUNDS", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -52f), new Vector2(820f, 54f), 44f, TextAlignmentOptions.Center);
+        CreateText(panelObject.transform, "BrowserSubtitle", "Choose an existing session or create a new multiplayer round.", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -104f), new Vector2(1080f, 34f), 23f, TextAlignmentOptions.Center);
 
-        statusText = CreateText(panelObject.transform, "BrowserStatus", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -134f), new Vector2(900f, 26f), 17f, TextAlignmentOptions.Center);
+        statusText = CreateText(panelObject.transform, "BrowserStatus", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -148f), new Vector2(1080f, 34f), 22f, TextAlignmentOptions.Center);
         statusText.fontStyle = FontStyles.Normal;
         statusText.color = new Color(0.7f, 0.84f, 0.93f, 0.95f);
 
-        Button backButton = CreateButton(panelObject.transform, "BrowserBackButton", "BACK", new Vector2(-330f, -154f), new Vector2(210f, 68f), OnBackClicked);
-        StyleButton(backButton, new Color(0.18f, 0.22f, 0.29f, 0.95f), new Color(0.24f, 0.29f, 0.37f, 1f));
+        Button backButton = CreateButton(panelObject.transform, "BrowserBackButton", "BACK", new Vector2(-410f, -176f), new Vector2(260f, 84f), OnBackClicked);
+        StyleButton(backButton, new Color(0.5f, 0.08f, 0.1f, 0.98f), new Color(0.72f, 0.13f, 0.16f, 1f));
 
-        Button refreshButton = CreateButton(panelObject.transform, "BrowserRefreshButton", "REFRESH", new Vector2(-90f, -154f), new Vector2(210f, 68f), OnRefreshClicked);
+        Button refreshButton = CreateButton(panelObject.transform, "BrowserRefreshButton", "REFRESH", new Vector2(-112f, -176f), new Vector2(260f, 84f), OnRefreshClicked);
         StyleButton(refreshButton, new Color(0.16f, 0.36f, 0.44f, 0.95f), new Color(0.2f, 0.46f, 0.56f, 1f));
 
-        Button newRoundButton = CreateButton(panelObject.transform, "BrowserNewRoundButton", "NEW ROUND", new Vector2(195f, -154f), new Vector2(300f, 72f), OnNewRoundClicked);
+        Button newRoundButton = CreateButton(panelObject.transform, "BrowserNewRoundButton", "NEW ROUND", new Vector2(244f, -176f), new Vector2(380f, 88f), OnNewRoundClicked);
         StyleButton(newRoundButton, new Color(0.12f, 0.44f, 0.27f, 0.98f), new Color(0.16f, 0.56f, 0.34f, 1f));
 
         GameObject viewportObject = new GameObject("RoomListViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
@@ -11559,8 +12977,8 @@ public class SessionBrowserPanelUI : MonoBehaviour
         viewportRect.anchorMin = new Vector2(0.5f, 0.5f);
         viewportRect.anchorMax = new Vector2(0.5f, 0.5f);
         viewportRect.pivot = new Vector2(0.5f, 0.5f);
-        viewportRect.anchoredPosition = new Vector2(0f, -96f);
-        viewportRect.sizeDelta = new Vector2(1240f, 610f);
+        viewportRect.anchoredPosition = new Vector2(0f, -132f);
+        viewportRect.sizeDelta = new Vector2(1520f, 690f);
 
         Image viewportImage = viewportObject.GetComponent<Image>();
         viewportImage.color = new Color(0.08f, 0.11f, 0.15f, 0.9f);
@@ -11575,8 +12993,8 @@ public class SessionBrowserPanelUI : MonoBehaviour
         roomListContentRect.sizeDelta = new Vector2(0f, 0f);
 
         VerticalLayoutGroup layout = contentObject.GetComponent<VerticalLayoutGroup>();
-        layout.padding = new RectOffset(24, 24, 24, 24);
-        layout.spacing = 18f;
+        layout.padding = new RectOffset(28, 28, 28, 28);
+        layout.spacing = 20f;
         layout.childAlignment = TextAnchor.UpperCenter;
         layout.childControlWidth = true;
         layout.childControlHeight = false;
@@ -11593,9 +13011,9 @@ public class SessionBrowserPanelUI : MonoBehaviour
         roomListScrollRect.movementType = ScrollRect.MovementType.Clamped;
         roomListScrollRect.viewport = viewportRect;
         roomListScrollRect.content = roomListContentRect;
-        roomListScrollRect.scrollSensitivity = 38f;
+        roomListScrollRect.scrollSensitivity = 44f;
 
-        emptyStateText = CreateText(panelObject.transform, "RoomListEmpty", "No sessions are visible right now. Create a new round to start one.", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -40f), new Vector2(760f, 40f), 20f, TextAlignmentOptions.Center);
+        emptyStateText = CreateText(panelObject.transform, "RoomListEmpty", "No sessions are visible right now. Create a new round to start one.", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -46f), new Vector2(1040f, 54f), 26f, TextAlignmentOptions.Center);
         emptyStateText.fontStyle = FontStyles.Normal;
         emptyStateText.color = new Color(0.72f, 0.79f, 0.87f, 0.92f);
     }
@@ -11748,9 +13166,9 @@ public class SessionBrowserPanelUI : MonoBehaviour
         rowObject.transform.SetParent(roomListContentRect, false);
 
         RectTransform rect = rowObject.GetComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(0f, 156f);
+        rect.sizeDelta = new Vector2(0f, 188f);
         LayoutElement layout = rowObject.GetComponent<LayoutElement>();
-        layout.preferredHeight = 156f;
+        layout.preferredHeight = 188f;
 
         rowView = new SessionRowView
         {
@@ -11759,25 +13177,28 @@ public class SessionBrowserPanelUI : MonoBehaviour
             Button = rowObject.GetComponent<Button>(),
             Outline = rowObject.AddComponent<Outline>()
         };
-        rowView.Outline.effectDistance = new Vector2(2f, -2f);
+        rowView.Outline.effectDistance = new Vector2(3f, -3f);
         rowView.Outline.useGraphicAlpha = true;
 
-        rowView.TitleText = CreateText(rowObject.transform, "RoomTitle", string.Empty, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -28f), new Vector2(620f, 38f), 26f, TextAlignmentOptions.Left);
+        rowView.TitleText = CreateText(rowObject.transform, "RoomTitle", string.Empty, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(34f, -34f), new Vector2(860f, 46f), 33f, TextAlignmentOptions.Left);
         rowView.TitleText.rectTransform.pivot = new Vector2(0f, 0.5f);
+        rowView.TitleText.overflowMode = TextOverflowModes.Truncate;
 
-        rowView.MetaText = CreateText(rowObject.transform, "RoomMeta", string.Empty, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -70f), new Vector2(760f, 30f), 17f, TextAlignmentOptions.Left);
+        rowView.MetaText = CreateText(rowObject.transform, "RoomMeta", string.Empty, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(34f, -84f), new Vector2(930f, 34f), 22f, TextAlignmentOptions.Left);
         rowView.MetaText.rectTransform.pivot = new Vector2(0f, 0.5f);
         rowView.MetaText.fontStyle = FontStyles.Normal;
         rowView.MetaText.color = new Color(0.72f, 0.81f, 0.9f, 0.95f);
+        rowView.MetaText.overflowMode = TextOverflowModes.Truncate;
 
-        rowView.EffectsText = CreateText(rowObject.transform, "RoomEffects", string.Empty, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -106f), new Vector2(760f, 26f), 16f, TextAlignmentOptions.Left);
+        rowView.EffectsText = CreateText(rowObject.transform, "RoomEffects", string.Empty, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(34f, -128f), new Vector2(930f, 32f), 21f, TextAlignmentOptions.Left);
         rowView.EffectsText.rectTransform.pivot = new Vector2(0f, 0.5f);
         rowView.EffectsText.fontStyle = FontStyles.Bold;
         rowView.EffectsText.color = new Color(0.72f, 0.58f, 1f, 0.98f);
         rowView.EffectsText.overflowMode = TextOverflowModes.Truncate;
 
-        rowView.StateText = CreateText(rowObject.transform, "RoomState", string.Empty, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-232f, -34f), new Vector2(210f, 38f), 20f, TextAlignmentOptions.Center);
+        rowView.StateText = CreateText(rowObject.transform, "RoomState", string.Empty, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-304f, -44f), new Vector2(280f, 46f), 25f, TextAlignmentOptions.Center);
         rowView.StateText.rectTransform.pivot = new Vector2(1f, 0.5f);
+        rowView.StateText.overflowMode = TextOverflowModes.Truncate;
 
         rowView.JoinPillObject = new GameObject("RoomJoinPill", typeof(RectTransform), typeof(Image));
         rowView.JoinPillObject.transform.SetParent(rowObject.transform, false);
@@ -11785,12 +13206,12 @@ public class SessionBrowserPanelUI : MonoBehaviour
         joinPillRect.anchorMin = new Vector2(1f, 1f);
         joinPillRect.anchorMax = new Vector2(1f, 1f);
         joinPillRect.pivot = new Vector2(1f, 0.5f);
-        joinPillRect.anchoredPosition = new Vector2(-28f, -84f);
-        joinPillRect.sizeDelta = new Vector2(158f, 56f);
+        joinPillRect.anchoredPosition = new Vector2(-34f, -108f);
+        joinPillRect.sizeDelta = new Vector2(194f, 68f);
 
         rowView.JoinPillImage = rowView.JoinPillObject.GetComponent<Image>();
         rowView.JoinPillImage.raycastTarget = false;
-        rowView.JoinText = CreateText(rowView.JoinPillObject.transform, "RoomJoin", string.Empty, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, 21f, TextAlignmentOptions.Center);
+        rowView.JoinText = CreateText(rowView.JoinPillObject.transform, "RoomJoin", string.Empty, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, 26f, TextAlignmentOptions.Center);
         rowView.JoinText.rectTransform.pivot = new Vector2(0.5f, 0.5f);
         rowView.JoinText.fontStyle = FontStyles.Bold;
 
@@ -11888,12 +13309,12 @@ public class SessionBrowserPanelUI : MonoBehaviour
             onClick?.Invoke();
         });
 
-        TMP_Text text = CreateText(buttonObject.transform, objectName + "Text", label, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, 21f, TextAlignmentOptions.Center);
+        TMP_Text text = CreateText(buttonObject.transform, objectName + "Text", label, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, 27f, TextAlignmentOptions.Center);
         text.fontStyle = FontStyles.Bold;
         text.enableAutoSizing = true;
-        text.fontSizeMin = 16f;
-        text.fontSizeMax = 22f;
-        text.margin = new Vector4(8f, 4f, 8f, 4f);
+        text.fontSizeMin = 22f;
+        text.fontSizeMax = 30f;
+        text.margin = new Vector4(12f, 6f, 12f, 6f);
         return button;
     }
 
@@ -12017,39 +13438,61 @@ public class ProfileCraftingSlotDragHandler : MonoBehaviour, IBeginDragHandler, 
     }
 }
 
-public class ProfileShipSelectionSwipeHandler : MonoBehaviour, IBeginDragHandler, IEndDragHandler
+public class ProfileShipSelectionSwipeHandler : MonoBehaviour, IPointerDownHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     public PlayerProfilePanelUI owner;
-    Vector2 dragStartPosition;
+    Vector2 pointerDownPosition;
+    bool hasPointerDownPosition;
+
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        pointerDownPosition = eventData.position;
+        hasPointerDownPosition = true;
+    }
 
     public void OnBeginDrag(PointerEventData eventData)
     {
-        dragStartPosition = eventData.position;
+        owner?.BeginShipSelectionDrag(eventData, hasPointerDownPosition ? pointerDownPosition : eventData.position);
+    }
+
+    public void OnDrag(PointerEventData eventData)
+    {
+        owner?.UpdateShipSelectionDrag(eventData);
     }
 
     public void OnEndDrag(PointerEventData eventData)
     {
-        Vector2 delta = eventData.position - dragStartPosition;
-        if (Mathf.Abs(delta.x) > Mathf.Abs(delta.y))
-            owner?.OnShipSelectionSwiped(delta.x);
+        owner?.EndShipSelectionDrag(eventData);
+        hasPointerDownPosition = false;
     }
 }
 
-public class ProfilePilotSelectionSwipeHandler : MonoBehaviour, IBeginDragHandler, IEndDragHandler
+public class ProfilePilotSelectionSwipeHandler : MonoBehaviour, IPointerDownHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     public PlayerProfilePanelUI owner;
-    Vector2 dragStartPosition;
+    Vector2 pointerDownPosition;
+    bool hasPointerDownPosition;
+
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        pointerDownPosition = eventData.position;
+        hasPointerDownPosition = true;
+    }
 
     public void OnBeginDrag(PointerEventData eventData)
     {
-        dragStartPosition = eventData.position;
+        owner?.BeginPilotSelectionDrag(eventData, hasPointerDownPosition ? pointerDownPosition : eventData.position);
+    }
+
+    public void OnDrag(PointerEventData eventData)
+    {
+        owner?.UpdatePilotSelectionDrag(eventData);
     }
 
     public void OnEndDrag(PointerEventData eventData)
     {
-        Vector2 delta = eventData.position - dragStartPosition;
-        if (Mathf.Abs(delta.x) > Mathf.Abs(delta.y))
-            owner?.OnPilotSelectionSwiped(delta.x);
+        owner?.EndPilotSelectionDrag(eventData);
+        hasPointerDownPosition = false;
     }
 }
 

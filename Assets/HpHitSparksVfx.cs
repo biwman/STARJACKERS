@@ -27,6 +27,12 @@ public sealed class HpHitSparksVfx : MonoBehaviour
     readonly Color ember = new Color(1f, 0.46f, 0.12f, 1f);
     readonly Color dimRed = new Color(0.62f, 0.12f, 0.04f, 1f);
 
+    public static void Prewarm()
+    {
+        GetLineMaterial();
+        PrewarmSpriteTexture(GetGlowSprite());
+    }
+
     public static void Spawn(Vector3 position, Vector3 targetCenter, SpriteRenderer referenceRenderer = null)
     {
         GameObject effect = new GameObject("HpHitSparksVfx");
@@ -256,5 +262,13 @@ public sealed class HpHitSparksVfx : MonoBehaviour
         glowSprite = Sprite.Create(texture, new Rect(0f, 0f, GlowTextureSize, GlowTextureSize), new Vector2(0.5f, 0.5f), GlowTextureSize);
         glowSprite.name = "HpHitSparksGlowSprite";
         return glowSprite;
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
     }
 }

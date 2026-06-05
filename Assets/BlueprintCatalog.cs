@@ -21,6 +21,21 @@ sealed class WreckBlueprintDropRule
 
 public static class BlueprintCatalog
 {
+    const float ContainerBlueprintDropChanceMultiplier = 2f;
+    const float ContainerBlueprintDropChanceCap = 0.08f;
+
+    static readonly string[] StarterUnlockedBlueprintTargetItemIds =
+    {
+        InventoryItemCatalog.TripleGunId,
+        InventoryItemCatalog.BatteryId,
+        InventoryItemCatalog.ShieldReactorId,
+        InventoryItemCatalog.EmergencySuitBeaconId,
+        InventoryItemCatalog.KineticDampenerId,
+        InventoryItemCatalog.PowerEngineId,
+        InventoryItemCatalog.MagneticBeamId,
+        InventoryItemCatalog.CargoBayExtensionId
+    };
+
     static readonly BlueprintTradeOffer[] MissEnigmaOffers =
     {
         Offer(InventoryItemCatalog.RailGunId, InventoryItemCatalog.PirateBaseCoreId),
@@ -28,12 +43,22 @@ public static class BlueprintCatalog
         Offer(InventoryItemCatalog.EscapePodId, InventoryItemCatalog.RescueShipSalvageId, InventoryItemCatalog.CashSuitcaseId),
         Offer(InventoryItemCatalog.SalvageMagnetArrayId, InventoryItemCatalog.CashSuitcaseId, InventoryItemCatalog.RadarShipSalvageId),
         Offer(InventoryItemCatalog.PulseDisruptorId, InventoryItemCatalog.SpaceAnimalRemainsId, InventoryItemCatalog.PirateFighterSalvageId),
-        Offer(InventoryItemCatalog.ShieldReactorId, InventoryItemCatalog.PlatinumChunkId),
+        Offer(InventoryItemCatalog.StrongPlatingId, InventoryItemCatalog.PlatinumChunkId),
+        Offer(InventoryItemCatalog.AlienAegisCoreId, InventoryItemCatalog.SpaceAnimalRemainsId, InventoryItemCatalog.AsteroidEpicId),
         Offer(InventoryItemCatalog.TractorBeamId, InventoryItemCatalog.PlatinumChunkId),
         Offer(InventoryItemCatalog.AfterburnerStabilizerId, InventoryItemCatalog.PlatinumChunkId),
         Offer(InventoryItemCatalog.SpaceBombId, InventoryItemCatalog.PirateBaseCoreId, InventoryItemCatalog.SpaceMineWreckId),
+        ScrapOffer(InventoryItemCatalog.ShieldCapacitorId, 2),
+        ScrapOffer(InventoryItemCatalog.AegisBatteryId, 3),
+        ScrapOffer(InventoryItemCatalog.RegenerativeShieldMatrixId, 3),
+        ScrapOffer(InventoryItemCatalog.BulwarkProjectorId, 4),
         ScrapOffer(InventoryItemCatalog.AutoTurretId, 3),
+        ScrapOffer(InventoryItemCatalog.FiringFriendId, 4),
+        ScrapOffer(InventoryItemCatalog.DropbotId, 5),
         ScrapOffer(InventoryItemCatalog.SpaceDrillId, 3),
+        ScrapOffer(InventoryItemCatalog.TreasureScannerId, 4),
+        ScrapOffer(InventoryItemCatalog.ShortScannerId, 5),
+        ScrapOffer(InventoryItemCatalog.CloakDeviceId, 5),
         ScrapOffer(InventoryItemCatalog.GuidanceSystemId, 5),
         ScrapOffer(InventoryItemCatalog.DoubleEngineId, 6)
     };
@@ -48,58 +73,97 @@ public static class BlueprintCatalog
         InventoryItemCatalog.BatteryId
     };
 
+    public static string[] GetStarterUnlockedBlueprintItemIds()
+    {
+        string[] blueprintItemIds = new string[StarterUnlockedBlueprintTargetItemIds.Length];
+        for (int i = 0; i < StarterUnlockedBlueprintTargetItemIds.Length; i++)
+            blueprintItemIds[i] = InventoryItemCatalog.GetBlueprintItemId(StarterUnlockedBlueprintTargetItemIds[i]);
+
+        return blueprintItemIds;
+    }
+
+    public static bool IsStarterUnlockedBlueprint(string blueprintItemId)
+    {
+        if (!InventoryItemCatalog.IsBlueprintItem(blueprintItemId))
+            return false;
+
+        for (int i = 0; i < StarterUnlockedBlueprintTargetItemIds.Length; i++)
+        {
+            string starterBlueprintItemId = InventoryItemCatalog.GetBlueprintItemId(StarterUnlockedBlueprintTargetItemIds[i]);
+            if (string.Equals(starterBlueprintItemId, blueprintItemId, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
     static readonly WreckBlueprintDropRule[] WreckBlueprintDropRules =
     {
         WreckRule(InventoryItemCatalog.DroidScrapId,
             Drop(InventoryItemCatalog.EmergencySuitBeaconId, 0.012f),
+            Drop(InventoryItemCatalog.ShieldCapacitorId, 0.008f),
             Drop(InventoryItemCatalog.LureBeaconId, 0.0075f),
             Drop(InventoryItemCatalog.MagneticBeamId, 0.006f),
             Drop(InventoryItemCatalog.PowerEngineId, 0.006f),
             Drop(InventoryItemCatalog.SpaceDrillId, 0.0055f),
+            Drop(InventoryItemCatalog.FiringFriendId, 0.003f),
             Drop(InventoryItemCatalog.FusionEngineId, 0.003f),
             Drop(InventoryItemCatalog.LootingFriendId, 0.002f)),
         WreckRule(InventoryItemCatalog.SpaceMineWreckId,
             Drop(InventoryItemCatalog.SpaceTrapId, 0.012f),
             Drop(InventoryItemCatalog.KineticDampenerId, 0.0075f),
+            Drop(InventoryItemCatalog.ShieldCapacitorId, 0.0065f),
             Drop(InventoryItemCatalog.AutoTurretId, 0.0055f),
             Drop(InventoryItemCatalog.IonEngineId, 0.005f),
             Drop(InventoryItemCatalog.SpaceDrillId, 0.004f),
             Drop(InventoryItemCatalog.SpaceBombId, 0.0022f)),
         WreckRule(InventoryItemCatalog.SpaceTruckWreckId,
             Drop(InventoryItemCatalog.CargoBayExtensionId, 0.0115f),
+            Drop(InventoryItemCatalog.ShieldCapacitorId, 0.008f),
             Drop(InventoryItemCatalog.FusionEngineId, 0.0055f),
             Drop(InventoryItemCatalog.SuperBoosterId, 0.0045f),
+            Drop(InventoryItemCatalog.DropbotId, 0.003f),
             Drop(InventoryItemCatalog.HybridEngineId, 0.0035f),
             Drop(InventoryItemCatalog.StrongPlatingId, 0.0035f)),
         WreckRule(InventoryItemCatalog.ContainerShipWreckId,
             Drop(InventoryItemCatalog.CargoBayExtensionId, 0.0105f),
             Drop(InventoryItemCatalog.SalvageMagnetArrayId, 0.0065f),
+            Drop(InventoryItemCatalog.BulwarkProjectorId, 0.0055f),
             Drop(InventoryItemCatalog.StrongPlatingId, 0.0045f),
+            Drop(InventoryItemCatalog.DropbotId, 0.0032f),
             Drop(InventoryItemCatalog.SuperBoosterId, 0.0035f)),
         WreckRule(InventoryItemCatalog.NeutralFighterSalvageId,
             Drop(InventoryItemCatalog.GatlingGunId, 0.0095f),
             Drop(InventoryItemCatalog.DoubleIonizerId, 0.0085f),
             Drop(InventoryItemCatalog.RocketLauncherId, 0.0075f),
             Drop(InventoryItemCatalog.AutoTurretId, 0.006f),
+            Drop(InventoryItemCatalog.FiringFriendId, 0.0048f),
             Drop(InventoryItemCatalog.KineticDampenerId, 0.005f)),
         WreckRule(InventoryItemCatalog.RadarShipSalvageId,
             Drop(InventoryItemCatalog.MagneticBeamId, 0.0085f),
+            Drop(InventoryItemCatalog.RegenerativeShieldMatrixId, 0.006f),
             Drop(InventoryItemCatalog.DoubleIonizerId, 0.0055f),
             Drop(InventoryItemCatalog.AstroCutterId, 0.005f),
+            Drop(InventoryItemCatalog.TreasureScannerId, 0.0048f),
+            Drop(InventoryItemCatalog.ShortScannerId, 0.0045f),
+            Drop(InventoryItemCatalog.CloakDeviceId, 0.0032f),
             Drop(InventoryItemCatalog.IonEngineId, 0.0045f),
             Drop(InventoryItemCatalog.GuidanceSystemId, 0.004f),
             Drop(InventoryItemCatalog.StrongPlatingId, 0.0035f)),
         WreckRule(InventoryItemCatalog.RescueShipSalvageId,
             Drop(InventoryItemCatalog.EmergencySuitBeaconId, 0.011f),
             Drop(InventoryItemCatalog.CargoBayExtensionId, 0.0075f),
+            Drop(InventoryItemCatalog.AegisBatteryId, 0.006f),
             Drop(InventoryItemCatalog.LureBeaconId, 0.0065f),
             Drop(InventoryItemCatalog.StrongPlatingId, 0.004f),
+            Drop(InventoryItemCatalog.DropbotId, 0.0038f),
             Drop(InventoryItemCatalog.HybridEngineId, 0.0032f),
             Drop(InventoryItemCatalog.LootingFriendId, 0.003f)),
         WreckRule(InventoryItemCatalog.PirateFighterSalvageId,
             Drop(InventoryItemCatalog.RocketLauncherId, 0.0095f),
             Drop(InventoryItemCatalog.SpaceTrapId, 0.0065f),
             Drop(InventoryItemCatalog.AutoTurretId, 0.0055f),
+            Drop(InventoryItemCatalog.CloakDeviceId, 0.0022f),
             Drop(InventoryItemCatalog.DoubleRocketLauncherId, 0.0045f),
             Drop(InventoryItemCatalog.PlasmaGunId, 0.0035f)),
         WreckRule(InventoryItemCatalog.CorsairSalvageId,
@@ -117,17 +181,22 @@ public static class BlueprintCatalog
             Drop(InventoryItemCatalog.DoubleRocketLauncherId, 0.007f),
             Drop(InventoryItemCatalog.GuidanceSystemId, 0.0065f),
             Drop(InventoryItemCatalog.PlasmaGunId, 0.006f),
+            Drop(InventoryItemCatalog.BulwarkProjectorId, 0.006f),
             Drop(InventoryItemCatalog.StrongPlatingId, 0.0055f),
             Drop(InventoryItemCatalog.SuperBoosterId, 0.005f),
             Drop(InventoryItemCatalog.DoubleEngineId, 0.004f),
             Drop(InventoryItemCatalog.SpaceBombId, 0.0038f)),
         WreckRule(InventoryItemCatalog.MothershipCoreId,
             Drop(InventoryItemCatalog.GuidanceSystemId, 0.0075f),
+            Drop(InventoryItemCatalog.AlienAegisCoreId, 0.007f),
             Drop(InventoryItemCatalog.StrongPlatingId, 0.0065f),
             Drop(InventoryItemCatalog.AstroCutterId, 0.006f),
             Drop(InventoryItemCatalog.SuperBoosterId, 0.006f),
             Drop(InventoryItemCatalog.DoubleEngineId, 0.0045f),
             Drop(InventoryItemCatalog.LootingFriendId, 0.005f),
+            Drop(InventoryItemCatalog.FiringFriendId, 0.0048f),
+            Drop(InventoryItemCatalog.DropbotId, 0.0045f),
+            Drop(InventoryItemCatalog.CloakDeviceId, 0.0038f),
             Drop(InventoryItemCatalog.SpaceBombId, 0.0042f))
     };
 
@@ -170,6 +239,11 @@ public static class BlueprintCatalog
 
     public static bool TryRollContainerBlueprintDrop(string itemId, out string blueprintItemId)
     {
+        return TryRollContainerBlueprintDrop(itemId, null, out blueprintItemId);
+    }
+
+    public static bool TryRollContainerBlueprintDrop(string itemId, string[] unlockedBlueprintIds, out string blueprintItemId)
+    {
         blueprintItemId = string.Empty;
         if (!InventoryItemCatalog.IsContainerItem(itemId) || ContainerBlueprintTargetItemIds.Length == 0)
             return false;
@@ -177,7 +251,7 @@ public static class BlueprintCatalog
         if (UnityEngine.Random.value >= GetContainerBlueprintDropChance())
             return false;
 
-        string targetItemId = RollWeightedBlueprintTargetItemId(ContainerBlueprintTargetItemIds);
+        string targetItemId = RollWeightedBlueprintTargetItemId(ContainerBlueprintTargetItemIds, unlockedBlueprintIds);
         if (string.IsNullOrWhiteSpace(targetItemId))
             return false;
 
@@ -187,6 +261,11 @@ public static class BlueprintCatalog
 
     public static bool TryRollWreckBlueprintDrop(string wreckItemId, int sourceEnemyKindValue, out string blueprintItemId)
     {
+        return TryRollWreckBlueprintDrop(wreckItemId, sourceEnemyKindValue, null, out blueprintItemId);
+    }
+
+    public static bool TryRollWreckBlueprintDrop(string wreckItemId, int sourceEnemyKindValue, string[] unlockedBlueprintIds, out string blueprintItemId)
+    {
         blueprintItemId = string.Empty;
         WreckBlueprintDropRule rule = GetWreckBlueprintDropRule(wreckItemId);
         if (rule == null || rule.Candidates == null || rule.Candidates.Length == 0)
@@ -194,11 +273,11 @@ public static class BlueprintCatalog
 
         EnemyBotKind sourceEnemyKind = ResolveWreckSourceEnemyKind(wreckItemId, sourceEnemyKindValue);
         float multiplier = GetRoomDifficultyMultiplier(sourceEnemyKind) * GetEnemyWreckBlueprintMultiplier(sourceEnemyKind);
-        float totalChance = Mathf.Min(GetWreckBlueprintChance(rule) * multiplier, GetEnemyWreckBlueprintChanceCap(sourceEnemyKind));
+        float totalChance = Mathf.Min(GetWreckBlueprintChance(rule, unlockedBlueprintIds) * multiplier, GetEnemyWreckBlueprintChanceCap(sourceEnemyKind));
         if (totalChance <= 0f || UnityEngine.Random.value >= totalChance)
             return false;
 
-        string targetItemId = RollWreckBlueprintTargetItemId(rule);
+        string targetItemId = RollWreckBlueprintTargetItemId(rule, unlockedBlueprintIds);
         if (string.IsNullOrWhiteSpace(targetItemId))
             return false;
 
@@ -208,15 +287,25 @@ public static class BlueprintCatalog
 
     public static string ResolveContainerBlueprintDrop(string itemId)
     {
+        return ResolveContainerBlueprintDrop(itemId, null);
+    }
+
+    public static string ResolveContainerBlueprintDrop(string itemId, string[] unlockedBlueprintIds)
+    {
         if (InventoryItemCatalog.IsBlueprintScrapContainerItem(itemId))
             return InventoryItemCatalog.BlueprintScrapId;
 
-        return TryRollContainerBlueprintDrop(itemId, out string blueprintItemId)
+        return TryRollContainerBlueprintDrop(itemId, unlockedBlueprintIds, out string blueprintItemId)
             ? blueprintItemId
             : itemId;
     }
 
     public static string RollScienceStationBlueprint(int scrapCount)
+    {
+        return RollScienceStationBlueprint(scrapCount, null);
+    }
+
+    public static string RollScienceStationBlueprint(int scrapCount, string[] unlockedBlueprintIds)
     {
         string[] blueprintItemIds = InventoryItemCatalog.GetAllBlueprintItemIds();
         if (blueprintItemIds == null || blueprintItemIds.Length == 0)
@@ -225,7 +314,12 @@ public static class BlueprintCatalog
         int effectiveScrapCount = Mathf.Max(1, scrapCount);
         float totalWeight = 0f;
         for (int i = 0; i < blueprintItemIds.Length; i++)
-            totalWeight += GetScienceStationBlueprintWeight(blueprintItemIds[i], effectiveScrapCount);
+            totalWeight += IsBlueprintRollAvailable(blueprintItemIds[i], unlockedBlueprintIds)
+                ? GetScienceStationBlueprintWeight(blueprintItemIds[i], effectiveScrapCount)
+                : 0f;
+
+        if (totalWeight <= 0f && unlockedBlueprintIds != null && unlockedBlueprintIds.Length > 0)
+            return RollScienceStationBlueprint(scrapCount, null);
 
         if (totalWeight <= 0f)
             return string.Empty;
@@ -233,7 +327,9 @@ public static class BlueprintCatalog
         float roll = UnityEngine.Random.value * totalWeight;
         for (int i = 0; i < blueprintItemIds.Length; i++)
         {
-            float weight = GetScienceStationBlueprintWeight(blueprintItemIds[i], effectiveScrapCount);
+            float weight = IsBlueprintRollAvailable(blueprintItemIds[i], unlockedBlueprintIds)
+                ? GetScienceStationBlueprintWeight(blueprintItemIds[i], effectiveScrapCount)
+                : 0f;
             if (weight <= 0f)
                 continue;
 
@@ -242,7 +338,7 @@ public static class BlueprintCatalog
                 return blueprintItemIds[i];
         }
 
-        return blueprintItemIds[blueprintItemIds.Length - 1];
+        return string.Empty;
     }
 
     public static bool RollBlueprintScrapContainerBonus()
@@ -268,7 +364,7 @@ public static class BlueprintCatalog
         if (RoomSettings.IsEquipmentLossEnabled())
             chance += 0.005f;
 
-        return Mathf.Clamp(chance, 0.005f, 0.04f);
+        return Mathf.Clamp(chance * ContainerBlueprintDropChanceMultiplier, 0.005f, ContainerBlueprintDropChanceCap);
     }
 
     static WreckBlueprintDropRule GetWreckBlueprintDropRule(string wreckItemId)
@@ -286,7 +382,7 @@ public static class BlueprintCatalog
         return null;
     }
 
-    static float GetWreckBlueprintChance(WreckBlueprintDropRule rule)
+    static float GetWreckBlueprintChance(WreckBlueprintDropRule rule, string[] unlockedBlueprintIds)
     {
         if (rule == null || rule.Candidates == null)
             return 0f;
@@ -295,14 +391,14 @@ public static class BlueprintCatalog
         for (int i = 0; i < rule.Candidates.Length; i++)
         {
             BlueprintDropCandidate candidate = rule.Candidates[i];
-            if (candidate != null && InventoryItemCatalog.IsBlueprintItem(InventoryItemCatalog.GetBlueprintItemId(candidate.TargetItemId)))
-                chance += Mathf.Max(0f, candidate.Chance);
+            if (candidate != null && IsTargetBlueprintRollAvailable(candidate.TargetItemId, unlockedBlueprintIds))
+                chance += GetBoostedWreckBlueprintCandidateChance(candidate);
         }
 
         return chance;
     }
 
-    static string RollWreckBlueprintTargetItemId(WreckBlueprintDropRule rule)
+    static string RollWreckBlueprintTargetItemId(WreckBlueprintDropRule rule, string[] unlockedBlueprintIds)
     {
         if (rule == null || rule.Candidates == null)
             return string.Empty;
@@ -311,8 +407,8 @@ public static class BlueprintCatalog
         for (int i = 0; i < rule.Candidates.Length; i++)
         {
             BlueprintDropCandidate candidate = rule.Candidates[i];
-            if (candidate != null && InventoryItemCatalog.IsBlueprintItem(InventoryItemCatalog.GetBlueprintItemId(candidate.TargetItemId)))
-                totalWeight += Mathf.Max(0f, candidate.Chance);
+            if (candidate != null && IsTargetBlueprintRollAvailable(candidate.TargetItemId, unlockedBlueprintIds))
+                totalWeight += GetBoostedWreckBlueprintCandidateChance(candidate);
         }
 
         if (totalWeight <= 0f)
@@ -325,8 +421,8 @@ public static class BlueprintCatalog
             if (candidate == null)
                 continue;
 
-            float weight = InventoryItemCatalog.IsBlueprintItem(InventoryItemCatalog.GetBlueprintItemId(candidate.TargetItemId))
-                ? Mathf.Max(0f, candidate.Chance)
+            float weight = IsTargetBlueprintRollAvailable(candidate.TargetItemId, unlockedBlueprintIds)
+                ? GetBoostedWreckBlueprintCandidateChance(candidate)
                 : 0f;
             if (weight <= 0f)
                 continue;
@@ -336,17 +432,19 @@ public static class BlueprintCatalog
                 return candidate.TargetItemId;
         }
 
-        return rule.Candidates[rule.Candidates.Length - 1].TargetItemId;
+        return string.Empty;
     }
 
-    static string RollWeightedBlueprintTargetItemId(string[] targetItemIds)
+    static string RollWeightedBlueprintTargetItemId(string[] targetItemIds, string[] unlockedBlueprintIds)
     {
         if (targetItemIds == null || targetItemIds.Length == 0)
             return string.Empty;
 
         float totalWeight = 0f;
         for (int i = 0; i < targetItemIds.Length; i++)
-            totalWeight += GetBlueprintTargetWeight(targetItemIds[i]);
+            totalWeight += IsTargetBlueprintRollAvailable(targetItemIds[i], unlockedBlueprintIds)
+                ? GetBlueprintTargetWeight(targetItemIds[i])
+                : 0f;
 
         if (totalWeight <= 0f)
             return string.Empty;
@@ -354,7 +452,9 @@ public static class BlueprintCatalog
         float roll = UnityEngine.Random.value * totalWeight;
         for (int i = 0; i < targetItemIds.Length; i++)
         {
-            float weight = GetBlueprintTargetWeight(targetItemIds[i]);
+            float weight = IsTargetBlueprintRollAvailable(targetItemIds[i], unlockedBlueprintIds)
+                ? GetBlueprintTargetWeight(targetItemIds[i])
+                : 0f;
             if (weight <= 0f)
                 continue;
 
@@ -363,7 +463,60 @@ public static class BlueprintCatalog
                 return targetItemIds[i];
         }
 
-        return targetItemIds[targetItemIds.Length - 1];
+        return string.Empty;
+    }
+
+    static bool IsTargetBlueprintRollAvailable(string targetItemId, string[] unlockedBlueprintIds)
+    {
+        return IsBlueprintRollAvailable(InventoryItemCatalog.GetBlueprintItemId(targetItemId), unlockedBlueprintIds);
+    }
+
+    static float GetBoostedWreckBlueprintCandidateChance(BlueprintDropCandidate candidate)
+    {
+        if (candidate == null)
+            return 0f;
+
+        return Mathf.Max(0f, candidate.Chance) * GetWreckBlueprintFindMultiplier(candidate.TargetItemId);
+    }
+
+    static float GetWreckBlueprintFindMultiplier(string targetItemId)
+    {
+        InventoryItemDefinition definition = InventoryItemCatalog.GetDefinition(targetItemId);
+        if (definition == null || definition.ItemType != InventoryItemType.Equipment)
+            return 1f;
+
+        switch (definition.Rarity)
+        {
+            case InventoryItemRarity.Common:
+            case InventoryItemRarity.Uncommon:
+            case InventoryItemRarity.Rare:
+                return 2f;
+            case InventoryItemRarity.VeryRare:
+                return 1.7f;
+            case InventoryItemRarity.Epic:
+                return 1.35f;
+            case InventoryItemRarity.Legendary:
+                return 1.15f;
+            default:
+                return 1f;
+        }
+    }
+
+    static bool IsBlueprintRollAvailable(string blueprintItemId, string[] unlockedBlueprintIds)
+    {
+        if (!InventoryItemCatalog.IsBlueprintItem(blueprintItemId) || IsStarterUnlockedBlueprint(blueprintItemId))
+            return false;
+
+        if (unlockedBlueprintIds == null)
+            return true;
+
+        for (int i = 0; i < unlockedBlueprintIds.Length; i++)
+        {
+            if (string.Equals(unlockedBlueprintIds[i], blueprintItemId, StringComparison.Ordinal))
+                return false;
+        }
+
+        return true;
     }
 
     static float GetBlueprintTargetWeight(string targetItemId)
@@ -545,9 +698,9 @@ public static class BlueprintCatalog
             case EnemyBotKind.PirateFighterAce:
             case EnemyBotKind.PirateFighterElite:
             case EnemyBotKind.HunterLance:
-                return 0.07f;
+                return 0.09f;
             default:
-                return 0.05f;
+                return 0.08f;
         }
     }
 

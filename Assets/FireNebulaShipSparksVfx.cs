@@ -60,7 +60,7 @@ public sealed class FireNebulaShipSparksVfx : MonoBehaviour
         if (nebulaTarget == null || !nebulaTarget.IsInsideFireNebula)
             return false;
 
-        if (health == null || health.IsWreck || health.IsBotControlled || health.IsAstronautControlled)
+        if (health == null || health.IsWreck || health.IsBotControlled || health.IsNeutralRiderControlled || health.IsAstronautControlled)
             return false;
 
         if (GetComponent<EnemyBot>() != null || GetComponent<AstronautSurvivor>() != null)

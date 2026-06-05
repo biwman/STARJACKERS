@@ -9,6 +9,8 @@ public class Bullet : MonoBehaviourPun
     static readonly Collider2D[] AreaDamageHits = new Collider2D[96];
     const string RocketProjectileResourcePath = "Items/rakieta";
     const string PilotBreachProjectileMarker = "sir_breach";
+    const string WeaponMetadataMarker = "weapon_meta";
+    const string ContainerAutoCannonEffectId = "container_auto_cannon";
     const float RocketProjectileBaseWorldLength = 0.58f;
     const float PulseDisruptorMinimumDamageMultiplier = 0.35f;
     const int PilotBreachTraceCount = 3;
@@ -21,6 +23,9 @@ public class Bullet : MonoBehaviourPun
     public float fallbackPlayerLength = 1f;
     public float safetyLifetime = 10f;
     public float minimumWorldRadius = 0.12f;
+    public WeaponDamageType DamageType => damageType;
+    public WeaponDeliveryMethod DeliveryMethod => deliveryMethod;
+    public WeaponDeliveryFlags DeliveryFlags => deliveryFlags;
 
     Vector2 spawnPosition;
     float maxTravelDistance;
@@ -33,6 +38,9 @@ public class Bullet : MonoBehaviourPun
     bool pierces;
     float areaDamageRadius;
     string hitEffectId = string.Empty;
+    WeaponDamageType damageType = WeaponDamageType.None;
+    WeaponDeliveryMethod deliveryMethod = WeaponDeliveryMethod.None;
+    WeaponDeliveryFlags deliveryFlags = WeaponDeliveryFlags.None;
     bool isArcProjectile;
     bool isRocketProjectile;
     bool pilotBreachProjectile;
@@ -61,6 +69,31 @@ public class Bullet : MonoBehaviourPun
     float rocketProjectileWorldLength = RocketProjectileBaseWorldLength;
     Rigidbody2D cachedRigidbody;
     Collider2D cachedCollider;
+
+    public static void PrewarmRoundAssets()
+    {
+        PrewarmSpriteTexture(LoadRocketProjectileSprite());
+        GetProjectileLineMaterial();
+    }
+
+    public static object[] AppendWeaponMetadata(
+        object[] data,
+        WeaponDamageType configuredDamageType,
+        WeaponDeliveryMethod configuredDeliveryMethod,
+        WeaponDeliveryFlags configuredDeliveryFlags)
+    {
+        if (data == null)
+            return null;
+
+        object[] result = new object[data.Length + 4];
+        data.CopyTo(result, 0);
+        int start = data.Length;
+        result[start] = WeaponMetadataMarker;
+        result[start + 1] = (int)configuredDamageType;
+        result[start + 2] = (int)configuredDeliveryMethod;
+        result[start + 3] = (int)configuredDeliveryFlags;
+        return result;
+    }
 
     void Awake()
     {
@@ -176,6 +209,27 @@ public class Bullet : MonoBehaviourPun
         if (collision.gameObject.GetComponentInParent<Bullet>() != null)
             return;
 
+        if (IsPlayerOnlyProjectile())
+        {
+            PlayerHealth playerTarget = collision.gameObject.GetComponentInParent<PlayerHealth>();
+            if (!CanDamagePlayerOnlyTarget(playerTarget))
+            {
+                IgnoreCollision(collision);
+                return;
+            }
+
+            Vector2 impactPoint = collision.contactCount > 0 ? collision.GetContact(0).point : (Vector2)transform.position;
+            ApplyDamageToHealth(playerTarget, impactPoint, true);
+            Vector2 playerOnlyVfxDirection = GetTravelDirection();
+            if (!string.IsNullOrWhiteSpace(hitEffectId))
+                photonView.RPC(nameof(PlayImpactVfx), RpcTarget.All, hitEffectId, impactPoint.x, impactPoint.y, playerOnlyVfxDirection.x, playerOnlyVfxDirection.y, ResolveImpactVfxScale());
+
+            ApplyBulletPush(collision);
+            if (!pierces)
+                DestroyBullet();
+            return;
+        }
+
         PlayerDeployableBase deployable = collision.gameObject.GetComponentInParent<PlayerDeployableBase>();
         if (deployable != null && deployable.photonView != null)
         {
@@ -209,7 +263,7 @@ public class Bullet : MonoBehaviourPun
         ObstacleChunk obstacleChunk = collision.gameObject.GetComponentInParent<ObstacleChunk>();
         if (obstacleChunk != null && !string.IsNullOrWhiteSpace(obstacleChunk.StableId) && RoomSettings.AreObstaclesDestructible())
         {
-            SpaceObjectMotionSync.RequestObstacleDamage(obstacleChunk.StableId, GetPilotObstacleDamage(damage));
+            SpaceObjectMotionSync.RequestObstacleDamage(obstacleChunk.StableId, GetPilotObstacleDamage(damage, obstacleChunk.StableId));
         }
 
         Vector2 vfxPoint = collision.contactCount > 0 ? collision.GetContact(0).point : (Vector2)transform.position;
@@ -224,6 +278,13 @@ public class Bullet : MonoBehaviourPun
 
         if (!pierces)
             DestroyBullet();
+    }
+
+    void IgnoreCollision(Collision2D collision)
+    {
+        Collider2D bulletCollider = cachedCollider;
+        if (bulletCollider != null && collision != null && collision.collider != null)
+            Physics2D.IgnoreCollision(bulletCollider, collision.collider);
     }
 
     void UpdateArcProjectileVisual()
@@ -288,7 +349,7 @@ public class Bullet : MonoBehaviourPun
             ObstacleChunk obstacleChunk = hit.GetComponentInParent<ObstacleChunk>();
             if (obstacleChunk != null && !string.IsNullOrWhiteSpace(obstacleChunk.StableId) && RoomSettings.AreObstaclesDestructible())
             {
-                SpaceObjectMotionSync.RequestObstacleDamage(obstacleChunk.StableId, GetPilotObstacleDamage(damage));
+                SpaceObjectMotionSync.RequestObstacleDamage(obstacleChunk.StableId, GetPilotObstacleDamage(damage, obstacleChunk.StableId));
             }
         }
 
@@ -311,14 +372,37 @@ public class Bullet : MonoBehaviourPun
             return;
 
         damagedViewIds.Add(hp.photonView.ViewID);
-        float damageMultiplier = ResolveImpactDamageMultiplier() * ResolvePilotBreachTargetMultiplier(hp);
+        float damageMultiplier = ResolveImpactDamageMultiplier() * ResolvePilotBreachTargetMultiplier(hp) * ResolveVectorWeakPointTargetMultiplier(hp);
+        string damageSource = ResolveDamageSource();
+        WeaponHitContext hitContext = CreateHitContext(damageSource);
         if (useDamageProfile)
         {
-            hp.photonView.RPC("TakeDamageProfileAt", RpcTarget.MasterClient, ScaleDamage(shieldDamage, damageMultiplier), ScaleDamage(hpDamage, damageMultiplier), ownerViewID, impactPoint.x, impactPoint.y);
+            hp.photonView.RPC(
+                nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                RpcTarget.MasterClient,
+                ScaleDamage(shieldDamage, damageMultiplier),
+                ScaleDamage(hpDamage, damageMultiplier),
+                ownerViewID,
+                impactPoint.x,
+                impactPoint.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
         }
         else
         {
-            hp.photonView.RPC("TakeDamageAt", RpcTarget.MasterClient, ScaleDamage(damage, damageMultiplier), ownerViewID, impactPoint.x, impactPoint.y);
+            hp.photonView.RPC(
+                nameof(PlayerHealth.TakeDamageWithContextAt),
+                RpcTarget.MasterClient,
+                ScaleDamage(damage, damageMultiplier),
+                ownerViewID,
+                impactPoint.x,
+                impactPoint.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
         }
 
         if (!isOwner)
@@ -336,6 +420,15 @@ public class Bullet : MonoBehaviourPun
         for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = AreaDamageHits[i];
+            if (IsPlayerOnlyProjectile())
+            {
+                PlayerHealth playerTarget = hit != null ? hit.GetComponentInParent<PlayerHealth>() : null;
+                if (playerTarget != directHit && CanDamagePlayerOnlyTarget(playerTarget))
+                    ApplyDamageToHealth(playerTarget, playerTarget.transform.position, false);
+
+                continue;
+            }
+
             PlayerDeployableBase deployable = hit != null ? hit.GetComponentInParent<PlayerDeployableBase>() : null;
             if (deployable != null)
             {
@@ -394,14 +487,37 @@ public class Bullet : MonoBehaviourPun
 
         damagedViewIds.Add(deployable.photonView.ViewID);
         float damageMultiplier = ResolveImpactDamageMultiplier();
+        WeaponHitContext hitContext = CreateHitContext(ResolveDamageSource());
         if (useDamageProfile)
         {
-            deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, ScaleDamage(shieldDamage, damageMultiplier), ScaleDamage(hpDamage, damageMultiplier), ownerViewID, impactPoint.x, impactPoint.y);
+            deployable.photonView.RPC(
+                nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                RpcTarget.MasterClient,
+                ScaleDamage(shieldDamage, damageMultiplier),
+                ScaleDamage(hpDamage, damageMultiplier),
+                ownerViewID,
+                impactPoint.x,
+                impactPoint.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
         }
         else
         {
             int scaledDamage = ScaleDamage(damage, damageMultiplier);
-            deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, scaledDamage, scaledDamage, ownerViewID, impactPoint.x, impactPoint.y);
+            deployable.photonView.RPC(
+                nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                RpcTarget.MasterClient,
+                scaledDamage,
+                scaledDamage,
+                ownerViewID,
+                impactPoint.x,
+                impactPoint.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
         }
 
         NotifyOwnerComplexHit();
@@ -421,6 +537,33 @@ public class Bullet : MonoBehaviourPun
         float travelled = Vector2.Distance(spawnPosition, transform.position);
         float armed = Mathf.Clamp01(travelled / armDistance);
         return Mathf.Lerp(PulseDisruptorMinimumDamageMultiplier, 1f, armed);
+    }
+
+    float ResolveVectorWeakPointTargetMultiplier(PlayerHealth hp)
+    {
+        if (hp == null || hp.photonView == null || hp.GetComponent<EnemyBot>() == null)
+            return 1f;
+
+        return VectorWeakPointMemory.RegisterHitAndGetMultiplier(ownerViewID, "bot:" + hp.photonView.ViewID);
+    }
+
+    string ResolveDamageSource()
+    {
+        if (IsRocketProjectile() || string.Equals(hitEffectId, "rocket", System.StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(hitEffectId, "artillery", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return PlayerHealth.DamageSourceExplosive;
+        }
+
+        if (IsPirateFighterProjectile() || IsAutoTurretProjectile())
+            return PlayerHealth.DamageSourceLaser;
+
+        return string.Empty;
+    }
+
+    WeaponHitContext CreateHitContext(string damageSource)
+    {
+        return new WeaponHitContext(damageType, deliveryMethod, deliveryFlags, damageSource);
     }
 
     int ScaleDamage(int baseDamage, float multiplier)
@@ -477,12 +620,15 @@ public class Bullet : MonoBehaviourPun
         return attackerView.GetComponent<EnemyBot>() != null;
     }
 
-    int GetPilotObstacleDamage(int baseDamage)
+    int GetPilotObstacleDamage(int baseDamage, string obstacleStableId)
     {
         PhotonView ownerView = ownerViewID > 0 ? PhotonView.Find(ownerViewID) : null;
         float multiplier = 1f;
         if (ownerView != null && PilotCatalog.IsSelectedPilot(ownerView.Owner, PilotCatalog.SirNowitzkyId))
             multiplier *= 1.5f;
+
+        if (ownerView != null && !string.IsNullOrWhiteSpace(obstacleStableId) && PilotCatalog.IsSelectedPilot(ownerView.Owner, PilotCatalog.VectorId))
+            multiplier *= VectorWeakPointMemory.RegisterHitAndGetMultiplier(ownerViewID, "obstacle:" + obstacleStableId);
 
         if (pilotBreachProjectile)
             multiplier *= 2f;
@@ -524,6 +670,12 @@ public class Bullet : MonoBehaviourPun
             ? collision.collider.GetComponentInParent<PlayerRepairDocking>()
             : null;
         if (repairDocking != null && repairDocking.IsDamageImmune)
+            return;
+
+        PlayerHealth hitHealth = collision.collider != null
+            ? collision.collider.GetComponentInParent<PlayerHealth>()
+            : null;
+        if (hitHealth != null && hitHealth.IsEnemyAstronautControlled)
             return;
 
         Rigidbody2D hitBody = collision.rigidbody;
@@ -676,7 +828,12 @@ public class Bullet : MonoBehaviourPun
         if (data.Length >= 8 && data[7] is float configuredRangeMultiplier)
             rangeMultiplier = Mathf.Max(0.1f, configuredRangeMultiplier);
 
-        if (data.Length >= 13)
+        if (data.Length >= 13 &&
+            data[8] is int &&
+            data[9] is int &&
+            data[10] is bool &&
+            data[11] is float &&
+            data[12] is string)
         {
             shieldDamage = data[8] is int configuredShieldDamage ? Mathf.Max(0, configuredShieldDamage) : damage;
             hpDamage = data[9] is int configuredHpDamage ? Mathf.Max(0, configuredHpDamage) : damage;
@@ -689,7 +846,7 @@ public class Bullet : MonoBehaviourPun
         if (data.Length >= 14 && data[13] is float configuredFlightTime)
             safetyLifetime = Mathf.Clamp(configuredFlightTime, 0.2f, 30f);
 
-        if (data.Length >= 18)
+        if (data.Length >= 18 && data[14] is bool)
         {
             isArcProjectile = data[14] is bool configuredArcProjectile && configuredArcProjectile;
             arcTargetPosition = new Vector2(
@@ -699,7 +856,7 @@ public class Bullet : MonoBehaviourPun
             arcTravelDuration = Mathf.Clamp(safetyLifetime, 0.2f, 30f);
         }
 
-        if (data.Length >= 23)
+        if (data.Length >= 23 && data[18] is string)
         {
             string projectileMode = data[18] as string ?? string.Empty;
             isRocketProjectile = string.Equals(projectileMode, "rocket", System.StringComparison.OrdinalIgnoreCase);
@@ -709,8 +866,81 @@ public class Bullet : MonoBehaviourPun
             canDamageOwnerInArea = data[22] is bool configuredOwnerDamage && configuredOwnerDamage;
         }
 
-        if (data.Length > 0)
-            pilotBreachProjectile = string.Equals(data[data.Length - 1] as string, PilotBreachProjectileMarker, System.StringComparison.Ordinal);
+        ApplyWeaponMetadata(data);
+        pilotBreachProjectile = ContainsPayloadMarker(data, PilotBreachProjectileMarker);
+    }
+
+    void ApplyWeaponMetadata(object[] data)
+    {
+        if (data == null || data.Length < 4)
+            return;
+
+        for (int i = 0; i <= data.Length - 4; i++)
+        {
+            if (!string.Equals(data[i] as string, WeaponMetadataMarker, System.StringComparison.Ordinal))
+                continue;
+
+            damageType = ParseDamageType(data[i + 1], damageType);
+            deliveryMethod = ParseDeliveryMethod(data[i + 2], deliveryMethod);
+            deliveryFlags = ParseDeliveryFlags(data[i + 3], deliveryFlags);
+            return;
+        }
+    }
+
+    static bool ContainsPayloadMarker(object[] data, string marker)
+    {
+        if (data == null || string.IsNullOrWhiteSpace(marker))
+            return false;
+
+        for (int i = 0; i < data.Length; i++)
+        {
+            if (string.Equals(data[i] as string, marker, System.StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
+    static WeaponDamageType ParseDamageType(object value, WeaponDamageType fallback)
+    {
+        if (value is WeaponDamageType typedValue)
+            return typedValue;
+
+        if (value is int intValue && System.Enum.IsDefined(typeof(WeaponDamageType), intValue))
+            return (WeaponDamageType)intValue;
+
+        if (value is string raw && System.Enum.TryParse(raw, true, out WeaponDamageType parsedValue))
+            return parsedValue;
+
+        return fallback;
+    }
+
+    static WeaponDeliveryMethod ParseDeliveryMethod(object value, WeaponDeliveryMethod fallback)
+    {
+        if (value is WeaponDeliveryMethod typedValue)
+            return typedValue;
+
+        if (value is int intValue && System.Enum.IsDefined(typeof(WeaponDeliveryMethod), intValue))
+            return (WeaponDeliveryMethod)intValue;
+
+        if (value is string raw && System.Enum.TryParse(raw, true, out WeaponDeliveryMethod parsedValue))
+            return parsedValue;
+
+        return fallback;
+    }
+
+    static WeaponDeliveryFlags ParseDeliveryFlags(object value, WeaponDeliveryFlags fallback)
+    {
+        if (value is WeaponDeliveryFlags typedValue)
+            return typedValue;
+
+        if (value is int intValue && intValue >= 0)
+            return (WeaponDeliveryFlags)intValue;
+
+        if (value is string raw && System.Enum.TryParse(raw, true, out WeaponDeliveryFlags parsedValue))
+            return parsedValue;
+
+        return fallback;
     }
 
     void ApplyVisualConfig()
@@ -788,7 +1018,32 @@ public class Bullet : MonoBehaviourPun
 
     bool IsAutoTurretProjectile()
     {
-        return string.Equals(hitEffectId, "auto_turret", System.StringComparison.OrdinalIgnoreCase);
+        return string.Equals(hitEffectId, "auto_turret", System.StringComparison.OrdinalIgnoreCase) ||
+               IsContainerAutoCannonProjectile();
+    }
+
+    bool IsContainerAutoCannonProjectile()
+    {
+        return string.Equals(hitEffectId, ContainerAutoCannonEffectId, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    bool IsPlayerOnlyProjectile()
+    {
+        return IsContainerAutoCannonProjectile();
+    }
+
+    bool CanDamagePlayerOnlyTarget(PlayerHealth hp)
+    {
+        return hp != null &&
+               hp.photonView != null &&
+               hp.photonView.ViewID != ownerViewID &&
+               !hp.IsWreck &&
+               !hp.IsEvacuationAnimating &&
+               !hp.IsBotControlled &&
+               !hp.IsNeutralRiderControlled &&
+               !hp.IsAstronautControlled &&
+               hp.GetComponent<PlayerDeployableBase>() == null &&
+               hp.GetComponent<LureBeaconDecoy>() == null;
     }
 
     bool IsGatlingProjectile()
@@ -880,6 +1135,14 @@ public class Bullet : MonoBehaviourPun
             cachedRocketProjectileSprite = Resources.Load<Sprite>(RocketProjectileResourcePath);
 
         return cachedRocketProjectileSprite;
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
     }
 
     SpriteRenderer EnsureRocketSpriteRenderer(SpriteRenderer coreRenderer, Sprite rocketSprite)

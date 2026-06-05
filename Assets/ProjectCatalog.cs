@@ -6,7 +6,9 @@ public enum ProjectRequirementKind
 {
     ExactItem,
     AnyContainer,
-    AnySpaceJunk
+    AnySpaceJunk,
+    AnyWeapon,
+    AnyShield
 }
 
 [Serializable]
@@ -25,21 +27,38 @@ public sealed class ProjectStepDefinition
     public string IconItemId;
     public int RequiredCount;
     public ProjectRequirementKind RequirementKind;
+    public bool HasMinimumRarity;
+    public InventoryItemRarity MinimumRarity;
 
     public bool MatchesItem(string itemId)
     {
         if (string.IsNullOrWhiteSpace(itemId))
             return false;
 
+        bool matches;
         switch (RequirementKind)
         {
             case ProjectRequirementKind.AnyContainer:
-                return InventoryItemCatalog.IsContainerItem(itemId);
+                matches = InventoryItemCatalog.IsContainerItem(itemId);
+                break;
             case ProjectRequirementKind.AnySpaceJunk:
-                return InventoryItemCatalog.GetCategory(itemId) == InventoryItemCategory.SpaceJunk;
+                matches = InventoryItemCatalog.GetCategory(itemId) == InventoryItemCategory.SpaceJunk;
+                break;
+            case ProjectRequirementKind.AnyWeapon:
+                matches = InventoryItemCatalog.GetCategory(itemId) == InventoryItemCategory.Weapon;
+                break;
+            case ProjectRequirementKind.AnyShield:
+                matches = InventoryItemCatalog.GetCategory(itemId) == InventoryItemCategory.Shield;
+                break;
             default:
-                return string.Equals(itemId, ItemId, StringComparison.Ordinal);
+                matches = string.Equals(itemId, ItemId, StringComparison.Ordinal);
+                break;
         }
+
+        if (!matches)
+            return false;
+
+        return !HasMinimumRarity || InventoryItemCatalog.GetRarity(itemId) >= MinimumRarity;
     }
 
     public string ResolveIconItemId()
@@ -55,6 +74,12 @@ public sealed class ProjectStepDefinition
 
         if (RequirementKind == ProjectRequirementKind.AnySpaceJunk)
             return InventoryItemCatalog.SpaceJunkStandardId;
+
+        if (RequirementKind == ProjectRequirementKind.AnyWeapon)
+            return InventoryItemCatalog.PlasmaGunId;
+
+        if (RequirementKind == ProjectRequirementKind.AnyShield)
+            return InventoryItemCatalog.ShieldReactorId;
 
         return null;
     }
@@ -84,6 +109,7 @@ public static class ProjectCatalog
 {
     public const string SupplyToSurviveId = "supply_to_survive";
     public const string SpaceMayhemId = "space_mayhem";
+    public const string OmertaId = "omerta";
 
     static readonly ProjectDefinition[] Projects = BuildProjects();
     static readonly Dictionary<string, ProjectDefinition> ProjectsById = BuildProjectsById();
@@ -142,6 +168,19 @@ public static class ProjectCatalog
         }
 
         return project.Stages.Length > 0;
+    }
+
+    public static int CountCompletedProjects(PlayerProjectProgressData progress)
+    {
+        int completed = 0;
+        for (int i = 0; i < Projects.Length; i++)
+        {
+            ProjectDefinition project = Projects[i];
+            if (project != null && IsProjectComplete(progress, project.Id))
+                completed++;
+        }
+
+        return completed;
     }
 
     public static bool IsStageUnlocked(PlayerProjectProgressData progress, string projectId, int stageIndex)
@@ -249,17 +288,17 @@ public static class ProjectCatalog
                 Stages = new[]
                 {
                     Stage("stage_1", "STAGE 1",
-                        Reward(10000, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.PlasmaGunId), InventoryItemCatalog.BlueprintScrapId),
-                        Exact("common_asteroid", "Common Asteroid", InventoryItemCatalog.AsteroidCommonId, 20),
-                        Exact("uncommon_asteroid", "Uncommon Asteroid", InventoryItemCatalog.AsteroidUncommonId, 10),
-                        Exact("rare_asteroid", "Rare Asteroid", InventoryItemCatalog.AsteroidRareId, 5)),
+                        RewardWithBlueprintScrap(10000, 3, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.FuelTankId)),
+                        Exact("common_asteroid", "Common Asteroid", InventoryItemCatalog.AsteroidCommonId, 12),
+                        Exact("uncommon_asteroid", "Uncommon Asteroid", InventoryItemCatalog.AsteroidUncommonId, 6),
+                        Exact("rare_asteroid", "Rare Asteroid", InventoryItemCatalog.AsteroidRareId, 2)),
                     Stage("stage_2", "STAGE 2",
-                        Reward(20000, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.FusionEngineId), InventoryItemCatalog.BlueprintScrapId),
-                        AnyContainer("containers", "Any Container", 30),
-                        AnySpaceJunk("space_junk", "Any Space Junk", 10),
-                        Exact("very_rare_asteroid", "Very Rare Asteroid", InventoryItemCatalog.AsteroidVeryRareId, 3)),
+                        RewardWithBlueprintScrap(20000, 3, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.FusionEngineId)),
+                        AnyContainer("containers", "Any Container", 18),
+                        AnySpaceJunk("space_junk", "Any Space Junk", 6),
+                        Exact("very_rare_asteroid", "Very Rare Asteroid", InventoryItemCatalog.AsteroidVeryRareId, 2)),
                     Stage("stage_3", "STAGE 3",
-                        Reward(30000, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.RocketLauncherId), InventoryItemCatalog.BlueprintScrapId),
+                        RewardWithBlueprintScrap(30000, 5, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.RocketLauncherId)),
                         Exact("cash_suitcase", "Cash Suitcase", InventoryItemCatalog.CashSuitcaseId, 1),
                         Exact("legendary_asteroid", "Legendary Asteroid", InventoryItemCatalog.AsteroidLegendaryId, 1),
                         Exact("corsair_wreck", "Corsair Wreck", InventoryItemCatalog.CorsairSalvageId, 1))
@@ -275,21 +314,51 @@ public static class ProjectCatalog
                 Stages = new[]
                 {
                     Stage("stage_1", "STAGE 1",
-                        Reward(5000),
-                        Exact("drone_wrecks", "Drone Wreck", InventoryItemCatalog.DroidScrapId, 3),
-                        Exact("neutral_fighter_wrecks", "Neutral Fighter Wreck", InventoryItemCatalog.NeutralFighterSalvageId, 5)),
+                        Reward(5000, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.GatlingGunId)),
+                        Exact("drone_wrecks", "Drone Wreck", InventoryItemCatalog.DroidScrapId, 2),
+                        Exact("neutral_fighter_wrecks", "Neutral Fighter Wreck", InventoryItemCatalog.NeutralFighterSalvageId, 2)),
                     Stage("stage_2", "STAGE 2",
                         Reward(6000),
                         Exact("rescue_ship_wreck", "Rescue Ship Wreck", InventoryItemCatalog.RescueShipSalvageId, 1),
-                        Exact("corsair_wrecks", "Corsair Wreck", InventoryItemCatalog.CorsairSalvageId, 2)),
+                        Exact("corsair_wrecks", "Corsair Wreck", InventoryItemCatalog.CorsairSalvageId, 1)),
                     Stage("stage_3", "STAGE 3",
-                        Reward(7000, InventoryItemCatalog.BlueprintScrapId),
+                        RewardWithBlueprintScrap(7000, 3),
                         Exact("space_mine_wrecks", "Space Mine Wreck", InventoryItemCatalog.SpaceMineWreckId, 10),
                         Exact("pirate_fighter_wreck", "Pirate Fighter Wreck", InventoryItemCatalog.PirateFighterSalvageId, 1)),
                     Stage("stage_4", "STAGE 4",
-                        Reward(10000, InventoryItemCatalog.AlienTransmitterId, InventoryItemCatalog.BlueprintScrapId),
+                        RewardWithBlueprintScrap(10000, 5, InventoryItemCatalog.AlienTransmitterId),
                         Exact("radar_ship_wreck", "Radar Ship Wreck", InventoryItemCatalog.RadarShipSalvageId, 1),
                         Exact("pirate_fighter_wrecks", "Pirate Fighter Wreck", InventoryItemCatalog.PirateFighterSalvageId, 3))
+                }
+            },
+            new ProjectDefinition
+            {
+                Id = OmertaId,
+                DisplayName = "OMERTA",
+                Description = "The message arrived without a sender, burned into the ship's console in a neat line of red text: pay the silence, or everyone you love hears what you carried through the blockade.\n\nThe pirates knew the raider's route, his debts, and the names of the people waiting for him back home. They could ruin him with one transmission. They could also make him rich with one quiet introduction.\n\nTheir offer was simple. Move money. Move locked cases. Move military gear no customs officer should ever see. In return, the raider would get access to stolen schematics, black-market contacts, and a final mark of trust from the pirate families.\n\nNo signatures. No witnesses. No heroes.\n\nOnly OMERTA.",
+                TileResourcePath = "omerta_screen",
+                BackgroundResourcePath = "omerta_screen",
+                Stages = new[]
+                {
+                    Stage("stage_1", "FIRST PAYMENT",
+                        RewardWithBlueprintScrap(8000, 3, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.SpaceTrapId)),
+                        Exact("cash_suitcase", "Cash Suitcase", InventoryItemCatalog.CashSuitcaseId, 1),
+                        AnyContainer("sealed_containers", "Any Container", 8)),
+                    Stage("stage_2", "BLACK CASES",
+                        RewardWithBlueprintScrap(12000, 3, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.LootingFriendId)),
+                        Exact("cash_suitcases", "Cash Suitcase", InventoryItemCatalog.CashSuitcaseId, 2),
+                        AnyContainer("sealed_containers", "Any Container", 16)),
+                    Stage("stage_3", "ARMED ESCORT",
+                        RewardWithBlueprintScrap(16000, 3, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.GadgetMineId)),
+                        AnyWeapon("weapons", "Rare+ Weapon", 2, InventoryItemRarity.Rare),
+                        AnyShield("shields", "Rare+ Shield", 2, InventoryItemRarity.Rare),
+                        Exact("pirate_fighter_wrecks", "Pirate Fighter Wreck", InventoryItemCatalog.PirateFighterSalvageId, 2)),
+                    Stage("stage_4", "THE OATH",
+                        RewardWithBlueprintScrap(22000, 5, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.PlasmaGunId), InventoryItemCatalog.PirateSymbolId),
+                        Exact("cash_suitcases", "Cash Suitcase", InventoryItemCatalog.CashSuitcaseId, 4),
+                        AnyWeapon("weapons", "Epic+ Weapon", 2, InventoryItemRarity.Epic),
+                        AnyShield("shields", "Rare+ Shield", 3, InventoryItemRarity.Rare),
+                        Exact("pirate_base_core", "Pirate Base Core", InventoryItemCatalog.PirateBaseCoreId, 1))
                 }
             }
         };
@@ -313,6 +382,19 @@ public static class ProjectCatalog
             Astrons = Mathf.Max(0, astrons),
             ItemIds = itemIds ?? Array.Empty<string>()
         };
+    }
+
+    static ProjectRewardDefinition RewardWithBlueprintScrap(int astrons, int blueprintScrapCount, params string[] itemIds)
+    {
+        List<string> rewardItemIds = new List<string>();
+        if (itemIds != null)
+            rewardItemIds.AddRange(itemIds);
+
+        int safeScrapCount = Mathf.Max(0, blueprintScrapCount);
+        for (int i = 0; i < safeScrapCount; i++)
+            rewardItemIds.Add(InventoryItemCatalog.BlueprintScrapId);
+
+        return Reward(astrons, rewardItemIds.ToArray());
     }
 
     static ProjectStepDefinition Exact(string id, string displayName, string itemId, int requiredCount)
@@ -349,6 +431,34 @@ public static class ProjectCatalog
             IconItemId = InventoryItemCatalog.SpaceJunkStandardId,
             RequiredCount = Mathf.Max(1, requiredCount),
             RequirementKind = ProjectRequirementKind.AnySpaceJunk
+        };
+    }
+
+    static ProjectStepDefinition AnyWeapon(string id, string displayName, int requiredCount, InventoryItemRarity minimumRarity)
+    {
+        return new ProjectStepDefinition
+        {
+            Id = id,
+            DisplayName = displayName,
+            IconItemId = InventoryItemCatalog.PlasmaGunId,
+            RequiredCount = Mathf.Max(1, requiredCount),
+            RequirementKind = ProjectRequirementKind.AnyWeapon,
+            HasMinimumRarity = true,
+            MinimumRarity = minimumRarity
+        };
+    }
+
+    static ProjectStepDefinition AnyShield(string id, string displayName, int requiredCount, InventoryItemRarity minimumRarity)
+    {
+        return new ProjectStepDefinition
+        {
+            Id = id,
+            DisplayName = displayName,
+            IconItemId = InventoryItemCatalog.ShieldReactorId,
+            RequiredCount = Mathf.Max(1, requiredCount),
+            RequirementKind = ProjectRequirementKind.AnyShield,
+            HasMinimumRarity = true,
+            MinimumRarity = minimumRarity
         };
     }
 }

@@ -32,6 +32,12 @@ public sealed class PlayerShipExplosionVfx : MonoBehaviour
     Vector3 center;
     float age;
 
+    public static void Prewarm()
+    {
+        GetMaterial();
+        PrewarmSpriteTexture(GetSmokeSprite());
+    }
+
     public static void Spawn(Vector3 position, SpriteRenderer referenceRenderer = null)
     {
         GameObject effect = new GameObject("PlayerShipExplosionVfx");
@@ -256,5 +262,13 @@ public sealed class PlayerShipExplosionVfx : MonoBehaviour
         };
         sharedMaterial.renderQueue = 3200;
         return sharedMaterial;
+    }
+
+    static void PrewarmSpriteTexture(Sprite sprite)
+    {
+        if (sprite == null || sprite.texture == null)
+            return;
+
+        sprite.texture.GetNativeTexturePtr();
     }
 }

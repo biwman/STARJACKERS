@@ -288,6 +288,31 @@ public class ExtractionZone : MonoBehaviourPun
         return true;
     }
 
+    public bool TryUseNeutralRider(PhotonView riderView)
+    {
+        if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient)
+            return false;
+
+        if (riderView == null || isBeingUsed || isTransitioning || isEvacuating)
+            return false;
+
+        if (!NeutralRiderController.IsNeutralRider(riderView) &&
+            !NeutralRiderController.IsNeutralRiderInstantiationData(riderView.InstantiationData))
+        {
+            return false;
+        }
+
+        PlayerHealth riderHealth = riderView.GetComponent<PlayerHealth>();
+        if (riderHealth == null || riderHealth.IsWreck || riderHealth.IsEvacuationAnimating)
+            return false;
+
+        if (GetInteractionDistanceToPoint(riderHealth.transform.position) > RequestedPlayerEvacuationGraceDistance)
+            return false;
+
+        StartCoroutine(NeutralRiderUseRoutine());
+        return true;
+    }
+
     IEnumerator UseRoutine(PhotonView playerView)
     {
         isBeingUsed = true;
@@ -311,6 +336,27 @@ public class ExtractionZone : MonoBehaviourPun
         else
         {
             EvacuatePlayers(playerView);
+        }
+
+        isBeingUsed = false;
+    }
+
+    IEnumerator NeutralRiderUseRoutine()
+    {
+        isBeingUsed = true;
+
+        if (!isActive && !isTransitioning)
+        {
+            isTransitioning = true;
+            photonView.RPC(nameof(BeginTransitionStage), RpcTarget.All, transitionDuration);
+            yield return new WaitForSeconds(transitionDuration);
+
+            isTransitioning = false;
+            if (!isActive)
+            {
+                isActive = true;
+                photonView.RPC(nameof(ActivateZone), RpcTarget.All);
+            }
         }
 
         isBeingUsed = false;

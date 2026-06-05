@@ -14,22 +14,31 @@ public class PlayerHealth : MonoBehaviourPun
     const float DeathMessageExtraWidth = 180f;
     const int DefaultPlayerHp = 50;
     const int DefaultPlayerShield = 50;
-    const int ShieldReactorShieldBonus = 30;
     const int BatteryShieldPerTick = 5;
     const int BatteryTickCount = 5;
     const float BatteryTickInterval = 1f;
+    const float RegenerativeShieldDelay = 5f;
+    const float RegenerativeShieldPerSecond = 2f;
     public const float EvacuationAnimationDurationSeconds = 4f;
     const float EvacuationAnimationDuration = EvacuationAnimationDurationSeconds;
     const float MinimumEvacuationScale = 0.01f;
     const float AstronautSpawnClearanceRadius = 0.34f;
     const float SpawnInvulnerabilityDuration = 5f;
-    const float PhaseShieldInvulnerabilityDuration = 3f;
+    const float PhaseShieldInvulnerabilityDuration = 6f;
     const float PhaseShieldHpThresholdRatio = 0.35f;
-    const float KineticDampenerDamageMultiplier = 0.65f;
-    const float StrongPlatingEnvironmentalDamageMultiplier = 0.65f;
+    const float KineticDampenerDamageMultiplier = 0.5f;
+    const float KineticDampenerExplosiveDamageMultiplier = 0.75f;
+    const float StrongPlatingEnvironmentalDamageMultiplier = 0.5f;
+    const float BulwarkProjectorLaserDamageMultiplier = 0.75f;
+    const float AlienAegisBarrierDamageMultiplier = 0.5f;
+    const float AlienAegisBarrierDuration = 3f;
+    const float RadioactiveCargoDamageInterval = 1f;
     const string EnvironmentalDamageSource = "environmental";
     const string NebulaDamageSource = "nebula";
     public const string PilotDamageSourceRamming = "ramming";
+    public const string DamageSourceExplosive = "explosive";
+    public const string DamageSourceLaser = "laser";
+    public const string DamageSourceRadioactiveCargo = "radioactive_cargo";
 
     public int maxHP = 50;
     public int maxShield = 50;
@@ -49,25 +58,40 @@ public class PlayerHealth : MonoBehaviourPun
     string pendingEvacuationOutcome = "extracted";
     float spawnInvulnerableUntil = -1f;
     float equipmentInvulnerableUntil = -1f;
+    float alienAegisBarrierUntil = -1f;
+    float lastDamageTakenTime = -999f;
+    float shieldRegenAccumulator;
+    float nextRadioactiveCargoDamageTime;
     bool phaseShieldTriggered;
 
     public int CurrentHP => currentHP;
     public int CurrentShield => currentShield;
     public int MaxShield => maxShield;
-    public bool HasFullVitals => currentHP >= maxHP && currentShield >= maxShield;
+    public int RepairableMaxShield => GetRepairableShieldCap();
+    public WeaponHitContext LastDamageContext { get; private set; }
+    public float LastDamageShieldMultiplier { get; private set; } = 1f;
+    public float LastDamageHpMultiplier { get; private set; } = 1f;
+    public string LastDamageDebugSummary => WeaponDamageInteractionCatalog.BuildDebugSummary(LastDamageContext, LastDamageShieldMultiplier, LastDamageHpMultiplier);
+    public bool HasFullVitals => currentHP >= maxHP && currentShield >= RepairableMaxShield;
     public bool HasBrokenShield => maxShield > 0 && currentShield <= 0;
     public bool IsWreck { get; private set; }
+    public ActorIdentity Identity => ActorIdentity.Ensure(gameObject);
     public bool IsBotControlled => GetComponent<EnemyBot>() != null;
-    public bool IsAstronautControlled => GetComponent<AstronautSurvivor>() != null;
+    public bool IsNeutralRiderControlled => NeutralRiderController.IsNeutralRider(gameObject) ||
+                                           NeutralRiderController.IsNeutralRiderInstantiationData(photonView != null ? photonView.InstantiationData : null);
+    public bool IsAstronautControlled => ActorIdentity.IsAstronautActor(gameObject);
+    public bool IsEnemyAstronautControlled => ActorIdentity.IsEnemyAstronautActor(gameObject);
+    public bool IsHumanShipControlled => !IsBotControlled && !IsNeutralRiderControlled && !IsAstronautControlled;
     public bool IsEvacuationAnimating => isEvacuationAnimating;
     public bool IsSpawnInvulnerable => !IsWreck &&
                                        !IsBotControlled &&
+                                       !IsNeutralRiderControlled &&
                                        ((!IsAstronautControlled && Time.time < spawnInvulnerableUntil) ||
                                         Time.time < equipmentInvulnerableUntil);
 
     public bool CanActivateBatteryChargeLocally()
     {
-        return !IsWreck && !isEvacuationAnimating && currentShield < maxShield;
+        return !IsWreck && !isEvacuationAnimating && currentShield < GetRepairableShieldCap();
     }
 
     public void RequestBatteryShieldCharge()
@@ -80,10 +104,10 @@ public class PlayerHealth : MonoBehaviourPun
 
     public bool TryBeginBatteryShieldChargeAuthority()
     {
-        if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || currentShield >= maxShield)
+        if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || currentShield >= GetRepairableShieldCap())
             return false;
 
-        RoundXpTracker.RecordBatterySuccess(photonView.Owner, maxShield - currentShield);
+        RoundXpTracker.RecordBatterySuccess(photonView.Owner, GetRepairableShieldCap() - currentShield);
         photonView.RPC(nameof(PlayBatteryShieldChargeAudio), RpcTarget.All);
         StartCoroutine(ApplyBatteryShieldChargeRoutine());
         return true;
@@ -91,6 +115,8 @@ public class PlayerHealth : MonoBehaviourPun
 
     void Start()
     {
+        ActorIdentity.Ensure(gameObject);
+
         if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
         {
             PlayerDeployableRuntime.EnsureAttached(gameObject);
@@ -106,39 +132,46 @@ public class PlayerHealth : MonoBehaviourPun
         }
 
         EnsureBotBootstrap();
+        EnsureNeutralRiderBootstrap();
 
-        if (!IsAstronautControlled && !IsBotControlled)
+        if (IsHumanShipControlled)
         {
             int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
             maxHP = ShipCatalog.GetBaseHp(shipSkinIndex);
-            maxShield = ShipCatalog.GetBaseShield(shipSkinIndex) + CountEquippedShieldReactors(shipSkinIndex) * ShieldReactorShieldBonus;
+            maxShield = ShipCatalog.GetBaseShield(shipSkinIndex) + GetEquippedShieldCapacityBonus(shipSkinIndex);
         }
 
         currentHP = maxHP;
         currentShield = maxShield;
+        lastDamageTakenTime = Time.time;
 
-        if (!IsAstronautControlled && !IsBotControlled && GetComponent<PlayerRepairDocking>() == null)
+        if (IsHumanShipControlled && GetComponent<PlayerRepairDocking>() == null)
         {
             gameObject.AddComponent<PlayerRepairDocking>();
         }
 
-        if (!IsAstronautControlled && !IsBotControlled && GetComponent<PilotActiveAbilityController>() == null)
+        if (IsHumanShipControlled && GetComponent<PilotActiveAbilityController>() == null)
         {
             gameObject.AddComponent<PilotActiveAbilityController>();
         }
 
-        if (!IsAstronautControlled && !IsBotControlled)
+        if (IsHumanShipControlled && GetComponent<ShipDamageState>() == null)
+        {
+            gameObject.AddComponent<ShipDamageState>();
+        }
+
+        if (IsHumanShipControlled)
         {
             BeginSpawnInvulnerability(SpawnInvulnerabilityDuration);
             StartCoroutine(InitialSpawnInvulnerabilityRoutine());
         }
 
-        if (!IsAstronautControlled && !IsBotControlled && GetComponent<RoundChatCommandUI>() == null)
+        if (IsHumanShipControlled && GetComponent<RoundChatCommandUI>() == null)
         {
             gameObject.AddComponent<RoundChatCommandUI>();
         }
 
-        if (photonView.IsMine && !IsBotControlled)
+        if (photonView.IsMine && !IsBotControlled && !IsNeutralRiderControlled && !IsEnemyAstronautControlled)
         {
             PhotonNetwork.LocalPlayer.TagObject = gameObject;
 
@@ -155,6 +188,11 @@ public class PlayerHealth : MonoBehaviourPun
             if (GetComponent<RoundPilotHudUI>() == null)
             {
                 gameObject.AddComponent<RoundPilotHudUI>();
+            }
+
+            if (GetComponent<ValuableCargoCarrierOverlay>() == null)
+            {
+                gameObject.AddComponent<ValuableCargoCarrierOverlay>();
             }
 
             GameObject barObj = GameObject.Find("HP_Bar");
@@ -176,30 +214,100 @@ public class PlayerHealth : MonoBehaviourPun
     {
         if (IsSpawnInvulnerable && RoomSettings.AreVisualEffectsEnabled() && GetComponent<SpawnInvulnerabilityVfx>() == null)
             SpawnInvulnerabilityVfx.Attach(this);
+
+        if (PhotonNetwork.IsMasterClient)
+        {
+            RegenerateShieldFromEquipment();
+            ApplyRadioactiveCargoDamage();
+        }
     }
 
-    int CountEquippedShieldReactors(int shipSkinIndex)
+    void ApplyRadioactiveCargoDamage()
+    {
+        if (!IsHumanShipControlled || IsWreck || isEvacuationAnimating || currentHP <= 0)
+            return;
+
+        if (Time.time < nextRadioactiveCargoDamageTime)
+            return;
+
+        nextRadioactiveCargoDamageTime = Time.time + RadioactiveCargoDamageInterval;
+
+        int radioactiveCount = CountRadioactiveCargoItems();
+        if (radioactiveCount <= 0)
+            return;
+
+        int shieldDamage = radioactiveCount * InventoryItemCatalog.RadioactiveTreasureShieldDamagePerSecond;
+        int hpDamage = radioactiveCount * InventoryItemCatalog.RadioactiveTreasureHpDamagePerSecond;
+        ApplyDamageProfileInternal(
+            shieldDamage,
+            hpDamage,
+            -1,
+            false,
+            transform.position.x,
+            transform.position.y,
+            new WeaponHitContext(
+                WeaponDamageType.Environmental,
+                WeaponDeliveryMethod.AreaPulse,
+                WeaponDeliveryFlags.Continuous,
+                DamageSourceRadioactiveCargo));
+    }
+
+    int CountRadioactiveCargoItems()
     {
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
-        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        string[] shipSlots = PlayerProfileService.GetPlayerShipInventorySlots(owner);
+        if (shipSlots == null)
+            return 0;
+
         int count = 0;
-
-        if (IsShieldReactorEquipped(equipmentSlots, 2, shipSkinIndex))
-            count++;
-
-        if (IsShieldReactorEquipped(equipmentSlots, 3, shipSkinIndex))
-            count++;
+        for (int i = 0; i < shipSlots.Length; i++)
+        {
+            if (InventoryItemCatalog.IsRadioactiveTreasure(shipSlots[i]))
+                count++;
+        }
 
         return count;
     }
 
-    bool IsShieldReactorEquipped(string[] equipmentSlots, int slotIndex, int shipSkinIndex)
+    void RegenerateShieldFromEquipment()
     {
-        return equipmentSlots != null &&
-               slotIndex >= 0 &&
-               slotIndex < equipmentSlots.Length &&
-               ShipCatalog.IsEquipmentSlotEnabled(slotIndex, shipSkinIndex) &&
-               string.Equals(equipmentSlots[slotIndex], InventoryItemCatalog.ShieldReactorId, System.StringComparison.Ordinal);
+        if (!IsHumanShipControlled || IsWreck || isEvacuationAnimating || maxShield <= 0)
+            return;
+
+        if (!HasEquippedItem(InventoryItemCatalog.RegenerativeShieldMatrixId))
+            return;
+
+        int shieldCap = GetRepairableShieldCap();
+        if (shieldCap <= 0 || currentShield >= shieldCap)
+        {
+            shieldRegenAccumulator = 0f;
+            return;
+        }
+
+        if (Time.time < lastDamageTakenTime + RegenerativeShieldDelay)
+            return;
+
+        shieldRegenAccumulator += RegenerativeShieldPerSecond * Time.deltaTime;
+        if (shieldRegenAccumulator < 1f)
+            return;
+
+        int amount = Mathf.FloorToInt(shieldRegenAccumulator);
+        shieldRegenAccumulator -= amount;
+        int previousShield = currentShield;
+        currentShield = Mathf.Min(shieldCap, currentShield + amount);
+        if (currentShield != previousShield)
+            photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
+    }
+
+    int GetEquippedShieldCapacityBonus(int shipSkinIndex)
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        int bonus = InventoryItemCatalog.GetEquippedShieldCapacityBonus(equipmentSlots, shipSkinIndex);
+        if (bonus > 0 && PilotCatalog.IsSelectedPilot(owner, PilotCatalog.AtlasId))
+            bonus = Mathf.CeilToInt(bonus * 1.3f);
+
+        return bonus;
     }
 
     void OnDestroy()
@@ -223,12 +331,46 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
+    public void TakeDamageWithContext(
+        int dmg,
+        int attackerViewID,
+        int damageType,
+        int deliveryMethod,
+        int deliveryFlags,
+        string damageSource)
+    {
+        WeaponHitContext hitContext = WeaponHitContext.FromRpc(damageType, deliveryMethod, deliveryFlags, damageSource);
+        if (TryForwardDamageToDeployable(dmg, dmg, attackerViewID, transform.position.x, transform.position.y, hitContext))
+            return;
+
+        ApplyDamageInternal(dmg, attackerViewID, true, false, 0f, 0f, hitContext);
+    }
+
+    [PunRPC]
     public void TakeDamageAt(int dmg, int attackerViewID, float impactX, float impactY)
     {
         if (TryForwardDamageToDeployable(dmg, dmg, attackerViewID, impactX, impactY))
             return;
 
         ApplyDamageInternal(dmg, attackerViewID, true, true, impactX, impactY);
+    }
+
+    [PunRPC]
+    public void TakeDamageWithContextAt(
+        int dmg,
+        int attackerViewID,
+        float impactX,
+        float impactY,
+        int damageType,
+        int deliveryMethod,
+        int deliveryFlags,
+        string damageSource)
+    {
+        WeaponHitContext hitContext = WeaponHitContext.FromRpc(damageType, deliveryMethod, deliveryFlags, damageSource);
+        if (TryForwardDamageToDeployable(dmg, dmg, attackerViewID, impactX, impactY, hitContext))
+            return;
+
+        ApplyDamageInternal(dmg, attackerViewID, true, true, impactX, impactY, hitContext);
     }
 
     [PunRPC]
@@ -241,6 +383,35 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
+    public void TakeDamageProfileWithSourceAt(int shieldDmg, int hpDmg, int attackerViewID, float impactX, float impactY, string damageSource)
+    {
+        WeaponHitContext hitContext = WeaponHitContext.FromDamageSource(damageSource);
+        if (TryForwardDamageToDeployable(shieldDmg, hpDmg, attackerViewID, impactX, impactY, hitContext))
+            return;
+
+        ApplyDamageProfileInternal(shieldDmg, hpDmg, attackerViewID, true, impactX, impactY, hitContext);
+    }
+
+    [PunRPC]
+    public void TakeDamageProfileWithContextAt(
+        int shieldDmg,
+        int hpDmg,
+        int attackerViewID,
+        float impactX,
+        float impactY,
+        int damageType,
+        int deliveryMethod,
+        int deliveryFlags,
+        string damageSource)
+    {
+        WeaponHitContext hitContext = WeaponHitContext.FromRpc(damageType, deliveryMethod, deliveryFlags, damageSource);
+        if (TryForwardDamageToDeployable(shieldDmg, hpDmg, attackerViewID, impactX, impactY, hitContext))
+            return;
+
+        ApplyDamageProfileInternal(shieldDmg, hpDmg, attackerViewID, true, impactX, impactY, hitContext);
+    }
+
+    [PunRPC]
     public void TakeShieldOnlyDamageAt(int shieldDmg, int attackerViewID, float impactX, float impactY)
     {
         if (TryForwardShieldOnlyDamageToDeployable(shieldDmg, attackerViewID, impactX, impactY))
@@ -250,12 +421,31 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
-    public void TakePilotDamageAt(int dmg, int attackerViewID, float impactX, float impactY, string damageSource)
+    public void TakeShieldOnlyDamageWithContextAt(
+        int shieldDmg,
+        int attackerViewID,
+        float impactX,
+        float impactY,
+        int damageType,
+        int deliveryMethod,
+        int deliveryFlags,
+        string damageSource)
     {
-        if (TryForwardDamageToDeployable(dmg, dmg, attackerViewID, impactX, impactY))
+        WeaponHitContext hitContext = WeaponHitContext.FromRpc(damageType, deliveryMethod, deliveryFlags, damageSource);
+        if (TryForwardShieldOnlyDamageToDeployable(shieldDmg, attackerViewID, impactX, impactY, hitContext))
             return;
 
-        ApplyDamageInternal(dmg, attackerViewID, true, true, impactX, impactY, damageSource);
+        ApplyShieldOnlyDamageInternal(shieldDmg, attackerViewID, true, impactX, impactY, hitContext);
+    }
+
+    [PunRPC]
+    public void TakePilotDamageAt(int dmg, int attackerViewID, float impactX, float impactY, string damageSource)
+    {
+        WeaponHitContext hitContext = WeaponHitContext.FromDamageSource(damageSource);
+        if (TryForwardDamageToDeployable(dmg, dmg, attackerViewID, impactX, impactY, hitContext))
+            return;
+
+        ApplyDamageInternal(dmg, attackerViewID, true, true, impactX, impactY, hitContext);
     }
 
     [PunRPC]
@@ -291,6 +481,22 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
+    public void ApplyAtlasSuppressionRpc(float duration, float speedMultiplier, float fireIntervalMultiplier, float reloadMultiplier, float projectileSpeedMultiplier)
+    {
+        if (IsWreck || CurrentHP <= 0 || isEvacuationAnimating)
+            return;
+
+        if (IsAstronautControlled || GetComponent<LureBeaconDecoy>() != null || GetComponent<PlayerDeployableBase>() != null)
+            return;
+
+        EnemyBot bot = GetComponent<EnemyBot>();
+        if (bot != null && !bot.CanReceivePilotHostileEffect())
+            return;
+
+        AtlasSuppressionStatus.Apply(gameObject, duration, speedMultiplier, fireIntervalMultiplier, reloadMultiplier, projectileSpeedMultiplier);
+    }
+
+    [PunRPC]
     public void ApplyAsteroidKnockbackRpc(float directionX, float directionY, float impulse)
     {
         if (PhotonNetwork.IsConnected && photonView != null && !photonView.IsMine)
@@ -322,10 +528,33 @@ public class PlayerHealth : MonoBehaviourPun
         bot.InitializeFromPhotonData();
     }
 
+    void EnsureNeutralRiderBootstrap()
+    {
+        if (!NeutralRiderController.IsNeutralRiderInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            return;
+
+        NeutralRiderController rider = GetComponent<NeutralRiderController>();
+        if (rider == null)
+            rider = gameObject.AddComponent<NeutralRiderController>();
+
+        rider.InitializeFromPhotonData();
+    }
+
     [PunRPC]
     public void TakeEnvironmentalDamage(int dmg)
     {
-        ApplyDamageInternal(dmg, -1, false, false, 0f, 0f, EnvironmentalDamageSource);
+        ApplyDamageInternal(
+            dmg,
+            -1,
+            false,
+            false,
+            0f,
+            0f,
+            new WeaponHitContext(
+                WeaponDamageType.Environmental,
+                WeaponDeliveryMethod.AreaPulse,
+                WeaponDeliveryFlags.Continuous,
+                EnvironmentalDamageSource));
     }
 
     [PunRPC]
@@ -333,11 +562,22 @@ public class PlayerHealth : MonoBehaviourPun
     {
         if (PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.SirNowitzkyId))
         {
-            ApplyShieldOnlyEnvironmentalDamage(dmg);
+            ApplyShieldOnlyEnvironmentalDamage(dmg, NebulaDamageSource);
             return;
         }
 
-        ApplyDamageInternal(dmg, -1, false, false, 0f, 0f, NebulaDamageSource);
+        ApplyDamageInternal(
+            dmg,
+            -1,
+            false,
+            false,
+            0f,
+            0f,
+            new WeaponHitContext(
+                WeaponDamageType.Environmental,
+                WeaponDeliveryMethod.AreaPulse,
+                WeaponDeliveryFlags.Continuous,
+                NebulaDamageSource));
     }
 
     void ApplyDamageInternal(int dmg, int attackerViewID, bool playImpactAudio, bool hasImpactPosition, float impactX, float impactY)
@@ -346,6 +586,16 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     void ApplyDamageProfileInternal(int shieldDmg, int hpDmg, int attackerViewID, bool playImpactAudio, float impactX, float impactY)
+    {
+        ApplyDamageProfileInternal(shieldDmg, hpDmg, attackerViewID, playImpactAudio, impactX, impactY, string.Empty);
+    }
+
+    void ApplyDamageProfileInternal(int shieldDmg, int hpDmg, int attackerViewID, bool playImpactAudio, float impactX, float impactY, string damageSource)
+    {
+        ApplyDamageProfileInternal(shieldDmg, hpDmg, attackerViewID, playImpactAudio, impactX, impactY, WeaponHitContext.FromDamageSource(damageSource));
+    }
+
+    void ApplyDamageProfileInternal(int shieldDmg, int hpDmg, int attackerViewID, bool playImpactAudio, float impactX, float impactY, WeaponHitContext hitContext)
     {
         if (IsDeployableDamageProxy())
             return;
@@ -364,12 +614,16 @@ public class PlayerHealth : MonoBehaviourPun
         if (repairDocking != null && repairDocking.IsDamageImmune)
             return;
 
+        WeaponDamageMultipliers damageMultipliers = WeaponDamageInteractionCatalog.ResolveMultipliers(hitContext);
+        RememberDamageContext(hitContext, damageMultipliers);
+        string damageSource = hitContext.DamageSource ?? string.Empty;
         int previousHp = currentHP;
         int previousShield = currentShield;
         int rawShieldDamage = Mathf.Max(0, shieldDmg);
         int rawHpDamage = Mathf.Max(0, hpDmg);
-        int adjustedShieldDamage = ApplyPilotDamageModifiers(rawShieldDamage, attackerViewID, string.Empty);
-        int adjustedHpDamage = ApplyPilotDamageModifiers(rawHpDamage, attackerViewID, string.Empty);
+        int adjustedShieldDamage = WeaponDamageInteractionCatalog.ApplyMultiplier(ApplyPilotDamageModifiers(rawShieldDamage, attackerViewID, hitContext), damageMultipliers.ShieldMultiplier);
+        int adjustedHpDamage = WeaponDamageInteractionCatalog.ApplyMultiplier(ApplyPilotDamageModifiers(rawHpDamage, attackerViewID, hitContext), damageMultipliers.HpMultiplier);
+        WeaponDamageInteractionCatalog.LogDamageContext(this, "profile", hitContext, damageMultipliers, attackerViewID, adjustedShieldDamage, adjustedHpDamage);
         int absorbed = 0;
         int hpDamageToApply = 0;
 
@@ -392,7 +646,9 @@ public class PlayerHealth : MonoBehaviourPun
         if (hpDamageToApply > 0)
             currentHP = Mathf.Max(0, currentHP - hpDamageToApply);
 
+        TrackDamageTakenAndShieldBreak(previousHp, previousShield);
         TryTriggerPhaseShield(previousHp);
+        TryRollShipDamageOnHalfHpCrossing(previousHp);
 
         int hpDamage = Mathf.Max(0, previousHp - currentHP);
         Vector2 impactPosition = Vector2.zero;
@@ -428,6 +684,13 @@ public class PlayerHealth : MonoBehaviourPun
                 damagedBot.NotifyDamageTaken(previousHp, currentHP, Mathf.Max(0, previousShield - currentShield), hpDamage, attackerViewID);
         }
 
+        if (IsNeutralRiderControlled)
+        {
+            NeutralRiderController rider = GetComponent<NeutralRiderController>();
+            if (rider != null)
+                rider.NotifyDamageTaken(attackerViewID);
+        }
+
         RoundXpTracker.RecordDamage(attackerViewID, photonView, absorbed, hpDamage);
 
         if (previousHp > 0 && currentHP <= 0)
@@ -438,6 +701,11 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     void ApplyDamageInternal(int dmg, int attackerViewID, bool playImpactAudio, bool hasImpactPosition, float impactX, float impactY, string damageSource)
+    {
+        ApplyDamageInternal(dmg, attackerViewID, playImpactAudio, hasImpactPosition, impactX, impactY, WeaponHitContext.FromDamageSource(damageSource));
+    }
+
+    void ApplyDamageInternal(int dmg, int attackerViewID, bool playImpactAudio, bool hasImpactPosition, float impactX, float impactY, WeaponHitContext hitContext)
     {
         if (IsDeployableDamageProxy())
             return;
@@ -456,23 +724,39 @@ public class PlayerHealth : MonoBehaviourPun
         if (repairDocking != null && repairDocking.IsDamageImmune)
             return;
 
+        WeaponDamageMultipliers damageMultipliers = WeaponDamageInteractionCatalog.ResolveMultipliers(hitContext);
+        RememberDamageContext(hitContext, damageMultipliers);
+        string damageSource = hitContext.DamageSource ?? string.Empty;
         int previousHp = currentHP;
         int previousShield = currentShield;
-        int remainingDamage = ApplyPilotDamageModifiers(Mathf.Max(0, dmg), attackerViewID, damageSource);
+        int pilotAdjustedDamage = ApplyPilotDamageModifiers(Mathf.Max(0, dmg), attackerViewID, hitContext);
+        int adjustedShieldDamage = WeaponDamageInteractionCatalog.ApplyMultiplier(pilotAdjustedDamage, damageMultipliers.ShieldMultiplier);
+        int adjustedHpDamage = WeaponDamageInteractionCatalog.ApplyMultiplier(pilotAdjustedDamage, damageMultipliers.HpMultiplier);
+        WeaponDamageInteractionCatalog.LogDamageContext(this, "simple", hitContext, damageMultipliers, attackerViewID, adjustedShieldDamage, adjustedHpDamage);
         int absorbed = 0;
+        int hpDamageToApply = 0;
         if (currentShield > 0)
         {
-            absorbed = Mathf.Min(currentShield, remainingDamage);
-            currentShield -= absorbed;
-            remainingDamage -= absorbed;
-        }
+            if (adjustedShieldDamage > 0)
+            {
+                absorbed = Mathf.Min(currentShield, adjustedShieldDamage);
+                currentShield -= absorbed;
 
-        if (remainingDamage > 0)
+                float overflowRatio = Mathf.Clamp01((adjustedShieldDamage - absorbed) / (float)adjustedShieldDamage);
+                hpDamageToApply = Mathf.RoundToInt(adjustedHpDamage * overflowRatio);
+            }
+        }
+        else
         {
-            currentHP = Mathf.Max(0, currentHP - remainingDamage);
+            hpDamageToApply = adjustedHpDamage;
         }
 
+        if (hpDamageToApply > 0)
+            currentHP = Mathf.Max(0, currentHP - hpDamageToApply);
+
+        TrackDamageTakenAndShieldBreak(previousHp, previousShield);
         TryTriggerPhaseShield(previousHp);
+        TryRollShipDamageOnHalfHpCrossing(previousHp);
 
         int hpDamage = Mathf.Max(0, previousHp - currentHP);
         Vector2 impactPosition = Vector2.zero;
@@ -510,6 +794,13 @@ public class PlayerHealth : MonoBehaviourPun
                 damagedBot.NotifyDamageTaken(previousHp, currentHP, Mathf.Max(0, previousShield - currentShield), hpDamage, attackerViewID);
         }
 
+        if (IsNeutralRiderControlled)
+        {
+            NeutralRiderController rider = GetComponent<NeutralRiderController>();
+            if (rider != null)
+                rider.NotifyDamageTaken(attackerViewID);
+        }
+
         RoundXpTracker.RecordDamage(attackerViewID, photonView, absorbed, hpDamage);
 
         if (previousHp > 0 && currentHP <= 0)
@@ -522,6 +813,11 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     void ApplyShieldOnlyDamageInternal(int dmg, int attackerViewID, bool playImpactAudio, float impactX, float impactY)
+    {
+        ApplyShieldOnlyDamageInternal(dmg, attackerViewID, playImpactAudio, impactX, impactY, WeaponHitContext.None);
+    }
+
+    void ApplyShieldOnlyDamageInternal(int dmg, int attackerViewID, bool playImpactAudio, float impactX, float impactY, WeaponHitContext hitContext)
     {
         if (IsDeployableDamageProxy())
             return;
@@ -540,13 +836,19 @@ public class PlayerHealth : MonoBehaviourPun
         if (repairDocking != null && repairDocking.IsDamageImmune)
             return;
 
-        int shieldOnlyDamage = ApplyPilotDamageModifiers(Mathf.Max(0, dmg), attackerViewID, string.Empty);
+        WeaponDamageMultipliers damageMultipliers = WeaponDamageInteractionCatalog.ResolveMultipliers(hitContext);
+        RememberDamageContext(hitContext, damageMultipliers);
+        int shieldOnlyDamage = WeaponDamageInteractionCatalog.ApplyMultiplier(
+            ApplyPilotDamageModifiers(Mathf.Max(0, dmg), attackerViewID, hitContext),
+            damageMultipliers.ShieldMultiplier);
+        WeaponDamageInteractionCatalog.LogDamageContext(this, "shield-only", hitContext, damageMultipliers, attackerViewID, shieldOnlyDamage, 0);
         if (shieldOnlyDamage <= 0 || currentShield <= 0)
             return;
 
         int previousShield = currentShield;
         int absorbed = Mathf.Min(currentShield, shieldOnlyDamage);
         currentShield -= absorbed;
+        TrackDamageTakenAndShieldBreak(currentHP, previousShield);
         photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
 
         if (playImpactAudio && absorbed > 0)
@@ -567,20 +869,10 @@ public class PlayerHealth : MonoBehaviourPun
 
     bool TryForwardDamageToDeployable(int shieldDmg, int hpDmg, int attackerViewID, float impactX, float impactY)
     {
-        if (!IsDeployableDamageProxy())
-            return false;
-
-        PlayerDeployableBase deployable = GetComponent<PlayerDeployableBase>();
-        if (deployable == null)
-            deployable = PlayerDeployableRuntime.EnsureAttached(gameObject);
-
-        if (deployable != null)
-            deployable.TakeDeployableDamageAt(shieldDmg, hpDmg, attackerViewID, impactX, impactY);
-
-        return true;
+        return TryForwardDamageToDeployable(shieldDmg, hpDmg, attackerViewID, impactX, impactY, WeaponHitContext.None);
     }
 
-    bool TryForwardShieldOnlyDamageToDeployable(int shieldDmg, int attackerViewID, float impactX, float impactY)
+    bool TryForwardDamageToDeployable(int shieldDmg, int hpDmg, int attackerViewID, float impactX, float impactY, WeaponHitContext hitContext)
     {
         if (!IsDeployableDamageProxy())
             return false;
@@ -590,7 +882,44 @@ public class PlayerHealth : MonoBehaviourPun
             deployable = PlayerDeployableRuntime.EnsureAttached(gameObject);
 
         if (deployable != null)
-            deployable.TakeDeployableShieldOnlyDamageAt(shieldDmg, attackerViewID, impactX, impactY);
+            deployable.TakeDeployableDamageWithContextAt(
+                shieldDmg,
+                hpDmg,
+                attackerViewID,
+                impactX,
+                impactY,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
+
+        return true;
+    }
+
+    bool TryForwardShieldOnlyDamageToDeployable(int shieldDmg, int attackerViewID, float impactX, float impactY)
+    {
+        return TryForwardShieldOnlyDamageToDeployable(shieldDmg, attackerViewID, impactX, impactY, WeaponHitContext.None);
+    }
+
+    bool TryForwardShieldOnlyDamageToDeployable(int shieldDmg, int attackerViewID, float impactX, float impactY, WeaponHitContext hitContext)
+    {
+        if (!IsDeployableDamageProxy())
+            return false;
+
+        PlayerDeployableBase deployable = GetComponent<PlayerDeployableBase>();
+        if (deployable == null)
+            deployable = PlayerDeployableRuntime.EnsureAttached(gameObject);
+
+        if (deployable != null)
+            deployable.TakeDeployableShieldOnlyDamageWithContextAt(
+                shieldDmg,
+                attackerViewID,
+                impactX,
+                impactY,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
 
         return true;
     }
@@ -601,11 +930,21 @@ public class PlayerHealth : MonoBehaviourPun
                GetComponent<PlayerDeployableBase>() != null;
     }
 
+    void RememberDamageContext(WeaponHitContext hitContext, WeaponDamageMultipliers damageMultipliers)
+    {
+        LastDamageContext = hitContext;
+        LastDamageShieldMultiplier = damageMultipliers.ShieldMultiplier;
+        LastDamageHpMultiplier = damageMultipliers.HpMultiplier;
+    }
+
     int ApplyPilotDamageModifiers(int damage, int attackerViewID, string damageSource)
     {
         int result = Mathf.Max(0, damage);
         if (result <= 0)
             return 0;
+
+        if (string.Equals(damageSource, DamageSourceRadioactiveCargo, System.StringComparison.Ordinal))
+            return result;
 
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
         if (string.Equals(damageSource, PilotDamageSourceRamming, System.StringComparison.Ordinal) &&
@@ -620,16 +959,28 @@ public class PlayerHealth : MonoBehaviourPun
             result = Mathf.Max(1, Mathf.RoundToInt(result * 0.5f));
         }
 
-        if (!IsBotControlled && !IsAstronautControlled && HasEquippedItem(InventoryItemCatalog.KineticDampenerId) &&
+        if (IsHumanShipControlled && HasEquippedItem(InventoryItemCatalog.KineticDampenerId) &&
             IsPhysicalImpactDamage(attackerViewID, damageSource))
         {
             result = Mathf.Max(1, Mathf.RoundToInt(result * KineticDampenerDamageMultiplier));
         }
 
-        if (!IsBotControlled && !IsAstronautControlled && HasEquippedItem(InventoryItemCatalog.StrongPlatingId) &&
+        if (IsHumanShipControlled && HasEquippedItem(InventoryItemCatalog.KineticDampenerId) &&
+            IsExplosiveDamageSource(damageSource))
+        {
+            result = Mathf.Max(1, Mathf.RoundToInt(result * KineticDampenerExplosiveDamageMultiplier));
+        }
+
+        if (IsHumanShipControlled && HasEquippedItem(InventoryItemCatalog.StrongPlatingId) &&
             IsEnvironmentalDamageSource(damageSource))
         {
             result = Mathf.Max(1, Mathf.RoundToInt(result * StrongPlatingEnvironmentalDamageMultiplier));
+        }
+
+        if (IsHumanShipControlled && HasEquippedItem(InventoryItemCatalog.BulwarkProjectorId) &&
+            IsLaserWeaponDamage(attackerViewID, damageSource))
+        {
+            result = Mathf.Max(1, Mathf.RoundToInt(result * BulwarkProjectorLaserDamageMultiplier));
         }
 
         EnemyBot targetBot = IsBotControlled ? GetComponent<EnemyBot>() : null;
@@ -639,6 +990,9 @@ public class PlayerHealth : MonoBehaviourPun
         PilotActiveAbilityController pilotAbility = GetComponent<PilotActiveAbilityController>();
         if (pilotAbility != null && pilotAbility.IsJakeBarrierActive)
             result = Mathf.Max(1, Mathf.RoundToInt(result * 0.5f));
+
+        if (IsHumanShipControlled && Time.time < alienAegisBarrierUntil)
+            result = Mathf.Max(1, Mathf.RoundToInt(result * AlienAegisBarrierDamageMultiplier));
 
         if (photonView != null && PilotActiveAbilityController.IsRoburMarked(photonView.ViewID))
             result = Mathf.Max(1, Mathf.RoundToInt(result * 1.5f));
@@ -671,10 +1025,27 @@ public class PlayerHealth : MonoBehaviourPun
                IsDamageFromEnemyKind(attackerViewID, EnemyBotKind.SpaceManta);
     }
 
+    bool IsExplosiveDamageSource(string damageSource)
+    {
+        return string.Equals(damageSource, DamageSourceExplosive, System.StringComparison.Ordinal);
+    }
+
     bool IsEnvironmentalDamageSource(string damageSource)
     {
         return string.Equals(damageSource, EnvironmentalDamageSource, System.StringComparison.Ordinal) ||
                string.Equals(damageSource, NebulaDamageSource, System.StringComparison.Ordinal);
+    }
+
+    bool IsLaserWeaponDamage(int attackerViewID, string damageSource)
+    {
+        if (string.Equals(damageSource, DamageSourceLaser, System.StringComparison.Ordinal))
+            return true;
+
+        return IsDamageFromEnemyKind(attackerViewID, EnemyBotKind.NeutralFighter) ||
+               IsDamageFromEnemyKind(attackerViewID, EnemyBotKind.PirateFighter) ||
+               IsDamageFromEnemyKind(attackerViewID, EnemyBotKind.PirateFighterElite) ||
+               IsDamageFromEnemyKind(attackerViewID, EnemyBotKind.PirateFighterAce) ||
+               IsDamageFromEnemyKind(attackerViewID, EnemyBotKind.ContainerShip);
     }
 
     bool HasEquippedItem(string itemId)
@@ -687,7 +1058,7 @@ public class PlayerHealth : MonoBehaviourPun
 
     bool TryTriggerPhaseShield(int previousHp)
     {
-        if (phaseShieldTriggered || IsBotControlled || IsAstronautControlled || IsWreck || maxHP <= 0)
+        if (phaseShieldTriggered || !IsHumanShipControlled || IsWreck || maxHP <= 0)
             return false;
 
         if (!HasEquippedItem(InventoryItemCatalog.PhaseShieldId))
@@ -703,6 +1074,22 @@ public class PlayerHealth : MonoBehaviourPun
         return true;
     }
 
+    void TryRollShipDamageOnHalfHpCrossing(int previousHp)
+    {
+        if (!PhotonNetwork.IsMasterClient || !IsHumanShipControlled || IsWreck || currentHP <= 0 || maxHP <= 0)
+            return;
+
+        float halfHp = maxHP * 0.5f;
+        if (previousHp < halfHp || currentHP >= halfHp)
+            return;
+
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        if (damageState == null)
+            damageState = gameObject.AddComponent<ShipDamageState>();
+
+        damageState.TryRollBelowHalfHpDamageAuthority();
+    }
+
     void BeginEquipmentInvulnerabilityAuthority(float duration)
     {
         if (!PhotonNetwork.IsMasterClient || photonView == null || duration <= 0f)
@@ -713,7 +1100,7 @@ public class PlayerHealth : MonoBehaviourPun
 
     public void BeginEquipmentInvulnerabilityLocal(float duration)
     {
-        if (duration <= 0f || IsWreck || IsBotControlled)
+        if (duration <= 0f || IsWreck || IsBotControlled || IsNeutralRiderControlled)
             return;
 
         equipmentInvulnerableUntil = Mathf.Max(equipmentInvulnerableUntil, Time.time + duration);
@@ -736,7 +1123,7 @@ public class PlayerHealth : MonoBehaviourPun
         return attackerView != null && PilotCatalog.IsSelectedPilot(attackerView.Owner, pilotId);
     }
 
-    void ApplyShieldOnlyEnvironmentalDamage(int dmg)
+    void ApplyShieldOnlyEnvironmentalDamage(int dmg, string damageSource)
     {
         if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || IsSpawnInvulnerable)
             return;
@@ -745,17 +1132,63 @@ public class PlayerHealth : MonoBehaviourPun
         if (launchProtectedBot != null && launchProtectedBot.IsPirateBaseLaunchProtected)
             return;
 
+        WeaponHitContext hitContext = new WeaponHitContext(
+            WeaponDamageType.Environmental,
+            WeaponDeliveryMethod.AreaPulse,
+            WeaponDeliveryFlags.Continuous,
+            damageSource);
+        WeaponDamageMultipliers damageMultipliers = WeaponDamageInteractionCatalog.ResolveMultipliers(hitContext);
+        RememberDamageContext(hitContext, damageMultipliers);
+
         int damage = Mathf.Max(0, dmg);
-        if (damage > 0 && !IsBotControlled && !IsAstronautControlled && HasEquippedItem(InventoryItemCatalog.StrongPlatingId))
+        if (damage > 0 && IsHumanShipControlled && HasEquippedItem(InventoryItemCatalog.StrongPlatingId))
             damage = Mathf.Max(1, Mathf.RoundToInt(damage * StrongPlatingEnvironmentalDamageMultiplier));
+
+        damage = WeaponDamageInteractionCatalog.ApplyMultiplier(damage, damageMultipliers.ShieldMultiplier);
+        WeaponDamageInteractionCatalog.LogDamageContext(this, "environmental-shield", hitContext, damageMultipliers, -1, damage, 0);
 
         if (damage <= 0 || currentShield <= 0)
             return;
 
         int previousShield = currentShield;
         currentShield = Mathf.Max(0, currentShield - damage);
+        TrackDamageTakenAndShieldBreak(currentHP, previousShield);
         if (currentShield != previousShield)
             photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
+    }
+
+    void TrackDamageTakenAndShieldBreak(int previousHp, int previousShield)
+    {
+        if (currentHP < previousHp || currentShield < previousShield)
+        {
+            lastDamageTakenTime = Time.time;
+            shieldRegenAccumulator = 0f;
+        }
+
+        if (previousShield > 0 && currentShield <= 0)
+            TryTriggerAlienAegisBarrier();
+    }
+
+    void TryTriggerAlienAegisBarrier()
+    {
+        if (!PhotonNetwork.IsMasterClient || !IsHumanShipControlled || IsWreck || currentHP <= 0)
+            return;
+
+        if (!HasEquippedItem(InventoryItemCatalog.AlienAegisCoreId))
+            return;
+
+        photonView.RPC(nameof(BeginAlienAegisBarrierRpc), RpcTarget.All, AlienAegisBarrierDuration);
+    }
+
+    [PunRPC]
+    void BeginAlienAegisBarrierRpc(float duration)
+    {
+        if (duration <= 0f || IsWreck || !IsHumanShipControlled)
+            return;
+
+        alienAegisBarrierUntil = Mathf.Max(alienAegisBarrierUntil, Time.time + duration);
+        if (RoomSettings.AreVisualEffectsEnabled())
+            PilotBarrierVfx.Attach(gameObject, duration);
     }
 
     void TryStartJakeEmergencyRegeneration(int previousHp)
@@ -763,7 +1196,7 @@ public class PlayerHealth : MonoBehaviourPun
         if (jakeEmergencyRegenerationUsed || currentHP <= 0 || currentHP >= maxHP)
             return;
 
-        if (IsBotControlled || IsAstronautControlled || IsWreck)
+        if (!IsHumanShipControlled || IsWreck)
             return;
 
         if (!PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.JakeId))
@@ -818,7 +1251,7 @@ public class PlayerHealth : MonoBehaviourPun
 
     void BeginSpawnInvulnerability(float duration)
     {
-        if (duration <= 0f || IsWreck || IsBotControlled || IsAstronautControlled)
+        if (duration <= 0f || IsWreck || !IsHumanShipControlled)
             return;
 
         spawnInvulnerableUntil = Mathf.Max(spawnInvulnerableUntil, Time.time + duration);
@@ -834,10 +1267,18 @@ public class PlayerHealth : MonoBehaviourPun
         int previousHp = currentHP;
         int previousShield = currentShield;
         currentHP = Mathf.Min(maxHP, currentHP + amount);
-        currentShield = Mathf.Min(maxShield, currentShield + amount);
+        int shieldCap = GetRepairableShieldCap();
+        if (currentShield < shieldCap)
+            currentShield = Mathf.Min(shieldCap, currentShield + amount);
 
         if (currentHP != previousHp || currentShield != previousShield)
             photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
+    }
+
+    int GetRepairableShieldCap()
+    {
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        return damageState != null ? damageState.GetShieldRepairCap(maxShield) : maxShield;
     }
 
     Vector2 ResolveDamageImpactPosition(int attackerViewID)
@@ -893,6 +1334,73 @@ public class PlayerHealth : MonoBehaviourPun
         }
     }
 
+    public bool CanRequestAstronautKillMeLocally()
+    {
+        return photonView != null &&
+               photonView.IsMine &&
+               CanApplyAstronautKillMeAuthority();
+    }
+
+    public void RequestLocalAstronautKillMe()
+    {
+        if (!CanRequestAstronautKillMeLocally())
+            return;
+
+        if (PhotonNetwork.IsConnected && PhotonNetwork.InRoom && photonView != null)
+        {
+            photonView.RPC(nameof(RequestAstronautKillMe), RpcTarget.MasterClient);
+            return;
+        }
+
+        ApplyAstronautKillMeAuthority();
+    }
+
+    [PunRPC]
+    void RequestAstronautKillMe(PhotonMessageInfo info)
+    {
+        if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient)
+            return;
+
+        if (photonView != null &&
+            photonView.Owner != null &&
+            info.Sender != null &&
+            photonView.Owner.ActorNumber != info.Sender.ActorNumber)
+        {
+            return;
+        }
+
+        ApplyAstronautKillMeAuthority();
+    }
+
+    bool CanApplyAstronautKillMeAuthority()
+    {
+        return IsAstronautControlled &&
+               !IsEnemyAstronautControlled &&
+               !IsWreck &&
+               !isEvacuationAnimating &&
+               !deathHandled &&
+               currentHP > 0;
+    }
+
+    void ApplyAstronautKillMeAuthority()
+    {
+        if (PhotonNetwork.IsConnected && PhotonNetwork.InRoom && !PhotonNetwork.IsMasterClient)
+            return;
+
+        if (!CanApplyAstronautKillMeAuthority())
+            return;
+
+        currentShield = 0;
+        currentHP = 0;
+
+        if (PhotonNetwork.IsConnected && PhotonNetwork.InRoom && photonView != null)
+            photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
+        else
+            SyncVitals(currentHP, currentShield);
+
+        HandleDeath(-1);
+    }
+
     [PunRPC]
     void HandleBatteryShieldChargeRequest()
     {
@@ -901,6 +1409,7 @@ public class PlayerHealth : MonoBehaviourPun
 
     System.Collections.IEnumerator ApplyBatteryShieldChargeRoutine()
     {
+        int shieldPerTick = BatteryShieldPerTick * GetBatteryShieldChargeMultiplier();
         for (int i = 0; i < BatteryTickCount; i++)
         {
             if (IsWreck || isEvacuationAnimating)
@@ -908,12 +1417,18 @@ public class PlayerHealth : MonoBehaviourPun
 
             yield return new WaitForSeconds(BatteryTickInterval);
 
-            if (currentShield >= maxShield)
+            int shieldCap = GetRepairableShieldCap();
+            if (currentShield >= shieldCap)
                 yield break;
 
-            currentShield = Mathf.Min(maxShield, currentShield + BatteryShieldPerTick);
+            currentShield = Mathf.Min(shieldCap, currentShield + shieldPerTick);
             photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
         }
+    }
+
+    int GetBatteryShieldChargeMultiplier()
+    {
+        return HasEquippedItem(InventoryItemCatalog.AegisBatteryId) ? 2 : 1;
     }
 
     public void ConfigureBaseStats(int hp, int shield)
@@ -931,14 +1446,15 @@ public class PlayerHealth : MonoBehaviourPun
 
     public bool TryRestoreShieldAuthority(float amount, bool playFullPowerAudio)
     {
-        if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || maxShield <= 0 || currentShield <= 0 || currentShield >= maxShield)
+        int shieldCap = GetRepairableShieldCap();
+        if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || maxShield <= 0 || shieldCap <= 0 || currentShield <= 0 || currentShield >= shieldCap)
             return false;
 
         int previousShield = currentShield;
-        currentShield = Mathf.Min(maxShield, currentShield + Mathf.Max(1, Mathf.RoundToInt(amount)));
+        currentShield = Mathf.Min(shieldCap, currentShield + Mathf.Max(1, Mathf.RoundToInt(amount)));
         photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
 
-        if (playFullPowerAudio && previousShield < maxShield && currentShield >= maxShield)
+        if (playFullPowerAudio && previousShield < shieldCap && currentShield >= shieldCap)
             photonView.RPC(nameof(PlayShieldFullPowerAudio), RpcTarget.All);
 
         return currentShield > previousShield;
@@ -956,18 +1472,22 @@ public class PlayerHealth : MonoBehaviourPun
             localMovement.StopEngineAudioImmediately();
 
         EnemyBot bot = IsBotControlled ? GetComponent<EnemyBot>() : null;
+        bool isEnemyAstronaut = IsEnemyAstronautControlled;
         bool useCustomBotDeath = bot != null && bot.HasCustomDeathExplosion();
         bool useSpaceAnimalDeath = bot != null && EnemyBot.IsSpaceAnimalKind(bot.Kind);
         if (!useCustomBotDeath && !useSpaceAnimalDeath)
             photonView.RPC(nameof(PlayDeathExplosion), RpcTarget.All);
 
-        if (!IsBotControlled)
+        if (!IsBotControlled && !IsNeutralRiderControlled && !isEnemyAstronaut)
         {
             photonView.RPC(nameof(ShowDeathMessage), RpcTarget.All);
         }
 
         if (IsBotControlled)
         {
+            if (PhotonNetwork.IsMasterClient && bot != null)
+                AstronautSurvivor.SpawnEnemySurvivorsFrom(bot);
+
             if (useCustomBotDeath && bot != null)
             {
                 if (ShouldConvertMineShotKillToWreck(bot, attackerViewID))
@@ -990,8 +1510,26 @@ public class PlayerHealth : MonoBehaviourPun
             return;
         }
 
+        if (IsNeutralRiderControlled)
+        {
+            NeutralRiderController rider = GetComponent<NeutralRiderController>();
+            string neutralWreckLoot = rider != null ? rider.BuildWreckLootJson() : PlayerProfileService.SerializeShipInventorySlots(new[] { InventoryItemCatalog.SpaceJunkStandardId });
+            int neutralShipSkinIndex = rider != null ? rider.ShipSkinIndex : ShipCatalog.ExplorerBasicSkinIndex;
+            photonView.RPC(nameof(BecomeNeutralRiderWreck), RpcTarget.All, neutralWreckLoot, neutralShipSkinIndex);
+            return;
+        }
+
         if (IsAstronautControlled)
         {
+            if (isEnemyAstronaut)
+            {
+                if (photonView.Owner != null)
+                    photonView.RPC(nameof(DestroySelf), photonView.Owner);
+                else
+                    DestroySelf();
+                return;
+            }
+
             int finalScore = GetCurrentRoundXp();
             if (!IsBotControlled)
             {
@@ -1190,8 +1728,8 @@ public class PlayerHealth : MonoBehaviourPun
 
     bool IsAstronautSpawnPositionFree(Vector2 candidate)
     {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(candidate, AstronautSpawnClearanceRadius);
-        for (int i = 0; i < hits.Length; i++)
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(candidate, AstronautSpawnClearanceRadius, out Collider2D[] hits);
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || hit.isTrigger)
@@ -1218,6 +1756,7 @@ public class PlayerHealth : MonoBehaviourPun
         PlayerHealth attackerHealth = attackerView.GetComponent<PlayerHealth>();
         return attackerHealth != null &&
                !attackerHealth.IsBotControlled &&
+               !attackerHealth.IsNeutralRiderControlled &&
                !attackerHealth.IsAstronautControlled &&
                !attackerHealth.IsWreck;
     }
@@ -1289,6 +1828,9 @@ public class PlayerHealth : MonoBehaviourPun
 
         if (string.Equals(RoomSettings.GetSelectedLobbyMapId(), "pirate_bay", System.StringComparison.OrdinalIgnoreCase))
             await PlayerProfileService.Instance.RecordPilotPirateBayReturnAsync();
+
+        if (AtlasPilotRoundTracker.GetNetCargoValueAstrons(profile) >= PilotCatalog.AtlasRequiredNetCargoAstrons)
+            await PlayerProfileService.Instance.RecordPilotAtlasMapReturnAsync(RoomSettings.GetSelectedLobbyMapId());
     }
 
     [PunRPC]
@@ -1316,6 +1858,24 @@ public class PlayerHealth : MonoBehaviourPun
             return;
 
         await PlayerProfileService.Instance.RecordPilotDroneKillAsync();
+    }
+
+    [PunRPC]
+    public async void RecordMothershipKillMapProgress()
+    {
+        if (!photonView.IsMine)
+            return;
+
+        await PlayerProfileService.Instance.RecordMothershipKillAsync();
+    }
+
+    [PunRPC]
+    public void RecordAshComputerEnemyKillProgress()
+    {
+        if (!photonView.IsMine)
+            return;
+
+        AshPilotRoundTracker.RecordComputerEnemyKill();
     }
 
     [PunRPC]
@@ -1375,6 +1935,10 @@ public class PlayerHealth : MonoBehaviourPun
         LootingFriendController lootingFriend = GetComponent<LootingFriendController>();
         if (lootingFriend != null)
             lootingFriend.DeactivateForShipLoss();
+
+        FiringFriendController firingFriend = GetComponent<FiringFriendController>();
+        if (firingFriend != null)
+            firingFriend.DeactivateForShipLoss();
 
         EngineThrusterVFX thruster = GetComponent<EngineThrusterVFX>();
         if (thruster != null)
@@ -1478,6 +2042,17 @@ public class PlayerHealth : MonoBehaviourPun
 
         if (astronaut != null)
         {
+            AstronautSurvivor survivor = astronaut.GetComponent<AstronautSurvivor>();
+            if (survivor == null)
+                survivor = astronaut.AddComponent<AstronautSurvivor>();
+            survivor.InitializeFromPhotonData();
+            ActorIdentity.Ensure(astronaut);
+
+            PlayerHealth astronautHealth = astronaut.GetComponent<PlayerHealth>();
+            if (astronautHealth != null)
+                GameVisualTheme.ApplyPlayerVisual(astronautHealth);
+            GameVisualTheme.RequestRuntimeRefresh();
+
             PhotonNetwork.LocalPlayer.TagObject = astronaut;
         }
     }
@@ -1486,6 +2061,7 @@ public class PlayerHealth : MonoBehaviourPun
     void BecomeWreck(string serializedLoot, int shipSkinIndex)
     {
         IsWreck = true;
+        ActorIdentity.Ensure(gameObject);
 
         if (photonView != null &&
             photonView.IsMine &&
@@ -1519,6 +2095,10 @@ public class PlayerHealth : MonoBehaviourPun
         LootingFriendController lootingFriend = GetComponent<LootingFriendController>();
         if (lootingFriend != null)
             lootingFriend.DeactivateForShipLoss();
+
+        FiringFriendController firingFriend = GetComponent<FiringFriendController>();
+        if (firingFriend != null)
+            firingFriend.DeactivateForShipLoss();
 
         HealthBarUI healthBarUi = GetComponent<HealthBarUI>();
         if (healthBarUi != null)
@@ -1589,9 +2169,81 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
+    void BecomeNeutralRiderWreck(string serializedLoot, int shipSkinIndex)
+    {
+        IsWreck = true;
+        ActorIdentity.Ensure(gameObject);
+
+        PlayerMovement movement = GetComponent<PlayerMovement>();
+        if (movement != null)
+        {
+            movement.StopEngineAudioImmediately();
+            movement.enabled = false;
+        }
+
+        PlayerShooting shooting = GetComponent<PlayerShooting>();
+        if (shooting != null)
+            shooting.enabled = false;
+
+        TreasureCollector collector = GetComponent<TreasureCollector>();
+        if (collector != null)
+            collector.enabled = false;
+
+        NeutralRiderController rider = GetComponent<NeutralRiderController>();
+        if (rider != null)
+            rider.MarkWreckConverted();
+
+        EngineThrusterVFX thruster = GetComponent<EngineThrusterVFX>();
+        if (thruster != null)
+            thruster.DisableAndClearTrails();
+
+        Collider2D[] colliders = GetComponents<Collider2D>();
+        for (int i = 0; i < colliders.Length; i++)
+            colliders[i].enabled = true;
+
+        Rigidbody2D body = GetComponent<Rigidbody2D>();
+        if (body != null)
+        {
+            body.simulated = true;
+            body.bodyType = RigidbodyType2D.Dynamic;
+            body.mass = 5.2f;
+            body.linearDamping = 0.62f;
+            body.angularDamping = 0.78f;
+
+            Vector2 driftDirection = UnityEngine.Random.insideUnitCircle.normalized;
+            if (driftDirection.sqrMagnitude < 0.001f)
+                driftDirection = Vector2.left;
+
+            body.linearVelocity = driftDirection * 0.16f;
+            body.angularVelocity = UnityEngine.Random.Range(-5f, 5f);
+        }
+
+        ShipWreck wreck = GetComponent<ShipWreck>();
+        if (wreck == null)
+            wreck = gameObject.AddComponent<ShipWreck>();
+
+        int safeSkinIndex = Mathf.Clamp(shipSkinIndex, ShipCatalog.ExplorerBasicSkinIndex, ShipCatalog.MaxShipSkinIndex);
+        wreck.InitializeFromLootJson(serializedLoot, safeSkinIndex);
+        wreck.SetBaseColor(new Color(0.82f, 0.96f, 1f, 0.96f));
+
+        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+        if (renderer != null)
+        {
+            Sprite wreckSprite = LoadPlayerWreckSprite(safeSkinIndex);
+            if (wreckSprite != null)
+                renderer.sprite = wreckSprite;
+
+            renderer.color = Color.white;
+        }
+
+        GameVisualTheme.ApplyPlayerVisual(this);
+    }
+
+    [PunRPC]
     void BecomeEnemyWreck(int kindValue)
     {
         IsWreck = true;
+        ActorIdentity.Ensure(gameObject);
         EnemyBotKind enemyKind = (EnemyBotKind)kindValue;
 
         PlayerMovement movement = GetComponent<PlayerMovement>();
@@ -1619,7 +2271,10 @@ public class PlayerHealth : MonoBehaviourPun
             }
 
             if (enemyKind == EnemyBotKind.ContainerShip)
+            {
+                bot.HideContainerShipCargoVisual();
                 bot.DropContainerShipCargoOnDeath();
+            }
 
             if (enemyKind == EnemyBotKind.Mothership)
                 bot.ConvertMothershipTurretsToWreckVisuals();
@@ -1678,6 +2333,7 @@ public class PlayerHealth : MonoBehaviourPun
 
         Color baseColor = wreckProfile != null ? wreckProfile.BaseColor : new Color(0.2f, 0.23f, 0.26f, 0.94f);
         wreck.SetBaseColor(baseColor);
+        TryDropPirateCaseNearEnemyWreck(enemyKind, body);
 
         SpriteRenderer renderer = GetComponent<SpriteRenderer>();
         if (renderer != null)
@@ -1691,6 +2347,50 @@ public class PlayerHealth : MonoBehaviourPun
 
         ConfigureEnemyWreckCollider(enemyKind, renderer);
         GameVisualTheme.ApplyPlayerVisual(this);
+    }
+
+    void TryDropPirateCaseNearEnemyWreck(EnemyBotKind enemyKind, Rigidbody2D wreckBody)
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        float dropChance = GetPirateCaseDropChance(enemyKind);
+        if (dropChance <= 0f || Random.value >= dropChance)
+            return;
+
+        Vector2 direction = wreckBody != null && wreckBody.linearVelocity.sqrMagnitude > 0.001f
+            ? wreckBody.linearVelocity.normalized
+            : Random.insideUnitCircle;
+
+        if (direction.sqrMagnitude < 0.001f)
+            direction = Vector2.up;
+
+        direction.Normalize();
+        Vector2 tangent = new Vector2(-direction.y, direction.x);
+        float distance = enemyKind == EnemyBotKind.PirateBase ? 1.65f : 0.92f;
+        Vector3 dropPosition = transform.position + (Vector3)(direction * distance + tangent * Random.Range(-0.32f, 0.32f));
+        Vector2 inheritedDrift = wreckBody != null ? wreckBody.linearVelocity * 0.35f : Vector2.zero;
+        Vector2 driftVelocity = inheritedDrift + direction * Random.Range(0.45f, 0.9f);
+
+        DroppedCargoManager.DropItemAtPosition(InventoryItemCatalog.PirateCaseId, dropPosition, driftVelocity);
+    }
+
+    static float GetPirateCaseDropChance(EnemyBotKind enemyKind)
+    {
+        switch (enemyKind)
+        {
+            case EnemyBotKind.PirateFighter:
+                return 0.03f;
+            case EnemyBotKind.Corsair:
+                return 0.06f;
+            case EnemyBotKind.PirateFighterElite:
+                return 0.10f;
+            case EnemyBotKind.PirateFighterAce:
+            case EnemyBotKind.PirateBase:
+                return 0.20f;
+            default:
+                return 0f;
+        }
     }
 
     void ConfigureEnemyWreckCollider(EnemyBotKind enemyKind, SpriteRenderer renderer)
@@ -1803,9 +2503,21 @@ public class PlayerHealth : MonoBehaviourPun
     void PlayDeathExplosion()
     {
         AudioManager.Instance.PlayExplosionAt(transform.position);
-        if (RoomSettings.AreVisualEffectsEnabled() && !IsBotControlled && !IsAstronautControlled)
+
+        if (!RoomSettings.AreVisualEffectsEnabled())
+            return;
+
+        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+        if (IsBotControlled)
         {
-            PlayerShipExplosionVfx.Spawn(transform.position, GetComponent<SpriteRenderer>());
+            EnemyBot bot = GetComponent<EnemyBot>();
+            EnemyDeathBoomVfx.Spawn(transform.position, renderer, bot != null ? bot.VisualTargetSize : GameVisualTheme.PlayerTargetSize);
+            return;
+        }
+
+        if (!IsNeutralRiderControlled && !IsAstronautControlled)
+        {
+            PlayerShipExplosionVfx.Spawn(transform.position, renderer);
         }
     }
 
@@ -2766,8 +3478,27 @@ public class ShieldBarUI : MonoBehaviourPun
 public class AstronautSurvivor : MonoBehaviourPun
 {
     public const string AstronautInstantiationMarker = "astronaut_survivor";
+    public const string EnemyAstronautInstantiationMarker = "enemy_astronaut_survivor";
     const float AstronautTargetSize = 0.56f;
+    const float EnemyAstronautTargetSize = AstronautTargetSize * 0.9f;
     const float EscapePodTargetSize = 0.75f;
+    const int EnemyAstronautHp = 14;
+    const float PlayerAstronautReferenceMovementSpeed = 5f;
+    const float PlayerAstronautSpeedDivisor = 3f;
+    const float PlayerAstronautMinimumSpeed = 1.2f;
+    static float EnemyAstronautSpeed => ResolvePlayerAstronautSpeed();
+    const float EnemyAstronautArrivalDistance = 0.58f;
+    const float EnemyAstronautAvoidPlayerRadius = 4.8f;
+    const float EnemyAstronautAvoidPlayerWeight = 1.35f;
+    const float EnemyAstronautAvoidObjectRadius = 1.35f;
+    const float EnemyAstronautAvoidObjectWeight = 1.9f;
+    const float EnemyAstronautMapEdgeMargin = 2.2f;
+    const float EnemyAstronautEvacuationDuration = 0.85f;
+    const float EnemyAstronautTargetJitterRadius = 0.62f;
+    const float EnemyAstronautSpawnClearanceRadius = 0.28f;
+    const float EnemyAstronautSpawnChancePerSlot = 0.5f;
+    const float EnemyAstronautPhysicsMass = 0.035f;
+    const string EnemyAstronautSpriteResourcePath = "Astronauts/enemy_astronauts_multiasset";
     const int EscapePodHpBonus = 50;
     const float EscapePodSpeedMultiplier = 3f;
     const float EmergencySuitBeaconProtectionDuration = 3f;
@@ -2776,20 +3507,51 @@ public class AstronautSurvivor : MonoBehaviourPun
 
     static Sprite cachedAstronautSprite;
     static Sprite cachedEscapePodSprite;
+    static Sprite[] cachedEnemyAstronautSprites;
     bool initialized;
     bool isEscapePod;
+    bool isEnemySurvivor;
+    bool hasEnemyTarget;
+    bool enemyEvacuationStarted;
+    int enemyVariantIndex;
+    Vector2 enemyTargetPosition;
     SpriteRenderer cachedRenderer;
+    Rigidbody2D cachedBody;
     Coroutine emergencySuitBeaconSpeedRoutine;
+    Coroutine enemyEvacuationRoutine;
 
     public bool IsEscapePodMode => isEscapePod;
-    public float VisualTargetSize => isEscapePod ? EscapePodTargetSize : AstronautTargetSize;
+    public bool IsEnemySurvivor => isEnemySurvivor;
+    public int EnemyVariantIndex => enemyVariantIndex;
+    public float VisualTargetSize => isEnemySurvivor ? EnemyAstronautTargetSize : isEscapePod ? EscapePodTargetSize : AstronautTargetSize;
 
     public static bool IsAstronautInstantiationData(object[] data)
     {
         return data != null &&
                data.Length > 0 &&
                data[0] is string marker &&
-               marker == AstronautInstantiationMarker;
+               (marker == AstronautInstantiationMarker || marker == EnemyAstronautInstantiationMarker);
+    }
+
+    public static bool IsEnemyAstronautInstantiationData(object[] data)
+    {
+        return data != null &&
+               data.Length > 0 &&
+               data[0] is string marker &&
+               marker == EnemyAstronautInstantiationMarker;
+    }
+
+    public static bool IsEnemyAstronaut(PlayerHealth health)
+    {
+        if (health == null)
+            return false;
+
+        AstronautSurvivor survivor = health.GetComponent<AstronautSurvivor>();
+        if (survivor != null && survivor.IsEnemySurvivor)
+            return true;
+
+        PhotonView view = health.photonView != null ? health.photonView : health.GetComponent<PhotonView>();
+        return IsEnemyAstronautInstantiationData(view != null ? view.InstantiationData : null);
     }
 
     public static bool IsEscapePodInstantiationData(object[] data)
@@ -2799,6 +3561,9 @@ public class AstronautSurvivor : MonoBehaviourPun
 
     public Sprite GetVisualSprite()
     {
+        if (isEnemySurvivor)
+            return LoadEnemyAstronautSprite(enemyVariantIndex);
+
         return isEscapePod ? LoadEscapePodSprite() : LoadAstronautSprite();
     }
 
@@ -2809,8 +3574,11 @@ public class AstronautSurvivor : MonoBehaviourPun
 
         initialized = true;
         object[] instantiationData = photonView != null ? photonView.InstantiationData : null;
-        bool hasEmergencySuitBeacon = HasEmergencySuitBeacon(instantiationData);
-        isEscapePod = HasEscapePod(instantiationData);
+        isEnemySurvivor = IsEnemyAstronautInstantiationData(instantiationData);
+        bool hasEmergencySuitBeacon = !isEnemySurvivor && HasEmergencySuitBeacon(instantiationData);
+        isEscapePod = !isEnemySurvivor && HasEscapePod(instantiationData);
+        ResolveEnemyAstronautData(instantiationData);
+        ActorIdentity.Ensure(gameObject);
 
         SpriteRenderer renderer = GetComponent<SpriteRenderer>();
         cachedRenderer = renderer;
@@ -2828,18 +3596,33 @@ public class AstronautSurvivor : MonoBehaviourPun
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null)
         {
-            float astronautSpeed = Mathf.Max(1.2f, movement.speed / 3f);
-            float survivorSpeed = isEscapePod ? astronautSpeed * EscapePodSpeedMultiplier : astronautSpeed;
-            movement.speed = survivorSpeed;
-            movement.boosterDuration = 9999f;
+            if (isEnemySurvivor)
+            {
+                movement.StopEngineAudioImmediately();
+                movement.enabled = false;
+            }
+            else
+            {
+                float astronautSpeed = Mathf.Max(PlayerAstronautMinimumSpeed, movement.speed / PlayerAstronautSpeedDivisor);
+                float survivorSpeed = isEscapePod ? astronautSpeed * EscapePodSpeedMultiplier : astronautSpeed;
+                movement.speed = survivorSpeed;
+                movement.boosterDuration = 9999f;
 
-            if (hasEmergencySuitBeacon)
-                emergencySuitBeaconSpeedRoutine = StartCoroutine(EmergencySuitBeaconSpeedRoutine(movement, survivorSpeed));
+                if (hasEmergencySuitBeacon)
+                    emergencySuitBeaconSpeedRoutine = StartCoroutine(EmergencySuitBeaconSpeedRoutine(movement, survivorSpeed));
+            }
         }
 
         PlayerShooting shooting = GetComponent<PlayerShooting>();
         if (shooting != null)
             shooting.enabled = false;
+
+        if (isEnemySurvivor)
+        {
+            TreasureCollector collector = GetComponent<TreasureCollector>();
+            if (collector != null)
+                collector.DisableForEnemyAstronaut();
+        }
 
         ShipInventoryHudUI cargoHud = GetComponent<ShipInventoryHudUI>();
         if (cargoHud != null)
@@ -2850,14 +3633,18 @@ public class AstronautSurvivor : MonoBehaviourPun
             boosterUi.enabled = false;
 
         EngineThrusterVFX thruster = GetComponent<EngineThrusterVFX>();
+        if (isEnemySurvivor && thruster == null)
+            thruster = gameObject.AddComponent<EngineThrusterVFX>();
         if (thruster != null)
             thruster.RefreshMode();
 
         PlayerHealth health = GetComponent<PlayerHealth>();
         if (health != null)
         {
-            int astronautHp = PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.JakeId) ? 60 : 20;
-            if (isEscapePod)
+            int astronautHp = isEnemySurvivor
+                ? EnemyAstronautHp
+                : PilotCatalog.IsSelectedPilot(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, PilotCatalog.JakeId) ? 60 : 20;
+            if (!isEnemySurvivor && isEscapePod)
                 astronautHp += EscapePodHpBonus;
 
             health.ConfigureBaseStats(astronautHp, 0);
@@ -2866,11 +3653,19 @@ public class AstronautSurvivor : MonoBehaviourPun
         }
 
         Rigidbody2D body = GetComponent<Rigidbody2D>();
+        cachedBody = body;
         if (body != null)
         {
-            body.mass = 0.01f;
-            body.linearDamping = 0.9f;
-            body.angularDamping = 1f;
+            body.mass = isEnemySurvivor ? EnemyAstronautPhysicsMass : 0.01f;
+            body.linearDamping = isEnemySurvivor ? 1.85f : 0.9f;
+            body.angularDamping = isEnemySurvivor ? 4f : 1f;
+            if (isEnemySurvivor)
+            {
+                body.bodyType = RigidbodyType2D.Dynamic;
+                body.simulated = true;
+                body.gravityScale = 0f;
+                body.constraints = RigidbodyConstraints2D.FreezeRotation;
+            }
         }
 
         BoxCollider2D boxCollider = GetComponent<BoxCollider2D>();
@@ -2887,6 +3682,567 @@ public class AstronautSurvivor : MonoBehaviourPun
 
     }
 
+    void ResolveEnemyAstronautData(object[] data)
+    {
+        enemyVariantIndex = 0;
+        hasEnemyTarget = false;
+        enemyTargetPosition = transform.position;
+
+        if (!isEnemySurvivor)
+            return;
+
+        if (data != null && data.Length > 1 && TryConvertToInt(data[1], out int variant))
+            enemyVariantIndex = Mathf.Abs(variant) % Mathf.Max(1, GetEnemyAstronautSpriteCount());
+
+        if (data != null &&
+            data.Length > 3 &&
+            TryConvertToFloat(data[2], out float targetX) &&
+            TryConvertToFloat(data[3], out float targetY))
+        {
+            enemyTargetPosition = new Vector2(targetX, targetY);
+            hasEnemyTarget = true;
+        }
+    }
+
+    void FixedUpdate()
+    {
+        if (!initialized || !isEnemySurvivor || enemyEvacuationStarted)
+            return;
+
+        if (PhotonNetwork.InRoom && photonView != null && !photonView.IsMine)
+            return;
+
+        PlayerHealth health = GetComponent<PlayerHealth>();
+        if (health != null && (health.IsWreck || health.IsEvacuationAnimating || health.CurrentHP <= 0))
+            return;
+
+        if (cachedBody == null)
+            cachedBody = GetComponent<Rigidbody2D>();
+
+        if (!hasEnemyTarget)
+        {
+            enemyTargetPosition = ResolveFallbackEnemyAstronautTarget(transform.position, enemyVariantIndex);
+            hasEnemyTarget = true;
+        }
+
+        Vector2 currentPosition = cachedBody != null ? cachedBody.position : (Vector2)transform.position;
+        if (Vector2.Distance(currentPosition, enemyTargetPosition) <= EnemyAstronautArrivalDistance)
+        {
+            RequestEnemyAstronautEvacuation(enemyTargetPosition);
+            return;
+        }
+
+        Vector2 moveDirection = ResolveEnemyAstronautMoveDirection(currentPosition);
+        if (moveDirection.sqrMagnitude <= 0.001f)
+            return;
+
+        Vector2 desiredVelocity = moveDirection.normalized * EnemyAstronautSpeed;
+        if (cachedBody != null)
+        {
+            cachedBody.linearVelocity = desiredVelocity;
+        }
+        else
+        {
+            transform.position += (Vector3)(desiredVelocity * Time.fixedDeltaTime);
+        }
+
+        float targetAngle = Mathf.Atan2(moveDirection.y, moveDirection.x) * Mathf.Rad2Deg + 90f;
+        transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.Euler(0f, 0f, targetAngle), 420f * Time.fixedDeltaTime);
+    }
+
+    Vector2 ResolveEnemyAstronautMoveDirection(Vector2 currentPosition)
+    {
+        Vector2 toTarget = enemyTargetPosition - currentPosition;
+        Vector2 desired = toTarget.sqrMagnitude > 0.001f ? toTarget.normalized : Vector2.up;
+        Vector2 playerAvoidance = Vector2.zero;
+
+        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < players.Length; i++)
+        {
+            PlayerHealth player = players[i];
+            if (player == null || player == GetComponent<PlayerHealth>() || player.IsWreck || player.IsBotControlled || player.IsNeutralRiderControlled || player.IsAstronautControlled || player.IsEvacuationAnimating)
+                continue;
+
+            Vector2 away = currentPosition - (Vector2)player.transform.position;
+            float distance = away.magnitude;
+            if (distance <= 0.001f || distance > EnemyAstronautAvoidPlayerRadius)
+                continue;
+
+            float strength = Mathf.Clamp01((EnemyAstronautAvoidPlayerRadius - distance) / EnemyAstronautAvoidPlayerRadius);
+            playerAvoidance += away.normalized * strength;
+        }
+
+        Vector2 objectAvoidance = ResolveEnemyAstronautObjectAvoidance(currentPosition, desired);
+        Vector2 result = playerAvoidance.sqrMagnitude > 0.001f
+            ? (desired + playerAvoidance.normalized * EnemyAstronautAvoidPlayerWeight).normalized
+            : desired;
+        result = ApplyEnemyAstronautObjectAvoidance(result, desired, objectAvoidance);
+
+        return ApplyEnemyAstronautMapEdgeSteering(currentPosition, result);
+    }
+
+    Vector2 ResolveEnemyAstronautObjectAvoidance(Vector2 currentPosition, Vector2 desired)
+    {
+        Vector2 avoidance = Vector2.zero;
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(currentPosition, EnemyAstronautAvoidObjectRadius, out Collider2D[] hits);
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null || hit.isTrigger || hit.attachedRigidbody == cachedBody)
+                continue;
+
+            if (!IsEnemyAstronautAvoidedObject(hit))
+                continue;
+
+            Vector2 closest = hit.ClosestPoint(currentPosition);
+            Vector2 toObject = closest - currentPosition;
+            if (toObject.sqrMagnitude > 0.0001f && Vector2.Dot(toObject.normalized, desired) < -0.35f)
+                continue;
+
+            Vector2 away = currentPosition - closest;
+            if (away.sqrMagnitude <= 0.0001f)
+                away = currentPosition - (Vector2)hit.transform.position;
+
+            if (away.sqrMagnitude <= 0.0001f)
+                continue;
+
+            float distance = Mathf.Max(0.08f, away.magnitude);
+            float strength = Mathf.Clamp01((EnemyAstronautAvoidObjectRadius - distance) / EnemyAstronautAvoidObjectRadius);
+            if (toObject.sqrMagnitude > 0.0001f)
+                strength *= Mathf.Lerp(0.75f, 1.3f, Mathf.Clamp01(Vector2.Dot(toObject.normalized, desired)));
+
+            avoidance += away.normalized * strength;
+        }
+
+        return avoidance;
+    }
+
+    Vector2 ApplyEnemyAstronautObjectAvoidance(Vector2 currentDirection, Vector2 desired, Vector2 objectAvoidance)
+    {
+        if (objectAvoidance.sqrMagnitude <= 0.001f)
+            return currentDirection;
+
+        Vector2 away = objectAvoidance.normalized;
+        Vector2 result = (currentDirection.normalized + away * EnemyAstronautAvoidObjectWeight).normalized;
+        if (Vector2.Dot(result, desired) >= 0.12f)
+            return result;
+
+        Vector2 tangent = new Vector2(-desired.y, desired.x);
+        if (Vector2.Dot(tangent, away) < 0f)
+            tangent = -tangent;
+
+        return (desired * 0.38f + tangent.normalized * 0.62f).normalized;
+    }
+
+    static bool IsEnemyAstronautAvoidedObject(Collider2D hit)
+    {
+        if (hit == null)
+            return false;
+
+        if (hit.GetComponentInParent<ObstacleChunk>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<Treasure>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<ShipWreck>() != null)
+            return true;
+
+        if (hit.GetComponentInParent<DroppedCargoCrate>() != null)
+            return true;
+
+        return hit.GetComponentInParent<MovingSpaceObject>() != null;
+    }
+
+    void OnCollisionEnter2D(Collision2D collision)
+    {
+        DeflectEnemyAstronautFromLooseObject(collision);
+    }
+
+    void OnCollisionStay2D(Collision2D collision)
+    {
+        DeflectEnemyAstronautFromLooseObject(collision);
+    }
+
+    void DeflectEnemyAstronautFromLooseObject(Collision2D collision)
+    {
+        if (!initialized || !isEnemySurvivor || enemyEvacuationStarted || collision == null)
+            return;
+
+        if (PhotonNetwork.InRoom && photonView != null && !photonView.IsMine)
+            return;
+
+        Collider2D hit = collision.collider;
+        if (!IsEnemyAstronautAvoidedObject(hit))
+            return;
+
+        if (cachedBody == null)
+            cachedBody = GetComponent<Rigidbody2D>();
+        if (cachedBody == null)
+            return;
+
+        Vector2 position = cachedBody.position;
+        Vector2 away = position - hit.ClosestPoint(position);
+        if (away.sqrMagnitude <= 0.0001f)
+            away = position - (Vector2)hit.transform.position;
+        if (away.sqrMagnitude <= 0.0001f)
+            return;
+
+        Vector2 toTarget = enemyTargetPosition - position;
+        Vector2 desired = toTarget.sqrMagnitude > 0.001f ? toTarget.normalized : cachedBody.linearVelocity.normalized;
+        if (desired.sqrMagnitude <= 0.001f)
+            desired = Vector2.up;
+
+        Vector2 awayNormal = away.normalized;
+        Vector2 tangent = new Vector2(-awayNormal.y, awayNormal.x);
+        if (Vector2.Dot(tangent, desired) < 0f)
+            tangent = -tangent;
+
+        cachedBody.linearVelocity = (desired * 0.32f + tangent.normalized * 0.68f).normalized * EnemyAstronautSpeed;
+    }
+
+    Vector2 ApplyEnemyAstronautMapEdgeSteering(Vector2 currentPosition, Vector2 desiredDirection)
+    {
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        if (mapSize.x <= 0f || mapSize.y <= 0f)
+            return desiredDirection;
+
+        float halfX = Mathf.Max(3f, mapSize.x * 0.5f - EnemyAstronautMapEdgeMargin);
+        float halfY = Mathf.Max(3f, mapSize.y * 0.5f - EnemyAstronautMapEdgeMargin);
+        Vector2 predicted = currentPosition + desiredDirection.normalized * 1.5f;
+        Vector2 inward = Vector2.zero;
+
+        if (predicted.x > halfX)
+            inward.x -= Mathf.InverseLerp(halfX + 1f, halfX, predicted.x);
+        else if (predicted.x < -halfX)
+            inward.x += Mathf.InverseLerp(-halfX - 1f, -halfX, predicted.x);
+
+        if (predicted.y > halfY)
+            inward.y -= Mathf.InverseLerp(halfY + 1f, halfY, predicted.y);
+        else if (predicted.y < -halfY)
+            inward.y += Mathf.InverseLerp(-halfY - 1f, -halfY, predicted.y);
+
+        if (inward.sqrMagnitude <= 0.001f)
+            return desiredDirection;
+
+        return (desiredDirection.normalized * 0.58f + inward.normalized * 0.42f).normalized;
+    }
+
+    void RequestEnemyAstronautEvacuation(Vector2 target)
+    {
+        if (enemyEvacuationStarted)
+            return;
+
+        enemyEvacuationStarted = true;
+        if (photonView != null)
+            photonView.RPC(nameof(BeginEnemyAstronautEvacuationRpc), RpcTarget.All, target.x, target.y);
+        else
+            StartEnemyAstronautEvacuation(target);
+    }
+
+    [PunRPC]
+    void BeginEnemyAstronautEvacuationRpc(float targetX, float targetY)
+    {
+        if (!initialized)
+            InitializeFromPhotonData();
+
+        if (!isEnemySurvivor)
+            return;
+
+        StartEnemyAstronautEvacuation(new Vector2(targetX, targetY));
+    }
+
+    void StartEnemyAstronautEvacuation(Vector2 target)
+    {
+        if (enemyEvacuationRoutine != null)
+            return;
+
+        enemyEvacuationStarted = true;
+        enemyEvacuationRoutine = StartCoroutine(EnemyAstronautEvacuationRoutine(target));
+    }
+
+    IEnumerator EnemyAstronautEvacuationRoutine(Vector2 target)
+    {
+        PlayerMovement movement = GetComponent<PlayerMovement>();
+        if (movement != null)
+        {
+            movement.StopEngineAudioImmediately();
+            movement.enabled = false;
+        }
+
+        PlayerShooting shooting = GetComponent<PlayerShooting>();
+        if (shooting != null)
+            shooting.enabled = false;
+
+        Collider2D[] colliders = GetComponents<Collider2D>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            if (colliders[i] != null)
+                colliders[i].enabled = false;
+        }
+
+        if (cachedBody == null)
+            cachedBody = GetComponent<Rigidbody2D>();
+
+        if (cachedBody != null)
+        {
+            cachedBody.linearVelocity = Vector2.zero;
+            cachedBody.angularVelocity = 0f;
+            cachedBody.simulated = false;
+        }
+
+        Vector3 startPosition = transform.position;
+        Vector3 endPosition = new Vector3(target.x, target.y, startPosition.z);
+        Vector3 startScale = transform.localScale;
+        Vector3 endScale = new Vector3(
+            Mathf.Sign(startScale.x) * 0.01f,
+            Mathf.Sign(startScale.y) * 0.01f,
+            startScale.z);
+        float elapsed = 0f;
+        while (elapsed < EnemyAstronautEvacuationDuration)
+        {
+            elapsed += Time.deltaTime;
+            float progress = Mathf.Clamp01(elapsed / EnemyAstronautEvacuationDuration);
+            float eased = Mathf.SmoothStep(0f, 1f, progress);
+            transform.position = Vector3.Lerp(startPosition, endPosition, eased);
+            transform.localScale = Vector3.Lerp(startScale, endScale, eased);
+            yield return null;
+        }
+
+        transform.position = endPosition;
+        transform.localScale = endScale;
+
+        if (photonView != null && photonView.IsMine)
+        {
+            if (PhotonNetwork.InRoom)
+                PhotonNetwork.Destroy(gameObject);
+            else
+                Destroy(gameObject);
+        }
+    }
+
+    public static void SpawnEnemySurvivorsFrom(EnemyBot sourceBot)
+    {
+        if (!PhotonNetwork.IsMasterClient || sourceBot == null || !PhotonNetwork.InRoom)
+            return;
+
+        int maxCount = GetEnemySurvivorCount(sourceBot.Kind);
+        if (maxCount <= 0)
+            return;
+
+        Vector2 origin = sourceBot.transform.position;
+        Vector2[] targets = ResolveEnemySurvivorTargets(origin, maxCount);
+        for (int i = 0; i < maxCount; i++)
+        {
+            if (Random.value > EnemyAstronautSpawnChancePerSlot)
+                continue;
+
+            Vector2 target = targets != null && i < targets.Length
+                ? targets[i]
+                : ResolveFallbackEnemyAstronautTarget(origin, i);
+            Vector2 spawn = ResolveEnemySurvivorSpawnPosition(sourceBot, origin, i);
+            int variantIndex = ResolveEnemyAstronautVariant(sourceBot.Kind, i);
+            GameObject astronaut = PhotonNetwork.Instantiate(
+                "Player",
+                new Vector3(spawn.x, spawn.y, 0f),
+                Quaternion.Euler(0f, 0f, Random.Range(0f, 360f)),
+                0,
+                new object[] { EnemyAstronautInstantiationMarker, variantIndex, target.x, target.y, (int)sourceBot.Kind });
+
+            if (astronaut == null)
+                continue;
+
+            AstronautSurvivor survivor = astronaut.GetComponent<AstronautSurvivor>();
+            if (survivor == null)
+                survivor = astronaut.AddComponent<AstronautSurvivor>();
+            survivor.InitializeFromPhotonData();
+
+            Rigidbody2D body = astronaut.GetComponent<Rigidbody2D>();
+            if (body != null)
+            {
+                Vector2 outward = spawn - origin;
+                if (outward.sqrMagnitude <= 0.001f)
+                    outward = Random.insideUnitCircle;
+                if (outward.sqrMagnitude <= 0.001f)
+                    outward = Vector2.up;
+
+                body.linearVelocity = outward.normalized * Random.Range(0.45f, 0.95f);
+            }
+        }
+    }
+
+    public static int GetEnemySurvivorCount(EnemyBotKind kind)
+    {
+        switch (kind)
+        {
+            case EnemyBotKind.Drone:
+            case EnemyBotKind.SpaceMine:
+            case EnemyBotKind.SpaceManta:
+            case EnemyBotKind.GravitySquid:
+            case EnemyBotKind.CosmicWorm:
+                return 0;
+            case EnemyBotKind.NeutralFighter:
+            case EnemyBotKind.PirateFighter:
+            case EnemyBotKind.PirateFighterElite:
+            case EnemyBotKind.PirateFighterAce:
+            case EnemyBotKind.HunterLance:
+                return 1;
+            case EnemyBotKind.Mothership:
+            case EnemyBotKind.PirateBase:
+                return 3;
+            default:
+                return 2;
+        }
+    }
+
+    static int ResolveEnemyAstronautVariant(EnemyBotKind kind, int ordinal)
+    {
+        if (EnemyBot.IsPirateFighterKind(kind) || kind == EnemyBotKind.PirateBase || kind == EnemyBotKind.Corsair)
+            return 3;
+
+        switch (kind)
+        {
+            case EnemyBotKind.NeutralFighter:
+                return ordinal % 2 == 0 ? 2 : 0;
+            case EnemyBotKind.RescueShip:
+                return 1;
+            case EnemyBotKind.RadarShip:
+                return ordinal % 2 == 0 ? 4 : 6;
+            case EnemyBotKind.SpaceTruck:
+            case EnemyBotKind.ContainerShip:
+                return ordinal % 2 == 0 ? 5 : 7;
+            case EnemyBotKind.Mothership:
+                return ordinal == 0 ? 8 : ordinal == 1 ? 4 : 5;
+            case EnemyBotKind.HunterLance:
+                return 8;
+            default:
+                return Mathf.Abs(((int)kind * 3) + ordinal) % Mathf.Max(1, GetEnemyAstronautSpriteCount());
+        }
+    }
+
+    static float ResolvePlayerAstronautSpeed()
+    {
+        return Mathf.Max(PlayerAstronautMinimumSpeed, PlayerAstronautReferenceMovementSpeed / PlayerAstronautSpeedDivisor);
+    }
+
+    static Vector2[] ResolveEnemySurvivorTargets(Vector2 origin, int count)
+    {
+        List<Vector2> destinations = CollectEnemyAstronautDestinations();
+        destinations.Sort((a, b) => Vector2.Distance(origin, a).CompareTo(Vector2.Distance(origin, b)));
+
+        Vector2[] result = new Vector2[Mathf.Max(0, count)];
+        for (int i = 0; i < result.Length; i++)
+        {
+            Vector2 baseTarget = destinations.Count > 0
+                ? destinations[i % destinations.Count]
+                : ResolveFallbackEnemyAstronautTarget(origin, i);
+            result[i] = baseTarget + ResolveEnemyAstronautTargetJitter(i, destinations.Count > 1);
+        }
+
+        return result;
+    }
+
+    static List<Vector2> CollectEnemyAstronautDestinations()
+    {
+        List<Vector2> destinations = new List<Vector2>();
+
+        ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < zones.Length; i++)
+        {
+            if (zones[i] != null)
+                AddUniqueDestination(destinations, zones[i].transform.position);
+        }
+
+        ScienceStation[] scienceStations = FindObjectsByType<ScienceStation>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < scienceStations.Length; i++)
+        {
+            if (scienceStations[i] != null)
+                AddUniqueDestination(destinations, scienceStations[i].transform.position);
+        }
+
+        RepairBay[] repairBays = FindObjectsByType<RepairBay>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < repairBays.Length; i++)
+        {
+            if (repairBays[i] != null)
+                AddUniqueDestination(destinations, repairBays[i].transform.position);
+        }
+
+        SpaceFactory[] factories = FindObjectsByType<SpaceFactory>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < factories.Length; i++)
+        {
+            if (factories[i] != null)
+                AddUniqueDestination(destinations, factories[i].transform.position);
+        }
+
+        return destinations;
+    }
+
+    static void AddUniqueDestination(List<Vector2> destinations, Vector2 position)
+    {
+        for (int i = 0; i < destinations.Count; i++)
+        {
+            if (Vector2.SqrMagnitude(destinations[i] - position) <= 0.64f)
+                return;
+        }
+
+        destinations.Add(position);
+    }
+
+    static Vector2 ResolveEnemyAstronautTargetJitter(int ordinal, bool keepSmall)
+    {
+        float radius = keepSmall ? EnemyAstronautTargetJitterRadius * 0.45f : EnemyAstronautTargetJitterRadius;
+        float angle = (ordinal * 137.50776f) * Mathf.Deg2Rad;
+        return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+    }
+
+    static Vector2 ResolveFallbackEnemyAstronautTarget(Vector2 origin, int ordinal)
+    {
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        if (mapSize.x <= 0f || mapSize.y <= 0f)
+            mapSize = new Vector2(64f, 48f);
+
+        Vector2 direction = origin.sqrMagnitude > 0.001f ? origin.normalized : Vector2.up;
+        float angle = Mathf.Atan2(direction.y, direction.x) + ordinal * 2.39996f;
+        direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
+
+        float halfX = Mathf.Max(4f, mapSize.x * 0.5f - EnemyAstronautMapEdgeMargin);
+        float halfY = Mathf.Max(4f, mapSize.y * 0.5f - EnemyAstronautMapEdgeMargin);
+        return new Vector2(direction.x * halfX, direction.y * halfY);
+    }
+
+    static Vector2 ResolveEnemySurvivorSpawnPosition(EnemyBot sourceBot, Vector2 origin, int ordinal)
+    {
+        float baseRadius = Mathf.Clamp(sourceBot != null ? sourceBot.VisualTargetSize * 0.22f : 0.6f, 0.52f, 1.75f);
+        for (int i = 0; i < 14; i++)
+        {
+            float angle = ((ordinal * 79f) + (i * 137.50776f)) * Mathf.Deg2Rad;
+            Vector2 offset = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * (baseRadius + i * 0.08f);
+            Vector2 candidate = origin + offset;
+            if (IsEnemyAstronautSpawnFree(candidate, sourceBot != null ? sourceBot.transform : null))
+                return candidate;
+        }
+
+        return origin + Random.insideUnitCircle.normalized * baseRadius;
+    }
+
+    static bool IsEnemyAstronautSpawnFree(Vector2 candidate, Transform sourceTransform)
+    {
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(candidate, EnemyAstronautSpawnClearanceRadius, out Collider2D[] hits);
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null || hit.isTrigger)
+                continue;
+
+            if (sourceTransform != null && (hit.transform == sourceTransform || hit.transform.IsChildOf(sourceTransform)))
+                continue;
+
+            return false;
+        }
+
+        return true;
+    }
+
     static bool HasEmergencySuitBeacon(object[] data)
     {
         return data != null &&
@@ -2901,6 +4257,60 @@ public class AstronautSurvivor : MonoBehaviourPun
                data.Length > 2 &&
                data[2] is bool enabled &&
                enabled;
+    }
+
+    static bool TryConvertToInt(object value, out int result)
+    {
+        if (value is int intValue)
+        {
+            result = intValue;
+            return true;
+        }
+
+        if (value is short shortValue)
+        {
+            result = shortValue;
+            return true;
+        }
+
+        if (value is byte byteValue)
+        {
+            result = byteValue;
+            return true;
+        }
+
+        if (value is long longValue)
+        {
+            result = longValue > int.MaxValue ? int.MaxValue : longValue < int.MinValue ? int.MinValue : (int)longValue;
+            return true;
+        }
+
+        result = 0;
+        return false;
+    }
+
+    static bool TryConvertToFloat(object value, out float result)
+    {
+        if (value is float floatValue)
+        {
+            result = floatValue;
+            return true;
+        }
+
+        if (value is double doubleValue)
+        {
+            result = (float)doubleValue;
+            return true;
+        }
+
+        if (value is int intValue)
+        {
+            result = intValue;
+            return true;
+        }
+
+        result = 0f;
+        return false;
     }
 
     IEnumerator EmergencySuitBeaconSpeedRoutine(PlayerMovement movement, float baseAstronautSpeed)
@@ -2928,6 +4338,28 @@ public class AstronautSurvivor : MonoBehaviourPun
         if (cachedAstronautSprite != null)
             return cachedAstronautSprite;
 
+        cachedAstronautSprite = Resources.Load<Sprite>("kosmonauta_resource");
+        if (cachedAstronautSprite != null)
+            return cachedAstronautSprite;
+
+        Sprite[] resourceSprites = Resources.LoadAll<Sprite>("kosmonauta_resource");
+        if (resourceSprites != null && resourceSprites.Length > 0)
+        {
+            cachedAstronautSprite = resourceSprites[0];
+            return cachedAstronautSprite;
+        }
+
+        Texture2D resourceTexture = Resources.Load<Texture2D>("kosmonauta_resource");
+        if (resourceTexture != null)
+        {
+            cachedAstronautSprite = Sprite.Create(
+                resourceTexture,
+                new Rect(0f, 0f, resourceTexture.width, resourceTexture.height),
+                new Vector2(0.5f, 0.5f),
+                100f);
+            return cachedAstronautSprite;
+        }
+
         string filePath = System.IO.Path.Combine(Application.dataPath, "kosmonauta.png");
         if (!System.IO.File.Exists(filePath))
             return null;
@@ -2945,6 +4377,63 @@ public class AstronautSurvivor : MonoBehaviourPun
             100f);
 
         return cachedAstronautSprite;
+    }
+
+    static int GetEnemyAstronautSpriteCount()
+    {
+        Sprite[] sprites = LoadEnemyAstronautSprites();
+        return sprites != null && sprites.Length > 0 ? sprites.Length : 9;
+    }
+
+    static Sprite LoadEnemyAstronautSprite(int variantIndex)
+    {
+        Sprite[] sprites = LoadEnemyAstronautSprites();
+        if (sprites == null || sprites.Length == 0)
+            return null;
+
+        return sprites[Mathf.Abs(variantIndex) % sprites.Length];
+    }
+
+    static Sprite[] LoadEnemyAstronautSprites()
+    {
+        if (cachedEnemyAstronautSprites != null && cachedEnemyAstronautSprites.Length > 0)
+            return cachedEnemyAstronautSprites;
+
+        cachedEnemyAstronautSprites = Resources.LoadAll<Sprite>(EnemyAstronautSpriteResourcePath);
+        if (cachedEnemyAstronautSprites != null && cachedEnemyAstronautSprites.Length > 0)
+            return cachedEnemyAstronautSprites;
+
+        Texture2D texture = Resources.Load<Texture2D>(EnemyAstronautSpriteResourcePath);
+        if (texture == null)
+            return cachedEnemyAstronautSprites;
+
+        cachedEnemyAstronautSprites = SliceEnemyAstronautTexture(texture);
+        return cachedEnemyAstronautSprites;
+    }
+
+    static Sprite[] SliceEnemyAstronautTexture(Texture2D texture)
+    {
+        if (texture == null)
+            return System.Array.Empty<Sprite>();
+
+        const int columns = 3;
+        const int rows = 3;
+        int cellWidth = texture.width / columns;
+        int cellHeight = texture.height / rows;
+        Sprite[] sprites = new Sprite[columns * rows];
+        int index = 0;
+        for (int row = rows - 1; row >= 0; row--)
+        {
+            for (int column = 0; column < columns; column++)
+            {
+                Rect rect = new Rect(column * cellWidth, row * cellHeight, cellWidth, cellHeight);
+                sprites[index] = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f), 100f);
+                sprites[index].name = "enemy_astronaut_runtime_" + index;
+                index++;
+            }
+        }
+
+        return sprites;
     }
 
     Sprite LoadEscapePodSprite()

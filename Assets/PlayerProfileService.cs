@@ -15,6 +15,7 @@ public class PlayerProfileService : MonoBehaviour
     const int DeferredInventorySaveDelayMs = 750;
     const int PlayerInventoryExtendBasePrice = 1000;
     const int PlayerInventoryExtendMaxPrice = 64000;
+    public const int DefaultStartingAstrons = 3000;
     public const int DefaultAstronautCargoSlotCount = 1;
     const string CloudNicknameKey = "profile_nickname";
     const string CloudShipSkinKey = "profile_ship_skin";
@@ -31,6 +32,8 @@ public class PlayerProfileService : MonoBehaviour
     const string CloudPilotPirateBayReturnsKey = "profile_pilot_pirate_bay_returns";
     const string CloudPilotAsteroidSalvageCountKey = "profile_pilot_asteroid_salvage_count";
     const string CloudPilotAshOverloadReturnsKey = "profile_pilot_ash_overload_returns";
+    const string CloudPilotAtlasMapReturnsKey = "profile_pilot_atlas_map_returns";
+    const string CloudMapUnlockProgressKey = "profile_map_unlock_progress";
     const string CloudProjectsKey = "profile_projects";
 
     static PlayerProfileService instance;
@@ -46,6 +49,7 @@ public class PlayerProfileService : MonoBehaviour
     int pendingProtectedEquipmentShipSkinIndex = -1;
     bool hasPendingProtectedEquipment;
     readonly HashSet<string> awardedMatchTokens = new HashSet<string>();
+    readonly HashSet<string> awardedMapReturnTokens = new HashSet<string>();
 
     public static PlayerProfileService Instance
     {
@@ -173,6 +177,8 @@ public class PlayerProfileService : MonoBehaviour
             CloudPilotPirateBayReturnsKey,
             CloudPilotAsteroidSalvageCountKey,
             CloudPilotAshOverloadReturnsKey,
+            CloudPilotAtlasMapReturnsKey,
+            CloudMapUnlockProgressKey,
             CloudProjectsKey
         };
         Dictionary<string, Item> data = await RunCloudOperationWithRetryAsync(
@@ -183,17 +189,19 @@ public class PlayerProfileService : MonoBehaviour
         int shipSkinIndex = 0;
         int gamesPlayed = 0;
         int totalXp = 0;
-        int astrons = 0;
+        int astrons = DefaultStartingAstrons;
         PlayerInventoryData inventory = PlayerInventoryData.Default();
         string selectedPilotId = PilotCatalog.JakeId;
         string[] unlockedPilotIds = PilotCatalog.GetDefaultUnlockedPilotIds();
-        string[] unlockedBlueprintIds = Array.Empty<string>();
+        string[] unlockedBlueprintIds = BlueprintCatalog.GetStarterUnlockedBlueprintItemIds();
         string[] missEnigmaPurchasedBlueprintIds = Array.Empty<string>();
         int pilotDroneKills = 0;
         int pilotSoldItemsAstrons = 0;
         int pilotPirateBayReturns = 0;
         int pilotAsteroidSalvageCount = 0;
         int pilotAshOverloadReturns = 0;
+        string[] pilotAtlasMapReturns = Array.Empty<string>();
+        PlayerMapUnlockProgressData mapUnlockProgress = NormalizeMapUnlockProgress(null);
         PlayerProjectProgressData projectProgress = ProjectCatalog.NormalizeProgress(null);
 
         if (data != null)
@@ -243,6 +251,12 @@ public class PlayerProfileService : MonoBehaviour
             if (data.TryGetValue(CloudPilotAshOverloadReturnsKey, out Item ashOverloadReturnsItem) && ashOverloadReturnsItem?.Value != null)
                 pilotAshOverloadReturns = Mathf.Max(0, ashOverloadReturnsItem.Value.GetAs<int>());
 
+            if (data.TryGetValue(CloudPilotAtlasMapReturnsKey, out Item atlasMapReturnsItem) && atlasMapReturnsItem?.Value != null)
+                pilotAtlasMapReturns = DeserializeAtlasMapReturns(atlasMapReturnsItem.Value.GetAsString());
+
+            if (data.TryGetValue(CloudMapUnlockProgressKey, out Item mapUnlockProgressItem) && mapUnlockProgressItem?.Value != null)
+                mapUnlockProgress = DeserializeMapUnlockProgress(mapUnlockProgressItem.Value.GetAsString());
+
             if (data.TryGetValue(CloudProjectsKey, out Item projectsItem) && projectsItem?.Value != null)
                 projectProgress = DeserializeProjectProgress(projectsItem.Value.GetAsString());
         }
@@ -267,12 +281,15 @@ public class PlayerProfileService : MonoBehaviour
             PilotPirateBayReturns = pilotPirateBayReturns,
             PilotAsteroidSalvageCount = pilotAsteroidSalvageCount,
             PilotAshOverloadReturns = pilotAshOverloadReturns,
+            PilotAtlasMapReturns = PilotCatalog.NormalizeAtlasMapReturnIds(pilotAtlasMapReturns),
+            MapUnlockProgress = NormalizeMapUnlockProgress(mapUnlockProgress),
             ProjectProgress = ProjectCatalog.NormalizeProgress(projectProgress)
         };
 
         EnsurePilotDefaults();
         EnsureBlueprintUnlocks();
         EnsureMissEnigmaBlueprintPurchases();
+        EnsureMapUnlockProgress();
         EnsureProjectProgress();
 
         ApplyProfileToPhoton();
@@ -311,23 +328,26 @@ public class PlayerProfileService : MonoBehaviour
             ShipSkinIndex = Mathf.Clamp(shipSkinIndex, 0, ShipCatalog.MaxShipSkinIndex),
             GamesPlayed = CurrentProfile != null ? CurrentProfile.GamesPlayed : 0,
             TotalXp = CurrentProfile != null ? CurrentProfile.TotalXp : 0,
-            Astrons = CurrentProfile != null ? CurrentProfile.Astrons : 0,
+                Astrons = CurrentProfile != null ? CurrentProfile.Astrons : DefaultStartingAstrons,
             Inventory = CurrentProfile != null && CurrentProfile.Inventory != null ? CurrentProfile.Inventory.Clone() : PlayerInventoryData.Default(),
             SelectedPilotId = CurrentProfile != null ? PilotCatalog.NormalizePilotId(CurrentProfile.SelectedPilotId) : PilotCatalog.JakeId,
             UnlockedPilotIds = CurrentProfile != null ? PilotCatalog.NormalizeUnlockedPilotIds(CurrentProfile.UnlockedPilotIds) : PilotCatalog.GetDefaultUnlockedPilotIds(),
-            UnlockedBlueprintIds = CurrentProfile != null ? NormalizeUnlockedBlueprintIds(CurrentProfile.UnlockedBlueprintIds) : Array.Empty<string>(),
+            UnlockedBlueprintIds = CurrentProfile != null ? NormalizeUnlockedBlueprintIds(CurrentProfile.UnlockedBlueprintIds) : NormalizeUnlockedBlueprintIds(null),
             MissEnigmaPurchasedBlueprintIds = CurrentProfile != null ? NormalizeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds) : Array.Empty<string>(),
             PilotDroneKills = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotDroneKills) : 0,
             PilotSoldItemsAstrons = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotSoldItemsAstrons) : 0,
             PilotPirateBayReturns = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotPirateBayReturns) : 0,
             PilotAsteroidSalvageCount = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotAsteroidSalvageCount) : 0,
             PilotAshOverloadReturns = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotAshOverloadReturns) : 0,
+            PilotAtlasMapReturns = CurrentProfile != null ? PilotCatalog.NormalizeAtlasMapReturnIds(CurrentProfile.PilotAtlasMapReturns) : Array.Empty<string>(),
+            MapUnlockProgress = CurrentProfile != null ? NormalizeMapUnlockProgress(CurrentProfile.MapUnlockProgress) : NormalizeMapUnlockProgress(null),
             ProjectProgress = CurrentProfile != null ? ProjectCatalog.NormalizeProgress(CurrentProfile.ProjectProgress) : ProjectCatalog.NormalizeProgress(null)
         };
 
         EnsurePilotDefaults();
         EnsureBlueprintUnlocks();
         EnsureMissEnigmaBlueprintPurchases();
+        EnsureMapUnlockProgress();
         EnsureProjectProgress();
         ApplyProfileToPhoton();
         NotifyProfileChanged();
@@ -344,6 +364,7 @@ public class PlayerProfileService : MonoBehaviour
             EnsurePilotDefaults();
             EnsureBlueprintUnlocks();
             EnsureMissEnigmaBlueprintPurchases();
+            EnsureMapUnlockProgress();
             EnsureProjectProgress();
 
             var data = new Dictionary<string, object>
@@ -363,6 +384,8 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudPilotPirateBayReturnsKey] = CurrentProfile.PilotPirateBayReturns,
                 [CloudPilotAsteroidSalvageCountKey] = CurrentProfile.PilotAsteroidSalvageCount,
                 [CloudPilotAshOverloadReturnsKey] = CurrentProfile.PilotAshOverloadReturns,
+                [CloudPilotAtlasMapReturnsKey] = SerializeAtlasMapReturns(CurrentProfile.PilotAtlasMapReturns),
+                [CloudMapUnlockProgressKey] = SerializeMapUnlockProgress(CurrentProfile.MapUnlockProgress),
                 [CloudProjectsKey] = SerializeProjectProgress(CurrentProfile.ProjectProgress)
             };
 
@@ -475,6 +498,154 @@ public class PlayerProfileService : MonoBehaviour
         }
     }
 
+    public LobbyMapUnlockStatus GetMapUnlockStatus(string mapId)
+    {
+        EnsureMapUnlockProgress();
+        int totalXp = CurrentProfile != null ? CurrentProfile.TotalXp : 0;
+        return LobbyMapUnlockCatalog.GetStatus(mapId, CurrentProfile != null ? CurrentProfile.MapUnlockProgress : null, totalXp);
+    }
+
+    public bool IsMapUnlocked(string mapId)
+    {
+        LobbyMapUnlockStatus status = GetMapUnlockStatus(mapId);
+        return status != null && status.IsUnlocked;
+    }
+
+    public int GetMapSuccessfulReturnCount(string mapId)
+    {
+        EnsureMapUnlockProgress();
+        return LobbyMapUnlockCatalog.GetReturnCount(CurrentProfile != null ? CurrentProfile.MapUnlockProgress : null, mapId);
+    }
+
+    public async Task<int> RecordMapSuccessfulReturnAsync(string mapId, string outcome, string matchToken)
+    {
+        await EnsureInitializedAsync();
+        EnsureMapUnlockProgress();
+
+        string normalizedMapId = LobbyMapUnlockCatalog.NormalizeMapId(mapId);
+        if (string.IsNullOrWhiteSpace(normalizedMapId))
+            return 0;
+
+        if (!IsSuccessfulMapReturnOutcome(outcome))
+            return LobbyMapUnlockCatalog.GetReturnCount(CurrentProfile.MapUnlockProgress, normalizedMapId);
+
+        string token = BuildMapProgressToken(normalizedMapId, matchToken);
+        if (awardedMapReturnTokens.Contains(token))
+            return LobbyMapUnlockCatalog.GetReturnCount(CurrentProfile.MapUnlockProgress, normalizedMapId);
+
+        PlayerMapUnlockProgressData previousProgress = CurrentProfile.MapUnlockProgress.Clone();
+        int previousCount = LobbyMapUnlockCatalog.GetReturnCount(CurrentProfile.MapUnlockProgress, normalizedMapId);
+        long updatedCount = (long)previousCount + 1;
+        CurrentProfile.MapUnlockProgress.SetReturnCount(normalizedMapId, updatedCount > int.MaxValue ? int.MaxValue : (int)updatedCount);
+        CurrentProfile.MapUnlockProgress = NormalizeMapUnlockProgress(CurrentProfile.MapUnlockProgress);
+        awardedMapReturnTokens.Add(token);
+
+        try
+        {
+            await SaveMapUnlockProgressAsync("save map return progress");
+        }
+        catch (Exception ex)
+        {
+            CurrentProfile.MapUnlockProgress = previousProgress;
+            awardedMapReturnTokens.Remove(token);
+            Debug.LogError("PlayerProfileService map return progress save failed: " + ex);
+            throw;
+        }
+
+        return LobbyMapUnlockCatalog.GetReturnCount(CurrentProfile.MapUnlockProgress, normalizedMapId);
+    }
+
+    public async Task RecordMothershipKillAsync()
+    {
+        await EnsureInitializedAsync();
+        EnsureMapUnlockProgress();
+
+        if (CurrentProfile.MapUnlockProgress.MothershipKilled)
+            return;
+
+        PlayerMapUnlockProgressData previousProgress = CurrentProfile.MapUnlockProgress.Clone();
+        CurrentProfile.MapUnlockProgress.MothershipKilled = true;
+
+        try
+        {
+            await SaveMapUnlockProgressAsync("save Mothership map unlock progress");
+        }
+        catch (Exception ex)
+        {
+            CurrentProfile.MapUnlockProgress = previousProgress;
+            Debug.LogError("PlayerProfileService Mothership progress save failed: " + ex);
+            throw;
+        }
+    }
+
+    public async Task UnlockAllMapsAsync()
+    {
+        await EnsureInitializedAsync();
+        EnsureMapUnlockProgress();
+
+        if (CurrentProfile.MapUnlockProgress.CheatUnlockAllMaps)
+            return;
+
+        PlayerMapUnlockProgressData previousProgress = CurrentProfile.MapUnlockProgress.Clone();
+        CurrentProfile.MapUnlockProgress.CheatUnlockAllMaps = true;
+
+        try
+        {
+            await SaveMapUnlockProgressAsync("save unlock all maps cheat");
+        }
+        catch (Exception ex)
+        {
+            CurrentProfile.MapUnlockProgress = previousProgress;
+            Debug.LogError("PlayerProfileService unlock all maps cheat failed: " + ex);
+            throw;
+        }
+    }
+
+    public async Task LockAllMapsAsync()
+    {
+        await EnsureInitializedAsync();
+
+        PlayerMapUnlockProgressData previousProgress = CurrentProfile.MapUnlockProgress != null
+            ? CurrentProfile.MapUnlockProgress.Clone()
+            : NormalizeMapUnlockProgress(null);
+        CurrentProfile.MapUnlockProgress = NormalizeMapUnlockProgress(null);
+        awardedMapReturnTokens.Clear();
+
+        try
+        {
+            await SaveMapUnlockProgressAsync("save lock all maps cheat");
+        }
+        catch (Exception ex)
+        {
+            CurrentProfile.MapUnlockProgress = previousProgress;
+            Debug.LogError("PlayerProfileService lock all maps cheat failed: " + ex);
+            throw;
+        }
+    }
+
+    async Task SaveMapUnlockProgressAsync(string operationName)
+    {
+        try
+        {
+            IsBusy = true;
+            EnsureMapUnlockProgress();
+
+            var data = new Dictionary<string, object>
+            {
+                [CloudMapUnlockProgressKey] = SerializeMapUnlockProgress(CurrentProfile.MapUnlockProgress)
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                operationName);
+            NotifyProfileChanged();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     public async Task AddCheatXpAsync(int amount)
     {
         await EnsureInitializedAsync();
@@ -524,25 +695,29 @@ public class PlayerProfileService : MonoBehaviour
                 ShipSkinIndex = 0,
                 GamesPlayed = 0,
                 TotalXp = 0,
-                Astrons = 0,
+                Astrons = DefaultStartingAstrons,
                 Inventory = PlayerInventoryData.Default(),
                 SelectedPilotId = PilotCatalog.JakeId,
                 UnlockedPilotIds = PilotCatalog.GetDefaultUnlockedPilotIds(),
-                UnlockedBlueprintIds = Array.Empty<string>(),
+                UnlockedBlueprintIds = NormalizeUnlockedBlueprintIds(null),
                 MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
                 PilotDroneKills = 0,
                 PilotSoldItemsAstrons = 0,
                 PilotPirateBayReturns = 0,
                 PilotAsteroidSalvageCount = 0,
                 PilotAshOverloadReturns = 0,
+                PilotAtlasMapReturns = Array.Empty<string>(),
+                MapUnlockProgress = NormalizeMapUnlockProgress(null),
                 ProjectProgress = ProjectCatalog.NormalizeProgress(null)
             };
 
             awardedMatchTokens.Clear();
+            awardedMapReturnTokens.Clear();
             EnsureInventory();
             EnsurePilotDefaults();
             EnsureBlueprintUnlocks();
             EnsureMissEnigmaBlueprintPurchases();
+            EnsureMapUnlockProgress();
             EnsureProjectProgress();
 
             var data = new Dictionary<string, object>
@@ -562,6 +737,8 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudPilotPirateBayReturnsKey] = CurrentProfile.PilotPirateBayReturns,
                 [CloudPilotAsteroidSalvageCountKey] = CurrentProfile.PilotAsteroidSalvageCount,
                 [CloudPilotAshOverloadReturnsKey] = CurrentProfile.PilotAshOverloadReturns,
+                [CloudPilotAtlasMapReturnsKey] = SerializeAtlasMapReturns(CurrentProfile.PilotAtlasMapReturns),
+                [CloudMapUnlockProgressKey] = SerializeMapUnlockProgress(CurrentProfile.MapUnlockProgress),
                 [CloudProjectsKey] = SerializeProjectProgress(CurrentProfile.ProjectProgress)
             };
 
@@ -586,6 +763,12 @@ public class PlayerProfileService : MonoBehaviour
     {
         EnsureInventory();
         return CurrentProfile.Inventory.GetFirstEmptyShipSlot(GetActiveShipInventoryCapacity(), GetActiveShipSkinIndex(), itemId) >= 0;
+    }
+
+    public bool HasFreePlayerInventorySlot()
+    {
+        EnsureInventory();
+        return CurrentProfile.Inventory.GetFirstEmptyPlayerSlot() >= 0;
     }
 
     public async Task ReplaceShipInventoryAsync(string[] newShipSlots)
@@ -946,7 +1129,7 @@ public class PlayerProfileService : MonoBehaviour
         EnsureMissEnigmaBlueprintPurchases();
 
         BlueprintTradeOffer offer = BlueprintCatalog.GetMissEnigmaOffer(blueprintItemId);
-        if (offer == null || IsMissEnigmaBlueprintPurchased(blueprintItemId) || !CanAffordItemTrade(offer.CostItemIds))
+        if (offer == null || IsBlueprintUnlocked(blueprintItemId) || IsMissEnigmaBlueprintPurchased(blueprintItemId) || !CanAffordItemTrade(offer.CostItemIds))
             return false;
 
         PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
@@ -1043,7 +1226,7 @@ public class PlayerProfileService : MonoBehaviour
         await EnsureInitializedAsync();
         EnsureBlueprintUnlocks();
 
-        CurrentProfile.UnlockedBlueprintIds = Array.Empty<string>();
+        CurrentProfile.UnlockedBlueprintIds = NormalizeUnlockedBlueprintIds(BlueprintCatalog.GetStarterUnlockedBlueprintItemIds());
         await SaveBlueprintsAsync();
     }
 
@@ -1062,7 +1245,7 @@ public class PlayerProfileService : MonoBehaviour
             ? IsBlueprintUnlocked(sourceItemPreview)
                 ? new[] { InventoryItemCatalog.BlueprintScrapId }
                 : Array.Empty<string>()
-            : InventoryItemCatalog.GetSalvageOutputs(sourceItemPreview);
+            : InventoryItemCatalog.RollSalvageOutputs(sourceItemPreview);
         if (string.IsNullOrWhiteSpace(sourceItemPreview) || salvageOutputs == null || salvageOutputs.Length == 0)
             return false;
 
@@ -1105,8 +1288,7 @@ public class PlayerProfileService : MonoBehaviour
         if (!InventoryItemCatalog.IsCompatibleWithEquipmentSlot(movedItem, equipmentSlotIndex))
             return false;
 
-        if ((string.Equals(movedItem, InventoryItemCatalog.LootingFriendId, StringComparison.Ordinal) ||
-             string.Equals(movedItem, InventoryItemCatalog.EscapePodId, StringComparison.Ordinal)) &&
+        if (IsSingleInstallItem(movedItem) &&
             IsItemAlreadyEquipped(workingInventory.EquipmentSlots, movedItem, equipmentSlotIndex))
         {
             return false;
@@ -1148,7 +1330,7 @@ public class PlayerProfileService : MonoBehaviour
         return slots[index];
     }
 
-    bool IsItemAlreadyEquipped(string[] equipmentSlots, string itemId, int ignoredSlotIndex)
+    static bool IsItemAlreadyEquipped(string[] equipmentSlots, string itemId, int ignoredSlotIndex)
     {
         if (equipmentSlots == null || string.IsNullOrWhiteSpace(itemId))
             return false;
@@ -1163,6 +1345,14 @@ public class PlayerProfileService : MonoBehaviour
         }
 
         return false;
+    }
+
+    static bool IsSingleInstallItem(string itemId)
+    {
+        return string.Equals(itemId, InventoryItemCatalog.LootingFriendId, StringComparison.Ordinal) ||
+               string.Equals(itemId, InventoryItemCatalog.FiringFriendId, StringComparison.Ordinal) ||
+               string.Equals(itemId, InventoryItemCatalog.DropbotId, StringComparison.Ordinal) ||
+               string.Equals(itemId, InventoryItemCatalog.EscapePodId, StringComparison.Ordinal);
     }
 
     bool TryMoveOverflowShipCargoToPlayer(PlayerInventoryData inventory, int shipSkinIndex)
@@ -1241,6 +1431,21 @@ public class PlayerProfileService : MonoBehaviour
         return true;
     }
 
+    public async Task<bool> AddItemToPlayerDeferredSaveAsync(string itemId)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        if (string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        if (!CurrentProfile.Inventory.TryAddToPlayer(itemId))
+            return false;
+
+        MarkInventoryChangedDeferred();
+        return true;
+    }
+
     public async Task<bool> AddRandomLootEquipmentAsync(string itemId)
     {
         await EnsureInitializedAsync();
@@ -1253,14 +1458,12 @@ public class PlayerProfileService : MonoBehaviour
         PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
         int shipSkinIndex = GetActiveShipSkinIndex();
 
-        if (definition.Category == InventoryItemCategory.Gadget)
+        int equipmentSlot = GetFirstFreeEquipmentSlotByCategory(workingInventory.EquipmentSlots, shipSkinIndex, definition.Category);
+        if (equipmentSlot >= 0)
         {
-            int gadgetSlot = GetFirstFreeGadgetEquipmentSlot(workingInventory.EquipmentSlots, shipSkinIndex);
-            if (gadgetSlot >= 0 &&
-                (!string.Equals(itemId, InventoryItemCatalog.LootingFriendId, StringComparison.Ordinal) ||
-                 !IsItemAlreadyEquipped(workingInventory.EquipmentSlots, itemId, gadgetSlot)))
+            if (!IsSingleInstallItem(itemId) || !IsItemAlreadyEquipped(workingInventory.EquipmentSlots, itemId, equipmentSlot))
             {
-                workingInventory.SetEquipment(gadgetSlot, itemId);
+                workingInventory.SetEquipment(equipmentSlot, itemId);
                 CurrentProfile.Inventory = workingInventory;
                 await SaveInventoryOnlyAsync();
                 return true;
@@ -1287,14 +1490,12 @@ public class PlayerProfileService : MonoBehaviour
         PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
         int shipSkinIndex = GetActiveShipSkinIndex();
 
-        if (definition.Category == InventoryItemCategory.Gadget)
+        int equipmentSlot = GetFirstFreeEquipmentSlotByCategory(workingInventory.EquipmentSlots, shipSkinIndex, definition.Category);
+        if (equipmentSlot >= 0)
         {
-            int gadgetSlot = GetFirstFreeGadgetEquipmentSlot(workingInventory.EquipmentSlots, shipSkinIndex);
-            if (gadgetSlot >= 0 &&
-                (!string.Equals(itemId, InventoryItemCatalog.LootingFriendId, StringComparison.Ordinal) ||
-                 !IsItemAlreadyEquipped(workingInventory.EquipmentSlots, itemId, gadgetSlot)))
+            if (!IsSingleInstallItem(itemId) || !IsItemAlreadyEquipped(workingInventory.EquipmentSlots, itemId, equipmentSlot))
             {
-                workingInventory.SetEquipment(gadgetSlot, itemId);
+                workingInventory.SetEquipment(equipmentSlot, itemId);
                 CurrentProfile.Inventory = workingInventory;
                 MarkInventoryChangedDeferred();
                 return true;
@@ -1693,6 +1894,54 @@ public class PlayerProfileService : MonoBehaviour
         return CurrentProfile.PilotAshOverloadReturns;
     }
 
+    public async Task<string[]> RecordPilotAtlasMapReturnAsync(string mapId)
+    {
+        await EnsureInitializedAsync();
+        EnsurePilotDefaults();
+
+        string normalizedMapId = PilotCatalog.NormalizeAtlasMapId(mapId);
+        if (string.IsNullOrWhiteSpace(normalizedMapId))
+            return CurrentProfile.PilotAtlasMapReturns;
+
+        string[] previousReturns = PilotCatalog.NormalizeAtlasMapReturnIds(CurrentProfile.PilotAtlasMapReturns);
+        for (int i = 0; i < previousReturns.Length; i++)
+        {
+            if (string.Equals(previousReturns[i], normalizedMapId, StringComparison.Ordinal))
+                return previousReturns;
+        }
+
+        string[] expanded = new string[previousReturns.Length + 1];
+        Array.Copy(previousReturns, expanded, previousReturns.Length);
+        expanded[expanded.Length - 1] = normalizedMapId;
+        CurrentProfile.PilotAtlasMapReturns = PilotCatalog.NormalizeAtlasMapReturnIds(expanded);
+
+        try
+        {
+            IsBusy = true;
+            var data = new Dictionary<string, object>
+            {
+                [CloudPilotAtlasMapReturnsKey] = SerializeAtlasMapReturns(CurrentProfile.PilotAtlasMapReturns)
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                "save pilot Atlas map returns");
+            NotifyProfileChanged();
+        }
+        catch (Exception ex)
+        {
+            CurrentProfile.PilotAtlasMapReturns = previousReturns;
+            Debug.LogError("PlayerProfileService pilot Atlas map return save failed: " + ex);
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        return CurrentProfile.PilotAtlasMapReturns;
+    }
+
     public async Task<string> RemoveShipItemAtAsync(int index)
     {
         await EnsureInitializedAsync();
@@ -1704,6 +1953,56 @@ public class PlayerProfileService : MonoBehaviour
 
         await SaveInventoryOnlyAsync();
         return removedItem;
+    }
+
+    public async Task<string> RemoveDropbotCargoItemDeferredSaveAsync(int slotIndex, string expectedItemId)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        if (string.IsNullOrWhiteSpace(expectedItemId) || !HasFreePlayerInventorySlot())
+            return null;
+
+        int shipSkinIndex = GetActiveShipSkinIndex();
+        int capacity = GetActiveShipInventoryCapacity();
+        if (!IsDropbotCargoIndex(shipSkinIndex, capacity, slotIndex, CurrentProfile.Inventory.EquipmentSlots))
+            return null;
+
+        if (slotIndex < 0 || slotIndex >= capacity || slotIndex >= CurrentProfile.Inventory.ShipSlots.Length)
+            return null;
+
+        string removedItem = CurrentProfile.Inventory.ShipSlots[slotIndex];
+        if (!string.Equals(removedItem, expectedItemId, StringComparison.Ordinal))
+            return null;
+
+        CurrentProfile.Inventory.ShipSlots[slotIndex] = null;
+        MarkInventoryChangedDeferred();
+        return removedItem;
+    }
+
+    public async Task<string> ReplaceShipItemDeferredSaveAsync(int index, string newItemId)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        if (string.IsNullOrWhiteSpace(newItemId))
+            return null;
+
+        int capacity = GetActiveShipInventoryCapacity();
+        int shipSkinIndex = GetActiveShipSkinIndex();
+        if (index < 0 || index >= capacity || index >= CurrentProfile.Inventory.ShipSlots.Length)
+            return null;
+
+        if (!CanStoreItemInShipSlot(newItemId, shipSkinIndex, index))
+            return null;
+
+        string replacedItem = CurrentProfile.Inventory.ShipSlots[index];
+        if (string.IsNullOrWhiteSpace(replacedItem))
+            return null;
+
+        CurrentProfile.Inventory.ShipSlots[index] = newItemId;
+        MarkInventoryChangedDeferred();
+        return replacedItem;
     }
 
     public async Task<string> RemoveFirstShipContainerAsync()
@@ -1957,7 +2256,8 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudPilotSoldItemsAstronsKey] = CurrentProfile.PilotSoldItemsAstrons,
                 [CloudPilotPirateBayReturnsKey] = CurrentProfile.PilotPirateBayReturns,
                 [CloudPilotAsteroidSalvageCountKey] = CurrentProfile.PilotAsteroidSalvageCount,
-                [CloudPilotAshOverloadReturnsKey] = CurrentProfile.PilotAshOverloadReturns
+                [CloudPilotAshOverloadReturnsKey] = CurrentProfile.PilotAshOverloadReturns,
+                [CloudPilotAtlasMapReturnsKey] = SerializeAtlasMapReturns(CurrentProfile.PilotAtlasMapReturns)
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -2354,7 +2654,26 @@ public class PlayerProfileService : MonoBehaviour
     public static bool PlayerHasFreeGadgetEquipmentSlot(Photon.Realtime.Player player)
     {
         int shipSkinIndex = player != null ? RoomSettings.GetPlayerShipSkin(player, 0) : 0;
-        return GetFirstFreeGadgetEquipmentSlot(GetPlayerEquipmentSlots(player), shipSkinIndex) >= 0;
+        return GetFirstFreeEquipmentSlotByCategory(GetPlayerEquipmentSlots(player), shipSkinIndex, InventoryItemCategory.Gadget) >= 0;
+    }
+
+    public static bool PlayerHasFreeEquipmentSlotForItem(Photon.Realtime.Player player, string itemId)
+    {
+        int shipSkinIndex = player != null ? RoomSettings.GetPlayerShipSkin(player, 0) : 0;
+        string[] equipmentSlots = GetPlayerEquipmentSlots(player);
+        if (IsSingleInstallItem(itemId) && IsItemAlreadyEquipped(equipmentSlots, itemId, -1))
+            return false;
+
+        return GetFirstFreeEquipmentSlotForItem(equipmentSlots, shipSkinIndex, itemId) >= 0;
+    }
+
+    public static bool PlayerHasFreeUtilityEquipmentSlot(Photon.Realtime.Player player)
+    {
+        int shipSkinIndex = player != null ? RoomSettings.GetPlayerShipSkin(player, 0) : 0;
+        string[] slots = GetPlayerEquipmentSlots(player);
+        return GetFirstFreeEquipmentSlotByCategory(slots, shipSkinIndex, InventoryItemCategory.Gadget) >= 0 ||
+               GetFirstFreeEquipmentSlotByCategory(slots, shipSkinIndex, InventoryItemCategory.Support) >= 0 ||
+               GetFirstFreeEquipmentSlotByCategory(slots, shipSkinIndex, InventoryItemCategory.Rescue) >= 0;
     }
 
     public static string[] GetPlayerShipInventorySlots(Photon.Realtime.Player player)
@@ -2449,10 +2768,44 @@ public class PlayerProfileService : MonoBehaviour
         return false;
     }
 
+    public static bool PlayerHasDropbotEquipped(Photon.Realtime.Player player)
+    {
+        int shipSkinIndex = player != null ? RoomSettings.GetPlayerShipSkin(player, 0) : 0;
+        return InventoryItemCatalog.HasEquippedItem(GetPlayerEquipmentSlots(player), shipSkinIndex, InventoryItemCatalog.DropbotId);
+    }
+
+    public static int GetDropbotCargoSlotIndex(int shipSkinIndex, int shipCapacity, string[] equipmentSlots)
+    {
+        if (!InventoryItemCatalog.HasEquippedItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.DropbotId))
+            return -1;
+
+        int clampedCapacity = Mathf.Clamp(shipCapacity, 0, PlayerInventoryData.ShipSlotCount);
+        for (int i = 0; i < clampedCapacity; i++)
+        {
+            if (IsSafePocketIndex(shipSkinIndex, i))
+                continue;
+
+            if (IsAstronautCargoIndex(shipSkinIndex, clampedCapacity, i))
+                continue;
+
+            return i;
+        }
+
+        return -1;
+    }
+
+    public static bool IsDropbotCargoIndex(int shipSkinIndex, int shipCapacity, int slotIndex, string[] equipmentSlots)
+    {
+        return slotIndex >= 0 && slotIndex == GetDropbotCargoSlotIndex(shipSkinIndex, shipCapacity, equipmentSlots);
+    }
+
     public static bool CanStoreItemInShipSlot(string itemId, int shipSkinIndex, int slotIndex)
     {
         if (string.IsNullOrWhiteSpace(itemId))
             return true;
+
+        if (InventoryItemCatalog.RequiresSafePocket(itemId))
+            return IsSafePocketIndex(shipSkinIndex, slotIndex) && InventoryItemCatalog.CanEnterSafePocket(itemId);
 
         return !IsSafePocketIndex(shipSkinIndex, slotIndex) || InventoryItemCatalog.CanEnterSafePocket(itemId);
     }
@@ -2465,7 +2818,9 @@ public class PlayerProfileService : MonoBehaviour
             : ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
         for (int i = 0; i < normalized.Length; i++)
         {
-            if (IsSafePocketIndex(shipSkinIndex, i) && InventoryItemCatalog.CanEnterSafePocket(normalized[i]))
+            if (InventoryItemCatalog.RequiresSafePocket(normalized[i]))
+                normalized[i] = null;
+            else if (IsSafePocketIndex(shipSkinIndex, i) && InventoryItemCatalog.CanEnterSafePocket(normalized[i]))
                 normalized[i] = null;
             else if (IsAstronautCargoIndex(shipSkinIndex, effectiveCapacity, i))
                 normalized[i] = null;
@@ -2499,7 +2854,9 @@ public class PlayerProfileService : MonoBehaviour
         string[] normalized = NormalizeShipSlots(sourceSlots);
         for (int i = 0; i < normalized.Length; i++)
         {
-            if (!IsSafePocketIndex(shipSkinIndex, i) || !InventoryItemCatalog.CanEnterSafePocket(normalized[i]))
+            bool keepSafePocketItem = IsSafePocketIndex(shipSkinIndex, i) && InventoryItemCatalog.CanEnterSafePocket(normalized[i]);
+            bool keepRequiredSafePocketItem = InventoryItemCatalog.RequiresSafePocket(normalized[i]);
+            if (!keepSafePocketItem && !keepRequiredSafePocketItem)
                 normalized[i] = null;
         }
 
@@ -2538,6 +2895,39 @@ public class PlayerProfileService : MonoBehaviour
         return false;
     }
 
+    public static bool PlayerCanStoreShipItemOrAtlasAutoReplace(Photon.Realtime.Player player, string itemId)
+    {
+        if (PlayerHasFreeShipInventorySlot(player, itemId))
+            return true;
+
+        if (!PilotCatalog.IsSelectedPilot(player, PilotCatalog.AtlasId))
+            return false;
+
+        int newValue = InventoryItemCatalog.GetSellValueAstrons(itemId);
+        if (newValue <= 0)
+            return false;
+
+        string[] slots = GetPlayerShipInventorySlots(player);
+        int shipSkinIndex = player != null ? RoomSettings.GetPlayerShipSkin(player, 0) : 0;
+        int capacity = GetPlayerShipInventoryCapacity(player);
+        int leastValue = int.MaxValue;
+        for (int i = 0; i < slots.Length && i < capacity; i++)
+        {
+            string currentItemId = slots[i];
+            if (string.IsNullOrWhiteSpace(currentItemId))
+                continue;
+
+            if (!CanStoreItemInShipSlot(itemId, shipSkinIndex, i))
+                continue;
+
+            int currentValue = InventoryItemCatalog.GetSellValueAstrons(currentItemId);
+            if (currentValue < leastValue)
+                leastValue = currentValue;
+        }
+
+        return leastValue < int.MaxValue && newValue > leastValue;
+    }
+
     public static string[] GetPlayerEquipmentSlots(Photon.Realtime.Player player)
     {
         if (player != null &&
@@ -2550,12 +2940,21 @@ public class PlayerProfileService : MonoBehaviour
         return new string[PlayerInventoryData.EquipmentSlotCount];
     }
 
-    static int GetFirstFreeGadgetEquipmentSlot(string[] sourceSlots, int shipSkinIndex)
+    static int GetFirstFreeEquipmentSlotForItem(string[] sourceSlots, int shipSkinIndex, string itemId)
+    {
+        InventoryItemDefinition definition = InventoryItemCatalog.GetDefinition(itemId);
+        if (definition == null || definition.ItemType != InventoryItemType.Equipment)
+            return -1;
+
+        return GetFirstFreeEquipmentSlotByCategory(sourceSlots, shipSkinIndex, definition.Category);
+    }
+
+    static int GetFirstFreeEquipmentSlotByCategory(string[] sourceSlots, int shipSkinIndex, InventoryItemCategory category)
     {
         string[] slots = NormalizeEquipmentSlots(sourceSlots);
         for (int i = 0; i < slots.Length; i++)
         {
-            if (InventoryItemCatalog.GetEquipmentSlotCategory(i) != InventoryItemCategory.Gadget)
+            if (InventoryItemCatalog.GetEquipmentSlotCategory(i) != category)
                 continue;
 
             if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
@@ -2652,7 +3051,7 @@ public class PlayerProfileService : MonoBehaviour
         if (TryRestoreEquipmentToSlot(itemId, preferredSlot, shipSkinIndex))
             return true;
 
-        int fallbackSlot = GetFirstFreeGadgetEquipmentSlot(CurrentProfile.Inventory.EquipmentSlots, shipSkinIndex);
+        int fallbackSlot = GetFirstFreeEquipmentSlotForItem(CurrentProfile.Inventory.EquipmentSlots, shipSkinIndex, itemId);
         if (TryRestoreEquipmentToSlot(itemId, fallbackSlot, shipSkinIndex))
             return true;
 
@@ -2746,17 +3145,19 @@ public class PlayerProfileService : MonoBehaviour
             ShipSkinIndex = 0,
             GamesPlayed = 0,
             TotalXp = 0,
-            Astrons = 0,
+            Astrons = DefaultStartingAstrons,
             Inventory = PlayerInventoryData.Default(),
             SelectedPilotId = PilotCatalog.JakeId,
             UnlockedPilotIds = PilotCatalog.GetDefaultUnlockedPilotIds(),
-            UnlockedBlueprintIds = Array.Empty<string>(),
+            UnlockedBlueprintIds = NormalizeUnlockedBlueprintIds(null),
             MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
             PilotDroneKills = 0,
             PilotSoldItemsAstrons = 0,
             PilotPirateBayReturns = 0,
             PilotAsteroidSalvageCount = 0,
             PilotAshOverloadReturns = 0,
+            PilotAtlasMapReturns = Array.Empty<string>(),
+            MapUnlockProgress = NormalizeMapUnlockProgress(null),
             ProjectProgress = ProjectCatalog.NormalizeProgress(null)
         };
     }
@@ -2792,6 +3193,21 @@ public class PlayerProfileService : MonoBehaviour
         return trimmed;
     }
 
+    static bool IsSuccessfulMapReturnOutcome(string outcome)
+    {
+        return string.Equals(outcome, "extracted", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(outcome, "evacuated", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static string BuildMapProgressToken(string mapId, string matchToken)
+    {
+        string normalizedMapId = LobbyMapUnlockCatalog.NormalizeMapId(mapId);
+        string normalizedMatchToken = string.IsNullOrWhiteSpace(matchToken)
+            ? "map_return_" + DateTime.UtcNow.Ticks
+            : matchToken.Trim();
+        return normalizedMatchToken + "_" + normalizedMapId;
+    }
+
     void NotifyProfileChanged()
     {
         ProfileChanged?.Invoke(CurrentProfile);
@@ -2807,6 +3223,7 @@ public class PlayerProfileService : MonoBehaviour
 
         CurrentProfile.Inventory.Normalize();
         TryMoveSafePocketRestrictedItems(CurrentProfile.Inventory, CurrentProfile.ShipSkinIndex);
+        TryMoveIncompatibleEquipmentItems(CurrentProfile.Inventory, CurrentProfile.ShipSkinIndex);
     }
 
     static bool TryMoveSafePocketRestrictedItems(PlayerInventoryData inventory, int shipSkinIndex)
@@ -2815,7 +3232,7 @@ public class PlayerProfileService : MonoBehaviour
             return true;
 
         inventory.Normalize();
-        int capacity = ShipCatalog.GetShipInventoryCapacity(shipSkinIndex);
+        int capacity = GetEffectiveShipInventoryCapacity(shipSkinIndex, inventory.EquipmentSlots);
         for (int i = 0; i < inventory.ShipSlots.Length && i < capacity; i++)
         {
             string itemId = inventory.ShipSlots[i];
@@ -2842,6 +3259,69 @@ public class PlayerProfileService : MonoBehaviour
         return true;
     }
 
+    static bool TryMoveIncompatibleEquipmentItems(PlayerInventoryData inventory, int shipSkinIndex)
+    {
+        if (inventory == null)
+            return true;
+
+        inventory.Normalize();
+        for (int i = 0; i < inventory.EquipmentSlots.Length; i++)
+        {
+            string itemId = inventory.EquipmentSlots[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            if (ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex) &&
+                InventoryItemCatalog.IsCompatibleWithEquipmentSlot(itemId, i))
+            {
+                continue;
+            }
+
+            inventory.EquipmentSlots[i] = null;
+            int targetSlot = GetFirstFreeCompatibleEquipmentSlot(inventory.EquipmentSlots, shipSkinIndex, itemId);
+            if (targetSlot >= 0)
+            {
+                inventory.EquipmentSlots[targetSlot] = itemId;
+                continue;
+            }
+
+            if (inventory.TryAddToPlayer(itemId))
+                continue;
+
+            if (inventory.TryAddToShip(itemId, GetEffectiveShipInventoryCapacity(shipSkinIndex, inventory.EquipmentSlots), shipSkinIndex))
+                continue;
+
+            inventory.EquipmentSlots[i] = itemId;
+            return false;
+        }
+
+        return true;
+    }
+
+    static int GetFirstFreeCompatibleEquipmentSlot(string[] sourceSlots, int shipSkinIndex, string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return -1;
+
+        if (IsSingleInstallItem(itemId) && IsItemAlreadyEquipped(sourceSlots, itemId, -1))
+            return -1;
+
+        string[] slots = NormalizeEquipmentSlots(sourceSlots);
+        for (int i = 0; i < slots.Length; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(slots[i]))
+                continue;
+
+            if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
+                continue;
+
+            if (InventoryItemCatalog.IsCompatibleWithEquipmentSlot(itemId, i))
+                return i;
+        }
+
+        return -1;
+    }
+
     void EnsurePilotDefaults()
     {
         if (CurrentProfile == null)
@@ -2853,6 +3333,7 @@ public class PlayerProfileService : MonoBehaviour
         CurrentProfile.PilotPirateBayReturns = Mathf.Max(0, CurrentProfile.PilotPirateBayReturns);
         CurrentProfile.PilotAsteroidSalvageCount = Mathf.Max(0, CurrentProfile.PilotAsteroidSalvageCount);
         CurrentProfile.PilotAshOverloadReturns = Mathf.Max(0, CurrentProfile.PilotAshOverloadReturns);
+        CurrentProfile.PilotAtlasMapReturns = PilotCatalog.NormalizeAtlasMapReturnIds(CurrentProfile.PilotAtlasMapReturns);
         CurrentProfile.SelectedPilotId = PilotCatalog.NormalizePilotId(CurrentProfile.SelectedPilotId);
         if (!PilotCatalog.IsPilotUnlocked(CurrentProfile, CurrentProfile.SelectedPilotId))
             CurrentProfile.SelectedPilotId = PilotCatalog.JakeId;
@@ -2874,6 +3355,14 @@ public class PlayerProfileService : MonoBehaviour
         CurrentProfile.MissEnigmaPurchasedBlueprintIds = NormalizeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds);
     }
 
+    void EnsureMapUnlockProgress()
+    {
+        if (CurrentProfile == null)
+            CurrentProfile = PlayerProfileData.Default();
+
+        CurrentProfile.MapUnlockProgress = NormalizeMapUnlockProgress(CurrentProfile.MapUnlockProgress);
+    }
+
     void EnsureProjectProgress()
     {
         if (CurrentProfile == null)
@@ -2884,15 +3373,23 @@ public class PlayerProfileService : MonoBehaviour
 
     public static string[] NormalizeUnlockedBlueprintIds(string[] blueprintIds)
     {
-        if (blueprintIds == null || blueprintIds.Length == 0)
-            return Array.Empty<string>();
-
         HashSet<string> normalized = new HashSet<string>(StringComparer.Ordinal);
-        for (int i = 0; i < blueprintIds.Length; i++)
+        string[] starterBlueprintIds = BlueprintCatalog.GetStarterUnlockedBlueprintItemIds();
+        for (int i = 0; i < starterBlueprintIds.Length; i++)
         {
-            string blueprintId = blueprintIds[i];
-            if (InventoryItemCatalog.IsBlueprintItem(blueprintId))
-                normalized.Add(blueprintId);
+            string starterBlueprintId = starterBlueprintIds[i];
+            if (InventoryItemCatalog.IsBlueprintItem(starterBlueprintId))
+                normalized.Add(starterBlueprintId);
+        }
+
+        if (blueprintIds != null)
+        {
+            for (int i = 0; i < blueprintIds.Length; i++)
+            {
+                string blueprintId = blueprintIds[i];
+                if (InventoryItemCatalog.IsBlueprintItem(blueprintId))
+                    normalized.Add(blueprintId);
+            }
         }
 
         string[] result = new string[normalized.Count];
@@ -2920,6 +3417,65 @@ public class PlayerProfileService : MonoBehaviour
         return result;
     }
 
+    public static PlayerMapUnlockProgressData NormalizeMapUnlockProgress(PlayerMapUnlockProgressData progress)
+    {
+        Dictionary<string, int> countsByMapId = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (progress != null && progress.ReturnCounts != null)
+        {
+            for (int i = 0; i < progress.ReturnCounts.Length; i++)
+            {
+                PlayerMapReturnCountEntry entry = progress.ReturnCounts[i];
+                if (entry == null)
+                    continue;
+
+                string mapId = LobbyMapUnlockCatalog.NormalizeMapId(entry.MapId);
+                if (string.IsNullOrWhiteSpace(mapId))
+                    continue;
+
+                int count = Mathf.Max(0, entry.Count);
+                if (count <= 0)
+                    continue;
+
+                if (countsByMapId.TryGetValue(mapId, out int existingCount))
+                {
+                    long combined = (long)existingCount + count;
+                    countsByMapId[mapId] = combined > int.MaxValue ? int.MaxValue : (int)combined;
+                }
+                else
+                {
+                    countsByMapId[mapId] = count;
+                }
+            }
+        }
+
+        List<PlayerMapReturnCountEntry> entries = new List<PlayerMapReturnCountEntry>();
+        if (LobbyMapCatalog.AllMaps != null)
+        {
+            for (int i = 0; i < LobbyMapCatalog.AllMaps.Count; i++)
+            {
+                LobbyMapDefinition map = LobbyMapCatalog.AllMaps[i];
+                if (map == null || string.IsNullOrWhiteSpace(map.Id))
+                    continue;
+
+                if (!countsByMapId.TryGetValue(map.Id, out int count) || count <= 0)
+                    continue;
+
+                entries.Add(new PlayerMapReturnCountEntry
+                {
+                    MapId = map.Id,
+                    Count = count
+                });
+            }
+        }
+
+        return new PlayerMapUnlockProgressData
+        {
+            ReturnCounts = entries.ToArray(),
+            MothershipKilled = progress != null && progress.MothershipKilled,
+            CheatUnlockAllMaps = progress != null && progress.CheatUnlockAllMaps
+        };
+    }
+
     int GetActiveShipSkinIndex()
     {
         int fallbackSkin = CurrentProfile != null ? CurrentProfile.ShipSkinIndex : 0;
@@ -2935,9 +3491,10 @@ public class PlayerProfileService : MonoBehaviour
 
     int GetActiveShipInventoryCapacity()
     {
-        return GetEffectiveShipInventoryCapacity(
+        int baseCapacity = GetEffectiveShipInventoryCapacity(
             GetActiveShipSkinIndex(),
             CurrentProfile != null && CurrentProfile.Inventory != null ? CurrentProfile.Inventory.EquipmentSlots : null);
+        return ShipDamageState.GetLocalCargoAdjustedCapacity(baseCapacity);
     }
 
     void ApplyInventoryToPhoton()
@@ -3088,6 +3645,54 @@ public class PlayerProfileService : MonoBehaviour
         }
     }
 
+    string SerializeAtlasMapReturns(string[] mapIds)
+    {
+        AtlasMapReturnSnapshot snapshot = new AtlasMapReturnSnapshot
+        {
+            mapIds = PilotCatalog.NormalizeAtlasMapReturnIds(mapIds)
+        };
+        return JsonUtility.ToJson(snapshot);
+    }
+
+    string[] DeserializeAtlasMapReturns(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return Array.Empty<string>();
+
+        try
+        {
+            AtlasMapReturnSnapshot snapshot = JsonUtility.FromJson<AtlasMapReturnSnapshot>(json);
+            return PilotCatalog.NormalizeAtlasMapReturnIds(snapshot != null ? snapshot.mapIds : null);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("Failed to deserialize Atlas map returns: " + ex.Message);
+            return Array.Empty<string>();
+        }
+    }
+
+    string SerializeMapUnlockProgress(PlayerMapUnlockProgressData progress)
+    {
+        return JsonUtility.ToJson(NormalizeMapUnlockProgress(progress));
+    }
+
+    PlayerMapUnlockProgressData DeserializeMapUnlockProgress(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return NormalizeMapUnlockProgress(null);
+
+        try
+        {
+            PlayerMapUnlockProgressData progress = JsonUtility.FromJson<PlayerMapUnlockProgressData>(json);
+            return NormalizeMapUnlockProgress(progress);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("Failed to deserialize map unlock progress: " + ex.Message);
+            return NormalizeMapUnlockProgress(null);
+        }
+    }
+
     string SerializeBlueprintUnlocks(string[] blueprintIds)
     {
         BlueprintUnlockSnapshot snapshot = new BlueprintUnlockSnapshot
@@ -3201,6 +3806,8 @@ public class PlayerProfileData
     public int PilotPirateBayReturns;
     public int PilotAsteroidSalvageCount;
     public int PilotAshOverloadReturns;
+    public string[] PilotAtlasMapReturns;
+    public PlayerMapUnlockProgressData MapUnlockProgress;
     public PlayerProjectProgressData ProjectProgress;
 
     public static PlayerProfileData Default()
@@ -3211,26 +3818,111 @@ public class PlayerProfileData
             ShipSkinIndex = 0,
             GamesPlayed = 0,
             TotalXp = 0,
-            Astrons = 0,
+            Astrons = PlayerProfileService.DefaultStartingAstrons,
             Inventory = PlayerInventoryData.Default(),
             SelectedPilotId = PilotCatalog.JakeId,
             UnlockedPilotIds = PilotCatalog.GetDefaultUnlockedPilotIds(),
-            UnlockedBlueprintIds = Array.Empty<string>(),
+            UnlockedBlueprintIds = PlayerProfileService.NormalizeUnlockedBlueprintIds(null),
             MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
             PilotDroneKills = 0,
             PilotSoldItemsAstrons = 0,
             PilotPirateBayReturns = 0,
             PilotAsteroidSalvageCount = 0,
             PilotAshOverloadReturns = 0,
+            PilotAtlasMapReturns = Array.Empty<string>(),
+            MapUnlockProgress = PlayerProfileService.NormalizeMapUnlockProgress(null),
             ProjectProgress = ProjectCatalog.NormalizeProgress(null)
         };
     }
 }
 
 [Serializable]
+public class PlayerMapUnlockProgressData
+{
+    public PlayerMapReturnCountEntry[] ReturnCounts;
+    public bool MothershipKilled;
+    public bool CheatUnlockAllMaps;
+
+    public PlayerMapUnlockProgressData Clone()
+    {
+        PlayerMapReturnCountEntry[] clonedCounts = ReturnCounts != null
+            ? new PlayerMapReturnCountEntry[ReturnCounts.Length]
+            : Array.Empty<PlayerMapReturnCountEntry>();
+
+        for (int i = 0; i < clonedCounts.Length; i++)
+        {
+            PlayerMapReturnCountEntry source = ReturnCounts[i];
+            clonedCounts[i] = source != null
+                ? new PlayerMapReturnCountEntry { MapId = source.MapId, Count = source.Count }
+                : null;
+        }
+
+        return new PlayerMapUnlockProgressData
+        {
+            ReturnCounts = clonedCounts,
+            MothershipKilled = MothershipKilled,
+            CheatUnlockAllMaps = CheatUnlockAllMaps
+        };
+    }
+
+    public void SetReturnCount(string mapId, int count)
+    {
+        string normalizedMapId = LobbyMapUnlockCatalog.NormalizeMapId(mapId);
+        if (string.IsNullOrWhiteSpace(normalizedMapId))
+            return;
+
+        count = Math.Max(0, count);
+        List<PlayerMapReturnCountEntry> entries = ReturnCounts != null
+            ? new List<PlayerMapReturnCountEntry>(ReturnCounts)
+            : new List<PlayerMapReturnCountEntry>();
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            PlayerMapReturnCountEntry entry = entries[i];
+            if (entry == null)
+                continue;
+
+            if (!string.Equals(entry.MapId, normalizedMapId, StringComparison.Ordinal))
+                continue;
+
+            if (count <= 0)
+                entries.RemoveAt(i);
+            else
+                entry.Count = count;
+            ReturnCounts = entries.ToArray();
+            return;
+        }
+
+        if (count > 0)
+        {
+            entries.Add(new PlayerMapReturnCountEntry
+            {
+                MapId = normalizedMapId,
+                Count = count
+            });
+        }
+
+        ReturnCounts = entries.ToArray();
+    }
+}
+
+[Serializable]
+public class PlayerMapReturnCountEntry
+{
+    public string MapId;
+    public int Count;
+}
+
+[Serializable]
 public class PilotUnlockSnapshot
 {
     public string[] pilotIds;
+}
+
+[Serializable]
+public class AtlasMapReturnSnapshot
+{
+    public string[] mapIds;
 }
 
 [Serializable]
@@ -3262,9 +3954,9 @@ public class PlayerInventoryData
 {
     public const int DefaultPlayerSlotCount = 30;
     public const int PlayerSlotCount = DefaultPlayerSlotCount;
-    public const int PlayerSlotExtensionSize = 10;
-    public const int ShipSlotCount = 10;
-    public const int EquipmentSlotCount = 8;
+    public const int PlayerSlotExtensionSize = 20;
+    public const int ShipSlotCount = 15;
+    public const int EquipmentSlotCount = 12;
     public const int CraftingSlotCount = 4;
     public string[] PlayerSlots;
     public string[] ShipSlots;

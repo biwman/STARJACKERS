@@ -20,14 +20,12 @@ public static class RoundXpTracker
     }
 
     static readonly Dictionary<int, PlayerRoundXpState> PlayerStates = new Dictionary<int, PlayerRoundXpState>();
-    static string trackedRoomName;
+    static string trackedRoundScope;
     static bool firstBloodAwarded;
 
     public static void ResetForCurrentRoom()
     {
-        trackedRoomName = PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null
-            ? PhotonNetwork.CurrentRoom.Name ?? string.Empty
-            : string.Empty;
+        trackedRoundScope = BuildCurrentRoundScope();
 
         PlayerStates.Clear();
         firstBloodAwarded = false;
@@ -96,8 +94,17 @@ public static class RoundXpTracker
         if (!PhotonNetwork.IsMasterClient || attackerViewId <= 0 || targetView == null || targetView.Owner == null)
             return;
 
+        PlayerHealth targetHealth = targetView.GetComponent<PlayerHealth>();
+        if (AstronautSurvivor.IsEnemyAstronaut(targetHealth) ||
+            (targetHealth != null && targetHealth.IsNeutralRiderControlled))
+            return;
+
         PhotonView attackerView = PhotonView.Find(attackerViewId);
         if (attackerView == null || attackerView.Owner == null)
+            return;
+
+        PlayerHealth attackerHealth = attackerView.GetComponent<PlayerHealth>();
+        if (attackerHealth != null && attackerHealth.IsNeutralRiderControlled)
             return;
 
         if (attackerView.Owner.ActorNumber == targetView.Owner.ActorNumber)
@@ -129,8 +136,15 @@ public static class RoundXpTracker
         if (!PhotonNetwork.IsMasterClient || attackerViewId <= 0 || victim == null || victim.photonView == null)
             return;
 
+        if (AstronautSurvivor.IsEnemyAstronaut(victim) || victim.IsNeutralRiderControlled)
+            return;
+
         PhotonView attackerView = PhotonView.Find(attackerViewId);
         if (attackerView == null || attackerView.Owner == null)
+            return;
+
+        PlayerHealth attackerHealth = attackerView.GetComponent<PlayerHealth>();
+        if (attackerHealth != null && attackerHealth.IsNeutralRiderControlled)
             return;
 
         bool killedHumanPlayer = !victim.IsBotControlled;
@@ -257,8 +271,14 @@ public static class RoundXpTracker
         if (PilotCatalog.IsSelectedPilot(attackerView.Owner, PilotCatalog.NovaId))
             attackerView.RPC(nameof(PlayerHealth.ApplyNovaKillSpeedBoost), attackerView.Owner);
 
+        if (!killedHumanPlayer && IsAshComputerEnemyKill(killedBotKind))
+            attackerView.RPC(nameof(PlayerHealth.RecordAshComputerEnemyKillProgress), attackerView.Owner);
+
         if (!killedHumanPlayer && killedBotKind == EnemyBotKind.Drone)
             attackerView.RPC(nameof(PlayerHealth.RecordPilotDroneKillProgress), attackerView.Owner);
+
+        if (!killedHumanPlayer && killedBotKind == EnemyBotKind.Mothership)
+            attackerView.RPC(nameof(PlayerHealth.RecordMothershipKillMapProgress), attackerView.Owner);
 
         if (!killedHumanPlayer)
             return;
@@ -266,6 +286,12 @@ public static class RoundXpTracker
         attackerView.RPC(nameof(PlayerHealth.UnlockRoburPilotAfterHumanKill), attackerView.Owner);
         if (PilotCatalog.IsSelectedPilot(attackerView.Owner, PilotCatalog.RoburId))
             GetOrCreate(attackerView.Owner).DoubleXpUntil = Mathf.Max(GetOrCreate(attackerView.Owner).DoubleXpUntil, Time.time + 60f);
+    }
+
+    static bool IsAshComputerEnemyKill(EnemyBotKind killedBotKind)
+    {
+        return killedBotKind != EnemyBotKind.SpaceMine &&
+               killedBotKind != EnemyBotKind.RescueShip;
     }
 
     static PlayerRoundXpState GetOrCreate(Player player)
@@ -367,15 +393,39 @@ public static class RoundXpTracker
 
     static void EnsureRoomScope()
     {
-        string currentRoomName = PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null
-            ? PhotonNetwork.CurrentRoom.Name ?? string.Empty
-            : string.Empty;
+        string currentRoundScope = BuildCurrentRoundScope();
 
-        if (trackedRoomName == currentRoomName)
+        if (trackedRoundScope == currentRoundScope)
             return;
 
-        trackedRoomName = currentRoomName;
+        trackedRoundScope = currentRoundScope;
         PlayerStates.Clear();
         firstBloodAwarded = false;
+    }
+
+    static string BuildCurrentRoundScope()
+    {
+        if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null)
+            return string.Empty;
+
+        string roomName = PhotonNetwork.CurrentRoom.Name ?? string.Empty;
+        string token = string.Empty;
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.RoundWarmupTokenKey, out object warmupValue) &&
+            warmupValue is string warmupToken &&
+            !string.IsNullOrWhiteSpace(warmupToken))
+        {
+            token = "warmup:" + warmupToken;
+        }
+        else if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.StartTimeKey, out object startValue) &&
+                 startValue != null)
+        {
+            token = "start:" + startValue;
+        }
+        else
+        {
+            token = "nostart";
+        }
+
+        return roomName + "|" + token;
     }
 }

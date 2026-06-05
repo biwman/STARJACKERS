@@ -8,6 +8,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
     const string NoobHavenBackdropResourceSuffix = "_resource";
     const string BackgroundObjectResourcePrefix = "Visuals/Backgrounds/";
     const string BackgroundObjectResourceSuffix = "_resource";
+    const string ToxicAreaCloudResourcePath = "Visuals/Backgrounds/background_object13_addon_resource";
     const int BackdropSortingOrder = GameVisualTheme.BackgroundSortingOrder - 20;
     const int HazeSortingOrder = GameVisualTheme.BackgroundSortingOrder - 18;
     const int FarSortingOrder = GameVisualTheme.BackgroundSortingOrder - 17;
@@ -18,6 +19,8 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
     const float NoobHavenBackdropViewportOverscan = 1.18f;
     const float NoobHavenBackdropParallax = 0.026f;
     const float BackgroundObjectParallax = 0.06f;
+    const float ToxicPlanetParallax = 0.052f;
+    const float ToxicCloudParallax = 0.092f;
     const float GravityWellCoreParallax = 1f;
     const float GravityWellObjectPulseSpeed = 2.2f;
     const float GravityWellObjectPulseAmount = 0.045f;
@@ -27,7 +30,8 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
     {
         None,
         NoobHaven,
-        GravityWell
+        GravityWell,
+        ToxicArea
     }
 
     enum LayerStyle
@@ -72,6 +76,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
     static string noobHavenBackdropSpriteId;
     static Sprite backgroundObjectSprite;
     static string backgroundObjectSpriteId;
+    static Sprite toxicAreaCloudSprite;
 
     readonly LayerState[] layers = new LayerState[10];
     MaterialPropertyBlock propertyBlock;
@@ -107,6 +112,8 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
                 return new Color(1f, 1f, 1f, 0f);
             case AdvancedBackgroundStyle.GravityWell:
                 return new Color(1f, 1f, 1f, 0f);
+            case AdvancedBackgroundStyle.ToxicArea:
+                return new Color(1f, 1f, 1f, 0f);
             default:
                 return Color.white;
         }
@@ -117,6 +124,9 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         string mapId = RoomSettings.GetSelectedLobbyMapId();
         if (string.Equals(mapId, LobbyMapCatalog.GravityWellMapId, StringComparison.Ordinal))
             return AdvancedBackgroundStyle.GravityWell;
+
+        if (string.Equals(mapId, LobbyMapCatalog.ToxicAreaMapId, StringComparison.Ordinal))
+            return AdvancedBackgroundStyle.ToxicArea;
 
         return AdvancedBackgroundStyle.NoobHaven;
     }
@@ -209,6 +219,9 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         {
             case AdvancedBackgroundStyle.GravityWell:
                 BuildGravityWellLayers(seed, mapSize);
+                break;
+            case AdvancedBackgroundStyle.ToxicArea:
+                BuildToxicAreaLayers(seed, mapSize);
                 break;
             case AdvancedBackgroundStyle.NoobHaven:
                 BuildNoobHavenLayers(seed, mapSize);
@@ -444,6 +457,117 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         builtStyle = AdvancedBackgroundStyle.GravityWell;
         builtBackgroundObjectId = RoomSettings.GetBackgroundObjectId();
         builtMapSize = mapSize;
+    }
+
+    void BuildToxicAreaLayers(int seed, Vector2 mapSize)
+    {
+        ClearLayers();
+
+        System.Random random = new System.Random(seed);
+        Vector2 extent = new Vector2(mapSize.x + MapPadding, mapSize.y + MapPadding);
+
+        int layerIndex = 0;
+        LayerState backdropLayer = CreateNoobHavenBackdropLayer(mapSize);
+        if (backdropLayer != null)
+            layers[layerIndex++] = backdropLayer;
+
+        layers[layerIndex++] = CreateLayer("ToxicFarStars", 500, extent, 0.035f, 0.16f, 1f, 1f, 0.05f, new Vector2(0.0009f, -0.0004f), 0.26f, 0.08f, FarSortingOrder, LayerStyle.Star, random);
+        layers[layerIndex++] = CreateLayer("ToxicGreenHaze", 38, extent, 3.6f, 9.2f, 2.8f, 0.58f, 0.12f, new Vector2(0.0014f, 0.0007f), 0.2f, 0.04f, HazeSortingOrder, LayerStyle.Haze, random);
+        layers[layerIndex++] = CreateLayer("ToxicMidStars", 260, extent, 0.065f, 0.22f, 1f, 1f, 0.2f, Vector2.zero, 0.45f, 0.08f, MidSortingOrder, LayerStyle.Star, random);
+        layers[layerIndex++] = CreateLayer("ToxicIonDust", 132, extent, 0.06f, 0.2f, 2.3f, 0.5f, 0.34f, new Vector2(-0.001f, 0.001f), 0.36f, 0.065f, DustSortingOrder, LayerStyle.Dust, random);
+
+        string objectId = RoomSettings.GetBackgroundObjectId();
+        if (!string.Equals(objectId, RoomSettings.BackgroundObjectOff, StringComparison.Ordinal))
+        {
+            float targetSize = Mathf.Clamp(Mathf.Min(mapSize.x, mapSize.y) * 0.34f, 11f, 17f);
+            Vector2 baseOffset = new Vector2(
+                Mathf.Clamp(mapSize.x * 0.13f, 3.2f, 6.2f),
+                Mathf.Clamp(mapSize.y * 0.04f, 1.2f, 2.4f));
+
+            LayerState planetLayer = CreateToxicAreaSpriteLayer(
+                "ToxicAreaBackgroundPlanet_" + objectId,
+                LoadBackgroundObjectSprite(objectId),
+                BackgroundObjectSortingOrder,
+                ToxicPlanetParallax,
+                Vector2.zero,
+                baseOffset,
+                targetSize,
+                Color.white,
+                true,
+                0f);
+            if (planetLayer != null)
+                layers[layerIndex++] = planetLayer;
+
+            LayerState cloudLayer = CreateToxicAreaSpriteLayer(
+                "ToxicAreaPlanetClouds",
+                LoadToxicAreaCloudSprite(),
+                BackgroundObjectSortingOrder + 1,
+                ToxicCloudParallax,
+                new Vector2(0.0016f, 0.0008f),
+                baseOffset + new Vector2(targetSize * 0.02f, targetSize * 0.04f),
+                targetSize * 0.72f,
+                new Color(0.88f, 1f, 0.45f, 0.72f),
+                true,
+                -5f);
+            if (cloudLayer != null)
+                layers[layerIndex++] = cloudLayer;
+        }
+
+        builtSeed = seed;
+        builtStyle = AdvancedBackgroundStyle.ToxicArea;
+        builtBackgroundObjectId = RoomSettings.GetBackgroundObjectId();
+        builtMapSize = mapSize;
+    }
+
+    LayerState CreateToxicAreaSpriteLayer(
+        string layerName,
+        Sprite sprite,
+        int sortingOrder,
+        float parallax,
+        Vector2 drift,
+        Vector2 baseOffset,
+        float targetSize,
+        Color color,
+        bool keepInsideCameraView,
+        float rotationZ)
+    {
+        if (sprite == null)
+            return null;
+
+        GameObject layerObject = new GameObject(layerName, typeof(SpriteRenderer));
+        layerObject.transform.SetParent(transform, false);
+
+        SpriteRenderer renderer = layerObject.GetComponent<SpriteRenderer>();
+        renderer.sprite = sprite;
+        renderer.color = color;
+        renderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        renderer.sortingOrder = sortingOrder;
+
+        Vector2 spriteSize = sprite.bounds.size;
+        float maxDimension = Mathf.Max(spriteSize.x, spriteSize.y);
+        if (maxDimension <= 0.001f)
+            maxDimension = 1f;
+
+        float scale = targetSize / maxDimension;
+        Vector3 baseLocalScale = new Vector3(scale, scale, 1f);
+        layerObject.transform.localScale = baseLocalScale;
+        layerObject.transform.rotation = Quaternion.Euler(0f, 0f, rotationZ);
+
+        return new LayerState
+        {
+            Root = layerObject,
+            Transform = layerObject.transform,
+            SpriteRenderer = renderer,
+            SpriteSize = spriteSize,
+            Parallax = parallax,
+            Drift = drift,
+            TwinkleSpeed = 0f,
+            TwinkleAmount = 0f,
+            Phase = StableLayerPhase(layerName),
+            BaseOffset = baseOffset,
+            KeepInsideCameraView = keepInsideCameraView,
+            BaseLocalScale = baseLocalScale
+        };
     }
 
     LayerState CreateBackgroundObjectLayer(Vector2 mapSize, System.Random random)
@@ -1201,6 +1325,36 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         backgroundObjectSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/" + objectId + ".png");
         if (backgroundObjectSprite != null)
             return backgroundObjectSprite;
+#endif
+
+        return null;
+    }
+
+    static Sprite LoadToxicAreaCloudSprite()
+    {
+        if (toxicAreaCloudSprite != null)
+            return toxicAreaCloudSprite;
+
+        Texture2D texture = Resources.Load<Texture2D>(ToxicAreaCloudResourcePath);
+        if (texture != null)
+            return toxicAreaCloudSprite = CreateSpriteFromTexture(texture, "ToxicAreaCloudSprite");
+
+        toxicAreaCloudSprite = Resources.Load<Sprite>(ToxicAreaCloudResourcePath);
+        if (toxicAreaCloudSprite != null)
+            return toxicAreaCloudSprite;
+
+#if UNITY_EDITOR
+        texture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Resources/" + ToxicAreaCloudResourcePath + ".png");
+        if (texture != null)
+            return toxicAreaCloudSprite = CreateSpriteFromTexture(texture, "ToxicAreaCloudSprite");
+
+        texture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/background_object 13 addon.png");
+        if (texture != null)
+            return toxicAreaCloudSprite = CreateSpriteFromTexture(texture, "ToxicAreaCloudSprite");
+
+        toxicAreaCloudSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Resources/" + ToxicAreaCloudResourcePath + ".png");
+        if (toxicAreaCloudSprite != null)
+            return toxicAreaCloudSprite;
 #endif
 
         return null;

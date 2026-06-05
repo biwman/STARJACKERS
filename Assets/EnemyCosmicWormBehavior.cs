@@ -149,7 +149,10 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
             weapon.ShotSoundId,
             weapon.Range,
             "cosmic_worm",
-            7.5f);
+            7.5f,
+            weapon.DamageType,
+            weapon.DeliveryMethod,
+            weapon.DeliveryFlags);
     }
 
     void ConfigureSeededMotion()
@@ -236,7 +239,7 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
         RotateHeadToward(attackDirection);
         rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, -attackDirection * bot.EffectiveMoveSpeed * 0.22f, 0.08f);
 
-        if (Time.time - modeStartedAt < SpitWindupDuration)
+        if (Time.time - modeStartedAt < ResolveSpitWindupDuration())
             return;
 
         FireSpitVolley();
@@ -275,7 +278,7 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
 
         Vector2 mouth = GetMouthPosition();
         if (bot.photonView != null)
-            bot.photonView.RPC(nameof(EnemyBot.SpawnCosmicWormDashWarningRpc), RpcTarget.All, mouth.x, mouth.y, attackDirection.x, attackDirection.y, ResolveDashRange(), DashWindupDuration);
+            bot.photonView.RPC(nameof(EnemyBot.SpawnCosmicWormDashWarningRpc), RpcTarget.All, mouth.x, mouth.y, attackDirection.x, attackDirection.y, ResolveDashRange(), ResolveDashWindupDuration());
     }
 
     void TickDashWindup()
@@ -290,7 +293,7 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
         RotateHeadToward(attackDirection);
         rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 0.18f);
 
-        if (Time.time - modeStartedAt < DashWindupDuration)
+        if (Time.time - modeStartedAt < ResolveDashWindupDuration())
             return;
 
         mode = WormMode.Dash;
@@ -337,7 +340,7 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
         RotateHeadToward(attackDirection);
         rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, -attackDirection * bot.EffectiveMoveSpeed * 0.12f, 0.08f);
 
-        if (Time.time - modeStartedAt < SwallowWindupDuration)
+        if (Time.time - modeStartedAt < ResolveSwallowWindupDuration())
             return;
 
         BeginSwallowChannel();
@@ -474,10 +477,10 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
     Vector2 ApplyAvoidance(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.right;
-        Collider2D[] hits = Physics2D.OverlapCircleAll(rb.position, AvoidanceScanRadius);
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(rb.position, AvoidanceScanRadius, out Collider2D[] hits);
         Vector2 avoidance = Vector2.zero;
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || hit.attachedRigidbody == rb)
@@ -554,10 +557,10 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
     void ApplySwallowPull(Vector2 mouth)
     {
         float radius = ResolveSwallowRange();
-        Collider2D[] hits = Physics2D.OverlapCircleAll(mouth + attackDirection * radius * 0.46f, radius * 0.62f);
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(mouth + attackDirection * radius * 0.46f, radius * 0.62f, out Collider2D[] hits);
         int sourceViewId = bot.photonView != null ? bot.photonView.ViewID : 0;
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || hit.attachedRigidbody == rb)
@@ -598,10 +601,13 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
 
     void ApplyDamageInRadius(Vector2 center, float radius, int damage, HashSet<int> processedViewIds, bool includeUtilities)
     {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(center, radius);
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(center, radius, out Collider2D[] hits);
         int attackerViewId = bot.photonView != null ? bot.photonView.ViewID : 0;
+        WeaponHitContext hitContext = weapon != null
+            ? new WeaponHitContext(weapon.DamageType, weapon.DeliveryMethod, weapon.DeliveryFlags, string.Empty)
+            : WeaponHitContext.None;
 
-        for (int i = 0; i < hits.Length; i++)
+        for (int i = 0; i < hitCount; i++)
         {
             Collider2D hit = hits[i];
             if (hit == null || hit.attachedRigidbody == rb)
@@ -616,7 +622,18 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
                 continue;
 
             Vector2 impact = ResolveImpactPoint(hit, center);
-            targetView.RPC(nameof(PlayerHealth.TakeDamageProfileAt), RpcTarget.MasterClient, damage, damage, attackerViewId, impact.x, impact.y);
+            targetView.RPC(
+                nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                RpcTarget.MasterClient,
+                damage,
+                damage,
+                attackerViewId,
+                impact.x,
+                impact.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
         }
 
         if (!includeUtilities)
@@ -647,7 +664,18 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
             if (!processedViewIds.Add(deployable.photonView.ViewID))
                 continue;
 
-            deployable.photonView.RPC(nameof(PlayerDeployableBase.TakeDeployableDamageAt), RpcTarget.MasterClient, damage, damage, attackerViewId, center.x, center.y);
+            deployable.photonView.RPC(
+                nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                RpcTarget.MasterClient,
+                damage,
+                damage,
+                attackerViewId,
+                center.x,
+                center.y,
+                (int)hitContext.DamageType,
+                (int)hitContext.DeliveryMethod,
+                (int)hitContext.DeliveryFlags,
+                hitContext.DamageSource ?? string.Empty);
         }
     }
 
@@ -656,7 +684,7 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
         if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating)
             return false;
 
-        if (candidate.IsBotControlled || candidate.IsAstronautControlled)
+        if (!ActorIdentity.CanBeTargetedByMonstersActor(candidate))
             return false;
 
         return candidate.GetComponent<LureBeaconDecoy>() == null && candidate.GetComponent<PlayerDeployableBase>() == null;
@@ -768,17 +796,32 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
 
     float ResolveSpitCooldown()
     {
-        return phase >= 3 ? 1.55f : phase >= 2 ? 1.85f : 2.25f;
+        return ScaleEnemyAttackCooldown(phase >= 3 ? 1.55f : phase >= 2 ? 1.85f : 2.25f);
     }
 
     float ResolveDashCooldown()
     {
-        return phase >= 3 ? 2.65f : 3.25f;
+        return ScaleEnemyAttackCooldown(phase >= 3 ? 2.65f : 3.25f);
     }
 
     float ResolveSwallowCooldown()
     {
-        return phase >= 3 ? 4.4f : 5.5f;
+        return ScaleEnemyAttackCooldown(phase >= 3 ? 4.4f : 5.5f);
+    }
+
+    float ResolveSpitWindupDuration()
+    {
+        return ScaleEnemyAttackWindup(SpitWindupDuration);
+    }
+
+    float ResolveDashWindupDuration()
+    {
+        return ScaleEnemyAttackWindup(DashWindupDuration);
+    }
+
+    float ResolveSwallowWindupDuration()
+    {
+        return ScaleEnemyAttackWindup(SwallowWindupDuration);
     }
 
     static Vector2 RotateVector(Vector2 vector, float degrees)

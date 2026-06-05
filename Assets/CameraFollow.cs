@@ -9,14 +9,20 @@ public class CameraFollow : MonoBehaviour
     Camera cachedCamera;
     float camHalfWidth;
     float camHalfHeight;
+    float baseOrthographicSize;
+    float dynamicZoomMultiplier = 1f;
+    Vector3 smoothedPosition;
+    bool hasSmoothedPosition;
 
     void Awake()
     {
+        CaptureBaseCameraSize();
         RefreshCameraExtents();
     }
 
     void Start()
     {
+        CaptureBaseCameraSize();
         RefreshCameraExtents();
     }
 
@@ -32,7 +38,9 @@ public class CameraFollow : MonoBehaviour
             return false;
 
         RefreshCameraExtents();
-        transform.position = GetTargetCameraPosition();
+        smoothedPosition = GetTargetCameraPosition();
+        hasSmoothedPosition = true;
+        transform.position = smoothedPosition;
         return true;
     }
 
@@ -52,17 +60,75 @@ public class CameraFollow : MonoBehaviour
         }
     }
 
+    void CaptureBaseCameraSize()
+    {
+        Camera cam = Camera.main;
+        if (cam != null && cam.orthographic && baseOrthographicSize <= 0f)
+            baseOrthographicSize = cam.orthographicSize;
+    }
+
     void LateUpdate()
     {
         Vector2 mapSize = RoomSettings.GetMapDimensions();
         mapSizeX = mapSize.x;
         mapSizeY = mapSize.y;
+        UpdateDynamicZoom();
 
         if (target == null)
             return;
 
         Vector3 targetPos = GetTargetCameraPosition();
-        transform.position = Vector3.Lerp(transform.position, targetPos, Time.deltaTime * 5f);
+        if (!hasSmoothedPosition)
+        {
+            smoothedPosition = targetPos;
+            hasSmoothedPosition = true;
+        }
+        else
+        {
+            smoothedPosition = Vector3.Lerp(smoothedPosition, targetPos, Time.deltaTime * 5f);
+        }
+
+        transform.position = smoothedPosition + ScreenShakeController.GetOffset(smoothedPosition);
+    }
+
+    void UpdateDynamicZoom()
+    {
+        Camera cam = Camera.main != null ? Camera.main : cachedCamera;
+        if (cam == null || !cam.orthographic)
+            return;
+
+        if (baseOrthographicSize <= 0f)
+            baseOrthographicSize = cam.orthographicSize / Mathf.Max(0.001f, dynamicZoomMultiplier);
+
+        Vector3 cameraBasePosition = hasSmoothedPosition ? smoothedPosition : transform.position;
+        DynamicCameraZoomState zoomState = DynamicCameraZoomController.GetState(cameraBasePosition);
+        float targetMultiplier = Mathf.Max(1f, zoomState.Multiplier);
+        float speed = targetMultiplier > dynamicZoomMultiplier ? zoomState.ZoomInSpeed : zoomState.ZoomOutSpeed;
+        float deltaTime = Time.unscaledDeltaTime > 0f ? Time.unscaledDeltaTime : Time.deltaTime;
+        float blend = 1f - Mathf.Exp(-Mathf.Max(0.1f, speed) * deltaTime);
+        dynamicZoomMultiplier = Mathf.Lerp(dynamicZoomMultiplier, targetMultiplier, blend);
+        if (Mathf.Abs(dynamicZoomMultiplier - 1f) < 0.001f && Mathf.Approximately(targetMultiplier, 1f))
+            dynamicZoomMultiplier = 1f;
+
+        cam.orthographicSize = baseOrthographicSize * dynamicZoomMultiplier;
+        RefreshCameraExtents();
+    }
+
+    void OnDisable()
+    {
+        RestoreBaseCameraSize();
+    }
+
+    void OnDestroy()
+    {
+        RestoreBaseCameraSize();
+    }
+
+    void RestoreBaseCameraSize()
+    {
+        Camera cam = cachedCamera != null ? cachedCamera : Camera.main;
+        if (cam != null && cam.orthographic && baseOrthographicSize > 0f)
+            cam.orthographicSize = baseOrthographicSize;
     }
 
     Vector3 GetTargetCameraPosition()

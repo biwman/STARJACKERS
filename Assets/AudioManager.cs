@@ -10,6 +10,11 @@ public class AudioManager : MonoBehaviour
     const float SpatialMinDistance = 1.5f;
     const float SpatialMaxDistance = 18f;
     const float ClickSoundCooldownSeconds = 0.055f;
+    const string MenuMusicResourcePath = "Audio/Music/Abandoned Orbital Dock";
+    const string ShipReturnMusicResourcePath = "Audio/Music/victory_orbit";
+    const float MenuMusicVolume = 0.42f;
+    const int SpatialAudioPoolSize = 24;
+    const int MaxSpatialOneShotsPerFrame = 12;
 
     static AudioManager instance;
 
@@ -48,6 +53,7 @@ public class AudioManager : MonoBehaviour
     AudioClip beaconSignalClip;
     AudioClip astroCutterClip;
     AudioClip guidanceSystemClip;
+    AudioClip treasureScannerPingClip;
     AudioClip spaceDrillDeliveryClip;
     AudioClip spaceMantaWarningClip;
     AudioClip gravitySquidWarningClip;
@@ -59,12 +65,23 @@ public class AudioManager : MonoBehaviour
     AudioClip rocketFlyLoopClip;
     AudioClip rocketExplosionClip;
     AudioClip cosmicWormShotClip;
+    AudioClip alienArtifactActivationClip;
+    AudioClip menuMusicClip;
+    AudioClip shipReturnMusicClip;
 
     AudioSource oneShotSource;
     AudioSource drillingLoopSource;
     AudioSource alarmLoopSource;
+    AudioSource menuMusicSource;
     Coroutine evacBuzzerRoutine;
+    Coroutine resumeMenuMusicRoutine;
+    bool shipReturnMusicPending;
+    bool shipReturnMusicPlaying;
     float lastClickSoundTime = -100f;
+    readonly List<AudioSource> spatialOneShotSources = new List<AudioSource>(SpatialAudioPoolSize);
+    int nextSpatialOneShotSourceIndex;
+    int spatialOneShotFrame = -1;
+    int spatialOneShotsThisFrame;
     readonly HashSet<int> hookedButtons = new HashSet<int>();
 
     public static AudioManager Instance
@@ -87,6 +104,7 @@ public class AudioManager : MonoBehaviour
     public AudioClip BeaconSignalClip => beaconSignalClip != null ? beaconSignalClip : alarmClip;
     public AudioClip AstroCutterClip => astroCutterClip != null ? astroCutterClip : lazer2Clip != null ? lazer2Clip : laserClip;
     public AudioClip GuidanceSystemClip => guidanceSystemClip != null ? guidanceSystemClip : beaconSignalClip != null ? beaconSignalClip : alarmClip;
+    public AudioClip TreasureScannerPingClip => treasureScannerPingClip != null ? treasureScannerPingClip : beaconSignalClip != null ? beaconSignalClip : clickClip;
     public AudioClip SpaceDrillDeliveryClip => spaceDrillDeliveryClip != null ? spaceDrillDeliveryClip : shieldChargeClip != null ? shieldChargeClip : clickClip;
     public AudioClip GravitySquidTetherClip => gravitySquidTetherClip != null ? gravitySquidTetherClip : magneticBeamClip != null ? magneticBeamClip : shieldChargeClip;
     public AudioClip RocketFlyLoopClip => rocketFlyLoopClip != null ? rocketFlyLoopClip : engineClip;
@@ -134,13 +152,21 @@ public class AudioManager : MonoBehaviour
     void Start()
     {
         HookSceneButtons();
+        RefreshMenuMusicForCurrentState();
+    }
+
+    void Update()
+    {
+        TryPlayPendingShipReturnMusic();
     }
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         HookSceneButtons();
+        StopSpatialOneShots();
         StopDrillingLoop();
         StopAlarmLoop();
+        RefreshMenuMusicForCurrentState();
     }
 
     void LoadClips()
@@ -149,6 +175,8 @@ public class AudioManager : MonoBehaviour
         corsairLaserClip = Resources.Load<AudioClip>("Audio/laser_classic_corsair");
         drillingClip = Resources.Load<AudioClip>("Audio/drilling");
         clickClip = Resources.Load<AudioClip>("Audio/click");
+        menuMusicClip = Resources.Load<AudioClip>(MenuMusicResourcePath);
+        shipReturnMusicClip = Resources.Load<AudioClip>(ShipReturnMusicResourcePath);
         cashClip = Resources.Load<AudioClip>("Audio/cash_sound");
         engineClip = Resources.Load<AudioClip>("Audio/silnik");
         fusionEngineClip = Resources.Load<AudioClip>("Audio/fusion_engine_sound");
@@ -180,6 +208,7 @@ public class AudioManager : MonoBehaviour
         beaconSignalClip = Resources.Load<AudioClip>("Audio/beacon_signal");
         astroCutterClip = Resources.Load<AudioClip>("Audio/astro_cutter_sound");
         guidanceSystemClip = Resources.Load<AudioClip>("Audio/guidance_system_sound");
+        treasureScannerPingClip = Resources.Load<AudioClip>("Audio/treasure_scanner_ping");
         spaceDrillDeliveryClip = Resources.Load<AudioClip>("Audio/space_drill_delivery_sound");
         spaceMantaWarningClip = Resources.Load<AudioClip>("Audio/space_manta_warning");
         gravitySquidWarningClip = Resources.Load<AudioClip>("Audio/gravity_squid_warning");
@@ -193,6 +222,7 @@ public class AudioManager : MonoBehaviour
         rocketFlyLoopClip = Resources.Load<AudioClip>("Audio/rocket_fly_loop");
         rocketExplosionClip = Resources.Load<AudioClip>("Audio/rocket_boom_sound");
         cosmicWormShotClip = Resources.Load<AudioClip>("Audio/cosmic_worm_shot");
+        alienArtifactActivationClip = Resources.Load<AudioClip>("Audio/alien_artifact_activate");
         if (cosmicWormShotClip == null)
             cosmicWormShotClip = CreateCosmicWormShotClip();
     }
@@ -268,9 +298,12 @@ public class AudioManager : MonoBehaviour
         oneShotSource = CreateChildSource("OneShotSource", false, false, 0.9f);
         drillingLoopSource = CreateChildSource("DrillingLoopSource", true, false, 0.455f);
         alarmLoopSource = CreateChildSource("AlarmLoopSource", true, false, 0.55f);
+        menuMusicSource = CreateChildSource("MenuMusicSource", true, false, MenuMusicVolume);
+        EnsureSpatialOneShotPool();
 
         drillingLoopSource.clip = drillingClip;
         alarmLoopSource.clip = alarmClip;
+        menuMusicSource.clip = menuMusicClip;
     }
 
     AudioSource CreateChildSource(string name, bool loop, bool playOnAwake, float volume)
@@ -288,6 +321,37 @@ public class AudioManager : MonoBehaviour
         source.spatialBlend = 0f;
         source.volume = volume;
         return source;
+    }
+
+    void EnsureSpatialOneShotPool()
+    {
+        spatialOneShotSources.Clear();
+        for (int i = 0; i < SpatialAudioPoolSize; i++)
+        {
+            AudioSource source = CreateChildSource($"SpatialOneShotSource_{i:00}", false, false, 0.8f);
+            ConfigureSpatialSource(source, 0.8f);
+            source.Stop();
+            source.clip = null;
+            spatialOneShotSources.Add(source);
+        }
+
+        nextSpatialOneShotSourceIndex = 0;
+    }
+
+    void StopSpatialOneShots()
+    {
+        for (int i = 0; i < spatialOneShotSources.Count; i++)
+        {
+            AudioSource source = spatialOneShotSources[i];
+            if (source == null)
+                continue;
+
+            source.Stop();
+            source.clip = null;
+        }
+
+        spatialOneShotsThisFrame = 0;
+        spatialOneShotFrame = -1;
     }
 
     void HookSceneButtons()
@@ -322,6 +386,131 @@ public class AudioManager : MonoBehaviour
     public void PlayCash()
     {
         PlayOneShot(cashClip != null ? cashClip : clickClip, 0.86f);
+    }
+
+    public void PlayMenuMusic()
+    {
+        if (menuMusicClip == null)
+            menuMusicClip = Resources.Load<AudioClip>(MenuMusicResourcePath);
+
+        if (menuMusicClip == null || menuMusicSource == null)
+            return;
+
+        if (shipReturnMusicPlaying &&
+            shipReturnMusicClip != null &&
+            menuMusicSource.clip == shipReturnMusicClip &&
+            menuMusicSource.isPlaying)
+        {
+            return;
+        }
+
+        CancelMenuMusicResumeRoutine();
+        shipReturnMusicPlaying = false;
+
+        if (menuMusicSource.clip != menuMusicClip)
+            menuMusicSource.clip = menuMusicClip;
+
+        menuMusicSource.loop = true;
+        menuMusicSource.volume = MenuMusicVolume;
+        if (!menuMusicSource.isPlaying)
+            menuMusicSource.Play();
+    }
+
+    public void RefreshMenuMusicForCurrentState()
+    {
+        if (ShouldMuteMenuMusicForRound())
+        {
+            StopMenuMusic();
+            return;
+        }
+
+        PlayMenuMusic();
+    }
+
+    public void StopMenuMusic()
+    {
+        CancelMenuMusicResumeRoutine();
+        shipReturnMusicPending = false;
+        shipReturnMusicPlaying = false;
+
+        if (menuMusicSource != null && menuMusicSource.isPlaying)
+            menuMusicSource.Stop();
+    }
+
+    bool ShouldMuteMenuMusicForRound()
+    {
+        if (PhotonNetwork.CurrentRoom == null)
+            return false;
+
+        string sessionState = RoomSettings.GetSessionState();
+        if (sessionState == RoomSettings.SessionStateInPlay)
+        {
+            return true;
+        }
+
+        return PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
+               value is bool started &&
+               started;
+    }
+
+    public void RequestShipReturnMusicForNextMenu()
+    {
+        shipReturnMusicPending = true;
+        TryPlayPendingShipReturnMusic();
+    }
+
+    void TryPlayPendingShipReturnMusic()
+    {
+        if (!shipReturnMusicPending || shipReturnMusicPlaying)
+            return;
+
+        if (PhotonNetwork.InRoom || ShouldMuteMenuMusicForRound())
+            return;
+
+        shipReturnMusicPending = false;
+        PlayShipReturnMusic();
+    }
+
+    public void PlayShipReturnMusic()
+    {
+        if (shipReturnMusicClip == null)
+            shipReturnMusicClip = Resources.Load<AudioClip>(ShipReturnMusicResourcePath);
+
+        if (shipReturnMusicClip == null || menuMusicSource == null)
+            return;
+
+        CancelMenuMusicResumeRoutine();
+        shipReturnMusicPlaying = true;
+
+        menuMusicSource.Stop();
+        menuMusicSource.clip = shipReturnMusicClip;
+        menuMusicSource.loop = false;
+        menuMusicSource.volume = MenuMusicVolume;
+        menuMusicSource.Play();
+
+        resumeMenuMusicRoutine = StartCoroutine(ResumeMenuMusicAfterShipReturn(shipReturnMusicClip));
+    }
+
+    IEnumerator ResumeMenuMusicAfterShipReturn(AudioClip playedClip)
+    {
+        float duration = playedClip != null ? Mathf.Max(0.05f, playedClip.length) : 0.05f;
+        yield return new WaitForSecondsRealtime(duration);
+
+        resumeMenuMusicRoutine = null;
+        if (!shipReturnMusicPlaying || menuMusicSource == null || menuMusicSource.clip != playedClip)
+            yield break;
+
+        shipReturnMusicPlaying = false;
+        PlayMenuMusic();
+    }
+
+    void CancelMenuMusicResumeRoutine()
+    {
+        if (resumeMenuMusicRoutine == null)
+            return;
+
+        StopCoroutine(resumeMenuMusicRoutine);
+        resumeMenuMusicRoutine = null;
     }
 
     public void PlayLaser()
@@ -462,6 +651,18 @@ public class AudioManager : MonoBehaviour
     public void PlayAstroCutterAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(AstroCutterClip, worldPosition, 0.72f);
+    }
+
+    public void PlayAlienArtifactActivatedAt(Vector3 worldPosition)
+    {
+        AudioClip clip = alienArtifactActivationClip != null
+            ? alienArtifactActivationClip
+            : gravitySquidTetherClip != null
+                ? gravitySquidTetherClip
+                : beaconSignalClip != null
+                    ? beaconSignalClip
+                    : shieldChargeClip;
+        PlaySpatialOneShot(clip, worldPosition, 0.9f);
     }
 
     public void PlayGuidanceSystemAt(Vector3 worldPosition)
@@ -616,20 +817,59 @@ public class AudioManager : MonoBehaviour
 
     void PlaySpatialOneShot(AudioClip clip, Vector3 worldPosition, float volumeScale)
     {
-        if (clip == null)
+        if (clip == null || !TryReserveSpatialOneShotThisFrame())
             return;
 
-        GameObject tempObject = new GameObject("SpatialAudio_" + clip.name);
-        tempObject.transform.position = worldPosition;
+        AudioSource source = GetSpatialOneShotSource();
+        if (source == null)
+            return;
 
-        AudioSource source = tempObject.AddComponent<AudioSource>();
+        source.Stop();
+        source.transform.position = worldPosition;
         ConfigureSpatialSource(source, volumeScale);
         source.clip = clip;
-        source.loop = false;
-        source.playOnAwake = false;
         source.Play();
+    }
 
-        Destroy(tempObject, clip.length + 0.1f);
+    bool TryReserveSpatialOneShotThisFrame()
+    {
+        int frame = Time.frameCount;
+        if (spatialOneShotFrame != frame)
+        {
+            spatialOneShotFrame = frame;
+            spatialOneShotsThisFrame = 0;
+        }
+
+        if (spatialOneShotsThisFrame >= MaxSpatialOneShotsPerFrame)
+            return false;
+
+        spatialOneShotsThisFrame++;
+        return true;
+    }
+
+    AudioSource GetSpatialOneShotSource()
+    {
+        if (spatialOneShotSources.Count == 0)
+            EnsureSpatialOneShotPool();
+
+        int count = spatialOneShotSources.Count;
+        if (count == 0)
+            return null;
+
+        for (int offset = 0; offset < count; offset++)
+        {
+            int index = (nextSpatialOneShotSourceIndex + offset) % count;
+            AudioSource source = spatialOneShotSources[index];
+            if (source == null || source.isPlaying)
+                continue;
+
+            nextSpatialOneShotSourceIndex = (index + 1) % count;
+            return source;
+        }
+
+        AudioSource fallback = spatialOneShotSources[nextSpatialOneShotSourceIndex];
+        nextSpatialOneShotSourceIndex = (nextSpatialOneShotSourceIndex + 1) % count;
+        return fallback;
     }
 
     public void ConfigureSpatialSource(AudioSource source, float volume)

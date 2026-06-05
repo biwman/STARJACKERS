@@ -99,6 +99,9 @@ public class Treasure : MonoBehaviourPun
 
     public void Highlight()
     {
+        if (isBeingCollected)
+            return;
+
         if (sr != null)
             sr.color = Color.green;
     }
@@ -113,5 +116,7 @@ public class Treasure : MonoBehaviourPun
     public void SetBeingCollectedRpc(bool value)
     {
         isBeingCollected = value;
+        if (value)
+            Unhighlight();
     }
 }

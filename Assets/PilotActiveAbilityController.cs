@@ -18,8 +18,22 @@ public sealed class PilotActiveAbilityController : MonoBehaviourPun
     const int SirNowitzkyBreachShots = 5;
     const float NovaCollectRangeMultiplier = 2.5f;
     const float NovaScavengerChannelDuration = 2.5f;
+    const int VectorBarrageMaxTargets = 5;
+    const float VectorBarrageHudDuration = 2f;
+    const float AtlasSuppressionDuration = 5f;
+    const float AtlasSuppressionRadius = 15f;
+    const float AtlasSuppressionSpeedMultiplier = 0.6f;
+    const float AtlasSuppressionFireIntervalMultiplier = 1.5f;
+    const float AtlasSuppressionReloadMultiplier = 1.5f;
+    const float AtlasSuppressionProjectileSpeedMultiplier = 0.65f;
 
     static readonly Dictionary<int, float> RoburMarkedTargets = new Dictionary<int, float>();
+
+    struct VectorBarrageTargetCandidate
+    {
+        public int ViewId;
+        public float DistanceSq;
+    }
 
     bool used;
     float activeUntil;
@@ -30,6 +44,11 @@ public sealed class PilotActiveAbilityController : MonoBehaviourPun
     public bool IsJakeBarrierActive => IsSelectedPilot(PilotCatalog.JakeId) && Time.time < activeUntil;
     public int SirNowitzkyBreachShotsRemaining => Mathf.Max(0, sirNowitzkyBreachShotsRemaining);
     public float ActiveRemainingSeconds => Mathf.Max(0f, activeUntil - Time.time);
+
+    public static void ResetForSessionTransition()
+    {
+        RoburMarkedTargets.Clear();
+    }
 
     void Update()
     {
@@ -186,6 +205,23 @@ public sealed class PilotActiveAbilityController : MonoBehaviourPun
             duration = AshSuperchargeDuration;
             photonView.RPC(nameof(ApplyAshSuperchargeRpc), RpcTarget.All, AshSuperchargeDuration);
         }
+        else if (string.Equals(pilotId, PilotCatalog.VectorId, StringComparison.Ordinal))
+        {
+            string targetViewIds = FindVectorBarrageTargetsOnMaster();
+            activated = !string.IsNullOrWhiteSpace(targetViewIds);
+            if (activated)
+            {
+                duration = VectorBarrageHudDuration;
+                photonView.RPC(nameof(FireVectorBarrageRpc), photonView.Owner, targetViewIds);
+            }
+        }
+        else if (string.Equals(pilotId, PilotCatalog.AtlasId, StringComparison.Ordinal))
+        {
+            ApplyAtlasSuppressionOnMaster();
+            activated = true;
+            duration = AtlasSuppressionDuration;
+            photonView.RPC(nameof(PlayAtlasSuppressorWaveRpc), RpcTarget.All, AtlasSuppressionRadius);
+        }
 
         if (!activated)
             return;
@@ -260,6 +296,20 @@ public sealed class PilotActiveAbilityController : MonoBehaviourPun
     void ApplyAshSuperchargeRpc(float duration)
     {
         AshSuperchargeStatus.Apply(gameObject, duration);
+    }
+
+    [PunRPC]
+    void FireVectorBarrageRpc(string targetViewIds)
+    {
+        PlayerShooting shooting = GetComponent<PlayerShooting>();
+        if (shooting != null)
+            shooting.TryFireVectorBarrage(targetViewIds);
+    }
+
+    [PunRPC]
+    void PlayAtlasSuppressorWaveRpc(float radius)
+    {
+        AtlasSuppressorWaveVfx.Spawn(transform.position, radius);
     }
 
     PhotonView FindNearestRoburMarkTarget()
@@ -370,6 +420,108 @@ public sealed class PilotActiveAbilityController : MonoBehaviourPun
             return false;
 
         if (candidate.IsAstronautControlled || candidate.IsEvacuationAnimating)
+            return false;
+
+        EnemyBot bot = candidate.GetComponent<EnemyBot>();
+        if (bot != null)
+            return bot.CanReceivePilotHostileEffect();
+
+        return candidate.photonView.Owner != null &&
+               photonView.Owner != null &&
+               candidate.photonView.Owner.ActorNumber != photonView.Owner.ActorNumber;
+    }
+
+    string FindVectorBarrageTargetsOnMaster()
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return string.Empty;
+
+        List<VectorBarrageTargetCandidate> candidates = new List<VectorBarrageTargetCandidate>();
+        PlayerHealth[] healths = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        Vector3 origin = transform.position;
+        for (int i = 0; i < healths.Length; i++)
+        {
+            PlayerHealth candidate = healths[i];
+            if (!IsValidVectorBarrageTarget(candidate))
+                continue;
+
+            PhotonView candidateView = candidate.photonView;
+            candidates.Add(new VectorBarrageTargetCandidate
+            {
+                ViewId = candidateView.ViewID,
+                DistanceSq = (candidate.transform.position - origin).sqrMagnitude
+            });
+        }
+
+        if (candidates.Count == 0)
+            return string.Empty;
+
+        candidates.Sort((a, b) => a.DistanceSq.CompareTo(b.DistanceSq));
+        List<int> selectedIds = new List<int>(VectorBarrageMaxTargets);
+        int count = Mathf.Min(VectorBarrageMaxTargets, candidates.Count);
+        for (int i = 0; i < count; i++)
+            selectedIds.Add(candidates[i].ViewId);
+
+        return BuildViewIdList(selectedIds);
+    }
+
+    bool IsValidVectorBarrageTarget(PlayerHealth candidate)
+    {
+        if (candidate == null || candidate.photonView == null || candidate.photonView == photonView || candidate.IsWreck || candidate.CurrentHP <= 0)
+            return false;
+
+        if (candidate.IsAstronautControlled || candidate.IsEvacuationAnimating)
+            return false;
+
+        if (candidate.GetComponent<LureBeaconDecoy>() != null || candidate.GetComponent<PlayerDeployableBase>() != null)
+            return false;
+
+        EnemyBot bot = candidate.GetComponent<EnemyBot>();
+        if (bot != null)
+            return bot.CanReceivePilotHostileEffect();
+
+        return candidate.photonView.Owner != null &&
+               photonView.Owner != null &&
+               candidate.photonView.Owner.ActorNumber != photonView.Owner.ActorNumber;
+    }
+
+    void ApplyAtlasSuppressionOnMaster()
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        float radiusSq = AtlasSuppressionRadius * AtlasSuppressionRadius;
+        Vector3 origin = transform.position;
+        PlayerHealth[] healths = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < healths.Length; i++)
+        {
+            PlayerHealth candidate = healths[i];
+            if (!IsValidAtlasSuppressionTarget(candidate))
+                continue;
+
+            if ((candidate.transform.position - origin).sqrMagnitude > radiusSq)
+                continue;
+
+            candidate.photonView.RPC(
+                nameof(PlayerHealth.ApplyAtlasSuppressionRpc),
+                RpcTarget.All,
+                AtlasSuppressionDuration,
+                AtlasSuppressionSpeedMultiplier,
+                AtlasSuppressionFireIntervalMultiplier,
+                AtlasSuppressionReloadMultiplier,
+                AtlasSuppressionProjectileSpeedMultiplier);
+        }
+    }
+
+    bool IsValidAtlasSuppressionTarget(PlayerHealth candidate)
+    {
+        if (candidate == null || candidate.photonView == null || candidate.photonView == photonView || candidate.IsWreck || candidate.CurrentHP <= 0)
+            return false;
+
+        if (candidate.IsAstronautControlled || candidate.IsEvacuationAnimating)
+            return false;
+
+        if (candidate.GetComponent<LureBeaconDecoy>() != null || candidate.GetComponent<PlayerDeployableBase>() != null)
             return false;
 
         EnemyBot bot = candidate.GetComponent<EnemyBot>();
