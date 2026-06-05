@@ -12,6 +12,7 @@ using UnityEngine.UI;
 public class PlayerShooting : MonoBehaviourPun
 {
     const float AutoAimRange = 13f;
+    const float AutoAimAcquireRangeBonus = 1.25f;
     const float ManualAimThreshold = 0.35f;
     const float DefaultBulletRangeMultiplier = 15f;
     const float ComplexTapMaxDuration = 0.44f;
@@ -97,6 +98,13 @@ public class PlayerShooting : MonoBehaviourPun
         public bool AshEmergencyReloadPending;
     }
 
+    struct AutoAimTargetResult
+    {
+        public PlayerHealth Health;
+        public Vector2 AimPoint;
+        public int ViewId;
+    }
+
     public Joystick shootJoystick;
     public GameObject bulletPrefab;
     public float bulletSpeed = 10f;
@@ -162,6 +170,7 @@ public class PlayerShooting : MonoBehaviourPun
     bool complexSuperCanceledByCenteredAim;
     int rocketLockCandidateViewId;
     int rocketLockedTargetViewId;
+    int simpleAutoAimTargetViewId;
     float rocketLockStartedAt;
     bool rocketLockFeedbackPlayed;
     Vector2 complexLastAimDirection = Vector2.up;
@@ -408,7 +417,7 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (Time.time >= nextFireTime)
         {
-            if (Shoot(direction.normalized))
+            if (Shoot(direction.normalized, simpleAutoAimTargetViewId))
             {
                 ConsumeAmmo();
                 nextFireTime = Time.time + fireRate * GetFireIntervalMultiplier();
@@ -527,18 +536,30 @@ public class PlayerShooting : MonoBehaviourPun
             return;
         }
 
+        float markerThreshold = GetManualShootMarkerThreshold(profile);
+        bool hadMarker = complexShootMaxDragMagnitude >= markerThreshold;
         bool wasTap = IsAdvancedShootJoystickEnabled()
             ? complexShootMaxDragMagnitude <= ComplexTapMaxDragMagnitude
             : Time.time - complexShootPressStartedAt <= ComplexTapMaxDuration &&
               complexShootMaxDragMagnitude <= ComplexTapMaxDragMagnitude;
+        bool useAutoAim = !hadMarker || wasTap;
 
-        Vector2 direction = wasTap
-            ? ResolveComplexAutoAimDirection(profile)
-            : ResolveSafeAimDirection(complexLastAimDirection);
-        Vector2 targetPoint = wasTap && IsArcWeaponProfile(profile)
-            ? ResolveComplexAutoAimTargetPoint(profile)
-            : complexLastAimTargetPoint;
-        int rocketTargetViewId = IsRocketWeaponProfile(profile) ? rocketLockedTargetViewId : 0;
+        Vector2 direction;
+        Vector2 targetPoint;
+        int autoAimTargetViewId = 0;
+        if (useAutoAim)
+        {
+            ResolveComplexAutoAim(profile, out direction, out targetPoint, out autoAimTargetViewId);
+        }
+        else
+        {
+            direction = ResolveSafeAimDirection(complexLastAimDirection);
+            targetPoint = complexLastAimTargetPoint;
+        }
+
+        int rocketTargetViewId = IsRocketWeaponProfile(profile)
+            ? (useAutoAim ? autoAimTargetViewId : rocketLockedTargetViewId)
+            : 0;
 
         complexShootWasPressed = false;
         complexShootCanceledByCenteredAim = false;
@@ -659,6 +680,7 @@ public class PlayerShooting : MonoBehaviourPun
     {
         direction = ResolveSafeAimDirection(direction);
         float range = GetComplexRangeWorld(profile);
+        Vector2 origin = transform.position;
         PlayerHealth[] targets = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         PlayerHealth bestTarget = null;
         float bestScore = float.MaxValue;
@@ -669,7 +691,8 @@ public class PlayerShooting : MonoBehaviourPun
             if (!IsValidRocketLockTarget(target))
                 continue;
 
-            Vector2 toTarget = target.transform.position - transform.position;
+            Vector2 targetPoint = GetAutoAimTargetPoint(target);
+            Vector2 toTarget = targetPoint - origin;
             float projection = Vector2.Dot(toTarget, direction);
             if (projection < 0.35f || projection > range)
                 continue;
@@ -679,7 +702,7 @@ public class PlayerShooting : MonoBehaviourPun
             if (lateralDistance > lockRadius)
                 continue;
 
-            if (IsLineBlockedByObstacle(transform.position, target.transform.position, target.transform))
+            if (IsLineBlockedByObstacle(origin, targetPoint, target.transform))
                 continue;
 
             float score = (lateralDistance * 4f) + (projection * 0.035f);
@@ -700,7 +723,8 @@ public class PlayerShooting : MonoBehaviourPun
         if (!IsValidRocketLockTarget(target))
             return false;
 
-        Vector2 toTarget = target.transform.position - transform.position;
+        Vector2 targetPoint = GetAutoAimTargetPoint(target);
+        Vector2 toTarget = targetPoint - (Vector2)transform.position;
         float distance = toTarget.magnitude;
         if (distance <= 0.001f || distance > GetComplexRangeWorld(profile) * 1.15f)
             return false;
@@ -709,22 +733,12 @@ public class PlayerShooting : MonoBehaviourPun
         if (angle > RocketLockBreakAngle)
             return false;
 
-        return !IsLineBlockedByObstacle(transform.position, target.transform.position, target.transform);
+        return !IsLineBlockedByObstacle(transform.position, targetPoint, target.transform);
     }
 
     bool IsValidRocketLockTarget(PlayerHealth target)
     {
-        if (target == null || target.IsWreck || target.photonView == null)
-            return false;
-
-        if (target.photonView.ViewID == (photonView != null ? photonView.ViewID : 0))
-            return false;
-
-        if (target.GetComponent<LureBeaconDecoy>() != null)
-            return false;
-
-        HideInNebulaTarget nebulaState = target.GetComponent<HideInNebulaTarget>();
-        return nebulaState == null || !nebulaState.IsHiddenFromLocalPlayer();
+        return IsValidAutoAimTarget(target);
     }
 
     float ResolveRocketLockRadius(PlayerHealth target)
@@ -828,15 +842,27 @@ public class PlayerShooting : MonoBehaviourPun
             return true;
         }
 
+        bool hadMarker = complexSuperMaxDragMagnitude >= ManualAimThreshold;
         bool wasTap = Time.time - complexSuperPressStartedAt <= ComplexTapMaxDuration &&
                       complexSuperMaxDragMagnitude <= ComplexTapMaxDragMagnitude;
-        Vector2 direction = wasTap
-            ? ResolveComplexAutoAimDirection(superProfile)
-            : ResolveSafeAimDirection(complexLastSuperAimDirection);
-        Vector2 targetPoint = wasTap && IsArcWeaponProfile(superProfile)
-            ? ResolveComplexAutoAimTargetPoint(superProfile)
-            : complexLastSuperAimTargetPoint;
-        int rocketTargetViewId = IsRocketWeaponProfile(superProfile) ? rocketLockedTargetViewId : 0;
+        bool useAutoAim = !hadMarker || wasTap;
+
+        Vector2 direction;
+        Vector2 targetPoint;
+        int autoAimTargetViewId = 0;
+        if (useAutoAim)
+        {
+            ResolveComplexAutoAim(superProfile, out direction, out targetPoint, out autoAimTargetViewId);
+        }
+        else
+        {
+            direction = ResolveSafeAimDirection(complexLastSuperAimDirection);
+            targetPoint = complexLastSuperAimTargetPoint;
+        }
+
+        int rocketTargetViewId = IsRocketWeaponProfile(superProfile)
+            ? (useAutoAim ? autoAimTargetViewId : rocketLockedTargetViewId)
+            : 0;
 
         complexSuperWasPressed = false;
         complexSuperCanceledByCenteredAim = false;
@@ -1370,83 +1396,101 @@ public class PlayerShooting : MonoBehaviourPun
         return landingPoint;
     }
 
-    Vector2 ResolveComplexAutoAimDirection(WeaponAttackProfile profile)
+    void ResolveComplexAutoAim(WeaponAttackProfile profile, out Vector2 direction, out Vector2 targetPoint, out int targetViewId)
     {
         float range = GetComplexRangeWorld(profile);
-        PlayerHealth[] targets = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
-        Transform bestTarget = null;
-        float bestDistance = float.MaxValue;
-
-        for (int i = 0; i < targets.Length; i++)
+        bool blockByObstacles = !IsArcWeaponProfile(profile);
+        if (TryResolveAutoAimTarget(range, blockByObstacles, out AutoAimTargetResult target))
         {
-            PlayerHealth target = targets[i];
-            if (target == null || target.IsWreck || target.photonView == null || target.photonView.ViewID == photonView.ViewID)
-                continue;
-
-            if (target.GetComponent<LureBeaconDecoy>() != null)
-                continue;
-
-            HideInNebulaTarget nebulaState = target.GetComponent<HideInNebulaTarget>();
-            if (nebulaState != null && nebulaState.IsHiddenFromLocalPlayer())
-                continue;
-
-            Vector2 targetPosition = target.transform.position;
-            float distance = Vector2.Distance(transform.position, targetPosition);
-            if (distance > range || distance >= bestDistance)
-                continue;
-
-            if (!IsArcWeaponProfile(profile) &&
-                IsLineBlockedByObstacle(transform.position, targetPosition, target.transform))
-                continue;
-
-            bestDistance = distance;
-            bestTarget = target.transform;
+            direction = ResolveSafeAimDirection(target.AimPoint - (Vector2)transform.position);
+            targetPoint = target.AimPoint;
+            targetViewId = target.ViewId;
+            return;
         }
 
-        if (bestTarget != null)
-            return ResolveSafeAimDirection(bestTarget.position - transform.position);
+        direction = ResolveSafeAimDirection(transform.up);
+        targetPoint = (Vector2)transform.position + (direction * range);
+        targetViewId = 0;
+    }
 
-        return transform.up;
+    Vector2 ResolveComplexAutoAimDirection(WeaponAttackProfile profile)
+    {
+        ResolveComplexAutoAim(profile, out Vector2 direction, out _, out _);
+        return direction;
     }
 
     Vector2 ResolveComplexAutoAimTargetPoint(WeaponAttackProfile profile)
     {
-        float range = GetComplexRangeWorld(profile);
-        Vector2 direction = ResolveComplexAutoAimDirection(profile);
+        ResolveComplexAutoAim(profile, out _, out Vector2 targetPoint, out _);
+        return targetPoint;
+    }
+
+    bool TryResolveAutoAimTarget(float range, bool blockByObstacles, out AutoAimTargetResult result)
+    {
+        result = default;
+        Vector2 origin = transform.position;
+        float maxDistance = Mathf.Max(0.1f, range) + AutoAimAcquireRangeBonus;
         PlayerHealth[] targets = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
-        Transform bestTarget = null;
         float bestDistance = float.MaxValue;
 
         for (int i = 0; i < targets.Length; i++)
         {
             PlayerHealth target = targets[i];
-            if (target == null || target.IsWreck || target.photonView == null || target.photonView.ViewID == photonView.ViewID)
+            if (!IsValidAutoAimTarget(target))
                 continue;
 
-            if (target.GetComponent<LureBeaconDecoy>() != null)
+            Vector2 aimPoint = GetAutoAimTargetPoint(target);
+            Vector2 closestPoint = GetAutoAimClosestPoint(target, origin, aimPoint);
+            float distance = Vector2.Distance(origin, closestPoint);
+            if (distance > maxDistance || distance >= bestDistance)
                 continue;
 
-            HideInNebulaTarget nebulaState = target.GetComponent<HideInNebulaTarget>();
-            if (nebulaState != null && nebulaState.IsHiddenFromLocalPlayer())
-                continue;
-
-            Vector2 targetPosition = target.transform.position;
-            float distance = Vector2.Distance(transform.position, targetPosition);
-            if (distance > range || distance >= bestDistance)
-                continue;
-
-            if (!IsArcWeaponProfile(profile) &&
-                IsLineBlockedByObstacle(transform.position, targetPosition, target.transform))
+            if (blockByObstacles && IsLineBlockedByObstacle(origin, aimPoint, target.transform))
                 continue;
 
             bestDistance = distance;
-            bestTarget = target.transform;
+            result = new AutoAimTargetResult
+            {
+                Health = target,
+                AimPoint = aimPoint,
+                ViewId = target.photonView != null ? target.photonView.ViewID : 0
+            };
         }
 
-        if (bestTarget != null)
-            return bestTarget.position;
+        return result.Health != null;
+    }
 
-        return (Vector2)transform.position + (direction * range);
+    bool IsValidAutoAimTarget(PlayerHealth target)
+    {
+        if (target == null || target.IsWreck || target.IsEvacuationAnimating || target.CurrentHP <= 0 || target.photonView == null)
+            return false;
+
+        if (target.photonView.ViewID == (photonView != null ? photonView.ViewID : 0))
+            return false;
+
+        if (target.GetComponent<LureBeaconDecoy>() != null)
+            return false;
+
+        HideInNebulaTarget nebulaState = target.GetComponent<HideInNebulaTarget>();
+        return nebulaState == null || !nebulaState.IsHiddenFromLocalPlayer();
+    }
+
+    Vector2 GetAutoAimTargetPoint(PlayerHealth target)
+    {
+        Collider2D targetCollider = target != null ? target.GetComponentInChildren<Collider2D>() : null;
+        if (targetCollider != null)
+            return targetCollider.bounds.center;
+
+        return target != null ? (Vector2)target.transform.position : (Vector2)transform.position;
+    }
+
+    Vector2 GetAutoAimClosestPoint(PlayerHealth target, Vector2 origin, Vector2 fallback)
+    {
+        Collider2D targetCollider = target != null ? target.GetComponentInChildren<Collider2D>() : null;
+        if (targetCollider != null && targetCollider.enabled)
+            return targetCollider.ClosestPoint(origin);
+
+        return fallback;
     }
 
     bool IsLineBlockedByObstacle(Vector2 start, Vector2 end, Transform target)
@@ -1877,51 +1921,39 @@ public class PlayerShooting : MonoBehaviourPun
 
     Vector2 ResolveManualAimDirection()
     {
+        simpleAutoAimTargetViewId = 0;
         Vector2 rawDirection = shootJoystick != null ? shootJoystick.inputVector : Vector2.zero;
         if (rawDirection.magnitude >= ManualAimThreshold)
             return rawDirection.normalized;
 
-        return FindAutoAimDirection();
+        return FindAutoAimDirection(out simpleAutoAimTargetViewId);
     }
 
     Vector2 FindAutoAimDirection()
     {
-        PlayerHealth[] targets = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
-        Transform bestTarget = null;
-        float bestDistance = float.MaxValue;
+        return FindAutoAimDirection(out _);
+    }
 
-        for (int i = 0; i < targets.Length; i++)
+    Vector2 FindAutoAimDirection(out int targetViewId)
+    {
+        targetViewId = 0;
+        float range = GetSimpleAutoAimRange();
+        if (TryResolveAutoAimTarget(range, false, out AutoAimTargetResult target))
         {
-            PlayerHealth target = targets[i];
-            if (target == null || target.IsWreck || target.photonView == null || target.photonView.ViewID == photonView.ViewID)
-                continue;
-
-            if (target.GetComponent<LureBeaconDecoy>() != null)
-                continue;
-
-            HideInNebulaTarget nebulaState = target.GetComponent<HideInNebulaTarget>();
-            if (nebulaState != null && nebulaState.IsHiddenFromLocalPlayer())
-                continue;
-
-            float distance = Vector2.Distance(transform.position, target.transform.position);
-            if (distance > AutoAimRange || distance >= bestDistance)
-                continue;
-
-            bestDistance = distance;
-            bestTarget = target.transform;
-        }
-
-        if (bestTarget != null)
-        {
-            Vector2 aim = (bestTarget.position - transform.position);
-            if (aim.sqrMagnitude > 0.001f)
-                return aim.normalized;
+            targetViewId = target.ViewId;
+            return ResolveSafeAimDirection(target.AimPoint - (Vector2)transform.position);
         }
 
         return transform.up;
     }
 
-    bool Shoot(Vector2 direction)
+    float GetSimpleAutoAimRange()
+    {
+        float configuredRange = GetOwnerLengthForRange() * Mathf.Max(0.1f, bulletRangeMultiplier);
+        return Mathf.Max(AutoAimRange, configuredRange);
+    }
+
+    bool Shoot(Vector2 direction, int homingTargetViewId = 0)
     {
         if (bulletPrefab == null)
         {
@@ -1962,11 +1994,11 @@ public class PlayerShooting : MonoBehaviourPun
             for (int i = 0; i < count; i++)
             {
                 Vector2 shotDirection = IsDoubleRocketLauncherProfile(profile)
-                    ? ResolveDoubleRocketProjectileDirection(direction.normalized, i, count, 0)
+                    ? ResolveDoubleRocketProjectileDirection(direction.normalized, i, count, homingTargetViewId)
                     : ResolveComplexProjectileDirection(direction.normalized, profile.SpreadAngle, i, count);
                 Vector3 spawnPos = ResolveComplexProjectileSpawnPosition(profile, shotDirection, i, count);
                 Vector2 targetPoint = (Vector2)spawnPos + (shotDirection.normalized * GetComplexRangeWorld(profile));
-                spawned |= SpawnComplexBullet(profile, shotDirection.normalized, spawnPos, ownerId, targetPoint, 0, pilotBreachProjectile);
+                spawned |= SpawnComplexBullet(profile, shotDirection.normalized, spawnPos, ownerId, targetPoint, homingTargetViewId, pilotBreachProjectile);
             }
         }
         else if (ShouldUseArcSimpleShot(profile))
@@ -2689,7 +2721,9 @@ public class PlayerShooting : MonoBehaviourPun
         complexLastAimDirection = transform.up;
         complexLastAimTargetPoint = (Vector2)transform.position + ((Vector2)transform.up * GetComplexRangeWorld(profile));
         HideAimMarker();
-        return TryFireComplexAttack(profile, ResolveComplexAutoAimDirection(profile), ResolveComplexAutoAimTargetPoint(profile), true, false);
+        ResolveComplexAutoAim(profile, out Vector2 direction, out Vector2 targetPoint, out int targetViewId);
+        int rocketTargetViewId = IsRocketWeaponProfile(profile) ? targetViewId : 0;
+        return TryFireComplexAttack(profile, direction, targetPoint, true, false, rocketTargetViewId);
     }
 
     public bool ReleaseAdvancedFloatingAim()

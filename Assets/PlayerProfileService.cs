@@ -1044,10 +1044,6 @@ public class PlayerProfileService : MonoBehaviour
         if (basePrice <= 0)
             return 0;
 
-        EnsurePilotDefaults();
-        if (CurrentProfile != null && string.Equals(CurrentProfile.SelectedPilotId, PilotCatalog.CharlieSmartId, StringComparison.Ordinal))
-            return Mathf.Max(1, Mathf.CeilToInt(basePrice * 0.95f));
-
         return basePrice;
     }
 

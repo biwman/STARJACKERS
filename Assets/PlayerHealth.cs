@@ -616,7 +616,6 @@ public class PlayerHealth : MonoBehaviourPun
 
         WeaponDamageMultipliers damageMultipliers = WeaponDamageInteractionCatalog.ResolveMultipliers(hitContext);
         RememberDamageContext(hitContext, damageMultipliers);
-        string damageSource = hitContext.DamageSource ?? string.Empty;
         int previousHp = currentHP;
         int previousShield = currentShield;
         int rawShieldDamage = Mathf.Max(0, shieldDmg);
@@ -726,7 +725,6 @@ public class PlayerHealth : MonoBehaviourPun
 
         WeaponDamageMultipliers damageMultipliers = WeaponDamageInteractionCatalog.ResolveMultipliers(hitContext);
         RememberDamageContext(hitContext, damageMultipliers);
-        string damageSource = hitContext.DamageSource ?? string.Empty;
         int previousHp = currentHP;
         int previousShield = currentShield;
         int pilotAdjustedDamage = ApplyPilotDamageModifiers(Mathf.Max(0, dmg), attackerViewID, hitContext);
@@ -937,8 +935,9 @@ public class PlayerHealth : MonoBehaviourPun
         LastDamageHpMultiplier = damageMultipliers.HpMultiplier;
     }
 
-    int ApplyPilotDamageModifiers(int damage, int attackerViewID, string damageSource)
+    int ApplyPilotDamageModifiers(int damage, int attackerViewID, WeaponHitContext hitContext)
     {
+        string damageSource = hitContext.DamageSource ?? string.Empty;
         int result = Mathf.Max(0, damage);
         if (result <= 0)
             return 0;
@@ -959,26 +958,27 @@ public class PlayerHealth : MonoBehaviourPun
             result = Mathf.Max(1, Mathf.RoundToInt(result * 0.5f));
         }
 
-        if (IsHumanShipControlled && HasEquippedItem(InventoryItemCatalog.KineticDampenerId) &&
-            IsPhysicalImpactDamage(attackerViewID, damageSource))
+        if (IsHumanShipControlled && HasEquippedItem(InventoryItemCatalog.KineticDampenerId))
         {
-            result = Mathf.Max(1, Mathf.RoundToInt(result * KineticDampenerDamageMultiplier));
-        }
+            float kineticMultiplier = 1f;
+            if (IsPhysicalImpactDamage(hitContext, attackerViewID, damageSource))
+                kineticMultiplier = Mathf.Min(kineticMultiplier, KineticDampenerDamageMultiplier);
 
-        if (IsHumanShipControlled && HasEquippedItem(InventoryItemCatalog.KineticDampenerId) &&
-            IsExplosiveDamageSource(damageSource))
-        {
-            result = Mathf.Max(1, Mathf.RoundToInt(result * KineticDampenerExplosiveDamageMultiplier));
+            if (IsExplosiveDamage(hitContext, damageSource))
+                kineticMultiplier = Mathf.Min(kineticMultiplier, KineticDampenerExplosiveDamageMultiplier);
+
+            if (kineticMultiplier < 1f)
+                result = Mathf.Max(1, Mathf.RoundToInt(result * kineticMultiplier));
         }
 
         if (IsHumanShipControlled && HasEquippedItem(InventoryItemCatalog.StrongPlatingId) &&
-            IsEnvironmentalDamageSource(damageSource))
+            IsEnvironmentalDamage(hitContext, damageSource))
         {
             result = Mathf.Max(1, Mathf.RoundToInt(result * StrongPlatingEnvironmentalDamageMultiplier));
         }
 
         if (IsHumanShipControlled && HasEquippedItem(InventoryItemCatalog.BulwarkProjectorId) &&
-            IsLaserWeaponDamage(attackerViewID, damageSource))
+            IsLaserWeaponDamage(hitContext, attackerViewID, damageSource))
         {
             result = Mathf.Max(1, Mathf.RoundToInt(result * BulwarkProjectorLaserDamageMultiplier));
         }
@@ -1018,11 +1018,24 @@ public class PlayerHealth : MonoBehaviourPun
         return bot != null && bot.Kind == kind;
     }
 
-    bool IsPhysicalImpactDamage(int attackerViewID, string damageSource)
+    bool IsLegacyPhysicalImpactDamage(int attackerViewID, string damageSource)
     {
         return string.Equals(damageSource, PilotDamageSourceRamming, System.StringComparison.Ordinal) ||
                IsDamageFromSpaceMine(attackerViewID) ||
                IsDamageFromEnemyKind(attackerViewID, EnemyBotKind.SpaceManta);
+    }
+
+    bool IsPhysicalImpactDamage(WeaponHitContext hitContext, int attackerViewID, string damageSource)
+    {
+        return hitContext.DamageType == WeaponDamageType.Kinetic ||
+               hitContext.DeliveryMethod == WeaponDeliveryMethod.ContactDash ||
+               IsLegacyPhysicalImpactDamage(attackerViewID, damageSource);
+    }
+
+    bool IsExplosiveDamage(WeaponHitContext hitContext, string damageSource)
+    {
+        return hitContext.DamageType == WeaponDamageType.Explosive ||
+               IsExplosiveDamageSource(damageSource);
     }
 
     bool IsExplosiveDamageSource(string damageSource)
@@ -1036,8 +1049,17 @@ public class PlayerHealth : MonoBehaviourPun
                string.Equals(damageSource, NebulaDamageSource, System.StringComparison.Ordinal);
     }
 
-    bool IsLaserWeaponDamage(int attackerViewID, string damageSource)
+    bool IsEnvironmentalDamage(WeaponHitContext hitContext, string damageSource)
     {
+        return hitContext.DamageType == WeaponDamageType.Environmental ||
+               IsEnvironmentalDamageSource(damageSource);
+    }
+
+    bool IsLaserWeaponDamage(WeaponHitContext hitContext, int attackerViewID, string damageSource)
+    {
+        if (hitContext.DamageType == WeaponDamageType.Laser)
+            return true;
+
         if (string.Equals(damageSource, DamageSourceLaser, System.StringComparison.Ordinal))
             return true;
 
@@ -1831,6 +1853,16 @@ public class PlayerHealth : MonoBehaviourPun
 
         if (AtlasPilotRoundTracker.GetNetCargoValueAstrons(profile) >= PilotCatalog.AtlasRequiredNetCargoAstrons)
             await PlayerProfileService.Instance.RecordPilotAtlasMapReturnAsync(RoomSettings.GetSelectedLobbyMapId());
+
+        if (ShouldAwardCharlieCargoGrowthExtractionBonus(profile))
+            await PlayerProfileService.Instance.AddAstronsAsync(1000);
+    }
+
+    bool ShouldAwardCharlieCargoGrowthExtractionBonus(PlayerProfileData profile)
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        return PilotCatalog.IsSelectedPilot(owner, PilotCatalog.CharlieSmartId) &&
+               AtlasPilotRoundTracker.GetNetOccupiedCargoSlots(profile) >= 6;
     }
 
     [PunRPC]
@@ -1839,7 +1871,7 @@ public class PlayerHealth : MonoBehaviourPun
         if (!photonView.IsMine)
             return;
 
-        await PlayerProfileService.Instance.AddAstronsAsync(1000);
+        await PlayerProfileService.Instance.AddAstronsAsync(2000);
     }
 
     [PunRPC]
@@ -3502,7 +3534,6 @@ public class AstronautSurvivor : MonoBehaviourPun
     const int EscapePodHpBonus = 50;
     const float EscapePodSpeedMultiplier = 3f;
     const float EmergencySuitBeaconProtectionDuration = 3f;
-    const float EmergencySuitBeaconSpeedDuration = 5f;
     const float EmergencySuitBeaconSpeedMultiplier = 1.35f;
 
     static Sprite cachedAstronautSprite;
@@ -3517,7 +3548,6 @@ public class AstronautSurvivor : MonoBehaviourPun
     Vector2 enemyTargetPosition;
     SpriteRenderer cachedRenderer;
     Rigidbody2D cachedBody;
-    Coroutine emergencySuitBeaconSpeedRoutine;
     Coroutine enemyEvacuationRoutine;
 
     public bool IsEscapePodMode => isEscapePod;
@@ -3605,11 +3635,11 @@ public class AstronautSurvivor : MonoBehaviourPun
             {
                 float astronautSpeed = Mathf.Max(PlayerAstronautMinimumSpeed, movement.speed / PlayerAstronautSpeedDivisor);
                 float survivorSpeed = isEscapePod ? astronautSpeed * EscapePodSpeedMultiplier : astronautSpeed;
+                if (hasEmergencySuitBeacon)
+                    survivorSpeed *= EmergencySuitBeaconSpeedMultiplier;
+
                 movement.speed = survivorSpeed;
                 movement.boosterDuration = 9999f;
-
-                if (hasEmergencySuitBeacon)
-                    emergencySuitBeaconSpeedRoutine = StartCoroutine(EmergencySuitBeaconSpeedRoutine(movement, survivorSpeed));
             }
         }
 
@@ -4311,20 +4341,6 @@ public class AstronautSurvivor : MonoBehaviourPun
 
         result = 0f;
         return false;
-    }
-
-    IEnumerator EmergencySuitBeaconSpeedRoutine(PlayerMovement movement, float baseAstronautSpeed)
-    {
-        if (movement == null)
-            yield break;
-
-        movement.speed = Mathf.Max(movement.speed, baseAstronautSpeed * EmergencySuitBeaconSpeedMultiplier);
-        yield return new WaitForSeconds(EmergencySuitBeaconSpeedDuration);
-
-        if (movement != null)
-            movement.speed = baseAstronautSpeed;
-
-        emergencySuitBeaconSpeedRoutine = null;
     }
 
     void LateUpdate()

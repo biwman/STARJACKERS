@@ -16,18 +16,30 @@ public static class NewItemsRuntime
             return false;
 
         Vector3 spawnPosition = ResolveRearSpawnPosition(owner.transform, 0.95f, 0.42f);
+        int ownerActorNumber = ResolveOwnerActorNumber(owner.photonView);
         GameObject turretObject = PhotonNetwork.InstantiateRoomObject(
             "Player",
             spawnPosition,
             owner.transform.rotation,
             0,
-            new object[] { PlayerDeployableRuntime.AutoTurretMarker, owner.photonView.ViewID });
+            new object[] { PlayerDeployableRuntime.AutoTurretMarker, owner.photonView.ViewID, ownerActorNumber });
 
         if (turretObject == null)
             return false;
 
         PlayerDeployableRuntime.EnsureAttached(turretObject);
         return true;
+    }
+
+    static int ResolveOwnerActorNumber(PhotonView view)
+    {
+        if (view == null)
+            return 0;
+
+        if (view.Owner != null && view.Owner.ActorNumber > 0)
+            return view.Owner.ActorNumber;
+
+        return Mathf.Max(0, view.OwnerActorNr);
     }
 
     public static bool TryDeploySpaceBomb(PlayerShooting owner)
@@ -1751,8 +1763,7 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
 
     Transform FindNearestTarget()
     {
-        PhotonView ownerView = ownerShipViewId > 0 ? PhotonView.Find(ownerShipViewId) : null;
-        int ownerActorNumber = ownerView != null ? ownerView.OwnerActorNr : -1;
+        int ownerActorNumber = ResolveOwnerActorNumber();
         PlayerHealth[] healths = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
         Transform best = null;
         float bestDistance = float.MaxValue;
@@ -1773,7 +1784,10 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
             else
             {
                 EnemyBot enemyBot = candidate.GetComponent<EnemyBot>();
-                bool hostile = enemyBot != null || candidate.IsBotControlled || (ownerActorNumber > 0 && candidate.photonView.OwnerActorNr != ownerActorNumber);
+                bool hostile = enemyBot != null ||
+                               candidate.IsBotControlled ||
+                               HasDifferentPhotonOwner(candidate, ownerActorNumber) ||
+                               IsOtherPlayerShipTarget(candidate, ownerActorNumber);
                 if (!hostile)
                     continue;
             }
@@ -1789,10 +1803,49 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
         return best;
     }
 
+    int ResolveOwnerActorNumber()
+    {
+        PhotonView ownerView = ownerShipViewId > 0 ? PhotonView.Find(ownerShipViewId) : null;
+        if (ownerView != null && ownerView.OwnerActorNr > 0)
+            return ownerView.OwnerActorNr;
+
+        object[] data = photonView != null ? photonView.InstantiationData : null;
+        if (data != null &&
+            data.Length > 2 &&
+            data[0] is string marker &&
+            marker == PlayerDeployableRuntime.AutoTurretMarker)
+        {
+            return Mathf.Max(0, ConvertToInt(data[2]));
+        }
+
+        return 0;
+    }
+
+    static bool HasDifferentPhotonOwner(PlayerHealth candidate, int ownerActorNumber)
+    {
+        return ownerActorNumber > 0 &&
+               candidate != null &&
+               candidate.photonView != null &&
+               candidate.photonView.OwnerActorNr != ownerActorNumber;
+    }
+
+    static bool IsOtherPlayerShipTarget(PlayerHealth candidate, int ownerActorNumber)
+    {
+        if (!IsPlayerShipTarget(candidate))
+            return false;
+
+        int candidateActorNumber = candidate.photonView.OwnerActorNr;
+        return ownerActorNumber <= 0 ||
+               candidateActorNumber <= 0 ||
+               candidateActorNumber != ownerActorNumber;
+    }
+
     static bool IsPlayerShipTarget(PlayerHealth candidate)
     {
         return candidate != null &&
+               candidate.photonView != null &&
                !candidate.IsBotControlled &&
+               !candidate.IsNeutralRiderControlled &&
                !candidate.IsAstronautControlled &&
                candidate.GetComponent<PlayerDeployableBase>() == null &&
                candidate.GetComponent<LureBeaconDecoy>() == null;
@@ -2370,10 +2423,10 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
         trailObject.transform.SetParent(transform, false);
         trailObject.transform.localPosition = new Vector3(0f, -0.42f, 0.05f);
         engineTrail = trailObject.AddComponent<TrailRenderer>();
+        EngineTrailVisualUtility.ConfigureTrailBase(engineTrail);
         engineTrail.time = 0.62f;
         engineTrail.minVertexDistance = 0.02f;
         engineTrail.widthMultiplier = 0.16f;
-        engineTrail.material = new Material(Shader.Find("Sprites/Default"));
         engineTrail.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
         engineTrail.sortingOrder = 35;
         engineTrail.emitting = false;
@@ -2798,10 +2851,10 @@ public sealed class SpaceDrillDeployable : PlayerDeployableBase
         trailObject.transform.SetParent(transform, false);
         trailObject.transform.localPosition = new Vector3(0f, -0.22f, 0.05f);
         engineTrail = trailObject.AddComponent<TrailRenderer>();
+        EngineTrailVisualUtility.ConfigureTrailBase(engineTrail);
         engineTrail.time = 0.42f;
         engineTrail.minVertexDistance = 0.025f;
         engineTrail.widthMultiplier = 0.08f;
-        engineTrail.material = new Material(Shader.Find("Sprites/Default"));
         engineTrail.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
         engineTrail.sortingOrder = 30;
         Gradient gradient = new Gradient();
@@ -3073,10 +3126,10 @@ public sealed class DropbotDeployable : PlayerDeployableBase
         trailObject.transform.SetParent(transform, false);
         trailObject.transform.localPosition = new Vector3(0f, -0.24f, 0.05f);
         engineTrail = trailObject.AddComponent<TrailRenderer>();
+        EngineTrailVisualUtility.ConfigureTrailBase(engineTrail);
         engineTrail.time = 0.34f;
         engineTrail.minVertexDistance = 0.025f;
         engineTrail.widthMultiplier = 0.075f;
-        engineTrail.material = new Material(Shader.Find("Sprites/Default"));
         engineTrail.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
         engineTrail.sortingOrder = 31;
         Gradient gradient = new Gradient();
@@ -4238,7 +4291,7 @@ public sealed class FiringFriendController : MonoBehaviourPun
         IgnoreOwnerCollisions(bulletCollider);
 
         if (photonView != null)
-            photonView.RPC(nameof(PlayFiringFriendShotRpc), RpcTarget.All, muzzle.x, muzzle.y, transform.position.z);
+            photonView.RPC(nameof(PlayFiringFriendShotRpc), RpcTarget.All, muzzle.x, muzzle.y, transform.position.z, direction.x, direction.y);
     }
 
     void BeginReload()
@@ -4341,8 +4394,15 @@ public sealed class FiringFriendController : MonoBehaviourPun
     }
 
     [PunRPC]
-    void PlayFiringFriendShotRpc(float x, float y, float z)
+    void PlayFiringFriendShotRpc(float x, float y, float z, float directionX, float directionY)
     {
+        Vector2 shotDirection = new Vector2(directionX, directionY);
+        if (shotDirection.sqrMagnitude > 0.001f)
+        {
+            recentAimDirection = shotDirection.normalized;
+            recentAimUntil = Time.time + 0.55f;
+        }
+
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlayShootSmallAt(new Vector3(x, y, z));
     }

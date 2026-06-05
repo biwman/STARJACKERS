@@ -29,7 +29,7 @@ public class TreasureCollector : MonoBehaviourPun
     const float ArtifactExamineSeconds = 5f;
     const float ArtifactExamineKeepAliveDistance = 0.9f;
     const float ArtifactBeamWidth = 0.16f;
-    const float HudButtonVerticalNudge = 12f;
+    static readonly Vector2 CollectButtonRoundPosition = new Vector2(230f, 490f);
     const float ExtractionUseSearchRadius = 2.1f;
     const float ExtractionUseKeepAliveDistance = 1.15f;
     const float ValuableCargoAnnouncementDuration = 4f;
@@ -91,7 +91,7 @@ public class TreasureCollector : MonoBehaviourPun
     Coroutine artifactExamineRoutine;
     bool collectButtonHooked;
     bool isActivatingExtraction;
-    RectTransform nudgedCollectButtonRect;
+    RectTransform positionedCollectButtonRect;
     UseButtonVisualController useButtonVisual;
     ExtractionZone pendingActivatedExtraction;
     float pendingActivatedExtractionUntil;
@@ -330,7 +330,7 @@ public class TreasureCollector : MonoBehaviourPun
                 collectButton = buttonObject.GetComponent<Button>();
         }
 
-        EnsureCollectButtonNudged();
+        EnsureCollectButtonPositioned();
 
         if (collectButton == null)
             return;
@@ -1652,17 +1652,17 @@ public class TreasureCollector : MonoBehaviourPun
         return (Vector2)transform.position + (Vector2)transform.up * forwardOffset;
     }
 
-    void EnsureCollectButtonNudged()
+    void EnsureCollectButtonPositioned()
     {
         if (collectButton == null)
             return;
 
         RectTransform rect = collectButton.GetComponent<RectTransform>();
-        if (rect == null || rect == nudgedCollectButtonRect)
+        if (rect == null || rect == positionedCollectButtonRect)
             return;
 
-        rect.anchoredPosition += new Vector2(0f, HudButtonVerticalNudge);
-        nudgedCollectButtonRect = rect;
+        rect.anchoredPosition = CollectButtonRoundPosition;
+        positionedCollectButtonRect = rect;
     }
 
     void SetupBeam()

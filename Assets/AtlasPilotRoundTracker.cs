@@ -10,6 +10,7 @@ public static class AtlasPilotRoundTracker
     static string trackedRoundKey = string.Empty;
     static readonly Dictionary<string, int> startingItemCounts = new Dictionary<string, int>(System.StringComparer.Ordinal);
     static int startingCargoValueAstrons;
+    static int startingOccupiedCargoSlots;
     static bool hasStartingSnapshot;
 
     public static void RecordRoundStart(PlayerProfileData profile)
@@ -26,6 +27,12 @@ public static class AtlasPilotRoundTracker
     {
         EnsureRoundScope(profile);
         return Mathf.Max(0, GetCurrentCargoValueAstrons(profile) - startingCargoValueAstrons);
+    }
+
+    public static int GetNetOccupiedCargoSlots(PlayerProfileData profile)
+    {
+        EnsureRoundScope(profile);
+        return Mathf.Max(0, GetCurrentOccupiedCargoSlots(profile) - startingOccupiedCargoSlots);
     }
 
     public static bool HasCargoRunBonus(PlayerProfileData profile)
@@ -105,6 +112,7 @@ public static class AtlasPilotRoundTracker
     {
         startingItemCounts.Clear();
         startingCargoValueAstrons = 0;
+        startingOccupiedCargoSlots = 0;
         hasStartingSnapshot = true;
 
         if (profile == null || profile.Inventory == null)
@@ -128,6 +136,7 @@ public static class AtlasPilotRoundTracker
                 startingItemCounts[itemId] = 0;
 
             startingItemCounts[itemId]++;
+            startingOccupiedCargoSlots++;
             startingCargoValueAstrons += InventoryItemCatalog.GetSellValueAstrons(itemId);
         }
     }
@@ -154,6 +163,29 @@ public static class AtlasPilotRoundTracker
         }
 
         return Mathf.Max(0, total);
+    }
+
+    static int GetCurrentOccupiedCargoSlots(PlayerProfileData profile)
+    {
+        if (profile == null || profile.Inventory == null)
+            return 0;
+
+        PlayerInventoryData inventory = profile.Inventory;
+        inventory.Normalize();
+        int shipSkinIndex = Mathf.Clamp(profile.ShipSkinIndex, 0, ShipCatalog.MaxShipSkinIndex);
+        int capacity = Mathf.Clamp(
+            PlayerProfileService.GetEffectiveShipInventoryCapacity(shipSkinIndex, inventory.EquipmentSlots),
+            0,
+            inventory.ShipSlots.Length);
+
+        int occupied = 0;
+        for (int i = 0; i < capacity; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(inventory.ShipSlots[i]))
+                occupied++;
+        }
+
+        return Mathf.Max(0, occupied);
     }
 
     static string BuildRoundKey()

@@ -1108,6 +1108,7 @@ public class Bullet : MonoBehaviourPun
         GameObject trailObject = new GameObject("RocketEngineTrail");
         trailObject.transform.SetParent(transform, false);
         rocketTrailLine = trailObject.AddComponent<LineRenderer>();
+        EngineTrailVisualUtility.ConfigureLineBase(rocketTrailLine);
         rocketTrailLine.useWorldSpace = true;
         rocketTrailLine.positionCount = 2;
         rocketTrailLine.textureMode = LineTextureMode.Stretch;
@@ -1346,6 +1347,8 @@ public class Bullet : MonoBehaviourPun
 
     void UpdateRocketProjectileVisual()
     {
+        AlignRocketVisualWithTravelDirection();
+
         if (rocketTrailLine == null)
             return;
 
@@ -1357,6 +1360,16 @@ public class Bullet : MonoBehaviourPun
         rocketTrailLine.widthMultiplier = 0.1f * Mathf.Clamp(visualScaleMultiplier, 0.7f, 1.15f) * flicker;
         rocketTrailLine.SetPosition(0, tail);
         rocketTrailLine.SetPosition(1, flameEnd);
+    }
+
+    void AlignRocketVisualWithTravelDirection()
+    {
+        if (isArcProjectile)
+            return;
+
+        Vector2 direction = GetTravelDirection();
+        if (direction.sqrMagnitude > 0.001f)
+            transform.up = direction.normalized;
     }
 
     void UpdateRailProjectileVisual()
@@ -1737,14 +1750,7 @@ public class Bullet : MonoBehaviourPun
         if (sharedProjectileLineMaterial != null)
             return sharedProjectileLineMaterial;
 
-        Shader shader = Shader.Find("Sprites/Default");
-        if (shader == null)
-            return null;
-
-        sharedProjectileLineMaterial = new Material(shader)
-        {
-            name = "BulletProjectileLineMaterial"
-        };
+        sharedProjectileLineMaterial = EngineTrailVisualUtility.GetSpritesMaterial();
         return sharedProjectileLineMaterial;
     }
 

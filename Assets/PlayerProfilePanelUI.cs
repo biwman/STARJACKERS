@@ -418,22 +418,6 @@ public class PlayerProfilePanelUI : MonoBehaviour
     readonly Dictionary<TraderShopKind, Button> traderButtonsByKind = new Dictionary<TraderShopKind, Button>();
     readonly Dictionary<TraderShopKind, Image> traderCardImagesByKind = new Dictionary<TraderShopKind, Image>();
     readonly Dictionary<TraderShopKind, Outline> traderOutlinesByKind = new Dictionary<TraderShopKind, Outline>();
-    GameObject cheatBrowserObject;
-    TMP_Text cheatAstronsText;
-    TMP_Text cheatXpText;
-    TMP_Text cheatStatusText;
-    Button cheatAddMoneyButton;
-    Button cheatAddXpButton;
-    Button cheatUnlockBlueprintsButton;
-    Button cheatLockBlueprintsButton;
-    Button cheatUnlockMapsButton;
-    Button cheatLockMapsButton;
-    Button cheatResetAccountButton;
-    Button cheatCloseButton;
-    GameObject cheatResetConfirmObject;
-    TMP_Text cheatResetConfirmText;
-    Button cheatResetConfirmYesButton;
-    Button cheatResetConfirmCancelButton;
     GameObject splashScreenObject;
     Image splashScreenImage;
     float splashHideTime;
@@ -1250,7 +1234,6 @@ public class PlayerProfilePanelUI : MonoBehaviour
         selectedTraderShop = kind;
         HideCraftingRecipeBrowser();
         HideItemPreview();
-        HideCheatBrowser();
         RefreshTraderSelectionVisuals();
 
         if (!TraderOpensShop(selectedTraderShop))
@@ -3435,7 +3418,6 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
         HideCraftingRecipeBrowser();
         HideItemPreview();
-        HideCheatBrowser();
         selectedTraderShop = TraderShopKind.IronJoe;
         RefreshTraderSelectionVisuals();
         RefreshShopBrowser();
@@ -3509,404 +3491,6 @@ public class PlayerProfilePanelUI : MonoBehaviour
         TMP_Text text = shopSortButton.GetComponentInChildren<TMP_Text>(true);
         if (text != null)
             text.text = "SORT: " + GetShopSortLabel(GetShopSortMode(selectedTraderShop));
-    }
-
-    void CreateCheatBrowser(Transform parent)
-    {
-        cheatBrowserObject = new GameObject("CheatBrowser", typeof(RectTransform), typeof(Image));
-        cheatBrowserObject.transform.SetParent(parent, false);
-
-        RectTransform overlayRect = cheatBrowserObject.GetComponent<RectTransform>();
-        overlayRect.anchorMin = Vector2.zero;
-        overlayRect.anchorMax = Vector2.one;
-        overlayRect.offsetMin = Vector2.zero;
-        overlayRect.offsetMax = Vector2.zero;
-
-        Image overlay = cheatBrowserObject.GetComponent<Image>();
-        overlay.color = new Color(0.03f, 0.04f, 0.06f, 0.72f);
-
-        GameObject panel = new GameObject("CheatBrowserPanel", typeof(RectTransform), typeof(Image));
-        panel.transform.SetParent(cheatBrowserObject.transform, false);
-        RectTransform panelRect = panel.GetComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.anchoredPosition = new Vector2(0f, 6f);
-        panelRect.sizeDelta = new Vector2(620f, 840f);
-
-        Image panelImage = panel.GetComponent<Image>();
-        panelImage.color = new Color(0.11f, 0.1f, 0.14f, 0.98f);
-
-        TMP_Text title = CreateText(panel.transform, "CheatBrowserTitle", "CHEAT", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -40f), new Vector2(420f, 34f), 30f, TextAlignmentOptions.Center);
-        title.characterSpacing = 3f;
-
-        TMP_Text hint = CreateText(panel.transform, "CheatBrowserHint", "This is temporary solution to speed up tests.", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -106f), new Vector2(520f, 64f), 19f, TextAlignmentOptions.Center);
-        hint.fontStyle = FontStyles.Normal;
-        hint.textWrappingMode = TextWrappingModes.Normal;
-        hint.color = new Color(0.86f, 0.9f, 0.96f, 0.96f);
-
-        cheatAstronsText = CreateText(panel.transform, "CheatAstronsText", "Astrons: 0", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -156f), new Vector2(440f, 28f), 20f, TextAlignmentOptions.Center);
-        cheatAstronsText.fontStyle = FontStyles.Normal;
-        cheatAstronsText.color = new Color(0.94f, 0.84f, 0.44f, 1f);
-
-        cheatXpText = CreateText(panel.transform, "CheatXpText", "Level: 1  XP: 0", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -190f), new Vector2(440f, 28f), 20f, TextAlignmentOptions.Center);
-        cheatXpText.fontStyle = FontStyles.Normal;
-        cheatXpText.color = new Color(0.74f, 0.92f, 1f, 1f);
-
-        cheatAddMoneyButton = CreateButton(panel.transform, "CheatAddMoneyButton", "ADD MONEY", new Vector2(0f, -238f), new Vector2(260f, 54f), OnCheatAddMoneyClicked);
-        StyleButton(cheatAddMoneyButton, new Color(0.5f, 0.22f, 0.18f, 1f), new Color(0.7f, 0.3f, 0.22f, 1f));
-
-        cheatAddXpButton = CreateButton(panel.transform, "CheatAddXpButton", "ADD XP", new Vector2(0f, -300f), new Vector2(260f, 54f), OnCheatAddXpClicked);
-        StyleButton(cheatAddXpButton, new Color(0.16f, 0.38f, 0.5f, 1f), new Color(0.22f, 0.52f, 0.7f, 1f));
-
-        cheatUnlockBlueprintsButton = CreateButton(panel.transform, "CheatUnlockBlueprintsButton", "UNLOCK ALL BLUEPRINTS", new Vector2(0f, -362f), new Vector2(340f, 54f), OnCheatUnlockBlueprintsClicked);
-        StyleButton(cheatUnlockBlueprintsButton, new Color(0.12f, 0.42f, 0.46f, 1f), new Color(0.18f, 0.58f, 0.64f, 1f));
-
-        cheatLockBlueprintsButton = CreateButton(panel.transform, "CheatLockBlueprintsButton", "LOCK ALL BLUEPRINTS", new Vector2(0f, -424f), new Vector2(340f, 54f), OnCheatLockBlueprintsClicked);
-        StyleButton(cheatLockBlueprintsButton, new Color(0.42f, 0.23f, 0.13f, 1f), new Color(0.58f, 0.34f, 0.18f, 1f));
-
-        cheatUnlockMapsButton = CreateButton(panel.transform, "CheatUnlockMapsButton", "UNLOCK ALL MAPS", new Vector2(0f, -486f), new Vector2(340f, 54f), OnCheatUnlockMapsClicked);
-        StyleButton(cheatUnlockMapsButton, new Color(0.14f, 0.36f, 0.26f, 1f), new Color(0.2f, 0.54f, 0.38f, 1f));
-
-        cheatLockMapsButton = CreateButton(panel.transform, "CheatLockMapsButton", "LOCK ALL MAPS", new Vector2(0f, -548f), new Vector2(340f, 54f), OnCheatLockMapsClicked);
-        StyleButton(cheatLockMapsButton, new Color(0.36f, 0.28f, 0.16f, 1f), new Color(0.5f, 0.4f, 0.22f, 1f));
-
-        cheatResetAccountButton = CreateButton(panel.transform, "CheatResetAccountButton", "RESET ACCOUNT", new Vector2(0f, -616f), new Vector2(260f, 54f), OnCheatResetAccountClicked);
-        StyleButton(cheatResetAccountButton, new Color(0.52f, 0.14f, 0.18f, 1f), new Color(0.72f, 0.2f, 0.25f, 1f));
-
-        cheatStatusText = CreateText(panel.transform, "CheatStatusText", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -686f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
-        cheatStatusText.fontStyle = FontStyles.Normal;
-        cheatStatusText.color = new Color(0.74f, 0.86f, 0.94f, 0.96f);
-
-        cheatCloseButton = CreateButton(panel.transform, "CheatCloseButton", "CLOSE", new Vector2(0f, -734f), new Vector2(220f, 52f), HideCheatBrowser);
-        StyleButton(cheatCloseButton, new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f));
-
-        cheatBrowserObject.SetActive(false);
-    }
-
-    void CreateCheatResetConfirm(Transform parent)
-    {
-        cheatResetConfirmObject = new GameObject("CheatResetConfirm", typeof(RectTransform), typeof(Image));
-        cheatResetConfirmObject.transform.SetParent(parent, false);
-        RectTransform overlayRect = cheatResetConfirmObject.GetComponent<RectTransform>();
-        overlayRect.anchorMin = Vector2.zero;
-        overlayRect.anchorMax = Vector2.one;
-        overlayRect.offsetMin = Vector2.zero;
-        overlayRect.offsetMax = Vector2.zero;
-
-        Image overlayImage = cheatResetConfirmObject.GetComponent<Image>();
-        overlayImage.color = new Color(0.01f, 0.015f, 0.025f, 0.78f);
-        overlayImage.raycastTarget = true;
-
-        GameObject panel = new GameObject("CheatResetConfirmPanel", typeof(RectTransform), typeof(Image));
-        panel.transform.SetParent(cheatResetConfirmObject.transform, false);
-        RectTransform panelRect = panel.GetComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.anchoredPosition = Vector2.zero;
-        panelRect.sizeDelta = new Vector2(640f, 330f);
-
-        Image panelImage = panel.GetComponent<Image>();
-        panelImage.color = new Color(0.13f, 0.09f, 0.11f, 0.98f);
-
-        CreateText(panel.transform, "CheatResetTitle", "RESET ACCOUNT", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -36f), new Vector2(560f, 36f), 26f, TextAlignmentOptions.Center);
-        cheatResetConfirmText = CreateText(panel.transform, "CheatResetText", "This will reset XP, level, Astrons to " + PlayerProfileService.DefaultStartingAstrons + ", inventory, equipment, blueprints, unlocked pilots and map progress. Continue?", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -102f), new Vector2(560f, 96f), 20f, TextAlignmentOptions.Center);
-        cheatResetConfirmText.fontStyle = FontStyles.Normal;
-        cheatResetConfirmText.textWrappingMode = TextWrappingModes.Normal;
-
-        cheatResetConfirmYesButton = CreateButton(panel.transform, "CheatResetYesButton", "YES", new Vector2(-122f, -238f), new Vector2(190f, 56f), OnCheatResetConfirmClicked);
-        StyleButton(cheatResetConfirmYesButton, new Color(0.56f, 0.12f, 0.16f, 1f), new Color(0.74f, 0.18f, 0.22f, 1f));
-        cheatResetConfirmCancelButton = CreateButton(panel.transform, "CheatResetCancelButton", "CANCEL", new Vector2(122f, -238f), new Vector2(190f, 56f), HideCheatResetConfirm);
-        StyleButton(cheatResetConfirmCancelButton, new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f));
-
-        cheatResetConfirmObject.SetActive(false);
-    }
-
-    void OnCheatButtonClicked()
-    {
-        if (inventoryActionInProgress || dragInProgress || cheatBrowserObject == null)
-            return;
-
-        HideCraftingRecipeBrowser();
-        HideItemPreview();
-        HideShopBrowser();
-        RefreshCheatBrowser(string.Empty);
-        cheatBrowserObject.SetActive(true);
-        EnsureProfileModalLayering();
-    }
-
-    void HideCheatBrowser()
-    {
-        if (cheatBrowserObject != null)
-            cheatBrowserObject.SetActive(false);
-        HideCheatResetConfirm();
-    }
-
-    void HideCheatResetConfirm()
-    {
-        if (cheatResetConfirmObject != null)
-            cheatResetConfirmObject.SetActive(false);
-    }
-
-    void RefreshCheatBrowser(string statusMessage = null)
-    {
-        if (cheatBrowserObject == null)
-            return;
-
-        PlayerProfileData profile = PlayerProfileService.Instance.CurrentProfile;
-        int astrons = profile != null ? profile.Astrons : 0;
-        if (cheatAstronsText != null)
-            cheatAstronsText.text = "Astrons: " + astrons;
-
-        int totalXp = profile != null ? profile.TotalXp : 0;
-        if (cheatXpText != null)
-            cheatXpText.text = "Level: " + RoundXpBalance.GetLevelForTotalXp(totalXp) + "  XP: " + totalXp;
-
-        if (statusMessage != null && cheatStatusText != null)
-            cheatStatusText.text = statusMessage;
-
-        if (cheatAddMoneyButton != null)
-            cheatAddMoneyButton.interactable = !inventoryActionInProgress;
-        if (cheatAddXpButton != null)
-            cheatAddXpButton.interactable = !inventoryActionInProgress;
-        if (cheatUnlockBlueprintsButton != null)
-            cheatUnlockBlueprintsButton.interactable = !inventoryActionInProgress;
-        if (cheatLockBlueprintsButton != null)
-            cheatLockBlueprintsButton.interactable = !inventoryActionInProgress;
-        if (cheatUnlockMapsButton != null)
-            cheatUnlockMapsButton.interactable = !inventoryActionInProgress;
-        if (cheatLockMapsButton != null)
-            cheatLockMapsButton.interactable = !inventoryActionInProgress;
-        if (cheatResetAccountButton != null)
-            cheatResetAccountButton.interactable = !inventoryActionInProgress;
-        if (cheatCloseButton != null)
-            cheatCloseButton.interactable = !inventoryActionInProgress;
-    }
-
-    async void OnCheatAddMoneyClicked()
-    {
-        if (inventoryActionInProgress || cheatBrowserObject == null)
-            return;
-
-        inventoryActionInProgress = true;
-        SetInventoryInteractable(false);
-        SetStatus("Adding 5000 Astrons...");
-        RefreshCheatBrowser("Adding 5000 Astrons...");
-
-        try
-        {
-            await PlayerProfileService.Instance.AddAstronsAsync(5000);
-            SetStatus("Added 5000 Astrons.");
-            RefreshView();
-            RefreshCheatBrowser("Added 5000 Astrons.");
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("Cheat add money failed: " + ex);
-            SetStatus("Cheat failed.");
-            RefreshCheatBrowser("Could not add Astrons.");
-        }
-        finally
-        {
-            inventoryActionInProgress = false;
-            SetInventoryInteractable(true);
-            RefreshCheatBrowser();
-        }
-    }
-
-    async void OnCheatAddXpClicked()
-    {
-        if (inventoryActionInProgress || cheatBrowserObject == null)
-            return;
-
-        inventoryActionInProgress = true;
-        SetInventoryInteractable(false);
-        SetStatus("Adding 1000 XP...");
-        RefreshCheatBrowser("Adding 1000 XP...");
-
-        try
-        {
-            await PlayerProfileService.Instance.AddCheatXpAsync(1000);
-            SetStatus("Added 1000 XP.");
-            RefreshView();
-            RefreshCheatBrowser("Added 1000 XP.");
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("Cheat add XP failed: " + ex);
-            SetStatus("Cheat failed.");
-            RefreshCheatBrowser("Could not add XP.");
-        }
-        finally
-        {
-            inventoryActionInProgress = false;
-            SetInventoryInteractable(true);
-            RefreshCheatBrowser();
-        }
-    }
-
-    async void OnCheatUnlockBlueprintsClicked()
-    {
-        if (inventoryActionInProgress || cheatBrowserObject == null)
-            return;
-
-        inventoryActionInProgress = true;
-        SetInventoryInteractable(false);
-        RefreshCheatBrowser("Unlocking blueprints...");
-
-        try
-        {
-            await PlayerProfileService.Instance.UnlockAllBlueprintsAsync();
-            SetStatus("All blueprints unlocked.");
-            RefreshCheatBrowser("All blueprints unlocked.");
-            RefreshCraftingRecipeBrowser(true);
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("Cheat unlock blueprints failed: " + ex);
-            SetStatus("Cheat failed.");
-            RefreshCheatBrowser("Could not unlock blueprints.");
-        }
-        finally
-        {
-            inventoryActionInProgress = false;
-            SetInventoryInteractable(true);
-            RefreshCheatBrowser();
-        }
-    }
-
-    async void OnCheatLockBlueprintsClicked()
-    {
-        if (inventoryActionInProgress || cheatBrowserObject == null)
-            return;
-
-        inventoryActionInProgress = true;
-        SetInventoryInteractable(false);
-        RefreshCheatBrowser("Locking blueprints...");
-
-        try
-        {
-            await PlayerProfileService.Instance.LockAllBlueprintsAsync();
-            SetStatus("Optional blueprints locked.");
-            RefreshCheatBrowser("Optional blueprints locked.");
-            RefreshCraftingRecipeBrowser(true);
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("Cheat lock blueprints failed: " + ex);
-            SetStatus("Cheat failed.");
-            RefreshCheatBrowser("Could not lock blueprints.");
-        }
-        finally
-        {
-            inventoryActionInProgress = false;
-            SetInventoryInteractable(true);
-            RefreshCheatBrowser();
-        }
-    }
-
-    async void OnCheatUnlockMapsClicked()
-    {
-        if (inventoryActionInProgress || cheatBrowserObject == null)
-            return;
-
-        inventoryActionInProgress = true;
-        SetInventoryInteractable(false);
-        RefreshCheatBrowser("Unlocking maps...");
-
-        try
-        {
-            await PlayerProfileService.Instance.UnlockAllMapsAsync();
-            SetStatus("All maps unlocked.");
-            RefreshCheatBrowser("All maps unlocked.");
-            RefreshView();
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("Cheat unlock maps failed: " + ex);
-            SetStatus("Cheat failed.");
-            RefreshCheatBrowser("Could not unlock maps.");
-        }
-        finally
-        {
-            inventoryActionInProgress = false;
-            SetInventoryInteractable(true);
-            RefreshCheatBrowser();
-        }
-    }
-
-    async void OnCheatLockMapsClicked()
-    {
-        if (inventoryActionInProgress || cheatBrowserObject == null)
-            return;
-
-        inventoryActionInProgress = true;
-        SetInventoryInteractable(false);
-        RefreshCheatBrowser("Locking maps...");
-
-        try
-        {
-            await PlayerProfileService.Instance.LockAllMapsAsync();
-            SetStatus("Optional maps locked.");
-            RefreshCheatBrowser("Optional maps locked.");
-            RefreshView();
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("Cheat lock maps failed: " + ex);
-            SetStatus("Cheat failed.");
-            RefreshCheatBrowser("Could not lock maps.");
-        }
-        finally
-        {
-            inventoryActionInProgress = false;
-            SetInventoryInteractable(true);
-            RefreshCheatBrowser();
-        }
-    }
-
-    void OnCheatResetAccountClicked()
-    {
-        if (inventoryActionInProgress || cheatResetConfirmObject == null)
-            return;
-
-        cheatResetConfirmObject.SetActive(true);
-        EnsureProfileModalLayering();
-    }
-
-    async void OnCheatResetConfirmClicked()
-    {
-        if (inventoryActionInProgress)
-            return;
-
-        inventoryActionInProgress = true;
-        SetInventoryInteractable(false);
-        SetStatus("Resetting account...");
-        RefreshCheatBrowser("Resetting account...");
-
-        try
-        {
-            await PlayerProfileService.Instance.ResetAccountAsync();
-            HideCheatResetConfirm();
-            HideItemPreview();
-            selectedSkin = 0;
-            SetStatus("Account reset.");
-            RefreshView();
-            RefreshCheatBrowser("Account reset.");
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("Cheat reset account failed: " + ex);
-            SetStatus("Account reset failed.");
-            RefreshCheatBrowser("Account reset failed.");
-        }
-        finally
-        {
-            inventoryActionInProgress = false;
-            SetInventoryInteractable(true);
-            RefreshCheatBrowser();
-        }
     }
 
     void RefreshShopBrowser()
@@ -6382,9 +5966,6 @@ public class PlayerProfilePanelUI : MonoBehaviour
             RefreshCraftingBlueprintBrowser();
         if (shopBrowserObject != null && shopBrowserObject.activeSelf)
             RefreshShopBrowser();
-        if (cheatBrowserObject != null && cheatBrowserObject.activeSelf)
-            RefreshCheatBrowser();
-
         ApplyProfileScreenLayoutAfterRefresh();
     }
 
@@ -7114,10 +6695,6 @@ public class PlayerProfilePanelUI : MonoBehaviour
             leftNavigationRootObject.transform.SetAsLastSibling();
         if (rightActionRootObject != null)
             rightActionRootObject.transform.SetAsLastSibling();
-        if (cheatBrowserObject != null)
-            cheatBrowserObject.SetActive(false);
-        if (cheatResetConfirmObject != null)
-            cheatResetConfirmObject.SetActive(false);
         if (shipTypeLabelText != null)
             shipTypeLabelText.gameObject.SetActive(false);
         if (shipSkinLabelText != null)
@@ -7297,17 +6874,6 @@ public class PlayerProfilePanelUI : MonoBehaviour
             craftingBlueprintBrowserObject.transform.SetAsLastSibling();
         }
 
-        if (cheatBrowserObject != null && cheatBrowserObject.activeSelf)
-        {
-            cheatBrowserObject.transform.SetParent(panelObject.transform, false);
-            cheatBrowserObject.transform.SetAsLastSibling();
-        }
-
-        if (cheatResetConfirmObject != null && cheatResetConfirmObject.activeSelf)
-        {
-            cheatResetConfirmObject.transform.SetParent(panelObject.transform, false);
-            cheatResetConfirmObject.transform.SetAsLastSibling();
-        }
     }
 
     void ApplyPanelBackgroundForCurrentScreen()
@@ -10378,7 +9944,6 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 HideShipImageModal();
                 HideCraftingRecipeBrowser();
                 HideShopBrowser();
-                HideCheatBrowser();
                 HideShipInventoryStartConfirm();
                 HideItemInfoOverlay();
             }
@@ -10756,26 +10321,6 @@ public class PlayerProfilePanelUI : MonoBehaviour
             shopCloseButton.interactable = interactable;
         RefreshShopSortButton();
         RefreshTraderSelectionVisuals();
-        if (cheatAddMoneyButton != null)
-            cheatAddMoneyButton.interactable = interactable && !inventoryActionInProgress;
-        if (cheatAddXpButton != null)
-            cheatAddXpButton.interactable = interactable && !inventoryActionInProgress;
-        if (cheatUnlockBlueprintsButton != null)
-            cheatUnlockBlueprintsButton.interactable = interactable && !inventoryActionInProgress;
-        if (cheatLockBlueprintsButton != null)
-            cheatLockBlueprintsButton.interactable = interactable && !inventoryActionInProgress;
-        if (cheatUnlockMapsButton != null)
-            cheatUnlockMapsButton.interactable = interactable && !inventoryActionInProgress;
-        if (cheatLockMapsButton != null)
-            cheatLockMapsButton.interactable = interactable && !inventoryActionInProgress;
-        if (cheatResetAccountButton != null)
-            cheatResetAccountButton.interactable = interactable && !inventoryActionInProgress;
-        if (cheatResetConfirmYesButton != null)
-            cheatResetConfirmYesButton.interactable = interactable && !inventoryActionInProgress;
-        if (cheatResetConfirmCancelButton != null)
-            cheatResetConfirmCancelButton.interactable = interactable && !inventoryActionInProgress;
-        if (cheatCloseButton != null)
-            cheatCloseButton.interactable = interactable && !inventoryActionInProgress;
     }
 
     void SetInventoryButtonState(Button[] buttons, bool interactable)
@@ -11426,7 +10971,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             case InventoryItemCatalog.SuperBoosterId:
                 return "A burst engine system for sudden aggressive movement or emergency disengage.";
             case InventoryItemCatalog.AfterburnerStabilizerId:
-                return "An engine stabilizer that makes boosted movement easier to control.";
+                return "An engine stabilizer that sharpens turning and halves the delay before booster recovery starts.";
             case InventoryItemCatalog.GadgetMineId:
                 return "A deployable trap for protecting an area or punishing pursuing enemies.";
             case InventoryItemCatalog.BatteryId:
@@ -11452,7 +10997,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             case InventoryItemCatalog.SpaceTrapId:
                 return "A sabotage kit that turns a loot object into a dangerous surprise.";
             case InventoryItemCatalog.EmergencySuitBeaconId:
-                return "A rescue beacon that helps the astronaut immediately after losing the ship.";
+                return "A rescue beacon that gives the astronaut brief protection and a permanent speed boost after losing the ship.";
             case InventoryItemCatalog.EscapePodId:
                 return "A rescue capsule that replaces the astronaut after losing the ship.";
             case InventoryItemCatalog.SalvageMagnetArrayId:
@@ -11460,7 +11005,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             case InventoryItemCatalog.ShieldReactorId:
                 return "A defensive reactor that strengthens the ship's protective shield layer.";
             case InventoryItemCatalog.KineticDampenerId:
-                return "A defensive module that softens physical impacts and explosive shocks.";
+                return "A defensive module that halves kinetic and contact damage while softening explosive shocks.";
             case InventoryItemCatalog.PhaseShieldId:
                 return "A last-moment defensive failsafe that gives the pilot a brief chance to recover.";
             case InventoryItemCatalog.CargoBayExtensionId:

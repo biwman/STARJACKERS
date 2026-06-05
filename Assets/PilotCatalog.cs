@@ -126,7 +126,7 @@ public static class PilotCatalog
         {
             "Killing an enemy human player grants 2x XP for 60 seconds.",
             "Damage from space mines is reduced by 50%.",
-            "Lure Beacons have double charges."
+            "Lure Beacons and Space Traps have double charges."
         },
         "Red Mark",
         "Mark the nearest enemy or player for 15 seconds. The marked target takes 50% increased damage from all sources.");
@@ -178,9 +178,9 @@ public static class PilotCatalog
         "Sell items worth 20000 Astrons. Reach XP level 10. Return to base from Pirate Bay 5 times.",
         new[]
         {
-            "Gets a 5% discount when buying items from traders/shop.",
+            "Returning with at least 6 more occupied cargo slots than at round start grants extra 1000 Astrons.",
             "Pirate Fighters, Elites and Aces do not attack unless attacked first.",
-            "Returning in the last 30 seconds grants extra 1000 Astrons."
+            "Returning in the last 30 seconds grants extra 2000 Astrons."
         },
         "Confusion Wave",
         "Release a green wave that scrambles all computer-controlled enemies in roughly screen range for 10 seconds, making them move randomly and fire in random directions.");
@@ -234,7 +234,7 @@ public static class PilotCatalog
         {
             "Common and Uncommon resource collection is 3x faster.",
             "Repeated hits on the same computer-controlled target or obstacle build analysis, increasing damage by 5% per hit up to 20%. The analysis resets after 3 seconds or when changing targets.",
-            "Rocket lock-on is 50% faster and Guidance System lasts 10 seconds longer."
+            "Rocket lock-on is 50% faster, Guidance System lasts 15 seconds longer, and Short Scanner lasts 10 seconds longer."
         },
         "Multi-Vector Barrage",
         "Fire Gatling Super-style barrages toward up to 5 nearest enemies.");
