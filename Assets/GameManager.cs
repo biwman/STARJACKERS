@@ -62,6 +62,7 @@ public class GameManager : MonoBehaviourPunCallbacks
     {
         if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient) return;
 
+        GameplayHudVisibility.SuppressForRoundSummary();
         EarlyRoundExitUI.HideAll();
         RoundPilotHudUI.DestroyAllRuntimeObjects();
         ShipDamageState.ClearAllRuntimeDamage();
@@ -118,6 +119,7 @@ public class GameManager : MonoBehaviourPunCallbacks
             return;
 
         leavingRoomToProfile = true;
+        GameplayHudVisibility.ResetSuppression();
         EarlyRoundExitUI.HideAll();
 
         PlayerMovement.gameStarted = false;

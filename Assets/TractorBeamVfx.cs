@@ -21,6 +21,7 @@ public sealed class TractorBeamVfx : MonoBehaviour
     int targetViewId;
     int sortingLayerId;
     int sortingOrder = 2400;
+    Vector2 sourceLocalAnchorDirection = Vector2.up;
 
     public static void Prewarm()
     {
@@ -29,6 +30,11 @@ public sealed class TractorBeamVfx : MonoBehaviour
     }
 
     public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId)
+    {
+        StartBeam(sourcePhotonViewId, targetPhotonViewId, Vector2.up);
+    }
+
+    public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId, Vector2 sourceLocalDirection)
     {
         StopBeam(sourcePhotonViewId);
 
@@ -39,7 +45,7 @@ public sealed class TractorBeamVfx : MonoBehaviour
 
         GameObject effect = new GameObject("TractorBeamVfx_" + sourcePhotonViewId);
         TractorBeamVfx vfx = effect.AddComponent<TractorBeamVfx>();
-        vfx.Initialize(sourceView.transform, targetView.transform, sourcePhotonViewId, targetPhotonViewId);
+        vfx.Initialize(sourceView.transform, targetView.transform, sourcePhotonViewId, targetPhotonViewId, sourceLocalDirection);
         ActiveBySourceViewId[sourcePhotonViewId] = vfx;
     }
 
@@ -64,12 +70,13 @@ public sealed class TractorBeamVfx : MonoBehaviour
             Destroy(vfx.gameObject);
     }
 
-    void Initialize(Transform sourceTransform, Transform targetTransform, int resolvedSourceViewId, int resolvedTargetViewId)
+    void Initialize(Transform sourceTransform, Transform targetTransform, int resolvedSourceViewId, int resolvedTargetViewId, Vector2 localAnchorDirection)
     {
         source = sourceTransform;
         target = targetTransform;
         sourceViewId = resolvedSourceViewId;
         targetViewId = resolvedTargetViewId;
+        sourceLocalAnchorDirection = localAnchorDirection.sqrMagnitude > 0.001f ? localAnchorDirection.normalized : Vector2.up;
 
         SpriteRenderer sourceRenderer = source != null ? source.GetComponentInChildren<SpriteRenderer>() : null;
         if (sourceRenderer != null)
@@ -152,9 +159,15 @@ public sealed class TractorBeamVfx : MonoBehaviour
         float forwardOffset = 0.55f;
         SpriteRenderer renderer = source != null ? source.GetComponentInChildren<SpriteRenderer>() : null;
         if (renderer != null)
-            forwardOffset = Mathf.Max(0.4f, renderer.bounds.extents.y * 0.9f);
+            forwardOffset = Mathf.Max(0.4f, Mathf.Max(renderer.bounds.extents.x, renderer.bounds.extents.y) * 0.9f);
 
-        return source.position + source.up * forwardOffset;
+        Vector3 anchorDirection = source != null
+            ? source.TransformDirection(new Vector3(sourceLocalAnchorDirection.x, sourceLocalAnchorDirection.y, 0f)).normalized
+            : Vector3.up;
+        if (anchorDirection.sqrMagnitude < 0.001f)
+            anchorDirection = source != null ? source.up : Vector3.up;
+
+        return source.position + anchorDirection * forwardOffset;
     }
 
     Vector3 GetTargetPoint(Vector3 sourcePoint)

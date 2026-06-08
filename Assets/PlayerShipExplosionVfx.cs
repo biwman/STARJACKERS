@@ -1,12 +1,19 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public sealed class PlayerShipExplosionVfx : MonoBehaviour
 {
     const float Lifetime = 0.82f;
     const float EffectZ = -0.32f;
+    const int PoolWarmCount = 4;
+    const int RingSegments = 40;
+    const int SparkCount = 10;
+    const int SmokeCount = 4;
 
     static Material sharedMaterial;
     static Sprite smokeSprite;
+    static readonly Stack<PlayerShipExplosionVfx> Pool = new Stack<PlayerShipExplosionVfx>(PoolWarmCount);
+    static Vector3[] ringUnitCircle;
 
     struct Spark
     {
@@ -36,19 +43,54 @@ public sealed class PlayerShipExplosionVfx : MonoBehaviour
     {
         GetMaterial();
         PrewarmSpriteTexture(GetSmokeSprite());
+        WarmPool(PoolWarmCount);
     }
 
     public static void Spawn(Vector3 position, SpriteRenderer referenceRenderer = null)
     {
-        GameObject effect = new GameObject("PlayerShipExplosionVfx");
-        PlayerShipExplosionVfx vfx = effect.AddComponent<PlayerShipExplosionVfx>();
+        PlayerShipExplosionVfx vfx = GetFromPool();
         vfx.Initialize(position, referenceRenderer);
+    }
+
+    static void WarmPool(int count)
+    {
+        for (int i = Pool.Count; i < count; i++)
+        {
+            PlayerShipExplosionVfx vfx = CreateInstance();
+            vfx.Initialize(Vector3.zero, null);
+            vfx.ReturnToPool();
+        }
+    }
+
+    static PlayerShipExplosionVfx GetFromPool()
+    {
+        while (Pool.Count > 0)
+        {
+            PlayerShipExplosionVfx pooled = Pool.Pop();
+            if (pooled != null)
+            {
+                pooled.gameObject.SetActive(true);
+                return pooled;
+            }
+        }
+
+        PlayerShipExplosionVfx created = CreateInstance();
+        created.gameObject.SetActive(true);
+        return created;
+    }
+
+    static PlayerShipExplosionVfx CreateInstance()
+    {
+        GameObject effect = new GameObject("PlayerShipExplosionVfx");
+        effect.SetActive(false);
+        return effect.AddComponent<PlayerShipExplosionVfx>();
     }
 
     void Initialize(Vector3 position, SpriteRenderer referenceRenderer)
     {
         center = new Vector3(position.x, position.y, EffectZ);
         transform.position = center;
+        age = 0f;
 
         int sortingLayerId = referenceRenderer != null ? referenceRenderer.sortingLayerID : 0;
         int sortingOrder = referenceRenderer != null ? referenceRenderer.sortingOrder + 170 : 1900;
@@ -56,9 +98,12 @@ public sealed class PlayerShipExplosionVfx : MonoBehaviour
             ? Mathf.Clamp(Mathf.Max(referenceRenderer.bounds.extents.x, referenceRenderer.bounds.extents.y), 0.45f, 1.25f)
             : 0.72f;
 
-        CreateFlashRing(sortingLayerId, sortingOrder, radius);
-        CreateSparks(sortingLayerId, sortingOrder + 1, radius);
-        CreateSmoke(sortingLayerId, sortingOrder - 1, radius);
+        CreateOrResetFlashRing(sortingLayerId, sortingOrder, radius);
+        CreateOrResetSparks(sortingLayerId, sortingOrder + 1, radius);
+        CreateOrResetSmoke(sortingLayerId, sortingOrder - 1, radius);
+        UpdateFlashRing(0f);
+        UpdateSparks(0f);
+        UpdateSmoke(0f);
     }
 
     void Update()
@@ -71,50 +116,71 @@ public sealed class PlayerShipExplosionVfx : MonoBehaviour
         UpdateSmoke(t);
 
         if (age >= Lifetime)
-            Destroy(gameObject);
+            ReturnToPool();
     }
 
-    void CreateFlashRing(int sortingLayerId, int sortingOrder, float radius)
+    void ReturnToPool()
     {
-        GameObject ringObject = new GameObject("ExplosionPressureRing");
-        ringObject.transform.SetParent(transform, false);
+        gameObject.SetActive(false);
+        Pool.Push(this);
+    }
 
-        flashRing = ringObject.AddComponent<LineRenderer>();
-        flashRing.useWorldSpace = false;
-        flashRing.loop = true;
-        flashRing.positionCount = 56;
+    void CreateOrResetFlashRing(int sortingLayerId, int sortingOrder, float radius)
+    {
+        if (flashRing == null)
+        {
+            GameObject ringObject = new GameObject("ExplosionPressureRing");
+            ringObject.transform.SetParent(transform, false);
+
+            flashRing = ringObject.AddComponent<LineRenderer>();
+            flashRing.useWorldSpace = false;
+            flashRing.loop = true;
+            flashRing.numCapVertices = 6;
+            flashRing.numCornerVertices = 6;
+            flashRing.alignment = LineAlignment.View;
+            flashRing.material = GetMaterial();
+        }
+
+        flashRing.gameObject.SetActive(true);
+        flashRing.positionCount = RingSegments;
         flashRing.widthMultiplier = 0.1f;
-        flashRing.numCapVertices = 8;
-        flashRing.numCornerVertices = 8;
-        flashRing.alignment = LineAlignment.View;
-        flashRing.material = GetMaterial();
         flashRing.sortingLayerID = sortingLayerId;
         flashRing.sortingOrder = sortingOrder;
 
-        for (int i = 0; i < flashRing.positionCount; i++)
+        Vector3[] unitCircle = GetRingUnitCircle();
+        for (int i = 0; i < RingSegments; i++)
         {
-            float a = (i / (float)flashRing.positionCount) * Mathf.PI * 2f;
-            flashRing.SetPosition(i, new Vector3(Mathf.Cos(a) * radius * 0.22f, Mathf.Sin(a) * radius * 0.18f, 0f));
+            Vector3 point = unitCircle[i];
+            flashRing.SetPosition(i, new Vector3(point.x * radius * 0.22f, point.y * radius * 0.18f, 0f));
         }
     }
 
-    void CreateSparks(int sortingLayerId, int sortingOrder, float radius)
+    void CreateOrResetSparks(int sortingLayerId, int sortingOrder, float radius)
     {
-        sparks = new Spark[14];
+        if (sparks == null || sparks.Length != SparkCount)
+            sparks = new Spark[SparkCount];
+
         for (int i = 0; i < sparks.Length; i++)
         {
             float angle = (i / (float)sparks.Length) * Mathf.PI * 2f + Random.Range(-0.18f, 0.18f);
             Vector3 direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f).normalized;
-            GameObject sparkObject = new GameObject("ExplosionSpark" + i);
-            sparkObject.transform.SetParent(transform, false);
+            LineRenderer line = sparks[i].line;
+            if (line == null)
+            {
+                GameObject sparkObject = new GameObject("ExplosionSpark" + i);
+                sparkObject.transform.SetParent(transform, false);
 
-            LineRenderer line = sparkObject.AddComponent<LineRenderer>();
-            line.useWorldSpace = true;
+                line = sparkObject.AddComponent<LineRenderer>();
+                line.useWorldSpace = true;
+                line.positionCount = 2;
+                line.numCapVertices = 4;
+                line.alignment = LineAlignment.View;
+                line.material = GetMaterial();
+            }
+
+            line.gameObject.SetActive(true);
             line.positionCount = 2;
-            line.widthMultiplier = Random.Range(0.025f, 0.055f);
-            line.numCapVertices = 5;
-            line.alignment = LineAlignment.View;
-            line.material = GetMaterial();
+            line.widthMultiplier = Random.Range(0.025f, 0.05f);
             line.sortingLayerID = sortingLayerId;
             line.sortingOrder = sortingOrder;
 
@@ -129,18 +195,27 @@ public sealed class PlayerShipExplosionVfx : MonoBehaviour
         }
     }
 
-    void CreateSmoke(int sortingLayerId, int sortingOrder, float radius)
+    void CreateOrResetSmoke(int sortingLayerId, int sortingOrder, float radius)
     {
-        smoke = new Smoke[6];
+        if (smoke == null || smoke.Length != SmokeCount)
+            smoke = new Smoke[SmokeCount];
+
         for (int i = 0; i < smoke.Length; i++)
         {
             float angle = Random.Range(0f, Mathf.PI * 2f);
             Vector3 direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f).normalized;
-            GameObject smokeObject = new GameObject("ExplosionSmoke" + i);
-            smokeObject.transform.SetParent(transform, false);
-            smokeObject.transform.localPosition = direction * Random.Range(0f, radius * 0.16f);
+            SpriteRenderer renderer = smoke[i].renderer;
+            if (renderer == null)
+            {
+                GameObject smokeObject = new GameObject("ExplosionSmoke" + i);
+                smokeObject.transform.SetParent(transform, false);
 
-            SpriteRenderer renderer = smokeObject.AddComponent<SpriteRenderer>();
+                renderer = smokeObject.AddComponent<SpriteRenderer>();
+            }
+
+            renderer.gameObject.SetActive(true);
+            renderer.transform.localPosition = direction * Random.Range(0f, radius * 0.16f);
+            renderer.transform.localScale = Vector3.one * Mathf.Max(0.01f, radius * 0.18f);
             renderer.sprite = GetSmokeSprite();
             renderer.material = GetMaterial();
             renderer.sortingLayerID = sortingLayerId;
@@ -164,10 +239,11 @@ public sealed class PlayerShipExplosionVfx : MonoBehaviour
             return;
 
         float radius = Mathf.Lerp(0.18f, 1.35f, Mathf.SmoothStep(0f, 1f, t));
-        for (int i = 0; i < flashRing.positionCount; i++)
+        Vector3[] unitCircle = GetRingUnitCircle();
+        for (int i = 0; i < RingSegments; i++)
         {
-            float a = (i / (float)flashRing.positionCount) * Mathf.PI * 2f;
-            flashRing.SetPosition(i, new Vector3(Mathf.Cos(a) * radius, Mathf.Sin(a) * radius * 0.74f, 0f));
+            Vector3 point = unitCircle[i];
+            flashRing.SetPosition(i, new Vector3(point.x * radius, point.y * radius * 0.74f, 0f));
         }
 
         Color color = new Color(0.9f, 0.95f, 1f, Mathf.Lerp(0.62f, 0f, t));
@@ -270,5 +346,20 @@ public sealed class PlayerShipExplosionVfx : MonoBehaviour
             return;
 
         sprite.texture.GetNativeTexturePtr();
+    }
+
+    static Vector3[] GetRingUnitCircle()
+    {
+        if (ringUnitCircle != null)
+            return ringUnitCircle;
+
+        ringUnitCircle = new Vector3[RingSegments];
+        for (int i = 0; i < ringUnitCircle.Length; i++)
+        {
+            float angle = (i / (float)ringUnitCircle.Length) * Mathf.PI * 2f;
+            ringUnitCircle[i] = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+        }
+
+        return ringUnitCircle;
     }
 }

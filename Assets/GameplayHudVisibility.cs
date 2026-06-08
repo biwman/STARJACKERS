@@ -4,7 +4,7 @@ using UnityEngine;
 public sealed class GameplayHudVisibility : MonoBehaviour
 {
     const string RootName = "GameplayHudVisibility";
-    const float SuppressionRescanInterval = 0.35f;
+    const float SuppressionRescanInterval = 0.75f;
 
     static readonly string[] SuppressedObjectNames =
     {
@@ -35,16 +35,18 @@ public sealed class GameplayHudVisibility : MonoBehaviour
 
     static GameplayHudVisibility instance;
     static bool extractionCinematicSuppressed;
+    static bool roundSummarySuppressed;
 
     readonly Dictionary<GameObject, bool> capturedActiveState = new Dictionary<GameObject, bool>();
     readonly List<GameObject> suppressedObjects = new List<GameObject>(32);
+    readonly HashSet<GameObject> suppressedObjectSet = new HashSet<GameObject>();
     float nextSuppressionRescanTime;
 
     public static bool IsExtractionCinematicSuppressed => extractionCinematicSuppressed;
 
     public static bool IsGameplayHudVisible(bool normallyVisible)
     {
-        return normallyVisible && !extractionCinematicSuppressed;
+        return normallyVisible && !IsHudSuppressed;
     }
 
     public static void SuppressForExtractionCinematic()
@@ -53,12 +55,22 @@ public sealed class GameplayHudVisibility : MonoBehaviour
         EnsureInstance().BeginSuppression();
     }
 
+    public static void SuppressForRoundSummary()
+    {
+        extractionCinematicSuppressed = false;
+        roundSummarySuppressed = true;
+        EnsureInstance().BeginSuppression();
+    }
+
     public static void ResetSuppression()
     {
         extractionCinematicSuppressed = false;
+        roundSummarySuppressed = false;
         if (instance != null)
             instance.RestoreCapturedObjects();
     }
+
+    static bool IsHudSuppressed => extractionCinematicSuppressed || roundSummarySuppressed;
 
     static GameplayHudVisibility EnsureInstance()
     {
@@ -68,6 +80,9 @@ public sealed class GameplayHudVisibility : MonoBehaviour
         GameObject existing = GameObject.Find(RootName);
         if (existing == null)
             existing = new GameObject(RootName);
+
+        if (Application.isPlaying && existing.transform.parent == null)
+            DontDestroyOnLoad(existing);
 
         instance = existing.GetComponent<GameplayHudVisibility>();
         if (instance == null)
@@ -100,19 +115,19 @@ public sealed class GameplayHudVisibility : MonoBehaviour
 
     void Update()
     {
-        if (extractionCinematicSuppressed)
+        if (IsHudSuppressed)
             ApplySuppression();
     }
 
     void LateUpdate()
     {
-        if (extractionCinematicSuppressed)
+        if (IsHudSuppressed)
             ApplySuppression();
     }
 
     void ApplySuppressionBeforeCanvasRender()
     {
-        if (extractionCinematicSuppressed)
+        if (IsHudSuppressed)
             ApplySuppression();
     }
 
@@ -124,7 +139,7 @@ public sealed class GameplayHudVisibility : MonoBehaviour
 
     void ApplySuppression()
     {
-        if (suppressedObjects.Count == 0 || Time.unscaledTime >= nextSuppressionRescanTime)
+        if (Time.unscaledTime >= nextSuppressionRescanTime)
             RebuildSuppressedObjectCache();
 
         for (int i = suppressedObjects.Count - 1; i >= 0; i--)
@@ -132,6 +147,7 @@ public sealed class GameplayHudVisibility : MonoBehaviour
             GameObject obj = suppressedObjects[i];
             if (obj == null || !obj.scene.IsValid())
             {
+                suppressedObjectSet.Remove(obj);
                 suppressedObjects.RemoveAt(i);
                 continue;
             }
@@ -148,35 +164,58 @@ public sealed class GameplayHudVisibility : MonoBehaviour
     {
         nextSuppressionRescanTime = Time.unscaledTime + SuppressionRescanInterval;
         suppressedObjects.Clear();
+        suppressedObjectSet.Clear();
 
-        GameObject[] objects = Resources.FindObjectsOfTypeAll<GameObject>();
-        for (int i = 0; i < objects.Length; i++)
+        Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include);
+        for (int canvasIndex = 0; canvasIndex < canvases.Length; canvasIndex++)
         {
-            GameObject obj = objects[i];
-            if (obj == null || !obj.scene.IsValid() || !IsSuppressedObjectName(obj.name))
+            Canvas canvas = canvases[canvasIndex];
+            if (canvas == null || !canvas.gameObject.scene.IsValid())
                 continue;
 
-            suppressedObjects.Add(obj);
+            Transform[] children = canvas.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                Transform child = children[i];
+                if (child != null)
+                    TryAddSuppressedObject(child.gameObject);
+            }
         }
+
+        for (int i = 0; i < SuppressedObjectNames.Length; i++)
+        {
+            GameObject activeObject = GameObject.Find(SuppressedObjectNames[i]);
+            TryAddSuppressedObject(activeObject);
+        }
+    }
+
+    void TryAddSuppressedObject(GameObject obj)
+    {
+        if (obj == null || !obj.scene.IsValid() || !IsSuppressedObjectName(obj.name) || suppressedObjectSet.Contains(obj))
+            return;
+
+        suppressedObjectSet.Add(obj);
+        suppressedObjects.Add(obj);
     }
 
     void RestoreCapturedObjects()
     {
-        if (capturedActiveState.Count <= 0)
-            return;
-
-        foreach (KeyValuePair<GameObject, bool> entry in capturedActiveState)
+        if (capturedActiveState.Count > 0)
         {
-            GameObject obj = entry.Key;
-            if (obj == null || !obj.scene.IsValid())
-                continue;
+            foreach (KeyValuePair<GameObject, bool> entry in capturedActiveState)
+            {
+                GameObject obj = entry.Key;
+                if (obj == null || !obj.scene.IsValid())
+                    continue;
 
-            if (obj.activeSelf != entry.Value)
-                obj.SetActive(entry.Value);
+                if (obj.activeSelf != entry.Value)
+                    obj.SetActive(entry.Value);
+            }
         }
 
         capturedActiveState.Clear();
         suppressedObjects.Clear();
+        suppressedObjectSet.Clear();
     }
 
     static bool IsSuppressedObjectName(string objectName)

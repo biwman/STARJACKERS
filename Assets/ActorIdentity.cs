@@ -101,6 +101,15 @@ public sealed class ActorIdentity : MonoBehaviour
         bool isNeutralRider = NeutralRiderController.IsNeutralRiderInstantiationData(instantiationData) ||
                               target.GetComponent<NeutralRiderController>() != null;
 
+        if (ViperRecoveryPlotController.IsViperWreckInstantiationData(instantiationData) ||
+            target.GetComponent<ViperWreckTowTarget>() != null)
+        {
+            team = ActorTeam.Environment;
+            form = ActorForm.Wreck;
+            control = ActorControl.None;
+            return;
+        }
+
         ShipWreck wreck = target.GetComponent<ShipWreck>();
         if (wreck != null)
         {

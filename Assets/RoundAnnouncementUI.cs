@@ -9,7 +9,10 @@ public sealed class RoundAnnouncementUI : MonoBehaviour
 
     Canvas canvas;
     TMP_Text messageText;
+    TMP_Text persistentHintText;
     Coroutine activeRoutine;
+    string persistentHintOwnerKey;
+    string persistentHintMessage;
 
     public static void Show(string message, float seconds = 2.6f)
     {
@@ -19,6 +22,24 @@ public sealed class RoundAnnouncementUI : MonoBehaviour
         EnsureInstance();
         if (instance != null)
             instance.ShowInternal(message, seconds);
+    }
+
+    public static void SetPersistentHint(string ownerKey, string message)
+    {
+        if (string.IsNullOrWhiteSpace(ownerKey) || string.IsNullOrWhiteSpace(message))
+            return;
+
+        EnsureInstance();
+        if (instance != null)
+            instance.SetPersistentHintInternal(ownerKey, message);
+    }
+
+    public static void ClearPersistentHint(string ownerKey)
+    {
+        if (string.IsNullOrWhiteSpace(ownerKey) || instance == null)
+            return;
+
+        instance.ClearPersistentHintInternal(ownerKey);
     }
 
     static void EnsureInstance()
@@ -47,7 +68,7 @@ public sealed class RoundAnnouncementUI : MonoBehaviour
 
     void EnsureUi()
     {
-        if (canvas != null && messageText != null)
+        if (canvas != null && messageText != null && persistentHintText != null)
             return;
 
         canvas = GetComponent<Canvas>();
@@ -88,6 +109,29 @@ public sealed class RoundAnnouncementUI : MonoBehaviour
         messageText.color = new Color(1f, 0.88f, 0.28f, 0f);
         messageText.raycastTarget = false;
         messageText.text = string.Empty;
+
+        Transform persistentExisting = transform.Find("RoundPersistentHintText");
+        GameObject persistentObject = persistentExisting != null
+            ? persistentExisting.gameObject
+            : new GameObject("RoundPersistentHintText", typeof(RectTransform), typeof(TextMeshProUGUI));
+        persistentObject.transform.SetParent(transform, false);
+
+        RectTransform persistentRect = persistentObject.GetComponent<RectTransform>();
+        persistentRect.anchorMin = new Vector2(0.5f, 1f);
+        persistentRect.anchorMax = new Vector2(0.5f, 1f);
+        persistentRect.pivot = new Vector2(0.5f, 1f);
+        persistentRect.anchoredPosition = new Vector2(0f, -154f);
+        persistentRect.sizeDelta = new Vector2(1120f, 60f);
+
+        persistentHintText = persistentObject.GetComponent<TMP_Text>();
+        persistentHintText.fontSize = 30f;
+        persistentHintText.fontStyle = FontStyles.Bold;
+        persistentHintText.alignment = TextAlignmentOptions.Center;
+        persistentHintText.color = new Color(0.7f, 0.92f, 1f, 0f);
+        persistentHintText.raycastTarget = false;
+        persistentHintText.text = string.Empty;
+
+        ApplyPersistentHintVisual();
     }
 
     void ShowInternal(string message, float seconds)
@@ -97,6 +141,36 @@ public sealed class RoundAnnouncementUI : MonoBehaviour
             StopCoroutine(activeRoutine);
 
         activeRoutine = StartCoroutine(ShowRoutine(message, seconds));
+    }
+
+    void SetPersistentHintInternal(string ownerKey, string message)
+    {
+        EnsureUi();
+        persistentHintOwnerKey = ownerKey;
+        persistentHintMessage = message;
+        ApplyPersistentHintVisual();
+    }
+
+    void ClearPersistentHintInternal(string ownerKey)
+    {
+        if (!string.Equals(persistentHintOwnerKey, ownerKey, System.StringComparison.Ordinal))
+            return;
+
+        persistentHintOwnerKey = null;
+        persistentHintMessage = null;
+        ApplyPersistentHintVisual();
+    }
+
+    void ApplyPersistentHintVisual()
+    {
+        if (persistentHintText == null)
+            return;
+
+        bool visible = !string.IsNullOrWhiteSpace(persistentHintMessage);
+        persistentHintText.text = visible ? persistentHintMessage : string.Empty;
+        persistentHintText.color = visible
+            ? new Color(0.7f, 0.92f, 1f, 0.92f)
+            : new Color(0.7f, 0.92f, 1f, 0f);
     }
 
     IEnumerator ShowRoutine(string message, float seconds)

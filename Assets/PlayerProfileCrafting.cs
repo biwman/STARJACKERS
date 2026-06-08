@@ -334,6 +334,19 @@ public static class PlayerProfileCraftingCatalog
         },
         new PlayerProfileCraftingRecipe
         {
+            Id = "rocket_auto_turret_from_launcher_and_droid_parts",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.AutoTurretId,
+                InventoryItemCatalog.RocketLauncherId,
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.RocketAutoTurretId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
             Id = "guidance_system_from_radar_salvage",
             Inputs = new[]
             {

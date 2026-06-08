@@ -115,6 +115,12 @@ public class PlayerHealth : MonoBehaviourPun
 
     void Start()
     {
+        if (ViperRecoveryPlotController.TryEnsureViperWreckRuntime(gameObject))
+        {
+            enabled = false;
+            return;
+        }
+
         ActorIdentity.Ensure(gameObject);
 
         if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
@@ -137,7 +143,7 @@ public class PlayerHealth : MonoBehaviourPun
         if (IsHumanShipControlled)
         {
             int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
-            maxHP = ShipCatalog.GetBaseHp(shipSkinIndex);
+            maxHP = ShipCatalog.GetBaseHp(shipSkinIndex) + GetEquippedHpCapacityBonus(shipSkinIndex);
             maxShield = ShipCatalog.GetBaseShield(shipSkinIndex) + GetEquippedShieldCapacityBonus(shipSkinIndex);
         }
 
@@ -308,6 +314,13 @@ public class PlayerHealth : MonoBehaviourPun
             bonus = Mathf.CeilToInt(bonus * 1.3f);
 
         return bonus;
+    }
+
+    int GetEquippedHpCapacityBonus(int shipSkinIndex)
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        return InventoryItemCatalog.GetEquippedHpCapacityBonus(equipmentSlots, shipSkinIndex);
     }
 
     void OnDestroy()
@@ -924,7 +937,10 @@ public class PlayerHealth : MonoBehaviourPun
 
     bool IsDeployableDamageProxy()
     {
-        return PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null) ||
+        object[] instantiationData = photonView != null ? photonView.InstantiationData : null;
+        return ViperRecoveryPlotController.IsViperWreckInstantiationData(instantiationData) ||
+               PlayerDeployableRuntime.IsInstantiationData(instantiationData) ||
+               GetComponent<ViperWreckTowTarget>() != null ||
                GetComponent<PlayerDeployableBase>() != null;
     }
 
@@ -1466,6 +1482,104 @@ public class PlayerHealth : MonoBehaviourPun
         }
     }
 
+    [PunRPC]
+    public void BeginAvengerShipOverrideRpc(int shipSkinIndex, float launchX, float launchY, float rotationZ)
+    {
+        if (IsBotControlled || IsNeutralRiderControlled || IsAstronautControlled)
+            return;
+
+        int safeSkinIndex = Mathf.Clamp(shipSkinIndex, ShipCatalog.ExplorerBasicSkinIndex, ShipCatalog.MaxShipSkinIndex);
+        transform.position = new Vector3(launchX, launchY, transform.position.z);
+        transform.rotation = Quaternion.Euler(0f, 0f, rotationZ);
+        IsWreck = false;
+        isEvacuationAnimating = false;
+        destroyRequested = false;
+        deathHandled = false;
+        astronautSpawnedAfterDestruction = false;
+        hasPendingEvacuationSummary = false;
+        pendingEvacuationOutcome = "extracted";
+        currentHP = Mathf.Max(1, ShipCatalog.GetBaseHp(safeSkinIndex));
+        currentShield = Mathf.Max(0, ShipCatalog.GetBaseShield(safeSkinIndex));
+        maxHP = currentHP;
+        maxShield = currentShield;
+        phaseShieldTriggered = false;
+        jakeEmergencyRegenerationUsed = false;
+        if (jakeEmergencyRegenerationRoutine != null)
+        {
+            StopCoroutine(jakeEmergencyRegenerationRoutine);
+            jakeEmergencyRegenerationRoutine = null;
+        }
+
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        if (damageState == null)
+            damageState = gameObject.AddComponent<ShipDamageState>();
+        damageState.ClearAllLocalDamageForNewShip();
+
+        PlayerShooting shooting = GetComponent<PlayerShooting>();
+        if (shooting != null)
+            shooting.CancelActiveGadgetEffectsForShipLoss();
+
+        if (GetComponent<PlayerRepairDocking>() == null)
+            gameObject.AddComponent<PlayerRepairDocking>();
+        if (GetComponent<PilotActiveAbilityController>() == null)
+            gameObject.AddComponent<PilotActiveAbilityController>();
+        if (GetComponent<RoundChatCommandUI>() == null)
+            gameObject.AddComponent<RoundChatCommandUI>();
+
+        if (photonView.IsMine)
+        {
+            PhotonNetwork.LocalPlayer.TagObject = gameObject;
+            if (PlayerProfileService.HasInstance)
+                PlayerProfileService.Instance.SetActiveRoundShipSkin(safeSkinIndex);
+
+            PlayerMovement movement = GetComponent<PlayerMovement>();
+            if (movement != null)
+                movement.enabled = true;
+            if (shooting != null)
+                shooting.enabled = true;
+
+            if (hpBar != null)
+            {
+                hpBar.maxValue = maxHP;
+                hpBar.value = currentHP;
+            }
+        }
+
+        BeginSpawnInvulnerability(SpawnInvulnerabilityDuration);
+        ApplyImmediateShipVisual(safeSkinIndex);
+        StartCoroutine(RefreshShipVisualAfterAvengerOverride());
+    }
+
+    void ApplyImmediateShipVisual(int shipSkinIndex)
+    {
+        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+        if (renderer == null)
+            return;
+
+        Sprite sprite = RuntimeSpriteUtility.LoadSprite(
+            ShipCatalog.GetShipSkinResourcePath(shipSkinIndex),
+            ShipCatalog.GetShipSkinEditorResourcePath(shipSkinIndex));
+        if (sprite == null)
+            return;
+
+        renderer.sprite = sprite;
+        renderer.color = Color.white;
+        renderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        renderer.sortingOrder = GameVisualTheme.PlayerSortingOrder;
+        RuntimeSpriteUtility.FitRenderer(renderer, GameVisualTheme.PlayerTargetSize);
+    }
+
+    IEnumerator RefreshShipVisualAfterAvengerOverride()
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            yield return new WaitForSeconds(0.08f);
+            GameVisualTheme.ApplyPlayerVisual(this);
+        }
+
+        GameVisualTheme.RequestRuntimeRefresh();
+    }
+
     public bool TryRestoreShieldAuthority(float amount, bool playFullPowerAudio)
     {
         int shieldCap = GetRepairableShieldCap();
@@ -1831,7 +1945,102 @@ public class PlayerHealth : MonoBehaviourPun
             }
         }
 
+        try
+        {
+            int returningShipSkinIndex = ResolveCurrentRoundShipSkinIndex();
+            if (string.Equals(pendingEvacuationOutcome, "extracted", System.StringComparison.OrdinalIgnoreCase) &&
+                ShipCatalog.GetShipTypeFromSkinIndex(returningShipSkinIndex) == ShipType.Avenger)
+            {
+                await PlayerProfileService.Instance.CompleteAvengerTheftAttemptAsync(returningShipSkinIndex);
+            }
+            else
+            {
+                await PlayerProfileService.Instance.FailAvengerTheftAttemptAsync();
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to resolve Avenger theft attempt on round end: " + ex);
+        }
+
+        try
+        {
+            if (string.Equals(pendingEvacuationOutcome, "extracted", System.StringComparison.OrdinalIgnoreCase))
+            {
+                ViperTestFlightResult viperResult = await PlayerProfileService.Instance.RecordViperTestFlightReturnAsync(ResolveCurrentRoundElapsedSeconds());
+                if (viperResult == ViperTestFlightResult.TooShort)
+                    RoundAnnouncementUI.Show("Test flight was too short", 2.8f);
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to resolve Viper test flight on round end: " + ex);
+        }
+
+        try
+        {
+            if (string.Equals(pendingEvacuationOutcome, "extracted", System.StringComparison.OrdinalIgnoreCase))
+            {
+                bool arrowCompleted = await PlayerProfileService.Instance.CompleteArrowFinalRunAsync(
+                    ResolveCurrentRoundShipSkinIndex(),
+                    ArrowRacePlotController.IsLocalFinalRunReadyForExtraction());
+                if (arrowCompleted)
+                    RoundAnnouncementUI.Show("Arrow unlocked.", 3f);
+            }
+            else
+            {
+                await PlayerProfileService.Instance.FailArrowFinalRunAsync();
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to resolve Arrow final run on round end: " + ex);
+        }
+        finally
+        {
+            ArrowRacePlotController.ClearLocalFinalRunState();
+        }
+
         TryRecordExtractionPilotProgress(pendingEvacuationOutcome);
+    }
+
+    int ResolveCurrentRoundShipSkinIndex()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        return RoomSettings.GetPlayerShipSkin(owner, ShipCatalog.ExplorerBasicSkinIndex);
+    }
+
+    [PunRPC]
+    public async void NotifyViperWreckRecovered()
+    {
+        if (!photonView.IsMine)
+            return;
+
+        try
+        {
+            await PlayerProfileService.Instance.RecordViperWreckRecoveredAsync();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to record Viper wreck recovery: " + ex);
+        }
+    }
+
+    float ResolveCurrentRoundElapsedSeconds()
+    {
+        GameTimer timer = FindAnyObjectByType<GameTimer>();
+        if (timer != null)
+            return Mathf.Max(0f, RoomSettings.GetRoundDuration() - timer.GetCurrentRemainingTime());
+
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.StartTimeKey, out object startValue) &&
+            startValue is double startTime &&
+            startTime >= 0d)
+        {
+            return Mathf.Max(0f, (float)(PhotonNetwork.Time - startTime));
+        }
+
+        return 0f;
     }
 
     async void TryRecordExtractionPilotProgress(string outcome)
@@ -1931,12 +2140,34 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
-    void NotifyFinalDeath(int finalScore)
+    async void NotifyFinalDeath(int finalScore)
     {
         if (!photonView.IsMine)
             return;
 
         PlayerProfileService.Instance.DiscardPendingAstronautCargo();
+        try
+        {
+            await PlayerProfileService.Instance.FailAvengerTheftAttemptAsync();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to clear Avenger theft attempt after death: " + ex);
+        }
+
+        try
+        {
+            await PlayerProfileService.Instance.FailArrowFinalRunAsync();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to clear Arrow final run after death: " + ex);
+        }
+        finally
+        {
+            ArrowRacePlotController.ClearLocalFinalRunState();
+        }
+
         EarlyRoundExitUI.ShowEndRoundButton(finalScore, "dead");
     }
 
@@ -2045,7 +2276,7 @@ public class PlayerHealth : MonoBehaviourPun
 
         try
         {
-            await PlayerProfileService.Instance.ApplyShipLossAsync(shipSkinIndex, loseShipInventory, loseEquipment, serializedAstronautCargo, protectedEquipmentItemId);
+            await PlayerProfileService.Instance.ApplyShipLossAsync(shipSkinIndex, loseShipInventory, loseEquipment, serializedAstronautCargo, protectedEquipmentItemId, true);
         }
         catch (System.Exception ex)
         {
@@ -2083,7 +2314,6 @@ public class PlayerHealth : MonoBehaviourPun
             PlayerHealth astronautHealth = astronaut.GetComponent<PlayerHealth>();
             if (astronautHealth != null)
                 GameVisualTheme.ApplyPlayerVisual(astronautHealth);
-            GameVisualTheme.RequestRuntimeRefresh();
 
             PhotonNetwork.LocalPlayer.TagObject = astronaut;
         }
@@ -2190,10 +2420,6 @@ public class PlayerHealth : MonoBehaviourPun
         SpriteRenderer renderer = GetComponent<SpriteRenderer>();
         if (renderer != null)
         {
-            Sprite wreckSprite = LoadPlayerWreckSprite(shipSkinIndex);
-            if (wreckSprite != null)
-                renderer.sprite = wreckSprite;
-
             renderer.color = Color.white;
         }
 
@@ -2261,10 +2487,6 @@ public class PlayerHealth : MonoBehaviourPun
         SpriteRenderer renderer = GetComponent<SpriteRenderer>();
         if (renderer != null)
         {
-            Sprite wreckSprite = LoadPlayerWreckSprite(safeSkinIndex);
-            if (wreckSprite != null)
-                renderer.sprite = wreckSprite;
-
             renderer.color = Color.white;
         }
 
@@ -2620,12 +2842,34 @@ public class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
-    public void OnTimeUp()
+    public async void OnTimeUp()
     {
         if (!photonView.IsMine)
             return;
 
         PlayerProfileService.Instance.DiscardPendingAstronautCargo();
+        try
+        {
+            await PlayerProfileService.Instance.FailAvengerTheftAttemptAsync();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to clear Avenger theft attempt after time up: " + ex);
+        }
+
+        try
+        {
+            await PlayerProfileService.Instance.FailArrowFinalRunAsync();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to clear Arrow final run after time up: " + ex);
+        }
+        finally
+        {
+            ArrowRacePlotController.ClearLocalFinalRunState();
+        }
+
         ShowTimeUpMessage();
         StartCoroutine(DieAfterDelay());
     }
@@ -3548,6 +3792,7 @@ public class AstronautSurvivor : MonoBehaviourPun
     Vector2 enemyTargetPosition;
     SpriteRenderer cachedRenderer;
     Rigidbody2D cachedBody;
+    PlayerHealth cachedHealth;
     Coroutine enemyEvacuationRoutine;
 
     public bool IsEscapePodMode => isEscapePod;
@@ -3668,8 +3913,8 @@ public class AstronautSurvivor : MonoBehaviourPun
         if (thruster != null)
             thruster.RefreshMode();
 
-        PlayerHealth health = GetComponent<PlayerHealth>();
-        if (health != null)
+        cachedHealth = GetComponent<PlayerHealth>();
+        if (cachedHealth != null)
         {
             int astronautHp = isEnemySurvivor
                 ? EnemyAstronautHp
@@ -3677,9 +3922,9 @@ public class AstronautSurvivor : MonoBehaviourPun
             if (!isEnemySurvivor && isEscapePod)
                 astronautHp += EscapePodHpBonus;
 
-            health.ConfigureBaseStats(astronautHp, 0);
+            cachedHealth.ConfigureBaseStats(astronautHp, 0);
             if (hasEmergencySuitBeacon)
-                health.BeginEquipmentInvulnerabilityLocal(EmergencySuitBeaconProtectionDuration);
+                cachedHealth.BeginEquipmentInvulnerabilityLocal(EmergencySuitBeaconProtectionDuration);
         }
 
         Rigidbody2D body = GetComponent<Rigidbody2D>();
@@ -3742,8 +3987,9 @@ public class AstronautSurvivor : MonoBehaviourPun
         if (PhotonNetwork.InRoom && photonView != null && !photonView.IsMine)
             return;
 
-        PlayerHealth health = GetComponent<PlayerHealth>();
-        if (health != null && (health.IsWreck || health.IsEvacuationAnimating || health.CurrentHP <= 0))
+        if (cachedHealth == null)
+            cachedHealth = GetComponent<PlayerHealth>();
+        if (cachedHealth != null && (cachedHealth.IsWreck || cachedHealth.IsEvacuationAnimating || cachedHealth.CurrentHP <= 0))
             return;
 
         if (cachedBody == null)
@@ -3786,11 +4032,13 @@ public class AstronautSurvivor : MonoBehaviourPun
         Vector2 desired = toTarget.sqrMagnitude > 0.001f ? toTarget.normalized : Vector2.up;
         Vector2 playerAvoidance = Vector2.zero;
 
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth ownHealth = cachedHealth != null ? cachedHealth : GetComponent<PlayerHealth>();
+        cachedHealth = ownHealth;
+        PlayerHealth[] players = RuntimeSceneQueryCache.GetPlayers();
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth player = players[i];
-            if (player == null || player == GetComponent<PlayerHealth>() || player.IsWreck || player.IsBotControlled || player.IsNeutralRiderControlled || player.IsAstronautControlled || player.IsEvacuationAnimating)
+            if (player == null || !player.gameObject.activeInHierarchy || player == ownHealth || player.IsWreck || player.IsBotControlled || player.IsNeutralRiderControlled || player.IsAstronautControlled || player.IsEvacuationAnimating)
                 continue;
 
             Vector2 away = currentPosition - (Vector2)player.transform.position;
@@ -4176,31 +4424,31 @@ public class AstronautSurvivor : MonoBehaviourPun
     {
         List<Vector2> destinations = new List<Vector2>();
 
-        ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
+        ExtractionZone[] zones = RuntimeSceneQueryCache.GetExtractionZones();
         for (int i = 0; i < zones.Length; i++)
         {
-            if (zones[i] != null)
+            if (zones[i] != null && zones[i].gameObject.activeInHierarchy)
                 AddUniqueDestination(destinations, zones[i].transform.position);
         }
 
-        ScienceStation[] scienceStations = FindObjectsByType<ScienceStation>(FindObjectsInactive.Exclude);
+        ScienceStation[] scienceStations = RuntimeSceneQueryCache.GetScienceStations();
         for (int i = 0; i < scienceStations.Length; i++)
         {
-            if (scienceStations[i] != null)
+            if (scienceStations[i] != null && scienceStations[i].gameObject.activeInHierarchy)
                 AddUniqueDestination(destinations, scienceStations[i].transform.position);
         }
 
-        RepairBay[] repairBays = FindObjectsByType<RepairBay>(FindObjectsInactive.Exclude);
+        RepairBay[] repairBays = RuntimeSceneQueryCache.GetRepairBays();
         for (int i = 0; i < repairBays.Length; i++)
         {
-            if (repairBays[i] != null)
+            if (repairBays[i] != null && repairBays[i].gameObject.activeInHierarchy)
                 AddUniqueDestination(destinations, repairBays[i].transform.position);
         }
 
-        SpaceFactory[] factories = FindObjectsByType<SpaceFactory>(FindObjectsInactive.Exclude);
+        SpaceFactory[] factories = RuntimeSceneQueryCache.GetSpaceFactories();
         for (int i = 0; i < factories.Length; i++)
         {
-            if (factories[i] != null)
+            if (factories[i] != null && factories[i].gameObject.activeInHierarchy)
                 AddUniqueDestination(destinations, factories[i].transform.position);
         }
 

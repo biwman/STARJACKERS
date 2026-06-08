@@ -21,6 +21,7 @@ public class GameVisualTheme : MonoBehaviour
     public const int PlayerSortingOrder = 32;
 
     public const float PlayerTargetSize = 1.04f;
+    const float CargoTruckPlayerSizeMultiplier = 1.5f;
     const float AstronautTargetSize = 0.56f;
     const float TreasureTargetSize = 1.5f;
     const float ContainerTargetSize = 1.05f;
@@ -527,6 +528,13 @@ public class GameVisualTheme : MonoBehaviour
             return;
 
         PhotonView view = player.GetComponent<PhotonView>();
+        if (ViperRecoveryPlotController.IsViperWreckInstantiationData(view != null ? view.InstantiationData : null) ||
+            player.GetComponent<ViperWreckTowTarget>() != null)
+        {
+            ViperRecoveryPlotController.TryEnsureViperWreckRuntime(player.gameObject);
+            return;
+        }
+
         if (PlayerDeployableRuntime.IsInstantiationData(view != null ? view.InstantiationData : null) ||
             player.GetComponent<PlayerDeployableBase>() != null)
         {
@@ -626,6 +634,8 @@ public class GameVisualTheme : MonoBehaviour
                 : RoomSettings.GetPlayerShipSkin(view.Owner, fallbackIndex);
             shipIndex %= shipSprites.Length;
             sprite = shipSprites[shipIndex];
+            if (ShipCatalog.GetShipTypeFromSkinIndex(shipIndex) == ShipType.CargoTruck)
+                targetSize *= CargoTruckPlayerSizeMultiplier;
         }
 
         if (sprite == null)

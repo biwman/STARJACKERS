@@ -295,6 +295,11 @@ public sealed class ShipDamageState : MonoBehaviourPun
         }
     }
 
+    public void ClearAllLocalDamageForNewShip()
+    {
+        ClearAllLocal();
+    }
+
     bool SetDamageAuthority(ShipDamageType type, ShipDamageSeverity severity)
     {
         if (!PhotonNetwork.IsMasterClient || severity == ShipDamageSeverity.None || GetSeverity(type) >= severity || !IsDamageTypeApplicable(type))

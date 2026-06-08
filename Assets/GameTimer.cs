@@ -20,6 +20,7 @@ public class GameTimer : MonoBehaviourPun
     const float TimeUpEvacuationGraceSeconds = 4.4f;
     public const string EvacuationPauseUntilKey = "evacPauseUntil";
     public const string EvacuationPauseRemainingKey = "evacPauseRemaining";
+    const float ActivePlayerScanInterval = 0.25f;
 
     public float roundTime = 180f;
 
@@ -28,9 +29,12 @@ public class GameTimer : MonoBehaviourPun
     bool isEndingRound;
     bool hasSeenMultipleActivePlayers;
     float pausedTimeRemaining;
+    int cachedActivePlayerCount = -1;
+    float nextActivePlayerScanTime;
 
     void Start()
     {
+        RuntimeSceneQueryCache.InvalidateAll();
         EndDisasterMeteorVfx.EnsureExists();
         RepairBaySpawner.EnsureExists();
         SpaceJunkSpawner.EnsureExists();
@@ -59,6 +63,7 @@ public class GameTimer : MonoBehaviourPun
         {
             hasSeenMultipleActivePlayers = false;
             pausedTimeRemaining = 0f;
+            cachedActivePlayerCount = -1;
             return;
         }
 
@@ -82,8 +87,9 @@ public class GameTimer : MonoBehaviourPun
 
         if (PhotonNetwork.IsMasterClient)
         {
-            UpdateLoneShipTimerMode();
-            if (CountActivePlayers() <= 0 && !HasActiveDropbotCargoInFlight() && !isEndingRound)
+            int activePlayerCount = GetActivePlayerCountCached();
+            UpdateLoneShipTimerMode(activePlayerCount);
+            if (activePlayerCount <= 0 && !HasActiveDropbotCargoInFlight() && !isEndingRound)
             {
                 StartRoundEmptyFieldEnd();
                 return;
@@ -137,11 +143,11 @@ public class GameTimer : MonoBehaviourPun
 
     System.Collections.IEnumerator EndGameAfterTimeUpSync()
     {
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] players = RuntimeSceneQueryCache.GetPlayers();
         bool evacuationInProgress = false;
         foreach (PlayerHealth p in players)
         {
-            if (p == null || p.IsWreck)
+            if (p == null || !p.gameObject.activeInHierarchy || p.IsWreck)
                 continue;
 
             if (p.IsEvacuationAnimating)
@@ -193,15 +199,15 @@ public class GameTimer : MonoBehaviourPun
         if (!PhotonNetwork.IsMasterClient)
             return;
 
+        RuntimeSceneQueryCache.InvalidateAll();
         RoundWarmupService.BeginRoundStartPreparation();
     }
 
-    void UpdateLoneShipTimerMode()
+    void UpdateLoneShipTimerMode(int activePlayers)
     {
         if (PhotonNetwork.CurrentRoom == null)
             return;
 
-        int activePlayers = CountActivePlayers();
         if (activePlayers >= 2)
         {
             hasSeenMultipleActivePlayers = true;
@@ -239,10 +245,21 @@ public class GameTimer : MonoBehaviourPun
         return PhotonNetwork.Time - startTime;
     }
 
+    int GetActivePlayerCountCached()
+    {
+        if (cachedActivePlayerCount < 0 || Time.unscaledTime >= nextActivePlayerScanTime)
+        {
+            cachedActivePlayerCount = CountActivePlayers();
+            nextActivePlayerScanTime = Time.unscaledTime + ActivePlayerScanInterval;
+        }
+
+        return cachedActivePlayerCount;
+    }
+
     int CountActivePlayers()
     {
         int count = 0;
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] players = RuntimeSceneQueryCache.GetPlayers();
         for (int i = 0; i < players.Length; i++)
         {
             if (!IsActiveRoundPlayer(players[i]))
@@ -280,15 +297,17 @@ public class GameTimer : MonoBehaviourPun
         }
 
         object[] instantiationData = player.photonView.InstantiationData;
-        if (PlayerDeployableRuntime.IsInstantiationData(instantiationData) ||
+        if (ViperRecoveryPlotController.IsViperWreckInstantiationData(instantiationData) ||
+            PlayerDeployableRuntime.IsInstantiationData(instantiationData) ||
             LureBeaconDecoy.IsInstantiationData(instantiationData) ||
+            player.GetComponent<ViperWreckTowTarget>() != null ||
             player.GetComponent<PlayerDeployableBase>() != null ||
             player.GetComponent<LureBeaconDecoy>() != null)
         {
             return false;
         }
 
-        return true;
+        return ActorIdentity.IsHumanPlayerActor(player);
     }
 
     bool IsGameStarted()

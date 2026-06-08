@@ -64,9 +64,13 @@ public class NebulaField : MonoBehaviour
     NebulaFieldKind fieldKind = NebulaFieldKind.Normal;
     Vector2 cloudInitialPosition;
     Vector2 cloudDriftDirection = Vector2.right;
+    Vector2 cloudBoundsMin;
+    Vector2 cloudBoundsSpan;
+    double cloudRoundStartTime;
     int cloudIndex;
     int cloudWrapGeneration;
     bool cloudDriftConfigured;
+    bool cloudUsesNetworkClock;
     readonly Dictionary<HideInNebulaTarget, float> nextTriggerStayRefreshByTarget = new Dictionary<HideInNebulaTarget, float>();
 
     public NebulaFieldKind FieldKind => fieldKind;
@@ -89,10 +93,14 @@ public class NebulaField : MonoBehaviour
 
     void Update()
     {
+        if (fieldKind == NebulaFieldKind.Normal)
+            RefreshAdvancedVisualState();
+    }
+
+    void FixedUpdate()
+    {
         if (fieldKind == NebulaFieldKind.Cloud && cloudDriftConfigured)
             UpdateCloudDrift(false);
-
-        RefreshAdvancedVisualState();
     }
 
     void OnEnable()
@@ -135,6 +143,8 @@ public class NebulaField : MonoBehaviour
         cloudIndex = Mathf.Max(0, index);
         cloudWrapGeneration = 0;
         cloudDriftConfigured = true;
+        ConfigureCloudBounds();
+        CaptureCloudTiming();
         ConfigureVisual();
         ConfigureCollider();
         RefreshAdvancedVisualState();
@@ -377,52 +387,7 @@ public class NebulaField : MonoBehaviour
 
     Bounds GetTargetBounds(HideInNebulaTarget target)
     {
-        Collider2D[] colliders = target.GetComponentsInChildren<Collider2D>(false);
-        bool hasBounds = false;
-        Bounds combined = new Bounds(target.transform.position, Vector3.zero);
-        for (int i = 0; i < colliders.Length; i++)
-        {
-            Collider2D collider = colliders[i];
-            if (collider == null || !collider.enabled || collider.isTrigger)
-                continue;
-
-            if (!hasBounds)
-            {
-                combined = collider.bounds;
-                hasBounds = true;
-            }
-            else
-            {
-                combined.Encapsulate(collider.bounds);
-            }
-        }
-
-        if (hasBounds)
-            return combined;
-
-        SpriteRenderer rootRenderer = target.GetComponent<SpriteRenderer>();
-        if (rootRenderer != null && rootRenderer.enabled)
-            return rootRenderer.bounds;
-
-        SpriteRenderer[] targetRenderers = target.GetComponentsInChildren<SpriteRenderer>(false);
-        for (int i = 0; i < targetRenderers.Length; i++)
-        {
-            SpriteRenderer renderer = targetRenderers[i];
-            if (renderer == null || !renderer.enabled)
-                continue;
-
-            if (!hasBounds)
-            {
-                combined = renderer.bounds;
-                hasBounds = true;
-            }
-            else
-            {
-                combined.Encapsulate(renderer.bounds);
-            }
-        }
-
-        return hasBounds ? combined : new Bounds(target.transform.position, Vector3.one);
+        return target != null ? target.GetNebulaBounds() : new Bounds(transform.position, Vector3.one);
     }
 
     float GetWorldNebulaRadius()
@@ -484,27 +449,27 @@ public class NebulaField : MonoBehaviour
 
     void UpdateCloudDrift(bool forceRefresh)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
-        float minX = -mapSize.x * 0.5f - CloudWrapPadding;
-        float maxX = mapSize.x * 0.5f + CloudWrapPadding;
-        float minY = -mapSize.y * 0.5f - CloudWrapPadding;
-        float maxY = mapSize.y * 0.5f + CloudWrapPadding;
-        float spanX = Mathf.Max(1f, maxX - minX);
-        float spanY = Mathf.Max(1f, maxY - minY);
         float elapsed = (float)GetRoundElapsedSeconds();
         Vector2 rawPosition = cloudInitialPosition + cloudDriftDirection * (CloudDriftSpeed * elapsed);
         int wrapX;
         int wrapY;
-        float wrappedX = WrapCoordinate(rawPosition.x, minX, spanX, out wrapX);
-        float wrappedY = WrapCoordinate(rawPosition.y, minY, spanY, out wrapY);
+        float wrappedX = WrapCoordinate(rawPosition.x, cloudBoundsMin.x, cloudBoundsSpan.x, out wrapX);
+        float wrappedY = WrapCoordinate(rawPosition.y, cloudBoundsMin.y, cloudBoundsSpan.y, out wrapY);
         int wrapGeneration = (wrapX * 73856093) ^ (wrapY * 19349663);
         bool changedGeneration = wrapGeneration != cloudWrapGeneration;
 
         Vector2 wrappedPosition = new Vector2(wrappedX, wrappedY);
         if (cloudRigidbody != null)
-            cloudRigidbody.position = wrappedPosition;
+        {
+            if (forceRefresh || changedGeneration)
+                cloudRigidbody.position = wrappedPosition;
+            else
+                cloudRigidbody.MovePosition(wrappedPosition);
+        }
         else
+        {
             transform.position = new Vector3(wrappedX, wrappedY, transform.position.z);
+        }
 
         if (forceRefresh || changedGeneration)
         {
@@ -512,6 +477,34 @@ public class NebulaField : MonoBehaviour
             ConfigureVisual();
             ConfigureCollider();
             HideInNebulaTarget.RemoveNebulaFromAll(nebulaKey);
+        }
+    }
+
+    void ConfigureCloudBounds()
+    {
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float minX = -mapSize.x * 0.5f - CloudWrapPadding;
+        float maxX = mapSize.x * 0.5f + CloudWrapPadding;
+        float minY = -mapSize.y * 0.5f - CloudWrapPadding;
+        float maxY = mapSize.y * 0.5f + CloudWrapPadding;
+
+        cloudBoundsMin = new Vector2(minX, minY);
+        cloudBoundsSpan = new Vector2(
+            Mathf.Max(1f, maxX - minX),
+            Mathf.Max(1f, maxY - minY));
+    }
+
+    void CaptureCloudTiming()
+    {
+        cloudUsesNetworkClock = false;
+        cloudRoundStartTime = 0d;
+
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.StartTimeKey, out object value) &&
+            value is double startTime)
+        {
+            cloudUsesNetworkClock = true;
+            cloudRoundStartTime = startTime;
         }
     }
 
@@ -524,11 +517,9 @@ public class NebulaField : MonoBehaviour
 
     double GetRoundElapsedSeconds()
     {
-        if (PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.StartTimeKey, out object value) &&
-            value is double startTime)
+        if (cloudUsesNetworkClock)
         {
-            double elapsed = PhotonNetwork.Time - startTime;
+            double elapsed = PhotonNetwork.Time - cloudRoundStartTime;
             return elapsed > 0d ? elapsed : 0d;
         }
 

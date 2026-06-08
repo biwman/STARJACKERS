@@ -161,6 +161,7 @@ public class NebulaSpawner : MonoBehaviour
                 Rigidbody2D body = nebula.AddComponent<Rigidbody2D>();
                 body.bodyType = RigidbodyType2D.Kinematic;
                 body.gravityScale = 0f;
+                body.interpolation = RigidbodyInterpolation2D.Interpolate;
             }
 
             NebulaField field = nebula.AddComponent<NebulaField>();

@@ -12,8 +12,11 @@ public class HideInNebulaTarget : MonoBehaviour
     const float ToxicNebulaDamageIntervalSeconds = 2f;
 
     static readonly HashSet<int> LocalPlayerNebulas = new HashSet<int>();
+    static readonly HashSet<HideInNebulaTarget> ActiveTargets = new HashSet<HideInNebulaTarget>();
 
     Renderer[] renderers;
+    Collider2D[] boundsColliders;
+    SpriteRenderer[] boundsSpriteRenderers;
     PhotonView photonView;
     PlayerHealth playerHealth;
     Coroutine damageRoutine;
@@ -38,6 +41,16 @@ public class HideInNebulaTarget : MonoBehaviour
         photonView = GetComponent<PhotonView>();
         playerHealth = GetComponent<PlayerHealth>();
         CacheRenderers();
+    }
+
+    void OnEnable()
+    {
+        ActiveTargets.Add(this);
+    }
+
+    void OnDisable()
+    {
+        ActiveTargets.Remove(this);
     }
 
     void Update()
@@ -182,11 +195,10 @@ public class HideInNebulaTarget : MonoBehaviour
 
     public static void RemoveNebulaFromAll(int nebulaId)
     {
-        HideInNebulaTarget[] targets = FindObjectsByType<HideInNebulaTarget>(FindObjectsInactive.Exclude);
-        for (int i = 0; i < targets.Length; i++)
+        foreach (HideInNebulaTarget target in ActiveTargets)
         {
-            if (targets[i] != null)
-                targets[i].RemoveNebula(nebulaId);
+            if (target != null && target.isActiveAndEnabled)
+                target.RemoveNebula(nebulaId);
         }
     }
 
@@ -196,6 +208,77 @@ public class HideInNebulaTarget : MonoBehaviour
         {
             renderers = GetComponentsInChildren<Renderer>(true);
         }
+    }
+
+    void CacheBoundsComponents()
+    {
+        if (boundsColliders == null || boundsColliders.Length == 0)
+            boundsColliders = GetComponentsInChildren<Collider2D>(true);
+
+        if (boundsSpriteRenderers == null || boundsSpriteRenderers.Length == 0)
+            boundsSpriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+    }
+
+    public Bounds GetNebulaBounds()
+    {
+        CacheBoundsComponents();
+
+        bool hasBounds = false;
+        Bounds combined = new Bounds(transform.position, Vector3.zero);
+
+        if (boundsColliders != null)
+        {
+            for (int i = 0; i < boundsColliders.Length; i++)
+            {
+                Collider2D collider = boundsColliders[i];
+                if (collider == null ||
+                    !collider.enabled ||
+                    collider.isTrigger ||
+                    !collider.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                if (!hasBounds)
+                {
+                    combined = collider.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    combined.Encapsulate(collider.bounds);
+                }
+            }
+        }
+
+        if (hasBounds)
+            return combined;
+
+        if (boundsSpriteRenderers != null)
+        {
+            for (int i = 0; i < boundsSpriteRenderers.Length; i++)
+            {
+                SpriteRenderer renderer = boundsSpriteRenderers[i];
+                if (renderer == null ||
+                    !renderer.enabled ||
+                    !renderer.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                if (!hasBounds)
+                {
+                    combined = renderer.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    combined.Encapsulate(renderer.bounds);
+                }
+            }
+        }
+
+        return hasBounds ? combined : new Bounds(transform.position, Vector3.one);
     }
 
     void ApplyVisibility()
@@ -340,11 +423,10 @@ public class HideInNebulaTarget : MonoBehaviour
 
     public static void RefreshAllTargetVisibility()
     {
-        HideInNebulaTarget[] targets = FindObjectsByType<HideInNebulaTarget>(FindObjectsInactive.Exclude);
-        for (int i = 0; i < targets.Length; i++)
+        foreach (HideInNebulaTarget target in ActiveTargets)
         {
-            if (targets[i] != null)
-                targets[i].ApplyVisibility();
+            if (target != null && target.isActiveAndEnabled)
+                target.ApplyVisibility();
         }
     }
 

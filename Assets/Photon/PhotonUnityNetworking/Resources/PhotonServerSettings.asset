@@ -90,6 +90,7 @@ MonoBehaviour:
   - TakeNebulaDamage
   - BeginTransitionStage
   - BeginEvacuationSequence
+  - BeginWreckEvacuationRpc
   - PlayMineDetonationEffects
   - ReceivePendingDroppedCargoLootRpc
   - ReceivePendingWreckLootRpc
@@ -127,6 +128,7 @@ MonoBehaviour:
   - TakeDamageProfileWithContextAt
   - PlayImpactVfx
   - NotifyFinalEvacuation
+  - NotifyViperWreckRecovered
   - AwardCharlieLastSecondExtractionBonus
   - UnlockRoburPilotAfterHumanKill
   - RecordPilotDroneKillProgress
@@ -261,6 +263,11 @@ MonoBehaviour:
   - SetArtifactExamineBeamTargetRpc
   - RequestAstronautKillMe
   - RecordMothershipKillMapProgress
+  - PlaySuperBoosterSfxRpc
+  - PlayRocketShotRpc
+  - BeginAvengerShipOverrideRpc
+  - StartNeutralRiderCollectionBeamRpc
+  - StopNeutralRiderCollectionBeamRpc
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

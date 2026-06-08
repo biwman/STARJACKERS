@@ -15,7 +15,7 @@ public class ShipInventoryHudUI : MonoBehaviourPun
     const float CargoButtonHeight = 244f;
     const float CargoButtonPanelGap = 12f;
     const float CargoButtonLeftInset = 4f;
-    const float CargoButtonTopInset = 254f;
+    const float CargoButtonTopInset = 232f;
     const float CargoSlotSize = 99f;
     const float CargoSlotSpacing = 10f;
     const int CargoSlotColumns = 5;

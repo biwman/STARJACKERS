@@ -64,6 +64,7 @@ public class EndGameWatcher : MonoBehaviour
         while (IsLocalPlayerEvacuationAnimating() && Time.unscaledTime < waitUntil)
             yield return null;
 
+        GameplayHudVisibility.SuppressForRoundSummary();
         PlayerMovement.gameStarted = false;
         PlayerShooting.gameStarted = false;
         EarlyRoundExitUI.HideAll();

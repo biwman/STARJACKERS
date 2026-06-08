@@ -30,8 +30,6 @@ public class TreasureCollector : MonoBehaviourPun
     const float ArtifactExamineKeepAliveDistance = 0.9f;
     const float ArtifactBeamWidth = 0.16f;
     static readonly Vector2 CollectButtonRoundPosition = new Vector2(230f, 490f);
-    const float ExtractionUseSearchRadius = 2.1f;
-    const float ExtractionUseKeepAliveDistance = 1.15f;
     const float ValuableCargoAnnouncementDuration = 4f;
 
     enum NovaPendingCollectibleKind
@@ -56,6 +54,7 @@ public class TreasureCollector : MonoBehaviourPun
         None,
         Collect,
         Land,
+        AvengerBoard,
         Examine,
         Activate,
         Escape
@@ -164,6 +163,12 @@ public class TreasureCollector : MonoBehaviourPun
 
     void Start()
     {
+        if (ViperRecoveryPlotController.TryEnsureViperWreckRuntime(gameObject))
+        {
+            enabled = false;
+            return;
+        }
+
         if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
         {
             PlayerDeployableRuntime.EnsureAttached(gameObject);
@@ -398,6 +403,14 @@ public class TreasureCollector : MonoBehaviourPun
         if (isExaminingArtifact)
             return;
 
+        AvengerWarBase avengerBase = AvengerWarBase.FindClosestUsable(transform.position);
+        if (avengerBase != null)
+        {
+            CancelActiveCollection();
+            if (avengerBase.TryStartUse(GetComponent<PlayerHealth>()))
+                return;
+        }
+
         PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
         RepairBay repairBay = RepairBay.FindClosestUsable(transform.position);
         SpaceFactory spaceFactory = SpaceFactory.FindClosestUsable(transform.position);
@@ -481,21 +494,18 @@ public class TreasureCollector : MonoBehaviourPun
 
     ExtractionZone ResolveNearbyExtractionZone()
     {
-        int hitCount = Physics2DNonAllocQuery.OverlapCircle(transform.position, ExtractionUseSearchRadius, out Collider2D[] hits);
+        PlayerHealth playerHealth = GetComponent<PlayerHealth>();
+        if (playerHealth == null)
+            return null;
+
+        ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
         ExtractionZone bestZone = null;
         float bestDistance = float.MaxValue;
 
-        for (int i = 0; i < hitCount; i++)
+        for (int i = 0; i < zones.Length; i++)
         {
-            Collider2D hit = hits[i];
-            if (hit == null)
-                continue;
-
-            ExtractionZone extractionZone = hit.GetComponent<ExtractionZone>();
-            if (extractionZone == null)
-                extractionZone = hit.GetComponentInParent<ExtractionZone>();
-
-            if (extractionZone == null)
+            ExtractionZone extractionZone = zones[i];
+            if (extractionZone == null || !extractionZone.CanPlayerRequestEvacuation(playerHealth))
                 continue;
 
             float distance = GetDistanceToExtractionZone(extractionZone);
@@ -746,7 +756,8 @@ public class TreasureCollector : MonoBehaviourPun
         if (extractionZone == null)
             return false;
 
-        return GetDistanceToExtractionZone(extractionZone) <= ExtractionUseKeepAliveDistance;
+        PlayerHealth playerHealth = GetComponent<PlayerHealth>();
+        return playerHealth != null && extractionZone.CanPlayerRequestEvacuation(playerHealth);
     }
 
     float GetDistanceToExtractionZone(ExtractionZone extractionZone)
@@ -1224,6 +1235,10 @@ public class TreasureCollector : MonoBehaviourPun
 
         if (!astronautMode)
         {
+            AvengerWarBase avengerBase = AvengerWarBase.FindClosestUsable(transform.position);
+            if (avengerBase != null)
+                return UseActionType.AvengerBoard;
+
             PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
             RepairBay repairBay = RepairBay.FindClosestUsable(transform.position);
             SpaceFactory spaceFactory = SpaceFactory.FindClosestUsable(transform.position);
@@ -1418,6 +1433,7 @@ public class TreasureCollector : MonoBehaviourPun
             case UseActionType.Collect:
                 return "COLLECT";
             case UseActionType.Land:
+            case UseActionType.AvengerBoard:
                 return "LAND";
             case UseActionType.Examine:
                 return "EXAMINE";

@@ -5,18 +5,20 @@ using UnityEngine.Rendering;
 
 public sealed class PilotBarrierVfx : MonoBehaviour
 {
-    const int PointCount = 128;
+    const string ShieldPrefabResourcePath = "VFX/ShieldBarrier";
     const float ZOffset = -0.08f;
     const int SortingOrderOffset = 170;
+    const float PrefabReferenceDiameter = 5f;
+    const float DestroyGraceSeconds = 1.5f;
 
-    static Material sharedMaterial;
+    static GameObject shieldPrefab;
 
     SpriteRenderer shipRenderer;
-    LineRenderer outerRing;
-    LineRenderer shimmerRing;
     GameObject rootObject;
+    ParticleSystem[] particleSystems;
     float endTime;
-    float phase;
+    float destroyAfterStopTime;
+    bool stopping;
 
     public static void Attach(GameObject target, float duration)
     {
@@ -27,87 +29,63 @@ public sealed class PilotBarrierVfx : MonoBehaviour
         if (existing != null)
         {
             existing.endTime = Mathf.Max(existing.endTime, Time.time + duration);
+            existing.ResumeIfStopping();
             return;
         }
 
         PilotBarrierVfx vfx = target.AddComponent<PilotBarrierVfx>();
-        vfx.Initialize(duration);
+        if (!vfx.Initialize(duration))
+            Destroy(vfx);
     }
 
-    void Initialize(float duration)
+    bool Initialize(float duration)
     {
         shipRenderer = GetComponentInChildren<SpriteRenderer>();
         endTime = Time.time + duration;
+        stopping = false;
 
-        rootObject = new GameObject("PilotBarrierVfxRoot");
+        GameObject prefab = LoadShieldPrefab();
+        if (prefab == null)
+            return false;
+
+        rootObject = Instantiate(prefab, transform);
+        rootObject.name = "PilotBarrierVfxRoot";
         rootObject.transform.SetParent(transform, false);
         rootObject.transform.localPosition = new Vector3(0f, 0f, ZOffset);
         rootObject.transform.localRotation = Quaternion.identity;
+        rootObject.transform.localScale = ResolveScale();
         rootObject.layer = gameObject.layer;
 
         int sortingLayerId = shipRenderer != null ? shipRenderer.sortingLayerID : 0;
         int sortingOrder = shipRenderer != null ? shipRenderer.sortingOrder + SortingOrderOffset : 1400;
-        outerRing = CreateRing("PilotBarrierOuterRing", sortingLayerId, sortingOrder, 0.075f);
-        shimmerRing = CreateRing("PilotBarrierShimmerRing", sortingLayerId, sortingOrder + 1, 0.035f);
+
+        ApplyLayer(rootObject, gameObject.layer);
+        ApplyParticleSorting(sortingLayerId, sortingOrder);
+        particleSystems = rootObject.GetComponentsInChildren<ParticleSystem>(true);
+        ConfigureParticleSystems();
+        PlayAll();
+        return true;
     }
 
     void Update()
     {
-        if (Time.time >= endTime || !RoomSettings.AreVisualEffectsEnabled())
+        if (!RoomSettings.AreVisualEffectsEnabled())
         {
             DestroySelf();
             return;
         }
 
-        phase += Time.deltaTime;
-        Vector2 radius = ResolveRadius();
-        SetRingPoints(outerRing, radius, 0f, 7f, true);
-        SetRingPoints(shimmerRing, radius * 0.88f, Mathf.PI / PointCount, 11f, false);
-
-        float pulse = 0.5f + Mathf.Sin(phase * 5.8f) * 0.5f;
-        SetRingColor(outerRing, Color.Lerp(new Color(0.3f, 1f, 0.86f, 0.32f), new Color(1f, 0.82f, 0.36f, 0.72f), pulse));
-        SetRingColor(shimmerRing, Color.Lerp(new Color(0.96f, 0.42f, 1f, 0.22f), new Color(0.56f, 1f, 0.94f, 0.58f), 1f - pulse));
-    }
-
-    LineRenderer CreateRing(string objectName, int sortingLayerId, int sortingOrder, float width)
-    {
-        GameObject ringObject = new GameObject(objectName);
-        ringObject.transform.SetParent(rootObject.transform, false);
-        ringObject.layer = gameObject.layer;
-
-        LineRenderer line = ringObject.AddComponent<LineRenderer>();
-        line.useWorldSpace = false;
-        line.loop = false;
-        line.positionCount = PointCount + 1;
-        line.widthMultiplier = width;
-        line.numCapVertices = 6;
-        line.numCornerVertices = 6;
-        line.alignment = LineAlignment.View;
-        line.textureMode = LineTextureMode.Stretch;
-        line.shadowCastingMode = ShadowCastingMode.Off;
-        line.receiveShadows = false;
-        line.material = GetMaterial("PilotBarrierVfxMaterial", 3400);
-        line.sortingLayerID = sortingLayerId;
-        line.sortingOrder = sortingOrder;
-        return line;
-    }
-
-    void SetRingPoints(LineRenderer line, Vector2 radius, float offset, float rippleFrequency, bool dashed)
-    {
-        if (line == null)
-            return;
-
-        for (int i = 0; i <= PointCount; i++)
+        if (!stopping && Time.time >= endTime)
         {
-            float t = i / (float)PointCount;
-            float angle = (t * Mathf.PI * 2f) + offset;
-            float dash = dashed ? Mathf.Clamp01(Mathf.Sin((angle * 9f) + phase * 7f) * 2.4f + 0.38f) : 1f;
-            float ripple = 1f + Mathf.Sin((angle * rippleFrequency) + phase * 4.5f) * 0.025f * dash;
-            line.SetPosition(i, new Vector3(Mathf.Cos(angle) * radius.x * ripple, Mathf.Sin(angle) * radius.y * ripple, 0f));
+            StopAll();
+            return;
         }
+
+        if (stopping && (Time.time >= destroyAfterStopTime || !HasLiveParticles()))
+            DestroySelf();
     }
 
-    Vector2 ResolveRadius()
+    Vector3 ResolveScale()
     {
         if (shipRenderer != null)
         {
@@ -115,21 +93,114 @@ public sealed class PilotBarrierVfx : MonoBehaviour
             float scaleX = Mathf.Max(0.001f, Mathf.Abs(scale.x));
             float scaleY = Mathf.Max(0.001f, Mathf.Abs(scale.y));
             Bounds bounds = shipRenderer.bounds;
-            return new Vector2(
-                Mathf.Max(0.72f, bounds.extents.x / scaleX + 0.18f),
-                Mathf.Max(0.72f, bounds.extents.y / scaleY + 0.18f));
+            float localDiameter = Mathf.Max(
+                bounds.extents.x / scaleX,
+                bounds.extents.y / scaleY) * 2f + 0.38f;
+            float scaleFactor = Mathf.Max(0.18f, localDiameter / PrefabReferenceDiameter);
+            return new Vector3(scaleFactor, scaleFactor, scaleFactor);
         }
 
-        return new Vector2(0.82f, 0.82f);
+        return Vector3.one * 0.26f;
     }
 
-    void SetRingColor(LineRenderer line, Color color)
+    void ApplyParticleSorting(int sortingLayerId, int sortingOrder)
     {
-        if (line == null)
+        if (rootObject == null)
             return;
 
-        line.startColor = color;
-        line.endColor = color;
+        ParticleSystemRenderer[] renderers = rootObject.GetComponentsInChildren<ParticleSystemRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            ParticleSystemRenderer renderer = renderers[i];
+            if (renderer == null)
+                continue;
+
+            renderer.sortingLayerID = sortingLayerId;
+            renderer.sortingOrder = sortingOrder + i;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+        }
+    }
+
+    void ApplyLayer(GameObject target, int layer)
+    {
+        if (target == null)
+            return;
+
+        target.layer = layer;
+        Transform targetTransform = target.transform;
+        for (int i = 0; i < targetTransform.childCount; i++)
+            ApplyLayer(targetTransform.GetChild(i).gameObject, layer);
+    }
+
+    void ConfigureParticleSystems()
+    {
+        if (particleSystems == null)
+            return;
+
+        for (int i = 0; i < particleSystems.Length; i++)
+        {
+            ParticleSystem system = particleSystems[i];
+            if (system == null)
+                continue;
+
+            ParticleSystem.MainModule main = system.main;
+            main.simulationSpace = ParticleSystemSimulationSpace.Local;
+            main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+        }
+    }
+
+    void PlayAll()
+    {
+        if (particleSystems == null)
+            return;
+
+        for (int i = 0; i < particleSystems.Length; i++)
+        {
+            ParticleSystem system = particleSystems[i];
+            if (system != null)
+                system.Play(true);
+        }
+    }
+
+    void StopAll()
+    {
+        stopping = true;
+        destroyAfterStopTime = Time.time + DestroyGraceSeconds;
+
+        if (particleSystems == null)
+            return;
+
+        for (int i = 0; i < particleSystems.Length; i++)
+        {
+            ParticleSystem system = particleSystems[i];
+            if (system != null)
+                system.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+        }
+    }
+
+    void ResumeIfStopping()
+    {
+        if (!stopping)
+            return;
+
+        stopping = false;
+        PlayAll();
+    }
+
+    bool HasLiveParticles()
+    {
+        if (particleSystems == null || particleSystems.Length == 0)
+            return false;
+
+        for (int i = 0; i < particleSystems.Length; i++)
+        {
+            ParticleSystem system = particleSystems[i];
+            if (system != null && system.IsAlive(true))
+                return true;
+        }
+
+        return false;
     }
 
     void OnDestroy()
@@ -149,22 +220,12 @@ public sealed class PilotBarrierVfx : MonoBehaviour
         Destroy(this);
     }
 
-    static Material GetMaterial(string materialName, int renderQueue)
+    static GameObject LoadShieldPrefab()
     {
-        if (sharedMaterial != null)
-            return sharedMaterial;
+        if (shieldPrefab == null)
+            shieldPrefab = Resources.Load<GameObject>(ShieldPrefabResourcePath);
 
-        Shader shader = Shader.Find("Sprites/Default");
-        if (shader == null)
-            shader = Shader.Find("Unlit/Color");
-
-        sharedMaterial = new Material(shader)
-        {
-            name = materialName,
-            color = Color.white
-        };
-        sharedMaterial.renderQueue = renderQueue;
-        return sharedMaterial;
+        return shieldPrefab;
     }
 }
 

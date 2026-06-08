@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public sealed class EnemyDeathBoomVfx : MonoBehaviour
@@ -5,11 +6,12 @@ public sealed class EnemyDeathBoomVfx : MonoBehaviour
     const float Lifetime = 1.18f;
     const float EffectZ = -0.34f;
     const int TextureSize = 160;
-    const int RingSegments = 96;
-    const int FireLayerCount = 6;
-    const int SmokeLayerCount = 8;
-    const int SparkCount = 20;
-    const int DebrisCount = 10;
+    const int RingSegments = 64;
+    const int FireLayerCount = 4;
+    const int SmokeLayerCount = 5;
+    const int SparkCount = 12;
+    const int DebrisCount = 6;
+    const int PoolWarmCount = 5;
 
     sealed class SpriteLayer
     {
@@ -40,6 +42,8 @@ public sealed class EnemyDeathBoomVfx : MonoBehaviour
     static Sprite coreSprite;
     static Sprite fireSprite;
     static Sprite smokeSprite;
+    static readonly Stack<EnemyDeathBoomVfx> Pool = new Stack<EnemyDeathBoomVfx>(PoolWarmCount);
+    static Vector3[] ringUnitPoints;
 
     readonly SpriteLayer[] fireLayers = new SpriteLayer[FireLayerCount];
     readonly SpriteLayer[] smokeLayers = new SpriteLayer[SmokeLayerCount];
@@ -64,6 +68,7 @@ public sealed class EnemyDeathBoomVfx : MonoBehaviour
         PrewarmSpriteTexture(GetCoreSprite());
         PrewarmSpriteTexture(GetFireSprite());
         PrewarmSpriteTexture(GetSmokeSprite());
+        WarmPool(PoolWarmCount);
     }
 
     public static void Spawn(Vector3 position, SpriteRenderer referenceRenderer, float visualTargetSize)
@@ -71,15 +76,49 @@ public sealed class EnemyDeathBoomVfx : MonoBehaviour
         if (!RoomSettings.AreVisualEffectsEnabled() || !RoomSettings.AreBoomVfxEnabled())
             return;
 
-        GameObject effect = new GameObject("EnemyDeathBoomVfx");
-        EnemyDeathBoomVfx vfx = effect.AddComponent<EnemyDeathBoomVfx>();
+        EnemyDeathBoomVfx vfx = GetFromPool();
         vfx.Initialize(position, referenceRenderer, visualTargetSize);
     }
 
-    void Initialize(Vector3 position, SpriteRenderer referenceRenderer, float visualTargetSize)
+    static void WarmPool(int count)
+    {
+        for (int i = Pool.Count; i < count; i++)
+        {
+            EnemyDeathBoomVfx vfx = CreateInstance();
+            vfx.Initialize(Vector3.zero, null, GameVisualTheme.PlayerTargetSize, false);
+            vfx.ReturnToPool();
+        }
+    }
+
+    static EnemyDeathBoomVfx GetFromPool()
+    {
+        while (Pool.Count > 0)
+        {
+            EnemyDeathBoomVfx pooled = Pool.Pop();
+            if (pooled != null)
+            {
+                pooled.gameObject.SetActive(true);
+                return pooled;
+            }
+        }
+
+        EnemyDeathBoomVfx created = CreateInstance();
+        created.gameObject.SetActive(true);
+        return created;
+    }
+
+    static EnemyDeathBoomVfx CreateInstance()
+    {
+        GameObject effect = new GameObject("EnemyDeathBoomVfx");
+        effect.SetActive(false);
+        return effect.AddComponent<EnemyDeathBoomVfx>();
+    }
+
+    void Initialize(Vector3 position, SpriteRenderer referenceRenderer, float visualTargetSize, bool playScreenShake = true)
     {
         center = new Vector3(position.x, position.y, EffectZ);
         transform.position = center;
+        age = 0f;
 
         float rendererRadius = referenceRenderer != null
             ? Mathf.Max(referenceRenderer.bounds.extents.x, referenceRenderer.bounds.extents.y)
@@ -94,14 +133,15 @@ public sealed class EnemyDeathBoomVfx : MonoBehaviour
             ? referenceRenderer.sortingOrder + 48
             : GameVisualTheme.EnemySortingOrder + 48;
 
-        CreateCore(sortingLayerId, sortingOrder + 8);
-        CreateFireLayers(sortingLayerId, sortingOrder + 3);
-        CreateSmokeLayers(sortingLayerId, sortingOrder + 1);
-        pressureRing = CreateLine("BoomPressureRing", 0.12f, sortingLayerId, sortingOrder + 12, true, RingSegments);
-        heatRing = CreateLine("BoomHeatRing", 0.08f, sortingLayerId, sortingOrder + 13, true, RingSegments);
-        CreateStreaks(sparks, "BoomSpark", sortingLayerId, sortingOrder + 16, true);
-        CreateStreaks(debris, "BoomDebris", sortingLayerId, sortingOrder + 10, false);
-        ScreenShakeController.Request(ScreenShakeProfiles.EnemyBoom, center);
+        CreateOrResetCore(sortingLayerId, sortingOrder + 8);
+        CreateOrResetFireLayers(sortingLayerId, sortingOrder + 3);
+        CreateOrResetSmokeLayers(sortingLayerId, sortingOrder + 1);
+        pressureRing = CreateOrResetLine(pressureRing, "BoomPressureRing", 0.12f, sortingLayerId, sortingOrder + 12, true, RingSegments);
+        heatRing = CreateOrResetLine(heatRing, "BoomHeatRing", 0.08f, sortingLayerId, sortingOrder + 13, true, RingSegments);
+        CreateOrResetStreaks(sparks, "BoomSpark", sortingLayerId, sortingOrder + 16, true);
+        CreateOrResetStreaks(debris, "BoomDebris", sortingLayerId, sortingOrder + 10, false);
+        if (playScreenShake)
+            ScreenShakeController.Request(ScreenShakeProfiles.EnemyBoom, center);
         UpdateVisuals(0f);
     }
 
@@ -112,27 +152,42 @@ public sealed class EnemyDeathBoomVfx : MonoBehaviour
         UpdateVisuals(t);
 
         if (age >= Lifetime)
-            Destroy(gameObject);
+            ReturnToPool();
     }
 
-    void CreateCore(int sortingLayerId, int sortingOrder)
+    void ReturnToPool()
     {
-        GameObject coreObject = new GameObject("BoomHotCore");
-        coreObject.transform.SetParent(transform, false);
-        coreRenderer = coreObject.AddComponent<SpriteRenderer>();
+        gameObject.SetActive(false);
+        Pool.Push(this);
+    }
+
+    void CreateOrResetCore(int sortingLayerId, int sortingOrder)
+    {
+        if (coreRenderer == null)
+        {
+            GameObject coreObject = new GameObject("BoomHotCore");
+            coreObject.transform.SetParent(transform, false);
+            coreRenderer = coreObject.AddComponent<SpriteRenderer>();
+        }
+
+        coreRenderer.gameObject.SetActive(true);
         coreRenderer.sprite = GetCoreSprite();
         coreRenderer.material = GetMaterial();
         coreRenderer.sortingLayerID = sortingLayerId;
         coreRenderer.sortingOrder = sortingOrder;
+        coreRenderer.color = Color.clear;
+        coreRenderer.transform.localPosition = Vector3.zero;
+        coreRenderer.transform.localScale = Vector3.one;
     }
 
-    void CreateFireLayers(int sortingLayerId, int sortingOrder)
+    void CreateOrResetFireLayers(int sortingLayerId, int sortingOrder)
     {
         Sprite sprite = GetFireSprite();
         for (int i = 0; i < fireLayers.Length; i++)
         {
             float angle = ((Mathf.PI * 2f) / fireLayers.Length) * i + Hash01(i, 2) * 0.72f;
-            SpriteLayer layer = CreateSpriteLayer("BoomFireBloom" + i, sprite, sortingLayerId, sortingOrder + i);
+            SpriteLayer layer = fireLayers[i] ?? CreateSpriteLayer("BoomFireBloom" + i, sprite, sortingLayerId, sortingOrder + i);
+            ResetSpriteLayer(layer, sprite, sortingLayerId, sortingOrder + i);
             layer.Direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
             layer.Distance = Mathf.Lerp(0.02f, 0.24f, Hash01(i, 3));
             layer.StartScale = Mathf.Lerp(0.64f, 0.88f, Hash01(i, 4));
@@ -144,13 +199,14 @@ public sealed class EnemyDeathBoomVfx : MonoBehaviour
         }
     }
 
-    void CreateSmokeLayers(int sortingLayerId, int sortingOrder)
+    void CreateOrResetSmokeLayers(int sortingLayerId, int sortingOrder)
     {
         Sprite sprite = GetSmokeSprite();
         for (int i = 0; i < smokeLayers.Length; i++)
         {
             float angle = ((Mathf.PI * 2f) / smokeLayers.Length) * i + Hash01(i, 11) * 0.9f;
-            SpriteLayer layer = CreateSpriteLayer("BoomSmokePuff" + i, sprite, sortingLayerId, sortingOrder + i);
+            SpriteLayer layer = smokeLayers[i] ?? CreateSpriteLayer("BoomSmokePuff" + i, sprite, sortingLayerId, sortingOrder + i);
+            ResetSpriteLayer(layer, sprite, sortingLayerId, sortingOrder + i);
             layer.Direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
             layer.Distance = Mathf.Lerp(0.18f, 0.72f, Hash01(i, 12));
             layer.StartScale = Mathf.Lerp(0.36f, 0.62f, Hash01(i, 13));
@@ -182,13 +238,29 @@ public sealed class EnemyDeathBoomVfx : MonoBehaviour
         };
     }
 
-    void CreateStreaks(Streak[] streaks, string objectPrefix, int sortingLayerId, int sortingOrder, bool spark)
+    void ResetSpriteLayer(SpriteLayer layer, Sprite sprite, int sortingLayerId, int sortingOrder)
+    {
+        if (layer == null || layer.Transform == null || layer.Renderer == null)
+            return;
+
+        layer.Renderer.gameObject.SetActive(true);
+        layer.Transform.localPosition = Vector3.zero;
+        layer.Transform.localScale = Vector3.one;
+        layer.Transform.localRotation = Quaternion.Euler(0f, 0f, Hash01(sortingOrder, 19) * 360f);
+        layer.Renderer.sprite = sprite;
+        layer.Renderer.material = GetMaterial();
+        layer.Renderer.sortingLayerID = sortingLayerId;
+        layer.Renderer.sortingOrder = sortingOrder;
+        layer.Renderer.color = Color.clear;
+    }
+
+    void CreateOrResetStreaks(Streak[] streaks, string objectPrefix, int sortingLayerId, int sortingOrder, bool spark)
     {
         for (int i = 0; i < streaks.Length; i++)
         {
             float angle = ((Mathf.PI * 2f) / streaks.Length) * i + Hash01(i, spark ? 23 : 31) * 0.42f;
             Vector3 direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
-            LineRenderer line = CreateLine(objectPrefix + i, spark ? 0.045f : 0.065f, sortingLayerId, sortingOrder + i, false, 2);
+            LineRenderer line = CreateOrResetLine(streaks[i].Line, objectPrefix + i, spark ? 0.04f : 0.058f, sortingLayerId, sortingOrder + i, false, 2);
             streaks[i] = new Streak
             {
                 Line = line,
@@ -203,22 +275,28 @@ public sealed class EnemyDeathBoomVfx : MonoBehaviour
         }
     }
 
-    LineRenderer CreateLine(string objectName, float width, int sortingLayerId, int sortingOrder, bool loop, int positionCount)
+    LineRenderer CreateOrResetLine(LineRenderer line, string objectName, float width, int sortingLayerId, int sortingOrder, bool loop, int positionCount)
     {
-        GameObject lineObject = new GameObject(objectName);
-        lineObject.transform.SetParent(transform, false);
+        if (line == null)
+        {
+            GameObject lineObject = new GameObject(objectName);
+            lineObject.transform.SetParent(transform, false);
 
-        LineRenderer line = lineObject.AddComponent<LineRenderer>();
-        line.useWorldSpace = true;
+            line = lineObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.alignment = LineAlignment.View;
+            line.textureMode = LineTextureMode.Stretch;
+            line.material = GetMaterial();
+        }
+
+        line.gameObject.SetActive(true);
         line.loop = loop;
         line.positionCount = Mathf.Max(2, positionCount);
         line.widthMultiplier = width;
         line.startWidth = width;
         line.endWidth = width;
-        line.numCapVertices = 6;
-        line.numCornerVertices = 4;
-        line.alignment = LineAlignment.View;
-        line.textureMode = LineTextureMode.Stretch;
+        line.numCapVertices = 4;
+        line.numCornerVertices = 3;
         line.material = GetMaterial();
         line.sortingLayerID = sortingLayerId;
         line.sortingOrder = sortingOrder;
@@ -309,11 +387,13 @@ public sealed class EnemyDeathBoomVfx : MonoBehaviour
         if (ring == null)
             return;
 
+        Vector3[] unitPoints = GetRingUnitPoints();
         for (int i = 0; i < RingSegments; i++)
         {
             float angle = ((Mathf.PI * 2f) / RingSegments) * i;
             float wobble = Mathf.Sin(angle * 7f + age * 5.2f) * radius * 0.018f;
-            ring.SetPosition(i, center + new Vector3(Mathf.Cos(angle) * (ringRadius + wobble), Mathf.Sin(angle) * (ringRadius + wobble), 0f));
+            Vector3 point = unitPoints[i];
+            ring.SetPosition(i, center + new Vector3(point.x * (ringRadius + wobble), point.y * (ringRadius + wobble), 0f));
         }
 
         color.a = alpha;
@@ -487,6 +567,21 @@ public sealed class EnemyDeathBoomVfx : MonoBehaviour
     static float Hash01(int index, int salt)
     {
         return Mathf.Repeat(Mathf.Sin((index * 127.1f) + (salt * 311.7f)) * 43758.5453f, 1f);
+    }
+
+    static Vector3[] GetRingUnitPoints()
+    {
+        if (ringUnitPoints != null)
+            return ringUnitPoints;
+
+        ringUnitPoints = new Vector3[RingSegments];
+        for (int i = 0; i < ringUnitPoints.Length; i++)
+        {
+            float angle = ((Mathf.PI * 2f) / ringUnitPoints.Length) * i;
+            ringUnitPoints[i] = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+        }
+
+        return ringUnitPoints;
     }
 
     enum TextureKind

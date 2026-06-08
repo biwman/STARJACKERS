@@ -1409,7 +1409,7 @@ public static class EnemyTargetingUtility
         Transform bestTarget = null;
         float bestDistance = float.MaxValue;
 
-        PlayerHealth[] players = Object.FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] players = RuntimeSceneQueryCache.GetPlayers();
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth candidate = players[i];
@@ -1464,7 +1464,7 @@ public static class EnemyTargetingUtility
 
     static bool IsValidPlayerTarget(PlayerHealth candidate, PlayerHealth observerHealth, Vector2 origin, float maxDistance, bool requireNebulaVisibility, bool includeEnemyAstronauts)
     {
-        if (candidate == null || candidate == observerHealth || candidate.IsWreck || candidate.IsBotControlled || candidate.IsEvacuationAnimating)
+        if (candidate == null || !candidate.gameObject.activeInHierarchy || candidate == observerHealth || candidate.IsWreck || candidate.IsBotControlled || candidate.IsEvacuationAnimating)
             return false;
 
         if (includeEnemyAstronauts)
@@ -4197,11 +4197,11 @@ public class EnemyBot : MonoBehaviourPun
             return;
 
         WeaponHitContext hitContext = new WeaponHitContext(explosion.DamageType, explosion.DeliveryMethod, explosion.DeliveryFlags, string.Empty);
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] players = RuntimeSceneQueryCache.GetPlayers();
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth candidate = players[i];
-            if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating || candidate.GetComponent<LureBeaconDecoy>() != null)
+            if (candidate == null || !candidate.gameObject.activeInHierarchy || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating || candidate.GetComponent<LureBeaconDecoy>() != null)
                 continue;
 
             EnemyBot candidateBot = candidate.GetComponent<EnemyBot>();
@@ -6020,7 +6020,7 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
 
         Transform bestTarget = null;
         float bestDistance = float.MaxValue;
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] players = RuntimeSceneQueryCache.GetPlayers();
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth candidate = players[i];
@@ -6046,7 +6046,7 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
 
     bool IsValidUnprotectedPlayerTarget(PlayerHealth candidate, float maxDistance)
     {
-        if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsBotControlled || candidate.IsAstronautControlled || candidate.IsEvacuationAnimating)
+        if (candidate == null || !candidate.gameObject.activeInHierarchy || candidate == health || candidate.IsWreck || candidate.IsBotControlled || candidate.IsAstronautControlled || candidate.IsEvacuationAnimating)
             return false;
 
         if (candidate.GetComponent<LureBeaconDecoy>() != null)
@@ -8785,11 +8785,11 @@ public class EnemyMineBehavior : EnemyBotBehaviorBase
 
     bool IsAnyTargetInRange(float radius)
     {
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] players = RuntimeSceneQueryCache.GetPlayers();
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth candidate = players[i];
-            if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating || candidate.GetComponent<LureBeaconDecoy>() != null)
+            if (candidate == null || !candidate.gameObject.activeInHierarchy || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating || candidate.GetComponent<LureBeaconDecoy>() != null)
                 continue;
 
             if (bot != null && bot.ShouldIgnoreMineTriggerFor(candidate))
@@ -9170,7 +9170,7 @@ public class EnemySpaceTruckBehavior : EnemyBotBehaviorBase
     void RefreshExtractionZones(bool chooseNearest)
     {
         nextZoneRefreshTime = Time.time + Mathf.Max(0.3f, movement != null ? movement.TargetRefreshInterval : 0.45f);
-        extractionZones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
+        extractionZones = RuntimeSceneQueryCache.GetExtractionZones();
         if (extractionZones == null || extractionZones.Length == 0)
             return;
 
@@ -9191,7 +9191,7 @@ public class EnemySpaceTruckBehavior : EnemyBotBehaviorBase
             return rb.linearVelocity.sqrMagnitude > 0.01f ? rb.linearVelocity.normalized : Vector2.up;
 
         ExtractionZone targetZone = extractionZones[Mathf.Clamp(targetZoneIndex, 0, extractionZones.Length - 1)];
-        if (targetZone == null)
+        if (targetZone == null || !targetZone.gameObject.activeInHierarchy)
         {
             AdvanceTargetZone();
             return Vector2.up;
@@ -9202,7 +9202,7 @@ public class EnemySpaceTruckBehavior : EnemyBotBehaviorBase
         {
             AdvanceTargetZone();
             targetZone = extractionZones[Mathf.Clamp(targetZoneIndex, 0, extractionZones.Length - 1)];
-            if (targetZone != null)
+            if (targetZone != null && targetZone.gameObject.activeInHierarchy)
                 toTarget = (Vector2)targetZone.transform.position - rb.position;
         }
 
@@ -9216,7 +9216,7 @@ public class EnemySpaceTruckBehavior : EnemyBotBehaviorBase
         for (int i = 0; i < extractionZones.Length; i++)
         {
             ExtractionZone zone = extractionZones[i];
-            if (zone == null)
+            if (zone == null || !zone.gameObject.activeInHierarchy)
                 continue;
 
             float distance = Vector2.Distance(rb.position, zone.transform.position);
@@ -9380,7 +9380,7 @@ public class EnemyRescueShipBehavior : EnemyBotBehaviorBase
     {
         result = null;
         float bestDistance = float.MaxValue;
-        PlayerHealth[] candidates = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] candidates = RuntimeSceneQueryCache.GetPlayers();
         for (int i = 0; i < candidates.Length; i++)
         {
             PlayerHealth candidate = candidates[i];
@@ -9400,7 +9400,7 @@ public class EnemyRescueShipBehavior : EnemyBotBehaviorBase
 
     static bool IsHealableTarget(PlayerHealth candidate, EnemyBot selfBot)
     {
-        if (candidate == null || candidate.IsWreck || candidate.IsEvacuationAnimating || !candidate.IsBotControlled)
+        if (candidate == null || !candidate.gameObject.activeInHierarchy || candidate.IsWreck || candidate.IsEvacuationAnimating || !candidate.IsBotControlled)
             return false;
 
         EnemyBot candidateBot = candidate.GetComponent<EnemyBot>();
@@ -9899,33 +9899,33 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
         int bestValue = int.MinValue;
         float bestDistance = float.MaxValue;
 
-        Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
+        Treasure[] treasures = RuntimeSceneQueryCache.GetTreasures();
         for (int i = 0; i < treasures.Length; i++)
         {
             Treasure treasure = treasures[i];
-            if (treasure == null || treasure.isBeingCollected)
+            if (treasure == null || !treasure.gameObject.activeInHierarchy || treasure.isBeingCollected)
                 continue;
 
             PhotonView targetView = treasure.GetComponent<PhotonView>();
             ConsiderCollectible(treasure.transform, targetView, treasure.itemId, ref bestTarget, ref targetViewId, ref bestValue, ref bestDistance);
         }
 
-        DroppedCargoCrate[] crates = FindObjectsByType<DroppedCargoCrate>(FindObjectsInactive.Exclude);
+        DroppedCargoCrate[] crates = RuntimeSceneQueryCache.GetDroppedCargoCrates();
         for (int i = 0; i < crates.Length; i++)
         {
             DroppedCargoCrate crate = crates[i];
-            if (crate == null || !crate.HasLoot || crate.isBeingCollected)
+            if (crate == null || !crate.gameObject.activeInHierarchy || !crate.HasLoot || crate.isBeingCollected)
                 continue;
 
             PhotonView targetView = crate.GetComponent<PhotonView>();
             ConsiderCollectible(crate.transform, targetView, crate.StoredItemId, ref bestTarget, ref targetViewId, ref bestValue, ref bestDistance);
         }
 
-        ShipWreck[] wrecks = FindObjectsByType<ShipWreck>(FindObjectsInactive.Exclude);
+        ShipWreck[] wrecks = RuntimeSceneQueryCache.GetShipWrecks();
         for (int i = 0; i < wrecks.Length; i++)
         {
             ShipWreck wreck = wrecks[i];
-            if (wreck == null || !wreck.HasLoot || wreck.isBeingCollected)
+            if (wreck == null || !wreck.gameObject.activeInHierarchy || !wreck.HasLoot || wreck.isBeingCollected)
                 continue;
 
             PhotonView targetView = wreck.GetComponent<PhotonView>();
@@ -10401,13 +10401,13 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
         if (pirateCaseCarrierViewId > 0)
             return pirateCaseCarrierViewId;
 
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] players = RuntimeSceneQueryCache.GetPlayers();
         int bestViewId = 0;
         float bestDistance = float.MaxValue;
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth candidate = players[i];
-            if (candidate == null || candidate.IsWreck || candidate.IsBotControlled || candidate.IsAstronautControlled || candidate.IsEvacuationAnimating)
+            if (candidate == null || !candidate.gameObject.activeInHierarchy || candidate.IsWreck || candidate.IsBotControlled || candidate.IsAstronautControlled || candidate.IsEvacuationAnimating)
                 continue;
 
             PhotonView candidateView = candidate.GetComponent<PhotonView>();
@@ -10557,11 +10557,11 @@ public class EnemyRadarShipBehavior : EnemyBotBehaviorBase
         Transform bestTarget = null;
         float bestScore = float.MinValue;
 
-        Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
+        Treasure[] treasures = RuntimeSceneQueryCache.GetTreasures();
         for (int i = 0; i < treasures.Length; i++)
         {
             Treasure treasure = treasures[i];
-            if (treasure == null || treasure.isBeingCollected)
+            if (treasure == null || !treasure.gameObject.activeInHierarchy || treasure.isBeingCollected)
                 continue;
 
             float score = ScoreCollectible(treasure.transform.position, treasure.itemId, 1f);
@@ -10572,11 +10572,11 @@ public class EnemyRadarShipBehavior : EnemyBotBehaviorBase
             }
         }
 
-        ShipWreck[] wrecks = FindObjectsByType<ShipWreck>(FindObjectsInactive.Exclude);
+        ShipWreck[] wrecks = RuntimeSceneQueryCache.GetShipWrecks();
         for (int i = 0; i < wrecks.Length; i++)
         {
             ShipWreck wreck = wrecks[i];
-            if (wreck == null || !wreck.HasLoot || wreck.isBeingCollected)
+            if (wreck == null || !wreck.gameObject.activeInHierarchy || !wreck.HasLoot || wreck.isBeingCollected)
                 continue;
 
             string itemId = wreck.GetLootItemAt(wreck.GetFirstLootIndex());
@@ -10588,11 +10588,11 @@ public class EnemyRadarShipBehavior : EnemyBotBehaviorBase
             }
         }
 
-        DroppedCargoCrate[] crates = FindObjectsByType<DroppedCargoCrate>(FindObjectsInactive.Exclude);
+        DroppedCargoCrate[] crates = RuntimeSceneQueryCache.GetDroppedCargoCrates();
         for (int i = 0; i < crates.Length; i++)
         {
             DroppedCargoCrate crate = crates[i];
-            if (crate == null || !crate.HasLoot || crate.isBeingCollected)
+            if (crate == null || !crate.gameObject.activeInHierarchy || !crate.HasLoot || crate.isBeingCollected)
                 continue;
 
             float score = ScoreCollectible(crate.transform.position, crate.StoredItemId, 1.08f);

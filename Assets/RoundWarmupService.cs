@@ -577,6 +577,7 @@ public sealed class RoundWarmupService : MonoBehaviour
         TractorBeamVfx.Prewarm();
         MagneticBeamVfx.Prewarm();
         SpaceMineExplosionVfx.Prewarm();
+        SpaceBombExplosionVfx.Prewarm();
         AsteroidShowerStrikeVfx.Prewarm();
     }
 

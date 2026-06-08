@@ -10,10 +10,12 @@ public class ExtractionZone : MonoBehaviourPun
     public float transitionDuration = 10f;
     public float activeDuration = 15f;
     public float evacuationAnimationDuration = 4f;
-    const float RequestedPlayerEvacuationGraceDistance = 1.65f;
+    public const float PlayerInteractionGraceDistance = 0.45f;
     const float CharlieSmartExtractionBonusWindow = 30f;
     const float EvacuationEndScreenDelayBuffer = 0.35f;
     const float PortalInteractionRadiusFactor = 0.82f;
+    const float ExtractionMessageSearchRetryInterval = 1f;
+    const string ExtractionMessageName = "ExtractionMessage";
 
     static readonly Vector2[] CarrierInteractionShape =
     {
@@ -71,6 +73,7 @@ public class ExtractionZone : MonoBehaviourPun
     Coroutine blinkRoutine;
     Coroutine hideMessageRoutine;
     GameObject cachedMessageObject;
+    float nextMessageSearchTime;
 
     void Start()
     {
@@ -92,8 +95,11 @@ public class ExtractionZone : MonoBehaviourPun
 
     void LateUpdate()
     {
-        if (cachedMessageObject == null)
+        if (cachedMessageObject == null && Time.unscaledTime >= nextMessageSearchTime)
+        {
+            nextMessageSearchTime = Time.unscaledTime + ExtractionMessageSearchRetryInterval;
             cachedMessageObject = FindExtractionMessage();
+        }
 
         if (cachedMessageObject != null && cachedMessageObject.activeSelf != messageShowing)
             cachedMessageObject.SetActive(messageShowing);
@@ -272,6 +278,11 @@ public class ExtractionZone : MonoBehaviourPun
             : Vector2.Distance(transform.position, worldPoint);
     }
 
+    public bool CanPlayerRequestEvacuation(PlayerHealth playerHealth)
+    {
+        return IsPlayerCloseEnoughForRequestedEvacuation(playerHealth);
+    }
+
     public bool TryUse(PhotonView playerView)
     {
         if (PhotonNetwork.IsConnected && !PhotonNetwork.IsMasterClient)
@@ -281,7 +292,7 @@ public class ExtractionZone : MonoBehaviourPun
             return false;
 
         PlayerHealth playerHealth = playerView.GetComponent<PlayerHealth>();
-        if (!GameTimer.IsActiveRoundPlayer(playerHealth) || !IsPlayerCloseEnoughForRequestedEvacuation(playerHealth))
+        if (!GameTimer.IsActiveRoundPlayer(playerHealth) || !CanPlayerRequestEvacuation(playerHealth))
             return false;
 
         StartCoroutine(UseRoutine(playerView));
@@ -306,7 +317,7 @@ public class ExtractionZone : MonoBehaviourPun
         if (riderHealth == null || riderHealth.IsWreck || riderHealth.IsEvacuationAnimating)
             return false;
 
-        if (GetInteractionDistanceToPoint(riderHealth.transform.position) > RequestedPlayerEvacuationGraceDistance)
+        if (!CanPlayerRequestEvacuation(riderHealth))
             return false;
 
         StartCoroutine(NeutralRiderUseRoutine());
@@ -513,7 +524,7 @@ public class ExtractionZone : MonoBehaviourPun
             return;
 
         PlayerHealth requestedPlayer = requestedPlayerView.GetComponent<PlayerHealth>();
-        if (requestedPlayer == null || !IsPlayerCloseEnoughForRequestedEvacuation(requestedPlayer))
+        if (requestedPlayer == null || !CanPlayerRequestEvacuation(requestedPlayer))
             return;
 
         TryEvacuatePlayer(requestedPlayer, processedPlayers);
@@ -522,6 +533,9 @@ public class ExtractionZone : MonoBehaviourPun
     bool TryEvacuatePlayer(PlayerHealth playerHealth, HashSet<int> processedPlayers)
     {
         if (!GameTimer.IsActiveRoundPlayer(playerHealth))
+            return false;
+
+        if (!CanPlayerRequestEvacuation(playerHealth))
             return false;
 
         PhotonView playerView = playerHealth.photonView;
@@ -536,6 +550,12 @@ public class ExtractionZone : MonoBehaviourPun
         if (ShouldAwardCharlieLastSecondExtractionBonus(playerHealth, outcome))
             playerView.RPC(nameof(PlayerHealth.AwardCharlieLastSecondExtractionBonus), playerView.Owner);
 
+        if (string.Equals(outcome, "extracted", System.StringComparison.OrdinalIgnoreCase) &&
+            ViperRecoveryPlotController.TryEvacuateWreckWithZone(this))
+        {
+            playerView.RPC(nameof(PlayerHealth.NotifyViperWreckRecovered), playerView.Owner);
+        }
+
         playerView.RPC(nameof(PlayerHealth.OnEvacuated), playerView.Owner, 0);
         playerView.RPC(nameof(PlayerHealth.NotifyFinalEvacuation), playerView.Owner, finalScore, outcome);
         Vector2 evacuationTarget = GetEvacuationTargetWorldPosition();
@@ -543,7 +563,7 @@ public class ExtractionZone : MonoBehaviourPun
         return true;
     }
 
-    Vector2 GetEvacuationTargetWorldPosition()
+    public Vector2 GetEvacuationTargetWorldPosition()
     {
         if (IsCarrierExtraction())
         {
@@ -596,26 +616,43 @@ public class ExtractionZone : MonoBehaviourPun
         Collider2D[] playerColliders = playerHealth.GetComponentsInChildren<Collider2D>();
         if (zoneColliders.Length > 0 && playerColliders != null && playerColliders.Length > 0)
         {
-            for (int z = 0; z < zoneColliders.Length; z++)
+            if (IsAnyPlayerColliderCloseEnough(zoneColliders, playerColliders, false, out bool foundBodyCollider))
+                return true;
+
+            if (!foundBodyCollider && IsAnyPlayerColliderCloseEnough(zoneColliders, playerColliders, true, out _))
+                return true;
+        }
+
+        return GetInteractionDistanceToPoint(playerHealth.transform.position) <= PlayerInteractionGraceDistance;
+    }
+
+    bool IsAnyPlayerColliderCloseEnough(Collider2D[] zoneColliders, Collider2D[] playerColliders, bool allowTriggers, out bool foundCandidate)
+    {
+        foundCandidate = false;
+
+        for (int z = 0; z < zoneColliders.Length; z++)
+        {
+            Collider2D zoneCollider = zoneColliders[z];
+            if (zoneCollider == null)
+                continue;
+
+            for (int i = 0; i < playerColliders.Length; i++)
             {
-                Collider2D zoneCollider = zoneColliders[z];
-                if (zoneCollider == null)
+                Collider2D playerCollider = playerColliders[i];
+                if (playerCollider == null || !playerCollider.enabled)
                     continue;
 
-                for (int i = 0; i < playerColliders.Length; i++)
-                {
-                    Collider2D playerCollider = playerColliders[i];
-                    if (playerCollider == null || !playerCollider.enabled)
-                        continue;
+                if (!allowTriggers && playerCollider.isTrigger)
+                    continue;
 
-                    ColliderDistance2D distance = zoneCollider.Distance(playerCollider);
-                    if (distance.isOverlapped || distance.distance <= RequestedPlayerEvacuationGraceDistance)
-                        return true;
-                }
+                foundCandidate = true;
+                ColliderDistance2D distance = zoneCollider.Distance(playerCollider);
+                if (distance.isOverlapped || distance.distance <= PlayerInteractionGraceDistance)
+                    return true;
             }
         }
 
-        return GetInteractionDistanceToPoint(playerHealth.transform.position) <= RequestedPlayerEvacuationGraceDistance;
+        return false;
     }
 
     Collider2D[] GetPlayersInsideZone()
@@ -766,6 +803,8 @@ public class ExtractionZone : MonoBehaviourPun
         if (obj == null)
             return;
 
+        cachedMessageObject = obj;
+
         RectTransform rect = obj.GetComponent<RectTransform>();
         if (rect != null)
             rect.SetAsLastSibling();
@@ -798,10 +837,14 @@ public class ExtractionZone : MonoBehaviourPun
 
     GameObject FindExtractionMessage()
     {
+        GameObject activeObject = GameObject.Find(ExtractionMessageName);
+        if (activeObject != null && activeObject.scene.IsValid())
+            return activeObject;
+
         GameObject[] allTexts = Resources.FindObjectsOfTypeAll<GameObject>();
         for (int i = 0; i < allTexts.Length; i++)
         {
-            if (allTexts[i].name == "ExtractionMessage")
+            if (allTexts[i].name == ExtractionMessageName)
                 return allTexts[i];
         }
 

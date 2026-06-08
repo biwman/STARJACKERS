@@ -190,7 +190,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         ShipType.Avenger,
         ShipType.Arrow,
         ShipType.Invader,
-        ShipType.CargoTruck
+        ShipType.CargoTruck,
+        ShipType.Pathfinder
     };
 
     static readonly Vector2 ShipPreviewImagePosition = new Vector2(0f, 22f);
@@ -230,7 +231,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         "BOOST",
         "MAX BOOST",
         "CARGO",
-        "SAFE"
+        "SAFE",
+        "DRIFT"
     };
     static readonly Vector2 PilotSelectionLeftPosition = new Vector2(-560f, -190f);
     static readonly Vector2 PilotSelectionCenterPosition = new Vector2(0f, -162f);
@@ -455,6 +457,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
     GameObject[] shipSelectionCardObjects;
     Image[] shipSelectionCardImages;
     TMP_Text[] shipSelectionCardTitles;
+    TMP_Text[] shipSelectionCardLockTexts;
+    Button[] shipSelectionCardDonateButtons;
     TMP_Text[][] shipSelectionCardStatLabelTexts;
     TMP_Text[][] shipSelectionCardStatValueTexts;
     Image[][] shipSelectionCardStatFillImages;
@@ -595,6 +599,15 @@ public class PlayerProfilePanelUI : MonoBehaviour
         instance.RefreshView();
         instance.MarkAllProfileUiDirty();
         instance.RefreshVisibility();
+    }
+
+    public static void RefreshOpenPanel()
+    {
+        if (instance == null)
+            return;
+
+        instance.MarkAllProfileUiDirty();
+        instance.RefreshView();
     }
 
     void Awake()
@@ -829,29 +842,33 @@ public class PlayerProfilePanelUI : MonoBehaviour
         shipTypeLabelText = CreateText(panelObject.transform, "ShipTypeLabel", "SHIP", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-304f, -176f), new Vector2(260f, 24f), 18f, TextAlignmentOptions.Left);
 
         shipTypeButtons = new Button[SelectableShipTypes.Length];
-        shipTypeButtons[0] = CreateButton(panelObject.transform, "ExplorerShipButton", "EXPLORER", new Vector2(326f, -204f), new Vector2(122f, 40f), () =>
+        shipTypeButtons[0] = CreateButton(panelObject.transform, "ExplorerShipButton", "EXPLORER", new Vector2(300f, -204f), new Vector2(108f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Explorer);
         });
-        shipTypeButtons[1] = CreateButton(panelObject.transform, "ViperShipButton", "VIPER", new Vector2(448f, -204f), new Vector2(112f, 40f), () =>
+        shipTypeButtons[1] = CreateButton(panelObject.transform, "ViperShipButton", "VIPER", new Vector2(412f, -204f), new Vector2(104f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Viper);
         });
-        shipTypeButtons[2] = CreateButton(panelObject.transform, "AvengerShipButton", "AVENGER", new Vector2(570f, -204f), new Vector2(112f, 40f), () =>
+        shipTypeButtons[2] = CreateButton(panelObject.transform, "AvengerShipButton", "AVENGER", new Vector2(524f, -204f), new Vector2(104f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Avenger);
         });
-        shipTypeButtons[3] = CreateButton(panelObject.transform, "ArrowShipButton", "ARROW", new Vector2(692f, -204f), new Vector2(112f, 40f), () =>
+        shipTypeButtons[3] = CreateButton(panelObject.transform, "ArrowShipButton", "ARROW", new Vector2(636f, -204f), new Vector2(104f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Arrow);
         });
-        shipTypeButtons[4] = CreateButton(panelObject.transform, "InvaderShipButton", "INVADER", new Vector2(814f, -204f), new Vector2(112f, 40f), () =>
+        shipTypeButtons[4] = CreateButton(panelObject.transform, "InvaderShipButton", "INVADER", new Vector2(748f, -204f), new Vector2(104f, 40f), () =>
         {
             SetSelectedShipType(ShipType.Invader);
         });
-        shipTypeButtons[5] = CreateButton(panelObject.transform, "CargoTruckShipButton", "BISON", new Vector2(936f, -204f), new Vector2(112f, 40f), () =>
+        shipTypeButtons[5] = CreateButton(panelObject.transform, "CargoTruckShipButton", "BISON", new Vector2(860f, -204f), new Vector2(104f, 40f), () =>
         {
             SetSelectedShipType(ShipType.CargoTruck);
+        });
+        shipTypeButtons[6] = CreateButton(panelObject.transform, "PathfinderShipButton", "PATHFINDER", new Vector2(982f, -204f), new Vector2(132f, 40f), () =>
+        {
+            SetSelectedShipType(ShipType.Pathfinder);
         });
 
         shipSkinLabelText = CreateText(panelObject.transform, "SkinLabel", "SHIP SKIN", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-304f, -256f), new Vector2(300f, 24f), 18f, TextAlignmentOptions.Left);
@@ -1556,6 +1573,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         shipSelectionCardObjects = new GameObject[3];
         shipSelectionCardImages = new Image[3];
         shipSelectionCardTitles = new TMP_Text[3];
+        shipSelectionCardLockTexts = new TMP_Text[3];
+        shipSelectionCardDonateButtons = new Button[3];
         shipSelectionCardStatLabelTexts = new TMP_Text[3][];
         shipSelectionCardStatValueTexts = new TMP_Text[3][];
         shipSelectionCardStatFillImages = new Image[3][];
@@ -1584,6 +1603,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 centerCard,
                 out shipSelectionCardImages[i],
                 out shipSelectionCardTitles[i],
+                out shipSelectionCardLockTexts[i],
+                out shipSelectionCardDonateButtons[i],
                 out shipSelectionCardStatLabelTexts[i],
                 out shipSelectionCardStatValueTexts[i],
                 out shipSelectionCardStatFillImages[i],
@@ -1736,7 +1757,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         return card;
     }
 
-    GameObject CreateShipSelectionCard(Transform parent, int cardIndex, Vector2 anchoredPosition, Vector2 size, bool centerCard, out Image previewImage, out TMP_Text titleText, out TMP_Text[] statLabelTexts, out TMP_Text[] statValueTexts, out Image[] statFillImages, out GameObject[] slotObjects)
+    GameObject CreateShipSelectionCard(Transform parent, int cardIndex, Vector2 anchoredPosition, Vector2 size, bool centerCard, out Image previewImage, out TMP_Text titleText, out TMP_Text lockText, out Button donateButton, out TMP_Text[] statLabelTexts, out TMP_Text[] statValueTexts, out Image[] statFillImages, out GameObject[] slotObjects)
     {
         GameObject card = new GameObject("ShipSelectionCard" + cardIndex, typeof(RectTransform), typeof(Image), typeof(Button));
         card.transform.SetParent(parent, false);
@@ -1783,6 +1804,16 @@ public class PlayerProfilePanelUI : MonoBehaviour
         previewImage.preserveAspect = true;
         previewImage.raycastTarget = false;
 
+        lockText = CreateText(card.transform, "LockText", string.Empty, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), centerCard ? new Vector2(18f, 18f) : new Vector2(10f, 12f), new Vector2(size.x - 80f, 118f), centerCard ? 28f : 20f, TextAlignmentOptions.Center);
+        lockText.textWrappingMode = TextWrappingModes.Normal;
+        lockText.color = new Color(1f, 0.92f, 0.72f, 0.98f);
+        lockText.raycastTarget = false;
+
+        donateButton = CreateButton(card.transform, "ViperDonateButton", "Repair with spare parts", centerCard ? new Vector2(18f, -218f) : new Vector2(10f, -162f), centerCard ? new Vector2(118f, 118f) : new Vector2(92f, 92f), OnViperRepairDonateClicked);
+        ConfigureViperRepairButtonLabel(donateButton, centerCard);
+        StyleButton(donateButton, new Color(0.12f, 0.38f, 0.22f, 0.98f), new Color(0.18f, 0.58f, 0.34f, 1f));
+        donateButton.gameObject.SetActive(false);
+
         slotObjects = new GameObject[PlayerInventoryData.EquipmentSlotCount];
         Vector2[] slotLayout = BuildShipSelectionSlotLayout(centerCard);
         for (int i = 0; i < slotObjects.Length; i++)
@@ -1821,6 +1852,28 @@ public class PlayerProfilePanelUI : MonoBehaviour
         CreateShipSelectionStatCards(card.transform, out statLabelTexts, out statValueTexts, out statFillImages);
 
         return card;
+    }
+
+    void ConfigureViperRepairButtonLabel(Button button, bool centerCard)
+    {
+        if (button == null)
+            return;
+
+        TMP_Text text = button.GetComponentInChildren<TMP_Text>(true);
+        if (text == null)
+            return;
+
+        text.text = "Repair with spare parts";
+        text.textWrappingMode = TextWrappingModes.Normal;
+        text.overflowMode = TextOverflowModes.Truncate;
+        text.enableAutoSizing = true;
+        text.fontSizeMin = centerCard ? 10f : 8f;
+        text.fontSizeMax = centerCard ? 17f : 13f;
+        text.fontStyle = FontStyles.Bold;
+        text.alignment = TextAlignmentOptions.Center;
+        text.margin = centerCard
+            ? new Vector4(8f, 8f, 8f, 8f)
+            : new Vector4(6f, 6f, 6f, 6f);
     }
 
     Vector2[] BuildShipSelectionSlotLayout(bool centerCard)
@@ -2191,10 +2244,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
         panelRect.anchorMax = new Vector2(1f, 1f);
         panelRect.pivot = new Vector2(1f, 0.5f);
         panelRect.anchoredPosition = new Vector2(-38f, -500f);
-        panelRect.sizeDelta = new Vector2(668f, 128f);
+        panelRect.sizeDelta = new Vector2(504f, 180f);
 
-        const int cardCount = 8;
-        const int columns = 4;
+        int cardCount = ShipStatLabels.Length;
+        const int columns = 3;
         const float cardWidth = 156f;
         const float cardHeight = 52f;
         const float cardSpacingX = 12f;
@@ -3581,6 +3634,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
     {
         BlueprintTradeOffer[] offers = BlueprintCatalog.GetMissEnigmaOffers();
         List<MissEnigmaOfferViewModel> visibleOffers = new List<MissEnigmaOfferViewModel>();
+        InventoryItemDefinition avengerCodesDefinition = InventoryItemCatalog.GetDefinition(InventoryItemCatalog.AvengerStartingCodesId);
+        bool showAvengerCodesOffer = avengerCodesDefinition != null &&
+            PlayerProfileService.Instance.CanBuyAvengerStartingCodes();
+        int avengerCodesPrice = showAvengerCodesOffer
+            ? PlayerProfileService.Instance.GetShopBuyPriceAstrons(InventoryItemCatalog.AvengerStartingCodesId)
+            : 0;
 
         for (int i = 0; i < offers.Length; i++)
         {
@@ -3610,7 +3669,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             });
         }
 
-        if (visibleOffers.Count == 0)
+        if (visibleOffers.Count == 0 && !showAvengerCodesOffer)
         {
             GameObject rowObject = GetOrCreateMissEnigmaEmptyRow();
             rowObject.transform.SetParent(shopContentRect, false);
@@ -3621,6 +3680,15 @@ public class PlayerProfilePanelUI : MonoBehaviour
             if (shopScrollRect != null)
                 shopScrollRect.verticalNormalizedPosition = 1f;
             return;
+        }
+
+        if (showAvengerCodesOffer && avengerCodesPrice > 0)
+        {
+            PlayerProfileData profile = PlayerProfileService.Instance.CurrentProfile;
+            bool canAffordCodes = profile != null && profile.Astrons >= avengerCodesPrice;
+            GameObject codesRow = CreateShopRow(shopRowObjects.Count, avengerCodesDefinition, avengerCodesPrice, canAffordCodes, null, 0, false);
+            if (codesRow != null)
+                shopRowObjects.Add(codesRow);
         }
 
         SortMissEnigmaOffers(visibleOffers);
@@ -6019,6 +6087,11 @@ public class PlayerProfilePanelUI : MonoBehaviour
         return ShipCatalog.GetShipTypeFromSkinIndex(selectedSkin);
     }
 
+    bool IsShipTypeUnlockedForUi(ShipType shipType)
+    {
+        return PlayerProfileService.HasInstance && PlayerProfileService.Instance.IsShipUnlocked(shipType);
+    }
+
     int GetActiveProfileShipSkinIndex()
     {
         PlayerProfileData profile = PlayerProfileService.HasInstance ? PlayerProfileService.Instance.CurrentProfile : null;
@@ -6030,7 +6103,18 @@ public class PlayerProfilePanelUI : MonoBehaviour
     {
         PlayerProfileData profile = PlayerProfileService.HasInstance ? PlayerProfileService.Instance.CurrentProfile : null;
         string[] equipmentSlots = profile != null && profile.Inventory != null ? profile.Inventory.EquipmentSlots : null;
+        if (PlayerProfileService.HasInstance)
+            return PlayerProfileService.Instance.GetShipInventoryCapacityForProfile(GetActiveProfileShipSkinIndex(), equipmentSlots);
+
         return PlayerProfileService.GetEffectiveShipInventoryCapacity(GetActiveProfileShipSkinIndex(), equipmentSlots);
+    }
+
+    bool IsEquipmentSlotEnabledForSelectedSkin(int slotIndex)
+    {
+        if (!PlayerProfileService.HasInstance)
+            return ShipCatalog.IsEquipmentSlotEnabled(slotIndex, selectedSkin);
+
+        return PlayerProfileService.Instance.IsEquipmentSlotEnabledForProfile(slotIndex, selectedSkin);
     }
 
     bool IsActiveShipSafePocketIndex(int slotIndex)
@@ -6045,6 +6129,13 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     async void SetSelectedShipType(ShipType shipType)
     {
+        if (!IsShipTypeUnlockedForUi(shipType))
+        {
+            SetStatus(ShipCatalog.GetShipTypeDisplayName(shipType).ToUpperInvariant() + " locked.");
+            RefreshView();
+            return;
+        }
+
         int[] allowedSkins = ShipCatalog.GetSkinsForShipType(shipType);
         int targetSkin = System.Array.IndexOf(allowedSkins, selectedSkin) >= 0 ? selectedSkin : allowedSkins[0];
         if (inventoryActionInProgress)
@@ -6092,6 +6183,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void ApplySkinChoiceByButtonIndex(int buttonIndex)
     {
+        if (!IsShipTypeUnlockedForUi(GetSelectedShipType()))
+            return;
+
         int[] allowedSkins = ShipCatalog.GetSkinsForShipType(GetSelectedShipType());
         if (buttonIndex < 0 || buttonIndex >= allowedSkins.Length)
             return;
@@ -6118,7 +6212,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
             if (image != null)
             {
                 bool isSelected = i < SelectableShipTypes.Length && SelectableShipTypes[i] == selectedType;
-                image.color = isSelected
+                bool locked = i < SelectableShipTypes.Length && !IsShipTypeUnlockedForUi(SelectableShipTypes[i]);
+                image.color = locked
+                    ? new Color(0.13f, 0.14f, 0.16f, 0.86f)
+                    : isSelected
                     ? new Color(0.19f, 0.61f, 0.5f, 0.98f)
                     : new Color(0.16f, 0.2f, 0.27f, 0.95f);
             }
@@ -6132,6 +6229,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
         ShipType shipType = GetSelectedShipType();
         int[] allowedSkins = ShipCatalog.GetSkinsForShipType(shipType);
+        bool shipUnlocked = IsShipTypeUnlockedForUi(shipType);
 
         if (shipTypeLabelText != null)
             shipTypeLabelText.text = "SHIP: " + ShipCatalog.GetShipTypeDisplayName(shipType).ToUpperInvariant();
@@ -6146,6 +6244,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
             bool active = i < allowedSkins.Length;
             skinButtons[i].gameObject.SetActive(active);
+            skinButtons[i].interactable = active && shipUnlocked && inventoryControlsInteractable && !inventoryActionInProgress;
             if (!active)
                 continue;
 
@@ -6161,6 +6260,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             return;
 
         int[] allowedSkins = ShipCatalog.GetSkinsForShipType(GetSelectedShipType());
+        bool shipUnlocked = IsShipTypeUnlockedForUi(GetSelectedShipType());
 
         for (int i = 0; i < skinButtons.Length; i++)
         {
@@ -6173,7 +6273,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
             Image image = skinButtons[i].GetComponent<Image>();
             if (image != null)
             {
-                image.color = allowedSkins[i] == selectedSkin
+                image.color = !shipUnlocked
+                    ? new Color(0.12f, 0.13f, 0.15f, 0.82f)
+                    : allowedSkins[i] == selectedSkin
                     ? new Color(0.19f, 0.61f, 0.5f, 0.98f)
                     : new Color(0.16f, 0.2f, 0.27f, 0.95f);
             }
@@ -6472,6 +6574,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         SetShipStatCard(5, ShipStatLabels[5], "+" + definition.MaxBoostPercent + "%", NormalizeShipStat(definition.MaxBoostPercent, stat => stat.MaxBoostPercent));
         SetShipStatCard(6, ShipStatLabels[6], definition.CargoCapacity.ToString(), NormalizeShipStat(definition.CargoCapacity, stat => stat.CargoCapacity));
         SetShipStatCard(7, ShipStatLabels[7], definition.SafePocketSlots.ToString(), NormalizeSafePocketStat(definition.SafePocketSlots));
+        SetShipStatCard(8, ShipStatLabels[8], definition.BrakingDriftLevel.ToString(), NormalizeShipStat(definition.BrakingDriftLevel, stat => stat.BrakingDriftLevel));
     }
 
     void SetShipStatCard(int index, string label, string valueText, float normalized)
@@ -7422,13 +7525,16 @@ public class PlayerProfilePanelUI : MonoBehaviour
         title.textWrappingMode = TextWrappingModes.NoWrap;
         SetAnchoredRect(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -16f), new Vector2(460f, 34f));
 
+        const string ProjectCompleteMarker = "V";
         TMP_Text check = tileButton.transform.Find("ProjectTileCheck")?.GetComponent<TMP_Text>();
         if (check == null)
         {
-            check = CreateText(tileButton.transform, "ProjectTileCheck", "\u2713", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(260f, 70f), 58f, TextAlignmentOptions.Center);
+            check = CreateText(tileButton.transform, "ProjectTileCheck", ProjectCompleteMarker, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(260f, 70f), 58f, TextAlignmentOptions.Center);
             check.raycastTarget = false;
         }
 
+        check.text = ProjectCompleteMarker;
+        check.fontStyle = FontStyles.Bold;
         check.color = new Color(0.28f, 1f, 0.45f, 0.98f);
     }
 
@@ -9197,6 +9303,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     async void CommitShipSelection(ShipType shipType)
     {
+        if (!IsShipTypeUnlockedForUi(shipType))
+        {
+            if (shipSelectionStatusText != null)
+                shipSelectionStatusText.text = ShipCatalog.GetShipTypeDisplayName(shipType).ToUpperInvariant() + " locked.";
+            RefreshShipSelectionView();
+            return;
+        }
+
         int targetSkin = GetShipSelectionDisplaySkin(shipType);
         inventoryActionInProgress = true;
         SetInteractable(false);
@@ -9235,12 +9349,47 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     void SetShipSelectionSkinByButton(int buttonIndex)
     {
+        if (!IsShipTypeUnlockedForUi(shipSelectionCenterType))
+            return;
+
         int[] allowedSkins = ShipCatalog.GetSkinsForShipType(shipSelectionCenterType);
         if (buttonIndex < 0 || buttonIndex >= allowedSkins.Length)
             return;
 
         shipSelectionSkinByType[shipSelectionCenterType] = allowedSkins[buttonIndex];
         RefreshShipSelectionView();
+    }
+
+    async void OnViperRepairDonateClicked()
+    {
+        if (inventoryActionInProgress || !PlayerProfileService.HasInstance)
+            return;
+
+        inventoryActionInProgress = true;
+        SetInteractable(false);
+        if (shipSelectionStatusText != null)
+            shipSelectionStatusText.text = "Repairing Viper...";
+
+        try
+        {
+            bool donated = await PlayerProfileService.Instance.DonateViperRepairPartsAsync();
+            if (shipSelectionStatusText != null)
+                shipSelectionStatusText.text = donated ? "Viper systems ready for test flights." : "Spare parts required.";
+
+            RefreshView();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Viper repair donation failed: " + ex);
+            if (shipSelectionStatusText != null)
+                shipSelectionStatusText.text = "Repair failed.";
+        }
+        finally
+        {
+            inventoryActionInProgress = false;
+            SetInteractable(true);
+            RefreshShipSelectionView();
+        }
     }
 
     int GetShipSelectionDisplaySkin(ShipType shipType)
@@ -9292,6 +9441,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             }
 
             int[] allowedSkins = ShipCatalog.GetSkinsForShipType(shipSelectionCenterType);
+            bool centerShipUnlocked = IsShipTypeUnlockedForUi(shipSelectionCenterType);
             for (int i = 0; i < shipSelectionSkinButtons.Length; i++)
             {
                 if (shipSelectionSkinButtons[i] == null)
@@ -9299,6 +9449,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
                 bool active = i < allowedSkins.Length;
                 shipSelectionSkinButtons[i].gameObject.SetActive(active);
+                shipSelectionSkinButtons[i].interactable = active && centerShipUnlocked && inventoryControlsInteractable && !inventoryActionInProgress;
                 if (!active)
                     continue;
 
@@ -9314,8 +9465,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
                 StyleButton(
                     shipSelectionSkinButtons[i],
-                    selected ? new Color(0.2f, 0.38f, 0.58f, 0.98f) : new Color(0.16f, 0.2f, 0.27f, 0.95f),
-                    selected ? new Color(0.28f, 0.5f, 0.74f, 1f) : new Color(0.22f, 0.3f, 0.42f, 1f));
+                    !centerShipUnlocked ? new Color(0.11f, 0.12f, 0.15f, 0.84f) : selected ? new Color(0.2f, 0.38f, 0.58f, 0.98f) : new Color(0.16f, 0.2f, 0.27f, 0.95f),
+                    !centerShipUnlocked ? new Color(0.16f, 0.17f, 0.2f, 0.9f) : selected ? new Color(0.28f, 0.5f, 0.74f, 1f) : new Color(0.22f, 0.3f, 0.42f, 1f));
             }
 
             ApplyShipSelectionCarouselVisuals();
@@ -9340,6 +9491,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
                     shipSelectionSkinButtons[i].transform.SetAsLastSibling();
             }
         }
+        if (shipSelectionCardDonateButtons != null)
+        {
+            for (int i = 0; i < shipSelectionCardDonateButtons.Length; i++)
+            {
+                if (shipSelectionCardDonateButtons[i] != null && shipSelectionCardDonateButtons[i].gameObject.activeSelf)
+                    shipSelectionCardDonateButtons[i].transform.SetAsLastSibling();
+            }
+        }
         if (shipSelectionStatusText != null)
             shipSelectionStatusText.transform.SetAsLastSibling();
     }
@@ -9351,6 +9510,16 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
         int skinIndex = GetShipSelectionDisplaySkin(shipType);
         PlayerShipDefinition definition = ShipCatalog.GetShipDefinition(shipType);
+        bool shipUnlocked = IsShipTypeUnlockedForUi(shipType);
+        ViperRecoveryStage viperStage = shipType == ShipType.Viper && PlayerProfileService.HasInstance
+            ? PlayerProfileService.Instance.GetViperRecoveryStage()
+            : ViperRecoveryStage.Complete;
+        ArrowLicenseStage arrowStage = shipType == ShipType.Arrow && PlayerProfileService.HasInstance
+            ? PlayerProfileService.Instance.GetArrowLicenseStage()
+            : ArrowLicenseStage.Complete;
+        bool viperNeedsParts = shipType == ShipType.Viper && viperStage == ViperRecoveryStage.WreckRecovered;
+        bool viperTesting = shipType == ShipType.Viper && viperStage == ViperRecoveryStage.Testing;
+        bool arrowLocked = shipType == ShipType.Arrow && !shipUnlocked && arrowStage != ArrowLicenseStage.Complete;
         RectTransform cardRect = shipSelectionCardObjects[cardIndex] != null ? shipSelectionCardObjects[cardIndex].GetComponent<RectTransform>() : null;
         if (cardRect != null)
         {
@@ -9376,16 +9545,83 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (image != null)
         {
             image.sprite = LoadShipPreviewSprite(skinIndex);
-            image.color = image.sprite != null ? Color.white : new Color(1f, 1f, 1f, 0f);
+            image.color = image.sprite != null
+                ? shipUnlocked ? Color.white : new Color(0.34f, 0.34f, 0.34f, centerCard ? 0.72f : 0.56f)
+                : new Color(1f, 1f, 1f, 0f);
             RectTransform imageRect = image.rectTransform;
             imageRect.anchoredPosition = centerCard ? new Vector2(48f, -64f) : new Vector2(30f, -48f);
             imageRect.sizeDelta = centerCard ? new Vector2(680f, 760f) : new Vector2(470f, 540f);
         }
 
+        TMP_Text lockText = shipSelectionCardLockTexts != null && cardIndex < shipSelectionCardLockTexts.Length
+            ? shipSelectionCardLockTexts[cardIndex]
+            : null;
+        if (lockText != null)
+        {
+            bool showProgressText = !shipUnlocked || viperTesting;
+            lockText.gameObject.SetActive(showProgressText);
+            lockText.text = BuildShipSelectionProgressText(shipType, shipUnlocked, viperStage);
+            lockText.fontSize = viperNeedsParts
+                ? centerCard ? 20f : 15f
+                : viperTesting
+                    ? centerCard ? 23f : 16f
+                    : arrowLocked
+                        ? centerCard ? 20f : 15f
+                    : centerCard ? 28f : 20f;
+            RectTransform lockRect = lockText.rectTransform;
+            lockRect.anchoredPosition = viperNeedsParts
+                ? centerCard ? new Vector2(18f, -92f) : new Vector2(10f, -72f)
+                : viperTesting
+                    ? centerCard ? new Vector2(18f, -208f) : new Vector2(10f, -150f)
+                    : arrowLocked
+                        ? centerCard ? new Vector2(18f, -92f) : new Vector2(10f, -72f)
+                    : centerCard ? new Vector2(18f, 18f) : new Vector2(10f, 12f);
+            lockRect.sizeDelta = viperNeedsParts
+                ? centerCard ? new Vector2(640f, 190f) : new Vector2(430f, 150f)
+                : viperTesting
+                    ? centerCard ? new Vector2(560f, 104f) : new Vector2(420f, 82f)
+                    : arrowLocked
+                        ? centerCard ? new Vector2(640f, 190f) : new Vector2(430f, 150f)
+                    : centerCard ? new Vector2(560f, 126f) : new Vector2(400f, 100f);
+            lockText.color = viperTesting
+                ? new Color(1f, 0.82f, 0.48f, 0.98f)
+                : arrowLocked
+                    ? new Color(0.66f, 0.9f, 1f, 0.98f)
+                : new Color(1f, 0.92f, 0.72f, 0.98f);
+            lockText.transform.SetAsLastSibling();
+        }
+
+        Button donateButton = shipSelectionCardDonateButtons != null && cardIndex < shipSelectionCardDonateButtons.Length
+            ? shipSelectionCardDonateButtons[cardIndex]
+            : null;
+        if (donateButton != null)
+        {
+            donateButton.gameObject.SetActive(viperNeedsParts);
+            donateButton.interactable = viperNeedsParts &&
+                                        centerCard &&
+                                        inventoryControlsInteractable &&
+                                        !inventoryActionInProgress &&
+                                        PlayerProfileService.Instance.IsViperRepairPartsDonationAvailable();
+            RectTransform donateRect = donateButton.GetComponent<RectTransform>();
+            if (donateRect != null)
+            {
+                donateRect.anchoredPosition = centerCard ? new Vector2(18f, -238f) : new Vector2(10f, -184f);
+                donateRect.sizeDelta = centerCard ? new Vector2(118f, 118f) : new Vector2(92f, 92f);
+            }
+
+            ConfigureViperRepairButtonLabel(donateButton, centerCard);
+            StyleButton(
+                donateButton,
+                donateButton.interactable ? new Color(0.12f, 0.38f, 0.22f, 0.98f) : new Color(0.16f, 0.17f, 0.18f, 0.86f),
+                donateButton.interactable ? new Color(0.18f, 0.58f, 0.34f, 1f) : new Color(0.22f, 0.24f, 0.25f, 0.9f));
+        }
+
         Image cardImage = shipSelectionCardObjects[cardIndex].GetComponent<Image>();
         if (cardImage != null)
         {
-            cardImage.color = centerCard
+            cardImage.color = !shipUnlocked
+                ? new Color(0.045f, 0.05f, 0.06f, centerCard ? 0.82f : 0.72f)
+                : centerCard
                 ? new Color(0.08f, 0.11f, 0.16f, 0.76f)
                 : new Color(0.07f, 0.1f, 0.15f, 0.68f);
         }
@@ -9411,6 +9647,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             SetShipSelectionStatCard(statLabels, statValues, statFills, 5, ShipStatLabels[5], "+" + definition.MaxBoostPercent + "%", NormalizeShipStat(definition.MaxBoostPercent, stat => stat.MaxBoostPercent));
             SetShipSelectionStatCard(statLabels, statValues, statFills, 6, ShipStatLabels[6], definition.CargoCapacity.ToString(), NormalizeShipStat(definition.CargoCapacity, stat => stat.CargoCapacity));
             SetShipSelectionStatCard(statLabels, statValues, statFills, 7, ShipStatLabels[7], definition.SafePocketSlots.ToString(), NormalizeSafePocketStat(definition.SafePocketSlots));
+            SetShipSelectionStatCard(statLabels, statValues, statFills, 8, ShipStatLabels[8], definition.BrakingDriftLevel.ToString(), NormalizeShipStat(definition.BrakingDriftLevel, stat => stat.BrakingDriftLevel));
         }
 
         GameObject[] slotObjects = shipSelectionCardSlotObjects != null && cardIndex < shipSelectionCardSlotObjects.Length
@@ -9424,10 +9661,11 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 if (slotObjects[i] == null)
                     continue;
 
-                bool slotEnabled = ShipCatalog.IsEquipmentSlotEnabled(i, skinIndex);
-                slotObjects[i].SetActive(slotEnabled);
-                if (!slotEnabled)
+                bool slotDefined = ShipCatalog.IsEquipmentSlotEnabled(i, skinIndex);
+                slotObjects[i].SetActive(slotDefined);
+                if (!slotDefined)
                     continue;
+                bool slotUnlocked = !viperTesting || PlayerProfileService.Instance.IsEquipmentSlotEnabledForProfile(i, skinIndex);
 
                 RectTransform slotRect = slotObjects[i].GetComponent<RectTransform>();
                 if (slotRect != null)
@@ -9438,19 +9676,98 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
                 Image slotImage = slotObjects[i].GetComponent<Image>();
                 if (slotImage != null)
-                    slotImage.color = GetShipSelectionSlotColor(i);
+                    slotImage.color = slotUnlocked ? GetShipSelectionSlotColor(i) : new Color(0.32f, 0.06f, 0.08f, 0.94f);
 
                 Outline outline = slotObjects[i].GetComponent<Outline>();
                 if (outline != null)
                 {
-                    outline.effectColor = GetShipSelectionSlotOutlineColor(i);
+                    outline.effectColor = slotUnlocked ? GetShipSelectionSlotOutlineColor(i) : new Color(0.98f, 0.16f, 0.18f, 0.96f);
                     outline.effectDistance = new Vector2(2.2f, -2.2f);
                 }
 
                 TMP_Text slotText = slotObjects[i].GetComponentInChildren<TMP_Text>(true);
                 ApplyEquipmentSlotPreviewTextStyle(slotText);
+                if (slotText != null && !slotUnlocked)
+                {
+                    slotText.text = "X";
+                    slotText.fontSize = centerCard ? 30f : 24f;
+                    slotText.fontSizeMax = slotText.fontSize;
+                    slotText.color = new Color(1f, 0.24f, 0.24f, 1f);
+                }
+                else if (slotText != null)
+                {
+                    slotText.text = GetShipSelectionSlotLabel(i);
+                }
             }
         }
+    }
+
+    string BuildShipSelectionProgressText(ShipType shipType, bool shipUnlocked, ViperRecoveryStage viperStage)
+    {
+        if (shipType == ShipType.Viper)
+        {
+            if (viperStage == ViperRecoveryStage.WreckRecovered)
+            {
+                int neutral = PlayerProfileService.Instance.CountViperRepairPartItem(InventoryItemCatalog.NeutralFighterSalvageId);
+                int drones = PlayerProfileService.Instance.CountViperRepairPartItem(InventoryItemCatalog.DroidScrapId);
+                int trucks = PlayerProfileService.Instance.CountViperRepairPartItem(InventoryItemCatalog.SpaceTruckWreckId);
+                return "Spare parts required to repair this starship.\n" +
+                       neutral + "/" + PlayerProfileService.ViperNeutralFighterWrecksRequired + " Neutral Fighter wrecks\n" +
+                       drones + "/" + PlayerProfileService.ViperDroneWrecksRequired + " Drone wrecks\n" +
+                       trucks + "/" + PlayerProfileService.ViperSpaceTruckWrecksRequired + " Space Truck wrecks";
+            }
+
+            if (viperStage == ViperRecoveryStage.Testing)
+                return "You need to make a few fligths to test and stablize all systems";
+
+            if (!shipUnlocked)
+                return "LOCKED\nRECOVER VIPER WRECK";
+        }
+
+        if (shipType == ShipType.Avenger)
+            return "LOCKED\nRECOVER AVENGER";
+
+        if (shipType == ShipType.Arrow && PlayerProfileService.HasInstance)
+        {
+            ArrowLicenseProgressData progress = PlayerProfileService.Instance.GetArrowLicenseProgress();
+            ArrowLicenseStage arrowStage = (ArrowLicenseStage)Mathf.Clamp(progress.Stage, (int)ArrowLicenseStage.Locked, (int)ArrowLicenseStage.Complete);
+            switch (arrowStage)
+            {
+                case ArrowLicenseStage.Locked:
+                case ArrowLicenseStage.Qualifying:
+                    return "Arrow Racing License\n" +
+                           "Complete Race Beacon qualifiers: " +
+                           progress.QualifierChips + "/" + PlayerProfileService.ArrowQualifierChipsRequired;
+                case ArrowLicenseStage.PartsRequired:
+                    return "Deliver racing parts\n" +
+                           "Ion Nozzle: " + FormatDelivered(progress.IonNozzleDelivered) + "\n" +
+                           "Gyro Stabilizer: " + FormatDelivered(progress.GyroStabilizerDelivered) + "\n" +
+                           "Race Transponder: " + FormatDelivered(progress.RaceTransponderDelivered);
+                case ArrowLicenseStage.TimeTrialRequired:
+                    return "Complete Arrow Time Trial\n" +
+                           "Required rank: B\n" +
+                           "Best rank: " + FormatArrowRank(progress.BestTimeTrialRank);
+                case ArrowLicenseStage.GhostRaceRequired:
+                    return "Defeat the ghost racer\n" +
+                           "Target: The Needle";
+                case ArrowLicenseStage.FinalRunReady:
+                    return "Final Arrow Run ready\n" +
+                           "Complete telemetry route and extract alive";
+            }
+        }
+
+        return "LOCKED";
+    }
+
+    string FormatDelivered(bool delivered)
+    {
+        return delivered ? "OK" : "-";
+    }
+
+    string FormatArrowRank(int rank)
+    {
+        ArrowTimeTrialRank safeRank = (ArrowTimeTrialRank)Mathf.Clamp(rank, (int)ArrowTimeTrialRank.None, (int)ArrowTimeTrialRank.S);
+        return safeRank == ArrowTimeTrialRank.None ? "-" : safeRank.ToString();
     }
 
     void LayoutShipSelectionStats(int cardIndex, bool centerCard)
@@ -9567,7 +9884,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
         for (int i = 0; i < PlayerInventoryData.EquipmentSlotCount; i++)
         {
-            bool enabled = inventory != null && inventory.IsEquipmentSlotEnabled(i, selectedSkin);
+            bool enabled = inventory != null && IsEquipmentSlotEnabledForSelectedSkin(i);
             string itemId = inventory != null && inventory.EquipmentSlots != null && i < inventory.EquipmentSlots.Length
                 ? inventory.EquipmentSlots[i]
                 : null;
@@ -10361,7 +10678,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
         else
         {
-            if (currentScreen == ProfileScreen.Home && ShipCatalog.IsEquipmentSlotEnabled(slotIndex, selectedSkin))
+            if (currentScreen == ProfileScreen.Home && IsEquipmentSlotEnabledForSelectedSkin(slotIndex))
             {
                 HideItemPreview();
                 SetStatus(string.Empty);
@@ -10609,7 +10926,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
     bool ApplyEquipmentSlotPlayerInventoryFilter(int slotIndex)
     {
-        if (!ShipCatalog.IsEquipmentSlotEnabled(slotIndex, selectedSkin))
+        if (!IsEquipmentSlotEnabledForSelectedSkin(slotIndex))
             return false;
 
         SetPlayerInventoryFilter(PlayerInventoryFilterMode.CustomEquipmentSlot, slotIndex);
@@ -10984,6 +11301,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 return "A decoy gadget that draws enemy attention away from the pilot.";
             case InventoryItemCatalog.AutoTurretId:
                 return "A deployable turret that supports the pilot by firing at nearby enemies.";
+            case InventoryItemCatalog.RocketAutoTurretId:
+                return "A deployable rocket turret that locks down an area with straight explosive shots.";
             case InventoryItemCatalog.GuidanceSystemId:
                 return "A support system that points the pilot toward useful objectives and threats.";
             case InventoryItemCatalog.CloakDeviceId:
@@ -11515,7 +11834,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         {
             ProfileItemSource.PlayerInventory => inventory.RemoveFromPlayer(sourceIndex),
             ProfileItemSource.ShipInventory => inventory.RemoveFromShip(sourceIndex),
-            ProfileItemSource.EquipmentSlot => inventory.IsEquipmentSlotEnabled(sourceIndex, selectedSkin) ? inventory.RemoveFromEquipment(sourceIndex) : null,
+            ProfileItemSource.EquipmentSlot => IsEquipmentSlotEnabledForSelectedSkin(sourceIndex) ? inventory.RemoveFromEquipment(sourceIndex) : null,
             ProfileItemSource.CraftingSlot => inventory.RemoveFromCrafting(sourceIndex),
             _ => null
         };
@@ -11532,7 +11851,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         {
             ProfileItemSource.PlayerInventory => GetSlotItem(inventory.PlayerSlots, sourceIndex),
             ProfileItemSource.ShipInventory => GetSlotItem(inventory.ShipSlots, sourceIndex),
-            ProfileItemSource.EquipmentSlot => inventory.IsEquipmentSlotEnabled(sourceIndex, selectedSkin) ? GetSlotItem(inventory.EquipmentSlots, sourceIndex) : null,
+            ProfileItemSource.EquipmentSlot => IsEquipmentSlotEnabledForSelectedSkin(sourceIndex) ? GetSlotItem(inventory.EquipmentSlots, sourceIndex) : null,
             ProfileItemSource.CraftingSlot => GetSlotItem(inventory.CraftingSlots, sourceIndex),
             _ => null
         };
@@ -11578,7 +11897,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 return true;
 
             case ProfileItemSource.EquipmentSlot:
-                if (!inventory.IsEquipmentSlotEnabled(targetIndex, selectedSkin))
+                if (!IsEquipmentSlotEnabledForSelectedSkin(targetIndex))
                     return false;
                 if (!InventoryItemCatalog.IsCompatibleWithEquipmentSlot(itemId, targetIndex))
                     return false;
@@ -11605,7 +11924,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             inventory.PlayerSlots == null ||
             targetIndex < 0 ||
             targetIndex >= inventory.PlayerSlots.Length ||
-            !inventory.IsEquipmentSlotEnabled(equipmentSlotIndex, selectedSkin))
+            !IsEquipmentSlotEnabledForSelectedSkin(equipmentSlotIndex))
         {
             return false;
         }
@@ -11677,7 +11996,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 return true;
 
             case ProfileItemSource.EquipmentSlot:
-                if (!inventory.IsEquipmentSlotEnabled(sourceIndex, selectedSkin))
+                if (!IsEquipmentSlotEnabledForSelectedSkin(sourceIndex))
                     return false;
                 if (!InventoryItemCatalog.IsCompatibleWithEquipmentSlot(itemId, sourceIndex))
                     return false;
@@ -11776,6 +12095,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
                     firstOutputSlot = targetSlot;
 
                 workingInventory.PlayerSlots[targetSlot] = craftResult.Recipe.OutputItemId;
+            }
+
+            if (!ShouldShowPlayerInventoryItem(craftResult.Recipe.OutputItemId))
+            {
+                SetPlayerInventoryFilter(PlayerInventoryFilterMode.All, -1);
+                resetPlayerInventoryScrollOnNextRefresh = true;
             }
 
             suppressNextProfileChangedRefresh = true;

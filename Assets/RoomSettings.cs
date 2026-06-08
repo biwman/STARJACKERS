@@ -52,6 +52,11 @@ public static class RoomSettings
     public const string RepairBayCountKey = "repairBayCount";
     public const string SpaceFactoryCountKey = "spaceFactoryCount";
     public const string ScienceStationCountKey = "scienceStationCount";
+    public const string AvengerPlotEnabledKey = "avengerPlotEnabled";
+    public const string ViperPlotChancePercentKey = "viperPlotChancePercent";
+    public const string ArrowPlotChancePercentKey = "arrowPlotChancePercent";
+    public const string ShipUnlockPlotActiveKey = "shipUnlockPlot.active";
+    public const string ShipUnlockPlotStartTimeKey = "shipUnlockPlot.startTime";
     public const string BoosterSlowdownKey = "boosterSlowdownPercent";
     public const string BoosterRecoveryDelayKey = "boosterRecoveryDelay";
     public const string AdvancedBoosterEnabledKey = "advancedBoosterEnabled";
@@ -66,6 +71,7 @@ public static class RoomSettings
     public const string MapBackgroundKey = "mapBackground";
     public const string SelectedMapKey = "selectedMap";
     public const string VisualEffectsEnabledKey = "visualEffectsEnabled";
+    public const string AdvancedSpawnVfxEnabledKey = "advancedSpawnVfxEnabled";
     public const string BoomVfxEnabledKey = "boomVfxEnabled";
     public const string DynamicCameraZoomEnabledKey = "dynamicCameraZoomEnabled";
     public const string ParallaxBackgroundKey = "parallaxBackground";
@@ -129,6 +135,9 @@ public static class RoomSettings
     public const int DefaultRepairBayCount = 1;
     public const int DefaultSpaceFactoryCount = 0;
     public const int DefaultScienceStationCount = 0;
+    public const bool DefaultAvengerPlotEnabled = false;
+    public const int DefaultViperPlotChancePercent = 20;
+    public const int DefaultArrowPlotChancePercent = 0;
     public const int DefaultRandomLootWreckCount = 0;
     public const bool DefaultHiddenTreasureEnabled = false;
     public const bool DefaultCosmicWormEnabled = false;
@@ -148,6 +157,7 @@ public static class RoomSettings
     public const int MaxMapBackground = 21;
     public const string DefaultLobbyMapId = "just_space";
     public const bool DefaultVisualEffectsEnabled = true;
+    public const bool DefaultAdvancedSpawnVfxEnabled = false;
     public const bool DefaultBoomVfxEnabled = true;
     public const bool DefaultDynamicCameraZoomEnabled = true;
     public const string ParallaxBackgroundKosmos3 = "kosmos3";
@@ -567,6 +577,18 @@ public static class RoomSettings
         return DefaultVisualEffectsEnabled;
     }
 
+    public static bool IsAdvancedSpawnVfxEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(AdvancedSpawnVfxEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultAdvancedSpawnVfxEnabled;
+    }
+
     public static bool AreBoomVfxEnabled()
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -668,6 +690,28 @@ public static class RoomSettings
         }
 
         return DefaultGravityWellPhysicsEnabled;
+    }
+
+    public static bool IsAvengerPlotEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(AvengerPlotEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultAvengerPlotEnabled;
+    }
+
+    public static int GetViperPlotChancePercent()
+    {
+        return GetInt(ViperPlotChancePercentKey, DefaultViperPlotChancePercent, 0, 100);
+    }
+
+    public static int GetArrowPlotChancePercent()
+    {
+        return GetInt(ArrowPlotChancePercentKey, DefaultArrowPlotChancePercent, 0, 100);
     }
 
     public static int GetCollectKeepAliveRangeBonusPercent()
@@ -1882,7 +1926,8 @@ public enum ShipType
     Avenger = 2,
     Arrow = 3,
     Invader = 4,
-    CargoTruck = 5
+    CargoTruck = 5,
+    Pathfinder = 6
 }
 
 public sealed class PlayerShipDefinition
@@ -1904,6 +1949,7 @@ public sealed class PlayerShipDefinition
     public float TurnRateMultiplier { get; }
     public float BoosterDuration { get; }
     public int MaxBoostPercent { get; }
+    public int BrakingDriftLevel { get; }
     public Vector2[] ThrusterOffsetFactors { get; }
 
     public PlayerShipDefinition(
@@ -1924,6 +1970,7 @@ public sealed class PlayerShipDefinition
         float turnRateMultiplier,
         float boosterDuration,
         int maxBoostPercent,
+        int brakingDriftLevel,
         Vector2[] thrusterOffsetFactors)
     {
         Type = type;
@@ -1943,6 +1990,7 @@ public sealed class PlayerShipDefinition
         TurnRateMultiplier = turnRateMultiplier;
         BoosterDuration = boosterDuration;
         MaxBoostPercent = Mathf.Max(0, maxBoostPercent);
+        BrakingDriftLevel = Mathf.Clamp(brakingDriftLevel, 0, 10);
         ThrusterOffsetFactors = thrusterOffsetFactors;
     }
 }
@@ -1967,7 +2015,10 @@ public static class ShipCatalog
     public const int CargoTruckGreenTruckSkinIndex = 15;
     public const int CargoTruckWhitePantherSkinIndex = 16;
     public const int CargoTruckSandSigmaSkinIndex = 17;
-    public const int MaxShipSkinIndex = CargoTruckSandSigmaSkinIndex;
+    public const int PathfinderClassicSkinIndex = 18;
+    public const int PathfinderAngelSkinIndex = 19;
+    public const int PathfinderExtravaganceSkinIndex = 20;
+    public const int MaxShipSkinIndex = PathfinderExtravaganceSkinIndex;
 
     static readonly PlayerShipDefinition ExplorerDefinition = new PlayerShipDefinition(
         ShipType.Explorer,
@@ -1979,7 +2030,7 @@ public static class ShipCatalog
         1,
         1,
         1,
-        1,
+        0,
         1,
         75,
         40,
@@ -1987,6 +2038,7 @@ public static class ShipCatalog
         1f,
         10f,
         30,
+        4,
         new[] { new Vector2(0f, 0.02f) });
 
     static readonly PlayerShipDefinition ViperDefinition = new PlayerShipDefinition(
@@ -2007,6 +2059,7 @@ public static class ShipCatalog
         1.2f,
         8f,
         40,
+        3,
         new[]
         {
             new Vector2(-2.24f, 0.34f),
@@ -2017,12 +2070,12 @@ public static class ShipCatalog
         ShipType.Avenger,
         "Avenger",
         new[] { AvengerDarkGreenSkinIndex, AvengerMilitarySkinIndex, AvengerNasaSkinIndex },
-        9,
+        8,
         1,
         2,
         2,
         0,
-        2,
+        1,
         1,
         1,
         98,
@@ -2031,6 +2084,7 @@ public static class ShipCatalog
         0.82f,
         12f,
         30,
+        5,
         new[] { new Vector2(0f, 0.02f) });
 
     static readonly PlayerShipDefinition ArrowDefinition = new PlayerShipDefinition(
@@ -2041,16 +2095,17 @@ public static class ShipCatalog
         1,
         1,
         1,
-        2,
+        1,
         1,
         0,
-        2,
+        1,
         63,
-        25,
+        30,
         4.25f,
         1.45f,
         7.2f,
         20,
+        1,
         new[]
         {
             new Vector2(-1.82f, 0.28f),
@@ -2071,18 +2126,19 @@ public static class ShipCatalog
         2,
         1,
         72,
-        35,
+        30,
         3.375f,
         1.08f,
         10.8f,
         25,
+        2,
         new[] { new Vector2(0f, 0.18f) });
 
     static readonly PlayerShipDefinition CargoTruckDefinition = new PlayerShipDefinition(
         ShipType.CargoTruck,
         "BISON",
         new[] { CargoTruckGreenTruckSkinIndex, CargoTruckWhitePantherSkinIndex, CargoTruckSandSigmaSkinIndex },
-        15,
+        14,
         1,
         0,
         2,
@@ -2096,11 +2152,37 @@ public static class ShipCatalog
         0.68f,
         7f,
         15,
+        7,
         new[]
         {
             new Vector2(-1.7f, 0.18f),
             new Vector2(0f, 0.12f),
             new Vector2(1.7f, 0.18f)
+        });
+
+    static readonly PlayerShipDefinition PathfinderDefinition = new PlayerShipDefinition(
+        ShipType.Pathfinder,
+        "Pathfinder",
+        new[] { PathfinderClassicSkinIndex, PathfinderAngelSkinIndex, PathfinderExtravaganceSkinIndex },
+        8,
+        2,
+        1,
+        1,
+        1,
+        2,
+        2,
+        0,
+        50,
+        50,
+        3.85f,
+        1.25f,
+        6f,
+        40,
+        3,
+        new[]
+        {
+            new Vector2(-1.35f, 0.22f),
+            new Vector2(1.35f, 0.22f)
         });
 
     static readonly Dictionary<ShipType, PlayerShipDefinition> Definitions = new Dictionary<ShipType, PlayerShipDefinition>
@@ -2110,8 +2192,86 @@ public static class ShipCatalog
         { ShipType.Avenger, AvengerDefinition },
         { ShipType.Arrow, ArrowDefinition },
         { ShipType.Invader, InvaderDefinition },
-        { ShipType.CargoTruck, CargoTruckDefinition }
+        { ShipType.CargoTruck, CargoTruckDefinition },
+        { ShipType.Pathfinder, PathfinderDefinition }
     };
+
+    public static string GetShipTypeId(ShipType shipType)
+    {
+        return shipType switch
+        {
+            ShipType.Viper => "viper",
+            ShipType.Avenger => "avenger",
+            ShipType.Arrow => "arrow",
+            ShipType.Invader => "invader",
+            ShipType.CargoTruck => "cargo_truck",
+            ShipType.Pathfinder => "pathfinder",
+            _ => "explorer"
+        };
+    }
+
+    public static bool TryGetShipTypeFromId(string shipTypeId, out ShipType shipType)
+    {
+        string normalized = string.IsNullOrWhiteSpace(shipTypeId)
+            ? string.Empty
+            : shipTypeId.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case "explorer":
+                shipType = ShipType.Explorer;
+                return true;
+            case "viper":
+                shipType = ShipType.Viper;
+                return true;
+            case "avenger":
+                shipType = ShipType.Avenger;
+                return true;
+            case "arrow":
+                shipType = ShipType.Arrow;
+                return true;
+            case "invader":
+                shipType = ShipType.Invader;
+                return true;
+            case "bison":
+            case "cargo_truck":
+                shipType = ShipType.CargoTruck;
+                return true;
+            case "pathfinder":
+                shipType = ShipType.Pathfinder;
+                return true;
+            default:
+                shipType = ShipType.Explorer;
+                return false;
+        }
+    }
+
+    public static string NormalizeShipTypeId(string shipTypeId)
+    {
+        return TryGetShipTypeFromId(shipTypeId, out ShipType shipType)
+            ? GetShipTypeId(shipType)
+            : string.Empty;
+    }
+
+    public static string[] GetAllShipTypeIds()
+    {
+        string[] ids =
+        {
+            GetShipTypeId(ShipType.Explorer),
+            GetShipTypeId(ShipType.Viper),
+            GetShipTypeId(ShipType.Avenger),
+            GetShipTypeId(ShipType.Arrow),
+            GetShipTypeId(ShipType.Invader),
+            GetShipTypeId(ShipType.CargoTruck),
+            GetShipTypeId(ShipType.Pathfinder)
+        };
+        return ids;
+    }
+
+    public static string[] GetDefaultUnlockedShipTypeIds()
+    {
+        return new[] { GetShipTypeId(ShipType.Explorer) };
+    }
 
     public static PlayerShipDefinition GetShipDefinition(int skinIndex)
     {
@@ -2127,6 +2287,7 @@ public static class ShipCatalog
     {
         return skinIndex switch
         {
+            >= PathfinderClassicSkinIndex => ShipType.Pathfinder,
             >= CargoTruckGreenTruckSkinIndex => ShipType.CargoTruck,
             >= InvaderCamoSkinIndex => ShipType.Invader,
             >= ArrowSmoothSkinIndex => ShipType.Arrow,
@@ -2168,6 +2329,9 @@ public static class ShipCatalog
             case CargoTruckGreenTruckSkinIndex: return "Green Truck";
             case CargoTruckWhitePantherSkinIndex: return "White Panther";
             case CargoTruckSandSigmaSkinIndex: return "Sand Sigma";
+            case PathfinderClassicSkinIndex: return "Classic";
+            case PathfinderAngelSkinIndex: return "Angel";
+            case PathfinderExtravaganceSkinIndex: return "Extravagance";
             default: return "Skin";
         }
     }
@@ -2242,6 +2406,11 @@ public static class ShipCatalog
         return GetShipDefinition(skinIndex).MaxBoostPercent;
     }
 
+    public static int GetBrakingDriftLevel(int skinIndex)
+    {
+        return GetShipDefinition(skinIndex).BrakingDriftLevel;
+    }
+
     public static Vector2[] GetThrusterOffsetFactors(int skinIndex)
     {
         return GetShipDefinition(skinIndex).ThrusterOffsetFactors;
@@ -2309,6 +2478,9 @@ public static class ShipCatalog
             CargoTruckGreenTruckSkinIndex => "Visuals/Ships/bison_green_truck",
             CargoTruckWhitePantherSkinIndex => "Visuals/Ships/bison_white_panther",
             CargoTruckSandSigmaSkinIndex => "Visuals/Ships/bison_sand_sigma",
+            PathfinderClassicSkinIndex => "Visuals/Ships/pathfinder_classic",
+            PathfinderAngelSkinIndex => "Visuals/Ships/pathfinder_angel",
+            PathfinderExtravaganceSkinIndex => "Visuals/Ships/pathfinder_extravagance",
             _ => "Visuals/Ships/ship1_resource"
         };
     }
@@ -2335,6 +2507,9 @@ public static class ShipCatalog
             CargoTruckGreenTruckSkinIndex => "Assets/Resources/Visuals/Ships/bison_green_truck.png",
             CargoTruckWhitePantherSkinIndex => "Assets/Resources/Visuals/Ships/bison_white_panther.png",
             CargoTruckSandSigmaSkinIndex => "Assets/Resources/Visuals/Ships/bison_sand_sigma.png",
+            PathfinderClassicSkinIndex => "Assets/Resources/Visuals/Ships/pathfinder_classic.png",
+            PathfinderAngelSkinIndex => "Assets/Resources/Visuals/Ships/pathfinder_angel.png",
+            PathfinderExtravaganceSkinIndex => "Assets/Resources/Visuals/Ships/pathfinder_extravagance.png",
             _ => "Assets/Resources/Visuals/Ships/ship1_resource.png"
         };
     }
@@ -2361,45 +2536,63 @@ public static class ShipCatalog
             CargoTruckGreenTruckSkinIndex => "Assets/Resources/Visuals/Ships/bison_green_truck.png",
             CargoTruckWhitePantherSkinIndex => "Assets/Resources/Visuals/Ships/bison_white_panther.png",
             CargoTruckSandSigmaSkinIndex => "Assets/Resources/Visuals/Ships/bison_sand_sigma.png",
+            PathfinderClassicSkinIndex => "Assets/Resources/Visuals/Ships/pathfinder_classic.png",
+            PathfinderAngelSkinIndex => "Assets/Resources/Visuals/Ships/pathfinder_angel.png",
+            PathfinderExtravaganceSkinIndex => "Assets/Resources/Visuals/Ships/pathfinder_extravagance.png",
             _ => "Assets/ship1.png"
         };
     }
 
     public static string GetWreckResourcePathForSkin(int skinIndex)
     {
+        if (GetShipTypeFromSkinIndex(skinIndex) == ShipType.Pathfinder)
+            return "Visuals/Ships/pathfinder_wreck";
+
+        if (GetShipTypeFromSkinIndex(skinIndex) == ShipType.CargoTruck)
+            return GetShipSkinResourcePath(skinIndex);
+
         return GetShipTypeFromSkinIndex(skinIndex) switch
         {
             ShipType.Viper => "wrak2_resource",
             ShipType.Avenger => "wrak3_resource",
             ShipType.Arrow => "Visuals/Ships/arrow_ship_wreck_resource",
             ShipType.Invader => "Visuals/Ships/invader_wreck_resource",
-            ShipType.CargoTruck => "space_truck_wrak_resource",
             _ => "wrak1_resource"
         };
     }
 
     public static string GetWreckEditorResourcePathForSkin(int skinIndex)
     {
+        if (GetShipTypeFromSkinIndex(skinIndex) == ShipType.Pathfinder)
+            return "Assets/Resources/Visuals/Ships/pathfinder_wreck.png";
+
+        if (GetShipTypeFromSkinIndex(skinIndex) == ShipType.CargoTruck)
+            return GetShipSkinEditorResourcePath(skinIndex);
+
         return GetShipTypeFromSkinIndex(skinIndex) switch
         {
             ShipType.Viper => "Assets/Resources/wrak2_resource.png",
             ShipType.Avenger => "Assets/Resources/wrak3_resource.png",
             ShipType.Arrow => "Assets/Resources/Visuals/Ships/arrow_ship_wreck_resource.png",
             ShipType.Invader => "Assets/Resources/Visuals/Ships/invader_wreck_resource.png",
-            ShipType.CargoTruck => "Assets/Resources/space_truck_wrak_resource.png",
             _ => "Assets/Resources/wrak1_resource.png"
         };
     }
 
     public static string GetWreckEditorFallbackPathForSkin(int skinIndex)
     {
+        if (GetShipTypeFromSkinIndex(skinIndex) == ShipType.Pathfinder)
+            return "Assets/Resources/Visuals/Ships/pathfinder_wreck.png";
+
+        if (GetShipTypeFromSkinIndex(skinIndex) == ShipType.CargoTruck)
+            return GetShipSkinEditorFallbackPath(skinIndex);
+
         return GetShipTypeFromSkinIndex(skinIndex) switch
         {
             ShipType.Viper => "Assets/wrak2.png",
             ShipType.Avenger => "Assets/wrak3.png",
             ShipType.Arrow => "Assets/arrow_ship_wreck.png",
             ShipType.Invader => "Assets/invader_wreck.png",
-            ShipType.CargoTruck => "Assets/space_truck_wrak.png",
             _ => "Assets/wrak1.png"
         };
     }

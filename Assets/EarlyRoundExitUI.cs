@@ -54,6 +54,7 @@ public class EarlyRoundExitUI : MonoBehaviour
         summaryRequested = true;
         awardRequested = false;
         exitRequested = false;
+        GameplayHudVisibility.SuppressForRoundSummary();
         NetworkManager.MarkCurrentRoundEndedForLocalPlayer(cachedOutcome);
         instance.Refresh();
         _ = instance.AwardRoundXpIfNeeded();

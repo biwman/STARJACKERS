@@ -61,6 +61,8 @@ public class Bullet : MonoBehaviourPun
     LineRenderer[] autoTurretBoltLines;
     LineRenderer[] gatlingTracerLines;
     LineRenderer[] pilotBreachTraceLines;
+    SpriteRenderer plasmaInnerRenderer;
+    SpriteRenderer plasmaOuterRenderer;
     LineRenderer rocketTrailLine;
     SpriteRenderer rocketProjectileRenderer;
     SpriteRenderer projectileGlowRenderer;
@@ -979,6 +981,10 @@ public class Bullet : MonoBehaviourPun
             {
                 EnsureGatlingProjectileVisual(spriteRenderer);
             }
+            else if (IsPlasmaProjectile())
+            {
+                EnsurePlasmaProjectileVisual(spriteRenderer);
+            }
             else if (IsSmallRedPlasma())
             {
                 EnsurePlasmaGlow(spriteRenderer);
@@ -1051,6 +1057,11 @@ public class Bullet : MonoBehaviourPun
         return string.Equals(hitEffectId, "gatling", System.StringComparison.OrdinalIgnoreCase);
     }
 
+    bool IsPlasmaProjectile()
+    {
+        return string.Equals(hitEffectId, "plasma", System.StringComparison.OrdinalIgnoreCase);
+    }
+
     bool IsSmallRedPlasma()
     {
         return visualColor.r > 0.85f &&
@@ -1072,6 +1083,46 @@ public class Bullet : MonoBehaviourPun
     void EnsurePlasmaGlow(SpriteRenderer coreRenderer)
     {
         EnsureProjectileGlow(coreRenderer, "RedPlasmaGlow", new Color(1f, 0.1f, 0.02f, 0.34f), 1.9f);
+    }
+
+    void EnsurePlasmaProjectileVisual(SpriteRenderer coreRenderer)
+    {
+        if (coreRenderer == null || coreRenderer.sprite == null)
+            return;
+
+        coreRenderer.color = new Color(0.72f, 1f, 0.48f, 0.95f);
+        EnsureProjectileGlow(coreRenderer, "PlasmaAuraGlow", new Color(0.08f, 1f, 0.26f, 0.3f), 2.2f);
+
+        plasmaInnerRenderer = EnsurePlasmaLayer(coreRenderer, "PlasmaHotCore", new Color(0.9f, 1f, 0.62f, 0.86f), 0.48f, coreRenderer.sortingOrder + 2);
+        plasmaOuterRenderer = EnsurePlasmaLayer(coreRenderer, "PlasmaEmeraldShell", new Color(0.02f, 0.72f, 0.2f, 0.45f), 1.34f, coreRenderer.sortingOrder + 1);
+        UpdatePlasmaProjectileVisual();
+    }
+
+    SpriteRenderer EnsurePlasmaLayer(SpriteRenderer coreRenderer, string objectName, Color color, float scale, int sortingOrder)
+    {
+        Transform layerTransform = transform.Find(objectName);
+        SpriteRenderer layerRenderer = layerTransform != null
+            ? layerTransform.GetComponent<SpriteRenderer>()
+            : null;
+
+        if (layerRenderer == null)
+        {
+            GameObject layerObject = new GameObject(objectName);
+            layerObject.transform.SetParent(transform, false);
+            layerTransform = layerObject.transform;
+            layerRenderer = layerObject.AddComponent<SpriteRenderer>();
+        }
+
+        layerTransform.localPosition = Vector3.zero;
+        layerTransform.localRotation = Quaternion.identity;
+        layerTransform.localScale = Vector3.one * scale;
+
+        layerRenderer.sprite = coreRenderer.sprite;
+        layerRenderer.color = color;
+        layerRenderer.sortingLayerID = coreRenderer.sortingLayerID;
+        layerRenderer.sortingOrder = sortingOrder;
+        layerRenderer.enabled = true;
+        return layerRenderer;
     }
 
     void EnsureArtilleryProjectileVisual(SpriteRenderer coreRenderer)
@@ -1338,6 +1389,9 @@ public class Bullet : MonoBehaviourPun
         if (IsGatlingProjectile())
             UpdateGatlingProjectileVisual();
 
+        if (IsPlasmaProjectile())
+            UpdatePlasmaProjectileVisual();
+
         if (IsRocketProjectile())
             UpdateRocketProjectileVisual();
 
@@ -1360,6 +1414,39 @@ public class Bullet : MonoBehaviourPun
         rocketTrailLine.widthMultiplier = 0.1f * Mathf.Clamp(visualScaleMultiplier, 0.7f, 1.15f) * flicker;
         rocketTrailLine.SetPosition(0, tail);
         rocketTrailLine.SetPosition(1, flameEnd);
+    }
+
+    void UpdatePlasmaProjectileVisual()
+    {
+        float seed = photonView != null ? photonView.ViewID * 0.13f : 0f;
+        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * 18f + seed);
+
+        if (projectileGlowRenderer != null)
+        {
+            projectileGlowRenderer.color = Color.Lerp(
+                new Color(0.02f, 0.95f, 0.22f, 0.22f),
+                new Color(0.42f, 1f, 0.12f, 0.42f),
+                pulse);
+            projectileGlowRenderer.transform.localScale = Vector3.one * Mathf.Lerp(1.9f, 2.35f, pulse);
+        }
+
+        if (plasmaInnerRenderer != null)
+        {
+            plasmaInnerRenderer.color = Color.Lerp(
+                new Color(0.82f, 1f, 0.48f, 0.78f),
+                new Color(0.98f, 1f, 0.74f, 0.96f),
+                pulse);
+            plasmaInnerRenderer.transform.localScale = Vector3.one * Mathf.Lerp(0.38f, 0.56f, pulse);
+        }
+
+        if (plasmaOuterRenderer != null)
+        {
+            plasmaOuterRenderer.color = Color.Lerp(
+                new Color(0.03f, 0.58f, 0.12f, 0.32f),
+                new Color(0.12f, 1f, 0.34f, 0.5f),
+                1f - pulse);
+            plasmaOuterRenderer.transform.localScale = Vector3.one * Mathf.Lerp(1.18f, 1.48f, 1f - pulse);
+        }
     }
 
     void AlignRocketVisualWithTravelDirection()

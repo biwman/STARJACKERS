@@ -54,6 +54,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     const float MapTileSpacingX = 48f;
     const float MapTileSpacingY = 36f;
     const float MapSelectionContentTopY = -140f;
+    const float MapUnlockRequirementFullScreenFontSize = 20f;
+    const float MapUnlockRequirementOverlayFontSize = 19f;
+    const float MapUnlockRequirementBottomOffset = 10f;
+    const float MapUnlockRequirementMinHeight = 86f;
     const float TopActionButtonWidth = 270f;
     const float TopActionButtonHeight = 72f;
     const float BottomWideButtonWidth = 430f;
@@ -159,6 +163,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     static readonly int[] SpaceFactoryCountOptions = { 0, 1, 2 };
     static readonly int[] ScienceStationCountOptions = { 0, 1 };
     static readonly int[] RandomLootWreckCountOptions = { 0, 1, 2, 3, 4, 5 };
+    static readonly int[] ViperPlotChancePercentOptions = { 0, 20, 40, 60, 80, 100 };
+    static readonly int[] ArrowPlotChancePercentOptions = { 0, 20, 40, 60, 80, 100 };
     static readonly int[] BoosterSlowdownOptions = { 30, 40, 50, 60, 70, 80, 90, 100 };
     static readonly int[] BoosterRecoveryDelayOptions = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
     static readonly float[] LastShipTimerMultiplierOptions = { 1f, 1.5f, 2f, 3f, 4f, 5f };
@@ -226,6 +232,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text mapSizeSettingText;
     public TMP_Text mapBackgroundSettingText;
     public TMP_Text visualEffectsSettingText;
+    public TMP_Text advancedSpawnVfxSettingText;
     public TMP_Text boomVfxSettingText;
     public TMP_Text dynamicCameraZoomSettingText;
     public TMP_Text advancedBackgroundSettingText;
@@ -262,6 +269,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text repairBaySettingText;
     public TMP_Text spaceFactorySettingText;
     public TMP_Text scienceStationSettingText;
+    public TMP_Text avengerPlotSettingText;
+    public TMP_Text viperPlotChanceSettingText;
+    public TMP_Text arrowPlotChanceSettingText;
     public TMP_Text boosterSettingText;
     public TMP_Text ammoSettingText;
     public TMP_Text boosterDelaySettingText;
@@ -303,6 +313,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button mapSizeSettingButton;
     public Button mapBackgroundSettingButton;
     public Button visualEffectsSettingButton;
+    public Button advancedSpawnVfxSettingButton;
     public Button boomVfxSettingButton;
     public Button dynamicCameraZoomSettingButton;
     public Button advancedBackgroundSettingButton;
@@ -339,6 +350,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button repairBaySettingButton;
     public Button spaceFactorySettingButton;
     public Button scienceStationSettingButton;
+    public Button avengerPlotSettingButton;
+    public Button viperPlotChanceSettingButton;
+    public Button arrowPlotChanceSettingButton;
     public Button boosterSettingButton;
     public Button ammoSettingButton;
     public Button boosterDelaySettingButton;
@@ -436,6 +450,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     Button developerCheatAddXpButton;
     Button developerCheatUnlockBlueprintsButton;
     Button developerCheatLockBlueprintsButton;
+    Button developerCheatUnlockShipsButton;
+    Button developerCheatLockShipsButton;
     Button developerCheatUnlockMapsButton;
     Button developerCheatLockMapsButton;
     Button developerCheatResetAccountButton;
@@ -1232,7 +1248,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         panelRect.anchorMax = new Vector2(0.5f, 0.5f);
         panelRect.pivot = new Vector2(0.5f, 0.5f);
         panelRect.anchoredPosition = new Vector2(0f, 6f);
-        panelRect.sizeDelta = new Vector2(620f, 840f);
+        panelRect.sizeDelta = new Vector2(620f, 960f);
 
         Image panelImage = panel.GetComponent<Image>();
         panelImage.color = new Color(0.11f, 0.1f, 0.14f, 0.98f);
@@ -1269,18 +1285,20 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         developerCheatAddXpButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddXpButton", "ADD XP", new Vector2(0f, -300f), new Vector2(260f, 54f), new Color(0.16f, 0.38f, 0.5f, 1f), new Color(0.22f, 0.52f, 0.7f, 1f), OnDeveloperCheatAddXpClicked);
         developerCheatUnlockBlueprintsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatUnlockBlueprintsButton", "UNLOCK ALL BLUEPRINTS", new Vector2(0f, -362f), new Vector2(340f, 54f), new Color(0.12f, 0.42f, 0.46f, 1f), new Color(0.18f, 0.58f, 0.64f, 1f), OnDeveloperCheatUnlockBlueprintsClicked);
         developerCheatLockBlueprintsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatLockBlueprintsButton", "LOCK ALL BLUEPRINTS", new Vector2(0f, -424f), new Vector2(340f, 54f), new Color(0.42f, 0.23f, 0.13f, 1f), new Color(0.58f, 0.34f, 0.18f, 1f), OnDeveloperCheatLockBlueprintsClicked);
-        developerCheatUnlockMapsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatUnlockMapsButton", "UNLOCK ALL MAPS", new Vector2(0f, -486f), new Vector2(340f, 54f), new Color(0.14f, 0.36f, 0.26f, 1f), new Color(0.2f, 0.54f, 0.38f, 1f), OnDeveloperCheatUnlockMapsClicked);
-        developerCheatLockMapsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatLockMapsButton", "LOCK ALL MAPS", new Vector2(0f, -548f), new Vector2(340f, 54f), new Color(0.36f, 0.28f, 0.16f, 1f), new Color(0.5f, 0.4f, 0.22f, 1f), OnDeveloperCheatLockMapsClicked);
-        developerCheatResetAccountButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatResetAccountButton", "RESET ACCOUNT", new Vector2(0f, -616f), new Vector2(260f, 54f), new Color(0.52f, 0.14f, 0.18f, 1f), new Color(0.72f, 0.2f, 0.25f, 1f), OnDeveloperCheatResetAccountClicked);
+        developerCheatUnlockShipsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatUnlockShipsButton", "UNLOCK ALL SHIPS", new Vector2(0f, -486f), new Vector2(340f, 54f), new Color(0.14f, 0.34f, 0.48f, 1f), new Color(0.2f, 0.48f, 0.68f, 1f), OnDeveloperCheatUnlockShipsClicked);
+        developerCheatLockShipsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatLockShipsButton", "LOCK ALL SHIPS", new Vector2(0f, -548f), new Vector2(340f, 54f), new Color(0.34f, 0.22f, 0.34f, 1f), new Color(0.5f, 0.32f, 0.5f, 1f), OnDeveloperCheatLockShipsClicked);
+        developerCheatUnlockMapsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatUnlockMapsButton", "UNLOCK ALL MAPS", new Vector2(0f, -610f), new Vector2(340f, 54f), new Color(0.14f, 0.36f, 0.26f, 1f), new Color(0.2f, 0.54f, 0.38f, 1f), OnDeveloperCheatUnlockMapsClicked);
+        developerCheatLockMapsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatLockMapsButton", "LOCK ALL MAPS", new Vector2(0f, -672f), new Vector2(340f, 54f), new Color(0.36f, 0.28f, 0.16f, 1f), new Color(0.5f, 0.4f, 0.22f, 1f), OnDeveloperCheatLockMapsClicked);
+        developerCheatResetAccountButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatResetAccountButton", "RESET ACCOUNT", new Vector2(0f, -740f), new Vector2(260f, 54f), new Color(0.52f, 0.14f, 0.18f, 1f), new Color(0.72f, 0.2f, 0.25f, 1f), OnDeveloperCheatResetAccountClicked);
 
-        developerCheatStatusText = CreateStandaloneLabel(panel.transform, "CheatStatusText", string.Empty, new Vector2(60f, -686f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
+        developerCheatStatusText = CreateStandaloneLabel(panel.transform, "CheatStatusText", string.Empty, new Vector2(60f, -810f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
         developerCheatStatusText.rectTransform.anchorMin = new Vector2(0.5f, 1f);
         developerCheatStatusText.rectTransform.anchorMax = new Vector2(0.5f, 1f);
         developerCheatStatusText.rectTransform.pivot = new Vector2(0.5f, 1f);
         developerCheatStatusText.fontStyle = FontStyles.Normal;
         developerCheatStatusText.color = new Color(0.74f, 0.86f, 0.94f, 0.96f);
 
-        developerCheatCloseButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatCloseButton", "CLOSE", new Vector2(0f, -734f), new Vector2(220f, 52f), new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f), HideDeveloperCheatOverlay);
+        developerCheatCloseButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatCloseButton", "CLOSE", new Vector2(0f, -858f), new Vector2(220f, 52f), new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f), HideDeveloperCheatOverlay);
 
         CreateDeveloperCheatResetConfirm(overlayObject.transform);
 
@@ -1464,6 +1482,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             developerCheatUnlockBlueprintsButton.interactable = !busy;
         if (developerCheatLockBlueprintsButton != null)
             developerCheatLockBlueprintsButton.interactable = !busy;
+        if (developerCheatUnlockShipsButton != null)
+            developerCheatUnlockShipsButton.interactable = !busy;
+        if (developerCheatLockShipsButton != null)
+            developerCheatLockShipsButton.interactable = !busy;
         if (developerCheatUnlockMapsButton != null)
             developerCheatUnlockMapsButton.interactable = !busy;
         if (developerCheatLockMapsButton != null)
@@ -1960,15 +1982,29 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         overlayObject.transform.SetAsLastSibling();
 
+        RectTransform tileRect = tileButton.GetComponent<RectTransform>();
+        float tileWidth = tileRect != null && tileRect.rect.width > 0f ? tileRect.rect.width : (fullScreenTile ? MapTileWidth : 540f);
+        float tileHeight = tileRect != null && tileRect.rect.height > 0f ? tileRect.rect.height : 250f;
+        float requirementFontSize = fullScreenTile ? MapUnlockRequirementFullScreenFontSize : MapUnlockRequirementOverlayFontSize;
+        float requirementHorizontalPadding = fullScreenTile ? 42f : 34f;
+        float requirementWidth = Mathf.Max(280f, tileWidth - requirementHorizontalPadding * 2f);
+        float requirementHeight = Mathf.Clamp(tileHeight * 0.38f, MapUnlockRequirementMinHeight, fullScreenTile ? 98f : 104f);
+        float lockTextHeight = fullScreenTile ? 36f : 34f;
+        float lockTopOffset = Mathf.Clamp(
+            tileHeight - MapUnlockRequirementBottomOffset - requirementHeight - lockTextHeight - 18f,
+            44f,
+            fullScreenTile ? 86f : 82f);
+        float lockTextWidth = Mathf.Max(280f, Mathf.Min(tileWidth - 36f, fullScreenTile ? 420f : 360f));
+
         TMP_Text lockText = overlayObject.transform.Find("TileLockText")?.GetComponent<TMP_Text>();
         if (lockText == null)
-            lockText = CreateStandaloneLabel(overlayObject.transform, "TileLockText", "LOCKED", new Vector2(0f, fullScreenTile ? -88f : -82f), new Vector2(fullScreenTile ? 420f : 360f, 34f), fullScreenTile ? 27f : 24f, TextAlignmentOptions.Center);
+            lockText = CreateStandaloneLabel(overlayObject.transform, "TileLockText", "LOCKED", new Vector2(0f, -lockTopOffset), new Vector2(lockTextWidth, lockTextHeight), fullScreenTile ? 27f : 24f, TextAlignmentOptions.Center);
         RectTransform lockRect = lockText.rectTransform;
         lockRect.anchorMin = new Vector2(0.5f, 1f);
         lockRect.anchorMax = new Vector2(0.5f, 1f);
         lockRect.pivot = new Vector2(0.5f, 1f);
-        lockRect.anchoredPosition = new Vector2(0f, fullScreenTile ? -88f : -82f);
-        lockRect.sizeDelta = new Vector2(fullScreenTile ? 420f : 360f, 34f);
+        lockRect.anchoredPosition = new Vector2(0f, -lockTopOffset);
+        lockRect.sizeDelta = new Vector2(lockTextWidth, lockTextHeight);
         lockText.text = "LOCKED";
         lockText.fontSize = fullScreenTile ? 27f : 24f;
         lockText.fontStyle = FontStyles.Bold;
@@ -1978,16 +2014,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         TMP_Text requirementText = overlayObject.transform.Find("TileRequirementText")?.GetComponent<TMP_Text>();
         if (requirementText == null)
-            requirementText = CreateStandaloneLabel(overlayObject.transform, "TileRequirementText", string.Empty, new Vector2(0f, 12f), new Vector2(fullScreenTile ? 462f : 492f, fullScreenTile ? 64f : 72f), fullScreenTile ? 17f : 16f, TextAlignmentOptions.Center);
+            requirementText = CreateStandaloneLabel(overlayObject.transform, "TileRequirementText", string.Empty, new Vector2(0f, MapUnlockRequirementBottomOffset), new Vector2(requirementWidth, requirementHeight), requirementFontSize, TextAlignmentOptions.Center);
         RectTransform requirementRect = requirementText.rectTransform;
         requirementRect.anchorMin = new Vector2(0.5f, 0f);
         requirementRect.anchorMax = new Vector2(0.5f, 0f);
         requirementRect.pivot = new Vector2(0.5f, 0f);
-        requirementRect.anchoredPosition = new Vector2(0f, 12f);
-        requirementRect.sizeDelta = new Vector2(fullScreenTile ? 462f : 492f, fullScreenTile ? 64f : 72f);
+        requirementRect.anchoredPosition = new Vector2(0f, MapUnlockRequirementBottomOffset);
+        requirementRect.sizeDelta = new Vector2(requirementWidth, requirementHeight);
         requirementText.text = unlockStatus != null ? unlockStatus.RequirementText : "Unlock requirement unavailable.";
-        requirementText.fontSize = fullScreenTile ? 17f : 16f;
+        requirementText.fontSize = requirementFontSize;
         requirementText.fontStyle = FontStyles.Normal;
+        requirementText.enableAutoSizing = false;
         requirementText.textWrappingMode = TextWrappingModes.Normal;
         requirementText.alignment = TextAlignmentOptions.Center;
         requirementText.color = new Color(0.9f, 0.94f, 0.98f, 0.98f);
@@ -2550,7 +2587,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             hasRecordedCurrentRound = false;
             if (ShouldKeepLobbyHiddenForSummary())
             {
-                HideLobby();
+                HideLobbyForSummary();
             }
             else
             {
@@ -2594,6 +2631,23 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         HideMapSelectionOverlay();
         HideFullScreenLobbyFlow();
         SetLegacyLobbyUiActive(false);
+
+        CanvasGroup cg = EnsureCanvasGroup();
+        cg.alpha = 0;
+        cg.interactable = false;
+        cg.blocksRaycasts = false;
+    }
+
+    void HideLobbyForSummary()
+    {
+        AudioManager.Instance.StopMenuMusic();
+        PlayerMovement.gameStarted = false;
+        PlayerShooting.gameStarted = false;
+        SetGameplayHudVisible(false, true);
+        HideMapSelectionOverlay();
+        HideFullScreenLobbyFlow();
+        SetLegacyLobbyUiActive(false);
+        GameplayHudVisibility.SuppressForRoundSummary();
 
         CanvasGroup cg = EnsureCanvasGroup();
         cg.alpha = 0;
@@ -2796,6 +2850,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         mapSizeSettingButton = EnsureSettingButton(ref mapSizeSettingText, mapSizeSettingButton, "MapSizeSettingButton", "MapSizeSettingText", Vector2.zero, CycleMapSize);
         mapBackgroundSettingButton = EnsureSettingButton(ref mapBackgroundSettingText, mapBackgroundSettingButton, "MapBackgroundSettingButton", "MapBackgroundSettingText", Vector2.zero, CycleMapBackground);
         visualEffectsSettingButton = EnsureSettingButton(ref visualEffectsSettingText, visualEffectsSettingButton, "VisualEffectsSettingButton", "VisualEffectsSettingText", Vector2.zero, CycleVisualEffectsEnabled);
+        advancedSpawnVfxSettingButton = EnsureSettingButton(ref advancedSpawnVfxSettingText, advancedSpawnVfxSettingButton, "AdvancedSpawnVfxSettingButton", "AdvancedSpawnVfxSettingText", Vector2.zero, CycleAdvancedSpawnVfxEnabled);
         boomVfxSettingButton = EnsureSettingButton(ref boomVfxSettingText, boomVfxSettingButton, "BoomVfxSettingButton", "BoomVfxSettingText", Vector2.zero, CycleBoomVfxEnabled);
         dynamicCameraZoomSettingButton = EnsureSettingButton(ref dynamicCameraZoomSettingText, dynamicCameraZoomSettingButton, "DynamicCameraZoomSettingButton", "DynamicCameraZoomSettingText", Vector2.zero, CycleDynamicCameraZoomEnabled);
         HideDeprecatedSettingButton("AdvancedBackgroundSettingButton", "AdvancedBackgroundSettingText");
@@ -2832,6 +2887,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         repairBaySettingButton = EnsureSettingButton(ref repairBaySettingText, repairBaySettingButton, "RepairBaySettingButton", "RepairBaySettingText", Vector2.zero, CycleRepairBayCount);
         spaceFactorySettingButton = EnsureSettingButton(ref spaceFactorySettingText, spaceFactorySettingButton, "SpaceFactorySettingButton", "SpaceFactorySettingText", Vector2.zero, CycleSpaceFactoryCount);
         scienceStationSettingButton = EnsureSettingButton(ref scienceStationSettingText, scienceStationSettingButton, "ScienceStationSettingButton", "ScienceStationSettingText", Vector2.zero, CycleScienceStationCount);
+        avengerPlotSettingButton = EnsureSettingButton(ref avengerPlotSettingText, avengerPlotSettingButton, "AvengerPlotSettingButton", "AvengerPlotSettingText", Vector2.zero, CycleAvengerPlotEnabled);
+        viperPlotChanceSettingButton = EnsureSettingButton(ref viperPlotChanceSettingText, viperPlotChanceSettingButton, "ViperPlotChanceSettingButton", "ViperPlotChanceSettingText", Vector2.zero, CycleViperPlotChancePercent);
+        arrowPlotChanceSettingButton = EnsureSettingButton(ref arrowPlotChanceSettingText, arrowPlotChanceSettingButton, "ArrowPlotChanceSettingButton", "ArrowPlotChanceSettingText", Vector2.zero, CycleArrowPlotChancePercent);
         boosterSettingButton = EnsureSettingButton(ref boosterSettingText, boosterSettingButton, "BoosterSettingButton", "BoosterSettingText", Vector2.zero, CycleBoosterSlowdown);
         HideDeprecatedSettingButton("AmmoSettingButton", "AmmoSettingText");
         boosterDelaySettingButton = EnsureSettingButton(ref boosterDelaySettingText, boosterDelaySettingButton, "BoosterDelaySettingButton", "BoosterDelaySettingText", Vector2.zero, CycleBoosterRecoveryDelay);
@@ -2905,6 +2963,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(repairBaySettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(spaceFactorySettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(scienceStationSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(avengerPlotSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(viperPlotChanceSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(arrowPlotChanceSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(movingObjectsSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(gravityWellPhysicsSettingButton, "ENVIRONMENT");
         AttachLeftSectionButton(obstacleWeightSettingButton, "ENVIRONMENT");
@@ -2912,6 +2973,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         AttachLeftSectionButton(mapBackgroundSettingButton, "COSMETICS");
         AttachLeftSectionButton(visualEffectsSettingButton, "COSMETICS");
+        AttachLeftSectionButton(advancedSpawnVfxSettingButton, "COSMETICS");
         AttachLeftSectionButton(boomVfxSettingButton, "COSMETICS");
         AttachLeftSectionButton(dynamicCameraZoomSettingButton, "COSMETICS");
         AttachLeftSectionButton(parallaxBackgroundSettingButton, "COSMETICS");
@@ -4063,6 +4125,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AdvancedSpawnVfxEnabledKey))
+        {
+            props[RoomSettings.AdvancedSpawnVfxEnabledKey] = RoomSettings.DefaultAdvancedSpawnVfxEnabled;
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.BoomVfxEnabledKey))
         {
             props[RoomSettings.BoomVfxEnabledKey] = RoomSettings.DefaultBoomVfxEnabled;
@@ -4231,6 +4299,24 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.CosmicWormEnabledKey))
         {
             props[RoomSettings.CosmicWormEnabledKey] = RoomSettings.DefaultCosmicWormEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AvengerPlotEnabledKey))
+        {
+            props[RoomSettings.AvengerPlotEnabledKey] = LobbyMapCatalog.IsAvengerPlotEnabledByDefault(RoomSettings.GetSelectedLobbyMapId());
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ViperPlotChancePercentKey))
+        {
+            props[RoomSettings.ViperPlotChancePercentKey] = LobbyMapCatalog.GetDefaultViperPlotChancePercent(RoomSettings.GetSelectedLobbyMapId());
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ArrowPlotChancePercentKey))
+        {
+            props[RoomSettings.ArrowPlotChancePercentKey] = LobbyMapCatalog.GetDefaultArrowPlotChancePercent(RoomSettings.GetSelectedLobbyMapId());
             changed = true;
         }
 
@@ -4687,6 +4773,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RefreshHostSettingsUi();
     }
 
+    void CycleAdvancedSpawnVfxEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.AdvancedSpawnVfxEnabledKey] = !RoomSettings.IsAdvancedSpawnVfxEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
     void CycleBoomVfxEnabled()
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
@@ -5014,6 +5111,35 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             RoomSettings.DefaultScienceStationCount);
     }
 
+    void CycleAvengerPlotEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.AvengerPlotEnabledKey] = !RoomSettings.IsAvengerPlotEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
+    void CycleViperPlotChancePercent()
+    {
+        CycleIntSetting(
+            RoomSettings.ViperPlotChancePercentKey,
+            ViperPlotChancePercentOptions,
+            RoomSettings.GetViperPlotChancePercent(),
+            LobbyMapCatalog.GetDefaultViperPlotChancePercent(RoomSettings.GetSelectedLobbyMapId()));
+    }
+
+    void CycleArrowPlotChancePercent()
+    {
+        CycleIntSetting(
+            RoomSettings.ArrowPlotChancePercentKey,
+            ArrowPlotChancePercentOptions,
+            RoomSettings.GetArrowPlotChancePercent(),
+            LobbyMapCatalog.GetDefaultArrowPlotChancePercent(RoomSettings.GetSelectedLobbyMapId()));
+    }
+
     void CycleBoosterSlowdown()
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
@@ -5050,12 +5176,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void CycleShipDriftEnabled()
     {
-        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
-            return;
-
-        Hashtable props = new Hashtable();
-        props[RoomSettings.ShipDriftEnabledKey] = (GetShipDriftLevel() + 1) % 11;
-        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RefreshHostSettingsUi();
     }
 
@@ -5540,6 +5660,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (visualEffectsSettingText != null)
             visualEffectsSettingText.text = "VISUALS: " + (AreVisualEffectsEnabled() ? "ON" : "OFF");
 
+        if (advancedSpawnVfxSettingText != null)
+            advancedSpawnVfxSettingText.text = "ADVANCED SPAWN VFX: " + (RoomSettings.IsAdvancedSpawnVfxEnabled() ? "ON" : "OFF");
+
         if (boomVfxSettingText != null)
             boomVfxSettingText.text = "BOOM VFX: " + (RoomSettings.AreBoomVfxEnabled() ? "ON" : "OFF");
 
@@ -5642,6 +5765,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (scienceStationSettingText != null)
             scienceStationSettingText.text = "SCIENCE STATION: " + (GetScienceStationCount() > 0 ? "ON" : "OFF");
 
+        if (avengerPlotSettingText != null)
+            avengerPlotSettingText.text = "AVENGER PLOT: " + (RoomSettings.IsAvengerPlotEnabled() ? "ON" : "OFF");
+
+        if (viperPlotChanceSettingText != null)
+            viperPlotChanceSettingText.text = "VIPER PLOT CHANCE: " + RoomSettings.GetViperPlotChancePercent() + "%";
+
+        if (arrowPlotChanceSettingText != null)
+            arrowPlotChanceSettingText.text = "ARROW UNLOCK STORY: " + RoomSettings.GetArrowPlotChancePercent() + "%";
+
         if (boosterSettingText != null)
             boosterSettingText.text = "EMPTY BOOSTER SLOWDOWN: " + GetBoosterSlowdownPercent() + "%";
 
@@ -5652,7 +5784,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             advancedBoosterSettingText.text = "ADVANCED BOOSTER: " + (RoomSettings.IsAdvancedBoosterEnabled() ? "ON" : "OFF");
 
         if (shipDriftSettingText != null)
-            shipDriftSettingText.text = "BRAKING DRIFT: " + GetShipDriftLevel();
+            shipDriftSettingText.text = "BRAKING DRIFT: PER SHIP";
 
         if (deathTimerSettingText != null)
             deathTimerSettingText.text = "LONE SHIP TIMER: " + FormatLastShipTimerMultiplier(GetLastShipTimerMultiplier());
@@ -5727,6 +5859,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(mapSizeSettingButton, isHost);
         SetSettingButtonState(mapBackgroundSettingButton, isHost);
         SetSettingButtonState(visualEffectsSettingButton, isHost);
+        SetSettingButtonState(advancedSpawnVfxSettingButton, isHost);
         SetSettingButtonState(boomVfxSettingButton, isHost);
         SetSettingButtonState(dynamicCameraZoomSettingButton, isHost);
         SetSettingButtonState(parallaxBackgroundSettingButton, isHost);
@@ -5760,10 +5893,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(repairBaySettingButton, isHost);
         SetSettingButtonState(spaceFactorySettingButton, isHost);
         SetSettingButtonState(scienceStationSettingButton, isHost);
+        SetSettingButtonState(avengerPlotSettingButton, isHost);
+        SetSettingButtonState(viperPlotChanceSettingButton, isHost);
         SetSettingButtonState(boosterSettingButton, isHost);
         SetSettingButtonState(boosterDelaySettingButton, isHost);
         SetSettingButtonState(advancedBoosterSettingButton, isHost);
-        SetSettingButtonState(shipDriftSettingButton, isHost);
+        SetSettingButtonState(shipDriftSettingButton, false);
         SetSettingButtonState(deathTimerSettingButton, isHost);
         SetSettingButtonState(inventoryLossSettingButton, isHost);
         SetSettingButtonState(equipmentLossSettingButton, isHost);
@@ -6088,6 +6223,52 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         }
     }
 
+    async void OnDeveloperCheatUnlockShipsClicked()
+    {
+        if (PlayerProfileService.Instance == null || developerCheatOverlayObject == null)
+            return;
+
+        try
+        {
+            RefreshDeveloperCheatOverlay("Unlocking ships...", true);
+            await PlayerProfileService.Instance.UnlockAllShipsAsync();
+            RefreshDeveloperCheatOverlay("All ships unlocked.");
+            PlayerProfilePanelUI.RefreshOpenPanel();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Developer cheat unlock ships failed: " + ex);
+            RefreshDeveloperCheatOverlay("Could not unlock ships.");
+        }
+        finally
+        {
+            RefreshDeveloperCheatOverlay();
+        }
+    }
+
+    async void OnDeveloperCheatLockShipsClicked()
+    {
+        if (PlayerProfileService.Instance == null || developerCheatOverlayObject == null)
+            return;
+
+        try
+        {
+            RefreshDeveloperCheatOverlay("Locking ships...", true);
+            await PlayerProfileService.Instance.LockAllShipsAsync();
+            RefreshDeveloperCheatOverlay("Optional ships locked.");
+            PlayerProfilePanelUI.RefreshOpenPanel();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Developer cheat lock ships failed: " + ex);
+            RefreshDeveloperCheatOverlay("Could not lock ships.");
+        }
+        finally
+        {
+            RefreshDeveloperCheatOverlay();
+        }
+    }
+
     async void OnDeveloperCheatUnlockMapsClicked()
     {
         if (PlayerProfileService.Instance == null || developerCheatOverlayObject == null)
@@ -6304,11 +6485,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.MapBackgroundKey) ||
                changedProps.ContainsKey(RoomSettings.SelectedMapKey) ||
                changedProps.ContainsKey(RoomSettings.VisualEffectsEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.AdvancedSpawnVfxEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.BoomVfxEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.DynamicCameraZoomEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.ParallaxBackgroundKey) ||
                changedProps.ContainsKey(RoomSettings.BackgroundObjectKey) ||
                changedProps.ContainsKey(RoomSettings.GravityWellPhysicsEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.AvengerPlotEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.ViperPlotChancePercentKey) ||
+               changedProps.ContainsKey(RoomSettings.ArrowPlotChancePercentKey) ||
                changedProps.ContainsKey(RoomSettings.EndDisasterModeKey) ||
                changedProps.ContainsKey(RoomSettings.EndDisasterWarningSecondsKey) ||
                changedProps.ContainsKey(RoomSettings.ObstacleDensityKey) ||

@@ -33,6 +33,11 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
         PrewarmSpriteTexture(LoadCrateSprite());
     }
 
+    static bool CanRaiseRoomEvent()
+    {
+        return PhotonNetwork.IsConnected && PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null;
+    }
+
     SpriteRenderer spriteRenderer;
     BoxCollider2D bodyCollider;
     Rigidbody2D rb;
@@ -102,7 +107,7 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
     {
         if (!initialized)
             return;
-        if (PhotonNetwork.CurrentRoom == null)
+        if (PhotonNetwork.CurrentRoom == null || (PhotonNetwork.IsConnected && !PhotonNetwork.InRoom))
             return;
 
         ApplySimulationMode();
@@ -240,7 +245,7 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
 
     void BroadcastSnapshotIfNeeded()
     {
-        if (!PhotonNetwork.IsConnected || Time.time < nextSnapshotTime || rb == null)
+        if (!CanRaiseRoomEvent() || !PhotonNetwork.IsMasterClient || Time.time < nextSnapshotTime || rb == null)
             return;
 
         nextSnapshotTime = Time.time + SnapshotInterval;
@@ -322,7 +327,7 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
 
     void OnCollisionEnter2D(Collision2D collision)
     {
-        if (!initialized || PhotonNetwork.CurrentRoom == null)
+        if (!initialized || PhotonNetwork.CurrentRoom == null || (PhotonNetwork.IsConnected && !PhotonNetwork.InRoom))
             return;
 
         if (isAuthority)
@@ -331,7 +336,7 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
 
     public bool TryRequestRemoteImpulse(Vector2 impulse)
     {
-        if (!initialized || isAuthority || !PhotonNetwork.IsConnected || Time.time < nextImpulseRequestTime)
+        if (!initialized || isAuthority || !CanRaiseRoomEvent() || Time.time < nextImpulseRequestTime)
             return false;
 
         if (impulse.sqrMagnitude < 0.0001f)
@@ -416,7 +421,7 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
 
     void RequestImpulseFromClient(Vector2 impulse)
     {
-        if (!PhotonNetwork.IsConnected)
+        if (!CanRaiseRoomEvent())
             return;
 
         Player masterClient = PhotonNetwork.MasterClient;
@@ -480,7 +485,7 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
         driftVelocity = rb.linearVelocity;
         rb.angularVelocity = Mathf.Clamp(rb.angularVelocity + impulse.magnitude * 9f * Mathf.Sign(Random.value - 0.5f), -MaxAngularSpeed, MaxAngularSpeed);
 
-        if (PhotonNetwork.IsConnected)
+        if (CanRaiseRoomEvent() && PhotonNetwork.IsMasterClient)
         {
             nextSnapshotTime = Time.time + SnapshotInterval;
             object[] snapshot = { photonView.ViewID, rb.position.x, rb.position.y, rb.linearVelocity.x, rb.linearVelocity.y, rb.rotation, rb.angularVelocity };

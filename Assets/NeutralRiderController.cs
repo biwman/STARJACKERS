@@ -16,22 +16,47 @@ public enum NeutralRiderArchetype
 public sealed class NeutralRiderController : MonoBehaviourPun
 {
     public const string InstantiationMarker = "neutral_rider";
+    public const string AggressiveInstantiationMarker = "avenger_plot_aggressive";
 
     const float ThinkInterval = 0.22f;
     const float TargetRefreshInterval = 0.55f;
+    const float ExtractionTargetRefreshInterval = 0.65f;
+    const float TimerLookupInterval = 0.75f;
     const float CollectRange = 2.25f;
-    const float CollectSeconds = 1.65f;
-    const float WreckCollectSeconds = 2.15f;
+    const float CollectSeconds = 3f;
+    const float WreckCollectSeconds = 3.25f;
     const float ExtractionUseSeconds = 2.5f;
     const float CombatRange = 10.5f;
     const float DetectionRange = 14f;
     const float PlayerRivalryRange = 11f;
     const float FleeHealthRatio = 0.34f;
-    const float ExtractionCargoValue = 950f;
-    const float ExtractionEndgameSeconds = 50f;
+    const float ExtractionCargoValue = 1850f;
+    const float ExtractionEndgameSeconds = 28f;
+    const float MinimumExtractionElapsedSeconds = 85f;
+    const float FleeExtractionMinimumCargoValue = 700f;
     const float MapMargin = 4f;
     const float AvoidanceRadius = 1.65f;
+    const float AvoidanceRefreshInterval = 0.1f;
+    const float NameplateRefreshInterval = 0.12f;
+    const int HumanOnlyDisablePassCount = 4;
     const float NameplateYOffset = 0.92f;
+
+    static readonly HashSet<NeutralRiderController> ActiveRiders = new HashSet<NeutralRiderController>();
+
+    struct WeaponLoadout
+    {
+        public float FireRate;
+        public int MaxAmmo;
+        public float ReloadDuration;
+        public int Damage;
+        public float BulletScale;
+        public Color BulletColor;
+        public float MuzzleOffset;
+        public float BulletSpeed;
+        public string ShotSoundId;
+        public float RangeMultiplier;
+        public float FlightTime;
+    }
 
     enum Mode
     {
@@ -57,17 +82,31 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     Vector2 patrolDirection = Vector2.up;
     float nextThinkTime;
     float nextTargetRefreshTime;
+    float nextExtractionTargetRefreshTime;
+    float nextTimerLookupTime;
+    float nextAvoidanceRefreshTime;
+    float nextNameplateRefreshTime;
     float collectStartedAt = -1f;
     float extractionUseStartedAt = -1f;
+    Vector2 cachedAvoidanceDirection = Vector2.zero;
     int targetViewId;
+    int collectingBeamTargetViewId;
     int hostilePlayerViewId;
+    int humanOnlyDisablePasses;
     float hostilePlayerUntil;
     int shipSkinIndex;
     int spawnOrdinal;
     string riderName = "Rider";
+    GameTimer cachedTimer;
     bool initialized;
     bool wreckConverted;
     bool collectionTargetLocked;
+    bool forcedAggressive;
+    bool humanOnlyComponentsDisabled;
+    bool registeredActiveRider;
+    bool nameplateVisible;
+    string lastNameplateText = string.Empty;
+    int forcedAggressiveTargetViewId;
 
     public int ShipSkinIndex => shipSkinIndex;
     public bool IsEvacuated => mode == Mode.Evacuated;
@@ -130,9 +169,49 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         };
     }
 
+    public static object[] BuildAggressiveInstantiationData(int skinIndex, string name, int ordinal, int targetViewId)
+    {
+        return new object[]
+        {
+            InstantiationMarker,
+            Mathf.Clamp(skinIndex, ShipCatalog.ExplorerBasicSkinIndex, ShipCatalog.MaxShipSkinIndex),
+            (int)NeutralRiderArchetype.Hunter,
+            string.IsNullOrWhiteSpace(name) ? "Rider" : name,
+            Mathf.Max(0, ordinal),
+            AggressiveInstantiationMarker,
+            Mathf.Max(0, targetViewId)
+        };
+    }
+
     public static string GetGeneratedName(int ordinal)
     {
         return "AI_Raider_" + (Mathf.Max(0, ordinal) + 1);
+    }
+
+    public static int CountActiveRiders()
+    {
+        int count = 0;
+        foreach (NeutralRiderController rider in ActiveRiders)
+        {
+            PlayerHealth riderHealth = rider != null ? rider.health : null;
+            if (rider != null && riderHealth != null && !riderHealth.IsWreck && !rider.IsEvacuated)
+                count++;
+        }
+
+        return count;
+    }
+
+    public static void CopyActiveRiders(List<NeutralRiderController> riders)
+    {
+        if (riders == null)
+            return;
+
+        riders.Clear();
+        foreach (NeutralRiderController rider in ActiveRiders)
+        {
+            if (rider != null)
+                riders.Add(rider);
+        }
     }
 
     public void InitializeFromPhotonData()
@@ -156,6 +235,13 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             : NeutralRiderArchetype.Scavenger;
         riderName = GetNameFromInstantiationData(data);
         spawnOrdinal = data != null && data.Length > 4 ? ConvertToInt(data[4], 0, 0, 999) : 0;
+        forcedAggressive = data != null &&
+                           data.Length > 5 &&
+                           data[5] is string extraMarker &&
+                           string.Equals(extraMarker, AggressiveInstantiationMarker, StringComparison.Ordinal);
+        forcedAggressiveTargetViewId = forcedAggressive && data.Length > 6
+            ? ConvertToInt(data[6], 0, 0, int.MaxValue)
+            : 0;
 
         ConfigurePhysics();
         ConfigureStats();
@@ -168,7 +254,31 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         float angle = (Mathf.Abs(seed) * 0.371f) % (Mathf.PI * 2f);
         patrolDirection = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)).normalized;
         destination = PickPatrolDestination();
+
+        float tickJitter = Mathf.Abs(seed % 1000) / 1000f;
+        nextThinkTime = Time.time + tickJitter * ThinkInterval;
+        nextTargetRefreshTime = Time.time + tickJitter * TargetRefreshInterval;
+        nextExtractionTargetRefreshTime = Time.time + tickJitter * ExtractionTargetRefreshInterval;
+        nextTimerLookupTime = Time.unscaledTime + tickJitter * TimerLookupInterval;
+        nextAvoidanceRefreshTime = Time.time + tickJitter * AvoidanceRefreshInterval;
+        nextNameplateRefreshTime = Time.time + tickJitter * NameplateRefreshInterval;
+
+        if (forcedAggressive && forcedAggressiveTargetViewId > 0)
+        {
+            hostilePlayerViewId = forcedAggressiveTargetViewId;
+            hostilePlayerUntil = float.PositiveInfinity;
+            targetViewId = forcedAggressiveTargetViewId;
+            mode = Mode.Combat;
+        }
+
         initialized = true;
+        RegisterActiveRider();
+    }
+
+    void OnEnable()
+    {
+        if (initialized)
+            RegisterActiveRider();
     }
 
     void Awake()
@@ -209,11 +319,13 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     void OnDisable()
     {
         ReleaseCollectionTarget();
+        UnregisterActiveRider();
     }
 
     void OnDestroy()
     {
         ReleaseCollectionTarget();
+        UnregisterActiveRider();
     }
 
     public void NotifyDamageTaken(int attackerViewId)
@@ -255,7 +367,26 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         mode = Mode.Evacuated;
         if (nameplate != null)
             nameplate.gameObject.SetActive(false);
+        UnregisterActiveRider();
         enabled = false;
+    }
+
+    void RegisterActiveRider()
+    {
+        if (registeredActiveRider || wreckConverted)
+            return;
+
+        ActiveRiders.Add(this);
+        registeredActiveRider = true;
+    }
+
+    void UnregisterActiveRider()
+    {
+        if (!registeredActiveRider)
+            return;
+
+        ActiveRiders.Remove(this);
+        registeredActiveRider = false;
     }
 
     void ConfigurePhysics()
@@ -286,30 +417,74 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (shooting == null)
             return;
 
-        float fireRate = archetype == NeutralRiderArchetype.Hunter ? 0.32f : archetype == NeutralRiderArchetype.Raider ? 0.38f : 0.48f;
-        int damage = archetype == NeutralRiderArchetype.Hunter ? 11 : 8;
-        Color color = archetype == NeutralRiderArchetype.Hunter
-            ? new Color(1f, 0.48f, 0.18f, 1f)
-            : new Color(0.36f, 0.92f, 1f, 1f);
+        WeaponLoadout loadout = ResolveWeaponLoadout();
 
         shooting.ConfigureWeaponProfile(
-            fireRate,
-            8,
-            3.2f,
-            damage,
-            0.85f,
-            color,
-            0.52f,
+            loadout.FireRate,
+            loadout.MaxAmmo,
+            loadout.ReloadDuration,
+            loadout.Damage,
+            loadout.BulletScale,
+            loadout.BulletColor,
+            loadout.MuzzleOffset,
             false,
-            10.5f,
-            "lazer1",
-            12f,
+            loadout.BulletSpeed,
+            loadout.ShotSoundId,
+            loadout.RangeMultiplier,
             string.Empty,
-            10f);
+            loadout.FlightTime);
+    }
+
+    WeaponLoadout ResolveWeaponLoadout()
+    {
+        int variant = Mathf.Abs((spawnOrdinal * 17) + shipSkinIndex) % 3;
+        switch (archetype)
+        {
+            case NeutralRiderArchetype.Hunter:
+                return variant == 0
+                    ? Weapon(0.48f, 5, 3.8f, 18, 1.12f, new Color(1f, 0.42f, 0.14f, 1f), 0.58f, 12.8f, "lazer3", 14.5f, 10f)
+                    : Weapon(0.34f, 7, 3.2f, 13, 0.96f, new Color(1f, 0.62f, 0.22f, 1f), 0.56f, 11.4f, "lazer2", 13.2f, 10f);
+
+            case NeutralRiderArchetype.Raider:
+                return variant == 1
+                    ? Weapon(0.26f, 12, 3.7f, 7, 0.72f, new Color(0.42f, 1f, 0.58f, 1f), 0.5f, 10.8f, "shoot_small", 10.8f, 9f)
+                    : Weapon(0.36f, 9, 3.1f, 10, 0.86f, new Color(0.28f, 1f, 0.88f, 1f), 0.52f, 11.2f, "lazer1", 11.8f, 9.5f);
+
+            case NeutralRiderArchetype.Coward:
+                return variant == 2
+                    ? Weapon(0.42f, 8, 3.5f, 8, 0.78f, new Color(0.62f, 0.9f, 1f, 1f), 0.48f, 10f, "lazer1", 10.2f, 8.5f)
+                    : Weapon(0.55f, 6, 3.8f, 9, 0.82f, new Color(0.72f, 0.82f, 1f, 1f), 0.5f, 9.4f, "shoot_small", 9.8f, 8.5f);
+
+            default:
+                return variant == 0
+                    ? Weapon(0.5f, 8, 3.4f, 8, 0.8f, new Color(0.36f, 0.92f, 1f, 1f), 0.5f, 10.2f, "lazer1", 10.5f, 9f)
+                    : Weapon(0.44f, 9, 3.2f, 7, 0.76f, new Color(0.22f, 1f, 0.68f, 1f), 0.48f, 10.8f, "shoot_small", 10.8f, 9f);
+        }
+    }
+
+    static WeaponLoadout Weapon(float fireRate, int maxAmmo, float reloadDuration, int damage, float bulletScale, Color color, float muzzleOffset, float bulletSpeed, string shotSoundId, float rangeMultiplier, float flightTime)
+    {
+        return new WeaponLoadout
+        {
+            FireRate = fireRate,
+            MaxAmmo = maxAmmo,
+            ReloadDuration = reloadDuration,
+            Damage = damage,
+            BulletScale = bulletScale,
+            BulletColor = color,
+            MuzzleOffset = muzzleOffset,
+            BulletSpeed = bulletSpeed,
+            ShotSoundId = shotSoundId,
+            RangeMultiplier = rangeMultiplier,
+            FlightTime = flightTime
+        };
     }
 
     void DisableHumanOnlyComponents()
     {
+        if (humanOnlyComponentsDisabled)
+            return;
+
         DisableComponent<TreasureCollector>();
         DisableComponent<PlayerRepairDocking>();
         DisableComponent<PilotActiveAbilityController>();
@@ -324,6 +499,9 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         DisableComponent<ShipInventoryHudUI>();
         DisableComponent<AdvancedMoveInputZone>();
         DisableComponent<AdvancedShootInputZone>();
+
+        humanOnlyDisablePasses++;
+        humanOnlyComponentsDisabled = humanOnlyDisablePasses >= HumanOnlyDisablePassCount;
     }
 
     void DisableComponent<T>() where T : Behaviour
@@ -335,11 +513,25 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
     void Think()
     {
+        if (forcedAggressive)
+        {
+            if (forcedAggressiveTargetViewId > 0 && IsValidCombatTarget(forcedAggressiveTargetViewId))
+            {
+                hostilePlayerViewId = forcedAggressiveTargetViewId;
+                hostilePlayerUntil = float.PositiveInfinity;
+                targetViewId = forcedAggressiveTargetViewId;
+                mode = Mode.Combat;
+                return;
+            }
+
+            forcedAggressive = false;
+        }
+
         if (ShouldExtract())
         {
             AbandonCollectionTarget();
             mode = Mode.Extract;
-            targetViewId = FindBestExtractionViewId();
+            RefreshExtractionTargetIfNeeded(targetViewId <= 0);
             return;
         }
 
@@ -502,6 +694,15 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (rb == null)
             return desired;
 
+        if (Time.time < nextAvoidanceRefreshTime)
+        {
+            if (cachedAvoidanceDirection.sqrMagnitude <= 0.001f)
+                return desired;
+
+            return (desired.normalized + cachedAvoidanceDirection.normalized * 0.7f).normalized;
+        }
+
+        nextAvoidanceRefreshTime = Time.time + AvoidanceRefreshInterval;
         Vector2 avoidance = Vector2.zero;
         int hitCount = Physics2DNonAllocQuery.OverlapCircle(rb.position, AvoidanceRadius, out Collider2D[] hits);
         for (int i = 0; i < hitCount; i++)
@@ -524,9 +725,13 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         }
 
         if (avoidance.sqrMagnitude <= 0.001f)
+        {
+            cachedAvoidanceDirection = Vector2.zero;
             return desired;
+        }
 
-        return (desired.normalized + avoidance.normalized * 0.7f).normalized;
+        cachedAvoidanceDirection = avoidance.normalized;
+        return (desired.normalized + cachedAvoidanceDirection * 0.7f).normalized;
     }
 
     Vector2 ApplyMapSteering(Vector2 desired)
@@ -600,6 +805,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             collectStartedAt = Time.time;
             collectionTargetLocked = true;
             SetCollectibleBusy(targetView, true);
+            StartCollectionBeam(targetView.ViewID);
             return;
         }
 
@@ -617,7 +823,8 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         ExtractionZone zone = zoneView != null ? zoneView.GetComponent<ExtractionZone>() : null;
         if (zone == null)
         {
-            targetViewId = FindBestExtractionViewId();
+            targetViewId = 0;
+            RefreshExtractionTargetIfNeeded(false);
             extractionUseStartedAt = -1f;
             return;
         }
@@ -651,6 +858,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
     void EvacuateAt(ExtractionZone zone)
     {
+        StopCollectionBeam();
         mode = Mode.Evacuated;
         wreckConverted = true;
         if (view != null)
@@ -660,6 +868,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     [PunRPC]
     void NeutralRiderEvacuatedRpc(float targetX, float targetY)
     {
+        StopCollectionBeam();
         mode = Mode.Evacuated;
         wreckConverted = true;
         StartCoroutine(EvacuateRoutine(new Vector2(targetX, targetY)));
@@ -762,15 +971,49 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             targetViewId = 0;
 
         if (!collectionTargetLocked)
+        {
+            StopCollectionBeam();
             return;
+        }
 
         collectionTargetLocked = false;
+        StopCollectionBeam();
         if (PhotonNetwork.InRoom)
         {
             PhotonView targetView = PhotonView.Find(releasedViewId);
             if (targetView != null)
                 SetCollectibleBusy(targetView, false);
         }
+    }
+
+    void StartCollectionBeam(int targetViewIdToCollect)
+    {
+        if (view == null || targetViewIdToCollect <= 0)
+            return;
+
+        collectingBeamTargetViewId = targetViewIdToCollect;
+        view.RPC(nameof(StartNeutralRiderCollectionBeamRpc), RpcTarget.All, targetViewIdToCollect);
+    }
+
+    void StopCollectionBeam()
+    {
+        if (view == null || collectingBeamTargetViewId <= 0)
+            return;
+
+        collectingBeamTargetViewId = 0;
+        view.RPC(nameof(StopNeutralRiderCollectionBeamRpc), RpcTarget.All);
+    }
+
+    [PunRPC]
+    void StartNeutralRiderCollectionBeamRpc(int targetViewIdToCollect)
+    {
+        NeutralRiderCollectionBeamVfx.StartBeam(view != null ? view.ViewID : 0, targetViewIdToCollect);
+    }
+
+    [PunRPC]
+    void StopNeutralRiderCollectionBeamRpc()
+    {
+        NeutralRiderCollectionBeamVfx.StopBeam(view != null ? view.ViewID : 0);
     }
 
     void SetCollectibleBusy(PhotonView targetView, bool busy)
@@ -808,11 +1051,11 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         float bestScore = float.MaxValue;
         Vector2 origin = transform.position;
 
-        Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
+        Treasure[] treasures = RuntimeSceneQueryCache.GetTreasures();
         for (int i = 0; i < treasures.Length; i++)
         {
             Treasure treasure = treasures[i];
-            if (treasure == null || treasure.isBeingCollected || string.IsNullOrWhiteSpace(treasure.itemId))
+            if (treasure == null || !treasure.gameObject.activeInHierarchy || treasure.isBeingCollected || string.IsNullOrWhiteSpace(treasure.itemId))
                 continue;
 
             PhotonView candidateView = treasure.photonView;
@@ -827,11 +1070,11 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             }
         }
 
-        DroppedCargoCrate[] crates = FindObjectsByType<DroppedCargoCrate>(FindObjectsInactive.Exclude);
+        DroppedCargoCrate[] crates = RuntimeSceneQueryCache.GetDroppedCargoCrates();
         for (int i = 0; i < crates.Length; i++)
         {
             DroppedCargoCrate crate = crates[i];
-            if (crate == null || crate.isBeingCollected || !crate.HasLoot)
+            if (crate == null || !crate.gameObject.activeInHierarchy || crate.isBeingCollected || !crate.HasLoot)
                 continue;
 
             PhotonView candidateView = crate.photonView;
@@ -846,11 +1089,11 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             }
         }
 
-        ShipWreck[] wrecks = FindObjectsByType<ShipWreck>(FindObjectsInactive.Exclude);
+        ShipWreck[] wrecks = RuntimeSceneQueryCache.GetShipWrecks();
         for (int i = 0; i < wrecks.Length; i++)
         {
             ShipWreck wreck = wrecks[i];
-            if (wreck == null || wreck.isBeingCollected || !wreck.HasLoot)
+            if (wreck == null || !wreck.gameObject.activeInHierarchy || wreck.isBeingCollected || !wreck.HasLoot)
                 continue;
 
             PhotonView candidateView = wreck.photonView;
@@ -870,7 +1113,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
     int FindBestEnemyTargetViewId()
     {
-        PlayerHealth[] candidates = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] candidates = RuntimeSceneQueryCache.GetPlayers();
         float bestScore = float.MaxValue;
         int bestViewId = 0;
         Vector2 origin = transform.position;
@@ -878,7 +1121,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         for (int i = 0; i < candidates.Length; i++)
         {
             PlayerHealth candidate = candidates[i];
-            if (candidate == null || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating)
+            if (candidate == null || !candidate.gameObject.activeInHierarchy || candidate == health || candidate.IsWreck || candidate.IsEvacuationAnimating)
                 continue;
 
             EnemyBot enemy = candidate.GetComponent<EnemyBot>();
@@ -923,7 +1166,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
     PlayerHealth FindNearestHumanPlayer(float maxRange)
     {
-        PlayerHealth[] candidates = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] candidates = RuntimeSceneQueryCache.GetPlayers();
         PlayerHealth best = null;
         float bestDistance = maxRange;
         Vector2 origin = transform.position;
@@ -931,7 +1174,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         for (int i = 0; i < candidates.Length; i++)
         {
             PlayerHealth candidate = candidates[i];
-            if (!ActorIdentity.IsHumanPlayerActor(candidate) || candidate.IsWreck || candidate.IsEvacuationAnimating)
+            if (candidate == null || !candidate.gameObject.activeInHierarchy || !ActorIdentity.IsHumanPlayerActor(candidate) || candidate.IsWreck || candidate.IsEvacuationAnimating)
                 continue;
 
             float distance = Vector2.Distance(origin, candidate.transform.position);
@@ -947,7 +1190,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
     int FindBestExtractionViewId()
     {
-        ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
+        ExtractionZone[] zones = RuntimeSceneQueryCache.GetExtractionZones();
         float bestDistance = float.MaxValue;
         int bestViewId = 0;
         Vector2 origin = transform.position;
@@ -955,7 +1198,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         for (int i = 0; i < zones.Length; i++)
         {
             ExtractionZone zone = zones[i];
-            if (zone == null || zone.IsEvacuating)
+            if (zone == null || !zone.gameObject.activeInHierarchy || zone.IsEvacuating)
                 continue;
 
             PhotonView zoneView = zone.photonView;
@@ -1001,14 +1244,75 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
     bool ShouldExtract()
     {
-        if (CargoValueAstrons >= ExtractionCargoValue)
+        float elapsed = GetElapsedRoundSeconds();
+        if (elapsed < MinimumExtractionElapsedSeconds && archetype != NeutralRiderArchetype.Coward)
+            return false;
+
+        int cargoValue = CargoValueAstrons;
+        float cargoThreshold = ResolveExtractionCargoThreshold();
+        if (cargoValue >= cargoThreshold)
             return true;
 
-        if (ShouldFlee() && cargo.Count > 0)
+        if (ShouldFlee() && cargoValue >= FleeExtractionMinimumCargoValue)
             return true;
 
-        GameTimer timer = FindAnyObjectByType<GameTimer>();
-        return timer != null && timer.GetCurrentRemainingTime() <= ExtractionEndgameSeconds && cargo.Count > 0;
+        GameTimer timer = ResolveGameTimer();
+        return timer != null && timer.GetCurrentRemainingTime() <= ResolveExtractionEndgameSeconds() && cargoValue > 0;
+    }
+
+    float ResolveExtractionCargoThreshold()
+    {
+        return archetype switch
+        {
+            NeutralRiderArchetype.Coward => 1250f,
+            NeutralRiderArchetype.Scavenger => ExtractionCargoValue,
+            NeutralRiderArchetype.Raider => 2300f,
+            NeutralRiderArchetype.Hunter => 2600f,
+            _ => ExtractionCargoValue
+        };
+    }
+
+    float ResolveExtractionEndgameSeconds()
+    {
+        return archetype switch
+        {
+            NeutralRiderArchetype.Coward => 36f,
+            NeutralRiderArchetype.Scavenger => ExtractionEndgameSeconds,
+            NeutralRiderArchetype.Raider => 24f,
+            NeutralRiderArchetype.Hunter => 18f,
+            _ => ExtractionEndgameSeconds
+        };
+    }
+
+    float GetElapsedRoundSeconds()
+    {
+        GameTimer timer = ResolveGameTimer();
+        if (timer == null)
+            return 0f;
+
+        return Mathf.Max(0f, RoomSettings.GetRoundDuration() - timer.GetCurrentRemainingTime());
+    }
+
+    void RefreshExtractionTargetIfNeeded(bool force)
+    {
+        if (!force && Time.time < nextExtractionTargetRefreshTime)
+            return;
+
+        nextExtractionTargetRefreshTime = Time.time + ExtractionTargetRefreshInterval;
+        targetViewId = FindBestExtractionViewId();
+    }
+
+    GameTimer ResolveGameTimer()
+    {
+        if (cachedTimer != null)
+            return cachedTimer;
+
+        if (Time.unscaledTime < nextTimerLookupTime)
+            return null;
+
+        nextTimerLookupTime = Time.unscaledTime + TimerLookupInterval;
+        cachedTimer = FindAnyObjectByType<GameTimer>();
+        return cachedTimer;
     }
 
     bool ShouldFlee()
@@ -1080,11 +1384,23 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (nameplate == null)
             return;
 
-        if (nameplate.text != riderName)
+        if (Time.time < nextNameplateRefreshTime)
+            return;
+
+        nextNameplateRefreshTime = Time.time + NameplateRefreshInterval;
+        if (!string.Equals(lastNameplateText, riderName, StringComparison.Ordinal))
+        {
             nameplate.text = riderName;
+            lastNameplateText = riderName;
+        }
 
         nameplate.transform.rotation = Quaternion.identity;
-        nameplate.gameObject.SetActive(!wreckConverted && mode != Mode.Evacuated);
+        bool visible = !wreckConverted && mode != Mode.Evacuated;
+        if (nameplateVisible != visible)
+        {
+            nameplate.gameObject.SetActive(visible);
+            nameplateVisible = visible;
+        }
     }
 
     bool IsGameStarted()
@@ -1112,5 +1428,208 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             result = Mathf.RoundToInt((float)doubleValue);
 
         return Mathf.Clamp(result, min, max);
+    }
+}
+
+public sealed class NeutralRiderCollectionBeamVfx : MonoBehaviour
+{
+    const int BeamPointCount = 13;
+    const float BeamWidth = 0.11f;
+    const float BeamJitterAmplitude = 0.085f;
+    const float BeamJitterFrequency = 17f;
+    const float BeamZOffset = -0.35f;
+    const int SortingOrderOffset = 36;
+
+    static readonly Dictionary<int, NeutralRiderCollectionBeamVfx> ActiveBySourceViewId = new Dictionary<int, NeutralRiderCollectionBeamVfx>();
+    static Material sharedMaterial;
+
+    Transform source;
+    Transform target;
+    LineRenderer beam;
+    int sourceViewId;
+    int targetViewId;
+    int sortingLayerId;
+    int sortingOrder = 50;
+
+    public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId)
+    {
+        StopBeam(sourcePhotonViewId);
+
+        PhotonView sourceView = PhotonView.Find(sourcePhotonViewId);
+        PhotonView targetView = PhotonView.Find(targetPhotonViewId);
+        if (sourceView == null || targetView == null)
+            return;
+
+        GameObject effect = new GameObject("NeutralRiderCollectionBeamVfx_" + sourcePhotonViewId);
+        NeutralRiderCollectionBeamVfx vfx = effect.AddComponent<NeutralRiderCollectionBeamVfx>();
+        vfx.Initialize(sourceView.transform, targetView.transform, sourcePhotonViewId, targetPhotonViewId);
+        ActiveBySourceViewId[sourcePhotonViewId] = vfx;
+    }
+
+    public static void StopBeam(int sourcePhotonViewId)
+    {
+        if (!ActiveBySourceViewId.TryGetValue(sourcePhotonViewId, out NeutralRiderCollectionBeamVfx vfx))
+            return;
+
+        ActiveBySourceViewId.Remove(sourcePhotonViewId);
+        if (vfx != null)
+            Destroy(vfx.gameObject);
+    }
+
+    void Initialize(Transform sourceTransform, Transform targetTransform, int resolvedSourceViewId, int resolvedTargetViewId)
+    {
+        source = sourceTransform;
+        target = targetTransform;
+        sourceViewId = resolvedSourceViewId;
+        targetViewId = resolvedTargetViewId;
+
+        SpriteRenderer sourceRenderer = source != null ? source.GetComponentInChildren<SpriteRenderer>() : null;
+        if (sourceRenderer != null)
+        {
+            sortingLayerId = sourceRenderer.sortingLayerID;
+            sortingOrder = sourceRenderer.sortingOrder + SortingOrderOffset;
+        }
+
+        if (source != null)
+            gameObject.layer = source.gameObject.layer;
+
+        beam = CreateBeam();
+    }
+
+    void Update()
+    {
+        if (source == null || target == null)
+        {
+            StopBeam(sourceViewId);
+            return;
+        }
+
+        UpdateBeam();
+    }
+
+    void OnDestroy()
+    {
+        if (ActiveBySourceViewId.TryGetValue(sourceViewId, out NeutralRiderCollectionBeamVfx active) && active == this)
+            ActiveBySourceViewId.Remove(sourceViewId);
+    }
+
+    void UpdateBeam()
+    {
+        if (beam == null)
+            return;
+
+        Vector2 start = GetSourcePoint();
+        Vector2 end = GetTargetPoint(start);
+        Vector2 delta = end - start;
+        Vector2 direction = delta.sqrMagnitude > 0.0001f ? delta.normalized : (Vector2)source.up;
+        Vector2 perpendicular = new Vector2(-direction.y, direction.x);
+        float pulse = Mathf.Sin((Time.time * 14f) + targetViewId * 0.09f) * 0.5f + 0.5f;
+        float alpha = Mathf.Lerp(0.72f, 1f, pulse);
+        beam.enabled = true;
+        beam.colorGradient = BuildCollectionBeamGradient(alpha);
+        beam.widthMultiplier = Mathf.Lerp(BeamWidth * 0.72f, BeamWidth * 1.3f, pulse);
+
+        for (int i = 0; i < beam.positionCount; i++)
+        {
+            float t = i / (float)(beam.positionCount - 1);
+            Vector2 point = Vector2.Lerp(start, end, t);
+            float taper = Mathf.Sin(t * Mathf.PI);
+            float waveA = Mathf.Sin((t * Mathf.PI * 5f) + Time.time * BeamJitterFrequency);
+            float waveB = Mathf.Sin((t * Mathf.PI * 11f) - Time.time * 13f) * 0.45f;
+            float jitter = (waveA + waveB) * BeamJitterAmplitude * taper;
+            point += perpendicular * jitter;
+            beam.SetPosition(i, new Vector3(point.x, point.y, BeamZOffset));
+        }
+    }
+
+    Vector2 GetSourcePoint()
+    {
+        float forwardOffset = 0.55f;
+        SpriteRenderer renderer = source != null ? source.GetComponentInChildren<SpriteRenderer>() : null;
+        if (renderer != null)
+            forwardOffset = Mathf.Max(0.4f, renderer.bounds.extents.y * 0.9f);
+
+        return source != null ? (Vector2)source.position + (Vector2)source.up * forwardOffset : Vector2.zero;
+    }
+
+    Vector2 GetTargetPoint(Vector2 sourcePoint)
+    {
+        Collider2D collider = target != null ? target.GetComponent<Collider2D>() : null;
+        if (collider != null)
+            return collider.ClosestPoint(sourcePoint);
+
+        return target != null ? (Vector2)target.position : sourcePoint;
+    }
+
+    LineRenderer CreateBeam()
+    {
+        GameObject beamObject = new GameObject("NeutralRiderCollectionBeam");
+        beamObject.transform.SetParent(transform, false);
+        if (source != null)
+            beamObject.layer = source.gameObject.layer;
+
+        LineRenderer line = beamObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.alignment = LineAlignment.View;
+        line.positionCount = BeamPointCount;
+        line.widthMultiplier = BeamWidth;
+        line.startWidth = BeamWidth;
+        line.endWidth = BeamWidth * 0.55f;
+        line.numCapVertices = 12;
+        line.numCornerVertices = 10;
+        line.material = GetMaterial();
+        line.colorGradient = BuildCollectionBeamGradient(1f);
+        line.widthCurve = BuildCollectionBeamWidthCurve();
+        line.textureMode = LineTextureMode.Stretch;
+        line.sortingLayerID = sortingLayerId;
+        line.sortingOrder = sortingOrder;
+        line.enabled = false;
+        return line;
+    }
+
+    static Gradient BuildCollectionBeamGradient(float alpha)
+    {
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(0.96f, 1f, 0.86f), 0f),
+                new GradientColorKey(new Color(0.28f, 1f, 0.66f), 0.38f),
+                new GradientColorKey(new Color(0.1f, 0.74f, 1f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0.95f * alpha, 0f),
+                new GradientAlphaKey(0.72f * alpha, 0.55f),
+                new GradientAlphaKey(0.18f * alpha, 1f)
+            });
+        return gradient;
+    }
+
+    static AnimationCurve BuildCollectionBeamWidthCurve()
+    {
+        return new AnimationCurve(
+            new Keyframe(0f, 0.62f),
+            new Keyframe(0.18f, 1.2f),
+            new Keyframe(0.58f, 0.82f),
+            new Keyframe(1f, 0.22f));
+    }
+
+    static Material GetMaterial()
+    {
+        if (sharedMaterial != null)
+            return sharedMaterial;
+
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null)
+            shader = Shader.Find("Unlit/Color");
+
+        sharedMaterial = new Material(shader)
+        {
+            name = "NeutralRiderCollectionBeamMaterial",
+            color = Color.white
+        };
+        sharedMaterial.renderQueue = 3350;
+        return sharedMaterial;
     }
 }

@@ -25,6 +25,7 @@ public class AudioManager : MonoBehaviour
     AudioClip cashClip;
     AudioClip engineClip;
     AudioClip fusionEngineClip;
+    AudioClip superBoosterClip;
     AudioClip alarmClip;
     AudioClip explosionClip;
     AudioClip reloadClip;
@@ -45,6 +46,7 @@ public class AudioManager : MonoBehaviour
     AudioClip gatlingGunClip;
     AudioClip lazer1Clip;
     AudioClip lazer2Clip;
+    AudioClip lazer3Clip;
     AudioClip repairBayLandingClip;
     AudioClip repairBayStartingClip;
     AudioClip radarShipShootClip;
@@ -53,6 +55,8 @@ public class AudioManager : MonoBehaviour
     AudioClip beaconSignalClip;
     AudioClip astroCutterClip;
     AudioClip guidanceSystemClip;
+    AudioClip shortScannerClip;
+    AudioClip cloakActivationClip;
     AudioClip treasureScannerPingClip;
     AudioClip spaceDrillDeliveryClip;
     AudioClip spaceMantaWarningClip;
@@ -180,6 +184,7 @@ public class AudioManager : MonoBehaviour
         cashClip = Resources.Load<AudioClip>("Audio/cash_sound");
         engineClip = Resources.Load<AudioClip>("Audio/silnik");
         fusionEngineClip = Resources.Load<AudioClip>("Audio/fusion_engine_sound");
+        superBoosterClip = Resources.Load<AudioClip>("Audio/super_booster");
         alarmClip = Resources.Load<AudioClip>("Audio/alarm");
         explosionClip = Resources.Load<AudioClip>("Audio/explosion");
         reloadClip = Resources.Load<AudioClip>("Audio/gun_reload");
@@ -200,6 +205,7 @@ public class AudioManager : MonoBehaviour
         gatlingGunClip = Resources.Load<AudioClip>("Audio/gatling_gun_sound");
         lazer1Clip = Resources.Load<AudioClip>("Audio/lazer1");
         lazer2Clip = Resources.Load<AudioClip>("Audio/lazer2");
+        lazer3Clip = Resources.Load<AudioClip>("Audio/lazer3");
         repairBayLandingClip = Resources.Load<AudioClip>("Audio/stacja_naprawcza_landing_sound");
         repairBayStartingClip = Resources.Load<AudioClip>("Audio/stacja_naprawcza_starting_sound");
         radarShipShootClip = Resources.Load<AudioClip>("Audio/radar_ship_shoot_sound");
@@ -208,6 +214,8 @@ public class AudioManager : MonoBehaviour
         beaconSignalClip = Resources.Load<AudioClip>("Audio/beacon_signal");
         astroCutterClip = Resources.Load<AudioClip>("Audio/astro_cutter_sound");
         guidanceSystemClip = Resources.Load<AudioClip>("Audio/guidance_system_sound");
+        shortScannerClip = Resources.Load<AudioClip>("Audio/short_scanner");
+        cloakActivationClip = Resources.Load<AudioClip>("Audio/cloak_activation");
         treasureScannerPingClip = Resources.Load<AudioClip>("Audio/treasure_scanner_ping");
         spaceDrillDeliveryClip = Resources.Load<AudioClip>("Audio/space_drill_delivery_sound");
         spaceMantaWarningClip = Resources.Load<AudioClip>("Audio/space_manta_warning");
@@ -553,6 +561,11 @@ public class AudioManager : MonoBehaviour
         PlaySpatialOneShot(lazer2Clip != null ? lazer2Clip : laserClip, worldPosition, 0.64f);
     }
 
+    public void PlayLazer3At(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(lazer3Clip != null ? lazer3Clip : lazer2Clip != null ? lazer2Clip : laserClip, worldPosition, 0.72f);
+    }
+
     public void PlayExplosion()
     {
         PlayOneShot(explosionClip, 0.75f);
@@ -633,6 +646,11 @@ public class AudioManager : MonoBehaviour
         PlaySpatialOneShot(magneticBeamClip != null ? magneticBeamClip : shieldChargeClip, worldPosition, 0.88f);
     }
 
+    public void PlaySuperBoosterAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(superBoosterClip != null ? superBoosterClip : fusionEngineClip != null ? fusionEngineClip : engineClip, worldPosition, 0.92f);
+    }
+
     public void PlayRepairBayLandingAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(repairBayLandingClip != null ? repairBayLandingClip : shieldChargeClip, worldPosition, 0.86f);
@@ -668,6 +686,16 @@ public class AudioManager : MonoBehaviour
     public void PlayGuidanceSystemAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(GuidanceSystemClip, worldPosition, 0.82f);
+    }
+
+    public void PlayShortScannerAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(shortScannerClip != null ? shortScannerClip : treasureScannerPingClip != null ? treasureScannerPingClip : GuidanceSystemClip, worldPosition, 0.82f);
+    }
+
+    public void PlayCloakActivationAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(cloakActivationClip != null ? cloakActivationClip : guidanceSystemClip != null ? guidanceSystemClip : beaconSignalClip, worldPosition, 0.82f);
     }
 
     public void PlaySpaceDrillDeliveryAt(Vector3 worldPosition)

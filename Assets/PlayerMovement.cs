@@ -119,6 +119,13 @@ public class PlayerMovement : MonoBehaviourPun
 
     void Start()
     {
+        if (ViperRecoveryPlotController.TryEnsureViperWreckRuntime(gameObject))
+        {
+            StopEngineAudioImmediately();
+            enabled = false;
+            return;
+        }
+
         if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
         {
             PlayerDeployableRuntime.EnsureAttached(gameObject);
@@ -137,13 +144,14 @@ public class PlayerMovement : MonoBehaviourPun
         EnsureNeutralRiderBootstrap();
 
         ActorIdentity identity = ActorIdentity.Ensure(gameObject);
+        AstronautSurvivor astronaut = null;
         bool isAstronaut = identity != null
             ? identity.IsAstronaut
             : GetComponent<AstronautSurvivor>() != null || AstronautSurvivor.IsAstronautInstantiationData(photonView != null ? photonView.InstantiationData : null);
         bool isNeutralRider = NeutralRiderController.IsNeutralRider(gameObject);
         if (isAstronaut)
         {
-            AstronautSurvivor astronaut = GetComponent<AstronautSurvivor>();
+            astronaut = GetComponent<AstronautSurvivor>();
             if (astronaut == null)
                 astronaut = gameObject.AddComponent<AstronautSurvivor>();
 
@@ -156,6 +164,7 @@ public class PlayerMovement : MonoBehaviourPun
                 return;
             }
         }
+        bool isEscapePod = astronaut != null && astronaut.IsEscapePodMode;
 
         rb = GetComponent<Rigidbody2D>();
         if (rb != null)
@@ -178,7 +187,7 @@ public class PlayerMovement : MonoBehaviourPun
             gameObject.AddComponent<PlayerNicknameUI>();
         }
 
-        if (GetComponent<EngineThrusterVFX>() == null)
+        if ((!isAstronaut || isEscapePod) && GetComponent<EngineThrusterVFX>() == null)
         {
             gameObject.AddComponent<EngineThrusterVFX>();
         }
@@ -196,8 +205,11 @@ public class PlayerMovement : MonoBehaviourPun
         targetRotationAngle = transform.eulerAngles.z;
 
         CaptureBaseMovementProfile();
-        SetupEngineAudio();
-        SyncEquippedEngineProfile(forceRefresh: true);
+        if (!isAstronaut)
+        {
+            SetupEngineAudio();
+            SyncEquippedEngineProfile(forceRefresh: true);
+        }
         lastAudioPosition = transform.position;
 
         if (GetComponent<EnemyBot>() != null || isNeutralRider)
@@ -214,7 +226,7 @@ public class PlayerMovement : MonoBehaviourPun
 
         ResolveJoysticks();
 
-        if (GetComponent<AdvancedMoveInputZone>() == null)
+        if (!isAstronaut && GetComponent<AdvancedMoveInputZone>() == null)
         {
             gameObject.AddComponent<AdvancedMoveInputZone>();
         }
@@ -248,8 +260,11 @@ public class PlayerMovement : MonoBehaviourPun
             return;
         }
 
-        RefreshPilotSpeedBoost();
-        SyncEquippedEngineProfile();
+        if (!IsAstronautMovementActor())
+        {
+            RefreshPilotSpeedBoost();
+            SyncEquippedEngineProfile();
+        }
 
         if (photonView.IsMine)
         {
@@ -682,6 +697,13 @@ public class PlayerMovement : MonoBehaviourPun
     {
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
         return ShipCatalog.GetShipTypeFromSkinIndex(RoomSettings.GetPlayerShipSkin(owner, 0));
+    }
+
+    int GetCurrentBrakingDriftLevel()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        return ShipCatalog.GetBrakingDriftLevel(shipSkinIndex);
     }
 
     Vector2 ResolveBatteringImpactNormal(Vector2 impactPoint)
@@ -1191,7 +1213,7 @@ public class PlayerMovement : MonoBehaviourPun
     void ApplyVelocity(float currentSpeed)
     {
         Vector2 targetVelocity = effectiveMoveInput * currentSpeed;
-        int driftLevel = RoomSettings.GetShipDriftLevel();
+        int driftLevel = GetCurrentBrakingDriftLevel();
 
         if (driftLevel <= 0)
         {

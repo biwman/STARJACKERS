@@ -13,6 +13,11 @@ public class PlayerShooting : MonoBehaviourPun
 {
     const float AutoAimRange = 13f;
     const float AutoAimAcquireRangeBonus = 1.25f;
+    const float AutoAimDirectLeadScale = 0.55f;
+    const float AutoAimArcLeadScale = 0.5f;
+    const float AutoAimDirectLeadMaxSeconds = 0.7f;
+    const float AutoAimArcLeadMaxSeconds = 1f;
+    const float AutoAimLeadVelocityThreshold = 0.08f;
     const float ManualAimThreshold = 0.35f;
     const float DefaultBulletRangeMultiplier = 15f;
     const float ComplexTapMaxDuration = 0.44f;
@@ -30,6 +35,7 @@ public class PlayerShooting : MonoBehaviourPun
     const int TractorBeamDefaultCharges = 4;
     const int LureBeaconDefaultCharges = 2;
     const int AutoTurretDefaultCharges = 1;
+    const int RocketAutoTurretDefaultCharges = 1;
     const int GuidanceSystemDefaultCharges = 2;
     const int ShortScannerDefaultCharges = 3;
     const int CloakDeviceDefaultCharges = 2;
@@ -171,6 +177,8 @@ public class PlayerShooting : MonoBehaviourPun
     int rocketLockCandidateViewId;
     int rocketLockedTargetViewId;
     int simpleAutoAimTargetViewId;
+    bool simpleAutoAimHasTargetPoint;
+    Vector2 simpleAutoAimTargetPoint;
     float rocketLockStartedAt;
     bool rocketLockFeedbackPlayed;
     Vector2 complexLastAimDirection = Vector2.up;
@@ -259,6 +267,12 @@ public class PlayerShooting : MonoBehaviourPun
 
     void Start()
     {
+        if (ViperRecoveryPlotController.TryEnsureViperWreckRuntime(gameObject))
+        {
+            enabled = false;
+            return;
+        }
+
         if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
         {
             PlayerDeployableRuntime.EnsureAttached(gameObject);
@@ -279,20 +293,20 @@ public class PlayerShooting : MonoBehaviourPun
         if (IsNeutralRiderShip())
             return;
 
+        if (AstronautSurvivor.IsAstronautInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            return;
+
         CaptureBaseWeaponProfile();
         maxAmmo = GetConfiguredMaxAmmo();
         currentAmmo = maxAmmo;
 
-        if (AstronautSurvivor.IsAstronautInstantiationData(photonView.InstantiationData))
-            return;
-
         if (GetComponent<EnemyBot>() != null)
             return;
 
-        if (!AstronautSurvivor.IsAstronautInstantiationData(photonView.InstantiationData) && GetComponent<LootingFriendController>() == null)
+        if (GetComponent<LootingFriendController>() == null)
             gameObject.AddComponent<LootingFriendController>();
 
-        if (!AstronautSurvivor.IsAstronautInstantiationData(photonView.InstantiationData) && GetComponent<FiringFriendController>() == null)
+        if (GetComponent<FiringFriendController>() == null)
             gameObject.AddComponent<FiringFriendController>();
 
         if (GetComponent<GuidanceSystemOverlay>() == null)
@@ -417,7 +431,7 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (Time.time >= nextFireTime)
         {
-            if (Shoot(direction.normalized, simpleAutoAimTargetViewId))
+            if (Shoot(direction.normalized, simpleAutoAimTargetViewId, simpleAutoAimHasTargetPoint, simpleAutoAimTargetPoint))
             {
                 ConsumeAmmo();
                 nextFireTime = Time.time + fireRate * GetFireIntervalMultiplier();
@@ -1400,7 +1414,7 @@ public class PlayerShooting : MonoBehaviourPun
     {
         float range = GetComplexRangeWorld(profile);
         bool blockByObstacles = !IsArcWeaponProfile(profile);
-        if (TryResolveAutoAimTarget(range, blockByObstacles, out AutoAimTargetResult target))
+        if (TryResolveAutoAimTarget(range, blockByObstacles, profile, out AutoAimTargetResult target))
         {
             direction = ResolveSafeAimDirection(target.AimPoint - (Vector2)transform.position);
             targetPoint = target.AimPoint;
@@ -1425,7 +1439,7 @@ public class PlayerShooting : MonoBehaviourPun
         return targetPoint;
     }
 
-    bool TryResolveAutoAimTarget(float range, bool blockByObstacles, out AutoAimTargetResult result)
+    bool TryResolveAutoAimTarget(float range, bool blockByObstacles, WeaponAttackProfile profile, out AutoAimTargetResult result)
     {
         result = default;
         Vector2 origin = transform.position;
@@ -1439,20 +1453,20 @@ public class PlayerShooting : MonoBehaviourPun
             if (!IsValidAutoAimTarget(target))
                 continue;
 
-            Vector2 aimPoint = GetAutoAimTargetPoint(target);
-            Vector2 closestPoint = GetAutoAimClosestPoint(target, origin, aimPoint);
+            Vector2 baseAimPoint = GetAutoAimTargetPoint(target);
+            Vector2 closestPoint = GetAutoAimClosestPoint(target, origin, baseAimPoint);
             float distance = Vector2.Distance(origin, closestPoint);
             if (distance > maxDistance || distance >= bestDistance)
                 continue;
 
-            if (blockByObstacles && IsLineBlockedByObstacle(origin, aimPoint, target.transform))
+            if (blockByObstacles && IsLineBlockedByObstacle(origin, baseAimPoint, target.transform))
                 continue;
 
             bestDistance = distance;
             result = new AutoAimTargetResult
             {
                 Health = target,
-                AimPoint = aimPoint,
+                AimPoint = ResolveAutoAimLeadPoint(target, origin, baseAimPoint, range, profile),
                 ViewId = target.photonView != null ? target.photonView.ViewID : 0
             };
         }
@@ -1463,6 +1477,13 @@ public class PlayerShooting : MonoBehaviourPun
     bool IsValidAutoAimTarget(PlayerHealth target)
     {
         if (target == null || target.IsWreck || target.IsEvacuationAnimating || target.CurrentHP <= 0 || target.photonView == null)
+            return false;
+
+        if (target.IsSpawnInvulnerable)
+            return false;
+
+        PlayerRepairDocking repairDocking = target.GetComponent<PlayerRepairDocking>();
+        if (repairDocking != null && repairDocking.IsDamageImmune)
             return false;
 
         if (target.photonView.ViewID == (photonView != null ? photonView.ViewID : 0))
@@ -1482,6 +1503,63 @@ public class PlayerShooting : MonoBehaviourPun
             return targetCollider.bounds.center;
 
         return target != null ? (Vector2)target.transform.position : (Vector2)transform.position;
+    }
+
+    Vector2 ResolveAutoAimLeadPoint(PlayerHealth target, Vector2 origin, Vector2 basePoint, float range, WeaponAttackProfile profile)
+    {
+        if (target == null || ShouldSkipAutoAimLead(profile))
+            return basePoint;
+
+        Rigidbody2D targetBody = target.GetComponent<Rigidbody2D>();
+        if (targetBody == null)
+            targetBody = target.GetComponentInChildren<Rigidbody2D>();
+
+        Vector2 velocity = targetBody != null ? targetBody.linearVelocity : Vector2.zero;
+        if (velocity.sqrMagnitude < AutoAimLeadVelocityThreshold * AutoAimLeadVelocityThreshold)
+            return basePoint;
+
+        bool isArc = IsArcWeaponProfile(profile);
+        float leadSeconds = isArc
+            ? GetAutoAimArcLeadSeconds(profile)
+            : GetAutoAimDirectLeadSeconds(origin, basePoint, profile);
+        if (leadSeconds <= 0.001f)
+            return basePoint;
+
+        float leadScale = isArc ? AutoAimArcLeadScale : AutoAimDirectLeadScale;
+        Vector2 leadPoint = basePoint + (velocity * leadSeconds * leadScale);
+        return isArc ? ClampAutoAimPointToRange(origin, leadPoint, range) : leadPoint;
+    }
+
+    bool ShouldSkipAutoAimLead(WeaponAttackProfile profile)
+    {
+        return IsRocketWeaponProfile(profile) ||
+               IsAstroCutterProfile(profile) ||
+               IsPulseDisruptorSuperProfile(profile);
+    }
+
+    float GetAutoAimDirectLeadSeconds(Vector2 origin, Vector2 targetPoint, WeaponAttackProfile profile)
+    {
+        float speed = profile != null
+            ? Mathf.Max(0.1f, profile.ProjectileSpeed * GetProjectileSpeedMultiplier())
+            : Mathf.Max(0.1f, bulletSpeed * GetProjectileSpeedMultiplier());
+        float distance = Vector2.Distance(origin, targetPoint);
+        return Mathf.Clamp(distance / speed, 0f, AutoAimDirectLeadMaxSeconds);
+    }
+
+    float GetAutoAimArcLeadSeconds(WeaponAttackProfile profile)
+    {
+        float flightTime = profile != null ? Mathf.Max(0f, profile.FlightTime) : 0f;
+        return Mathf.Clamp(flightTime, 0f, AutoAimArcLeadMaxSeconds);
+    }
+
+    Vector2 ClampAutoAimPointToRange(Vector2 origin, Vector2 point, float range)
+    {
+        float maxRange = Mathf.Max(0.1f, range);
+        Vector2 offset = point - origin;
+        if (offset.sqrMagnitude <= maxRange * maxRange)
+            return point;
+
+        return origin + (offset.normalized * maxRange);
     }
 
     Vector2 GetAutoAimClosestPoint(PlayerHealth target, Vector2 origin, Vector2 fallback)
@@ -1922,11 +2000,13 @@ public class PlayerShooting : MonoBehaviourPun
     Vector2 ResolveManualAimDirection()
     {
         simpleAutoAimTargetViewId = 0;
+        simpleAutoAimHasTargetPoint = false;
+        simpleAutoAimTargetPoint = default;
         Vector2 rawDirection = shootJoystick != null ? shootJoystick.inputVector : Vector2.zero;
         if (rawDirection.magnitude >= ManualAimThreshold)
             return rawDirection.normalized;
 
-        return FindAutoAimDirection(out simpleAutoAimTargetViewId);
+        return FindAutoAimDirection(out simpleAutoAimTargetViewId, out simpleAutoAimTargetPoint, out simpleAutoAimHasTargetPoint);
     }
 
     Vector2 FindAutoAimDirection()
@@ -1936,11 +2016,20 @@ public class PlayerShooting : MonoBehaviourPun
 
     Vector2 FindAutoAimDirection(out int targetViewId)
     {
+        return FindAutoAimDirection(out targetViewId, out _, out _);
+    }
+
+    Vector2 FindAutoAimDirection(out int targetViewId, out Vector2 targetPoint, out bool hasTargetPoint)
+    {
         targetViewId = 0;
+        targetPoint = default;
+        hasTargetPoint = false;
         float range = GetSimpleAutoAimRange();
-        if (TryResolveAutoAimTarget(range, false, out AutoAimTargetResult target))
+        if (TryResolveAutoAimTarget(range, false, activeSimpleWeaponProfile, out AutoAimTargetResult target))
         {
             targetViewId = target.ViewId;
+            targetPoint = target.AimPoint;
+            hasTargetPoint = true;
             return ResolveSafeAimDirection(target.AimPoint - (Vector2)transform.position);
         }
 
@@ -1953,7 +2042,7 @@ public class PlayerShooting : MonoBehaviourPun
         return Mathf.Max(AutoAimRange, configuredRange);
     }
 
-    bool Shoot(Vector2 direction, int homingTargetViewId = 0)
+    bool Shoot(Vector2 direction, int homingTargetViewId = 0, bool hasAutoAimTargetPoint = false, Vector2 autoAimTargetPoint = default(Vector2))
     {
         if (bulletPrefab == null)
         {
@@ -2004,7 +2093,10 @@ public class PlayerShooting : MonoBehaviourPun
         else if (ShouldUseArcSimpleShot(profile))
         {
             Vector3 spawnPos = transform.position + (transform.up * muzzleOffsetDistance);
-            Vector2 targetPoint = (Vector2)transform.position + (direction.normalized * GetComplexRangeWorld(profile));
+            float range = GetComplexRangeWorld(profile);
+            Vector2 targetPoint = hasAutoAimTargetPoint
+                ? ClampAutoAimPointToRange((Vector2)transform.position, autoAimTargetPoint, range)
+                : (Vector2)transform.position + (direction.normalized * range);
             spawned |= SpawnComplexBullet(profile, direction.normalized, spawnPos, ownerId, targetPoint, 0, pilotBreachProjectile);
         }
         else if (ShouldUseSimpleSpreadShot(profile))
@@ -3059,6 +3151,12 @@ public class PlayerShooting : MonoBehaviourPun
             return;
         }
 
+        if (soundId == "lazer3")
+        {
+            AudioManager.Instance.PlayLazer3At(transform.position);
+            return;
+        }
+
         if (soundId == "pirate_fighter")
         {
             AudioManager.Instance.PlayPirateFighterShotAt(transform.position);
@@ -3329,6 +3427,9 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal))
             return new Color(0.72f, 0.22f, 0.18f, 0.96f);
 
+        if (string.Equals(itemId, InventoryItemCatalog.RocketAutoTurretId, StringComparison.Ordinal))
+            return new Color(0.62f, 0.24f, 0.12f, 0.96f);
+
         if (string.Equals(itemId, InventoryItemCatalog.GuidanceSystemId, StringComparison.Ordinal))
             return new Color(0.18f, 0.62f, 0.58f, 0.96f);
 
@@ -3405,6 +3506,9 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal))
             return AutoTurretDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.RocketAutoTurretId, StringComparison.Ordinal))
+            return RocketAutoTurretDefaultCharges * equippedCount;
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.GuidanceSystemId, StringComparison.Ordinal))
             return GuidanceSystemDefaultCharges * equippedCount;
@@ -3778,6 +3882,15 @@ public class PlayerShooting : MonoBehaviourPun
             return deployed;
         }
 
+        if (string.Equals(itemId, InventoryItemCatalog.RocketAutoTurretId, StringComparison.Ordinal))
+        {
+            bool deployed = NewItemsRuntime.TryDeployRocketAutoTurret(this);
+            if (deployed)
+                RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+
+            return deployed;
+        }
+
         if (string.Equals(itemId, InventoryItemCatalog.GuidanceSystemId, StringComparison.Ordinal))
         {
             photonView.RPC(nameof(ActivateGuidanceSystemRpc), photonView.Owner, GetAdjustedGuidanceSystemDuration());
@@ -3828,6 +3941,7 @@ public class PlayerShooting : MonoBehaviourPun
                 return false;
 
             photonView.RPC(nameof(ActivateSuperBoosterRpc), photonView.Owner, SuperBoosterDuration);
+            photonView.RPC(nameof(PlaySuperBoosterSfxRpc), RpcTarget.All);
             RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
             return true;
         }
@@ -3844,12 +3958,14 @@ public class PlayerShooting : MonoBehaviourPun
     [PunRPC]
     void ActivateShortScannerRevealRpc(float duration)
     {
+        AudioManager.Instance.PlayShortScannerAt(transform.position);
         ShortScannerRevealStatus.EnsureFor(gameObject)?.ActivateReveal(duration);
     }
 
     [PunRPC]
     void ActivateCloakDeviceRpc(float duration)
     {
+        AudioManager.Instance.PlayCloakActivationAt(transform.position);
         HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>() ?? gameObject.AddComponent<HideInNebulaTarget>();
         nebulaTarget.ActivateCloak(duration);
     }
@@ -3880,6 +3996,12 @@ public class PlayerShooting : MonoBehaviourPun
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null)
             movement.ActivateSuperBooster(duration);
+    }
+
+    [PunRPC]
+    void PlaySuperBoosterSfxRpc()
+    {
+        AudioManager.Instance.PlaySuperBoosterAt(transform.position);
     }
 
     [PunRPC]

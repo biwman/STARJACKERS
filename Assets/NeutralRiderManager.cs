@@ -1,4 +1,5 @@
 using ExitGames.Client.Photon;
+using System.Collections.Generic;
 using Photon.Pun;
 using UnityEngine;
 
@@ -6,10 +7,12 @@ public sealed class NeutralRiderManager : MonoBehaviour
 {
     const float ScanInterval = 0.35f;
     const float RuntimeComponentScanInterval = 1f;
+    const float RelaxedRuntimeComponentScanInterval = 5f;
     const string RuntimeStartTimeKey = "neutralRiders.runtime.startTime";
     const string RuntimeSpawnedCountKey = "neutralRiders.runtime.spawned";
 
     static NeutralRiderManager instance;
+    static readonly List<NeutralRiderController> ActiveRiderBuffer = new List<NeutralRiderController>(8);
 
     double lastHandledStartTime = double.MinValue;
     float nextScanTime;
@@ -54,8 +57,8 @@ public sealed class NeutralRiderManager : MonoBehaviour
         float now = Time.unscaledTime;
         if (now >= nextRuntimeScanTime)
         {
-            nextRuntimeScanTime = now + RuntimeComponentScanInterval;
-            EnsureRuntimeComponents();
+            bool performedRuntimeSetup = EnsureRuntimeComponents();
+            nextRuntimeScanTime = now + (performedRuntimeSetup ? RuntimeComponentScanInterval : RelaxedRuntimeComponentScanInterval);
         }
 
         if (now < nextScanTime)
@@ -65,8 +68,9 @@ public sealed class NeutralRiderManager : MonoBehaviour
         HandleLifecycle();
     }
 
-    void EnsureRuntimeComponents()
+    bool EnsureRuntimeComponents()
     {
+        bool performedRuntimeSetup = false;
         PhotonView[] views = FindObjectsByType<PhotonView>(FindObjectsInactive.Exclude);
         for (int i = 0; i < views.Length; i++)
         {
@@ -79,11 +83,16 @@ public sealed class NeutralRiderManager : MonoBehaviour
 
             NeutralRiderController rider = view.GetComponent<NeutralRiderController>();
             if (rider == null)
+            {
                 rider = view.gameObject.AddComponent<NeutralRiderController>();
+                performedRuntimeSetup = true;
+            }
 
             rider.InitializeFromPhotonData();
             ActorIdentity.Ensure(view.gameObject);
         }
+
+        return performedRuntimeSetup;
     }
 
     void HandleLifecycle()
@@ -138,8 +147,8 @@ public sealed class NeutralRiderManager : MonoBehaviour
     bool SpawnNeutralRider(int ordinal)
     {
         Vector2 spawn = GetSpawnPosition(ordinal);
-        int skinIndex = ResolveShipSkin(ordinal);
         NeutralRiderArchetype archetype = ResolveArchetype(ordinal);
+        int skinIndex = ResolveShipSkin(ordinal, archetype);
         string name = NeutralRiderController.GetGeneratedName(ordinal);
         object[] data = NeutralRiderController.BuildInstantiationData(skinIndex, archetype, name, ordinal);
         GameObject riderObject = PhotonNetwork.Instantiate("Player", spawn, Quaternion.identity, 0, data);
@@ -200,19 +209,41 @@ public sealed class NeutralRiderManager : MonoBehaviour
         return true;
     }
 
-    int ResolveShipSkin(int ordinal)
+    int ResolveShipSkin(int ordinal, NeutralRiderArchetype archetype)
     {
-        int[] skins =
+        int[] skins = archetype switch
         {
-            ShipCatalog.ExplorerBasicSkinIndex,
-            ShipCatalog.ViperStandardSkinIndex,
-            ShipCatalog.AvengerDarkGreenSkinIndex,
-            ShipCatalog.ArrowSmoothSkinIndex,
-            ShipCatalog.InvaderCamoSkinIndex,
-            ShipCatalog.CargoTruckGreenTruckSkinIndex
+            NeutralRiderArchetype.Hunter => new[]
+            {
+                ShipCatalog.AvengerDarkGreenSkinIndex,
+                ShipCatalog.AvengerMilitarySkinIndex,
+                ShipCatalog.AvengerNasaSkinIndex,
+                ShipCatalog.ArrowSharkSkinIndex
+            },
+            NeutralRiderArchetype.Raider => new[]
+            {
+                ShipCatalog.ViperStandardSkinIndex,
+                ShipCatalog.ViperNavySkinIndex,
+                ShipCatalog.InvaderCamoSkinIndex,
+                ShipCatalog.InvaderVolcanicSkinIndex
+            },
+            NeutralRiderArchetype.Coward => new[]
+            {
+                ShipCatalog.ExplorerBasicSkinIndex,
+                ShipCatalog.ExplorerSilverSkinIndex,
+                ShipCatalog.CargoTruckWhitePantherSkinIndex,
+                ShipCatalog.ArrowSmoothSkinIndex
+            },
+            _ => new[]
+            {
+                ShipCatalog.CargoTruckGreenTruckSkinIndex,
+                ShipCatalog.CargoTruckSandSigmaSkinIndex,
+                ShipCatalog.ExplorerGildedSkinIndex,
+                ShipCatalog.ArrowSportySkinIndex
+            }
         };
 
-        return skins[Mathf.Abs(ordinal * 3 + Mathf.RoundToInt(Time.time * 10f)) % skins.Length];
+        return skins[Mathf.Abs((ordinal * 5) + (int)archetype * 3) % skins.Length];
     }
 
     NeutralRiderArchetype ResolveArchetype(int ordinal)
@@ -279,25 +310,15 @@ public sealed class NeutralRiderManager : MonoBehaviour
 
     int CountActiveNeutralRiders()
     {
-        int count = 0;
-        NeutralRiderController[] riders = FindObjectsByType<NeutralRiderController>(FindObjectsInactive.Exclude);
-        for (int i = 0; i < riders.Length; i++)
-        {
-            NeutralRiderController rider = riders[i];
-            PlayerHealth riderHealth = rider != null ? rider.GetComponent<PlayerHealth>() : null;
-            if (rider != null && riderHealth != null && !riderHealth.IsWreck && !rider.IsEvacuated)
-                count++;
-        }
-
-        return count;
+        return NeutralRiderController.CountActiveRiders();
     }
 
     void DestroyActiveNeutralRiders()
     {
-        NeutralRiderController[] riders = FindObjectsByType<NeutralRiderController>(FindObjectsInactive.Exclude);
-        for (int i = 0; i < riders.Length; i++)
+        NeutralRiderController.CopyActiveRiders(ActiveRiderBuffer);
+        for (int i = 0; i < ActiveRiderBuffer.Count; i++)
         {
-            NeutralRiderController rider = riders[i];
+            NeutralRiderController rider = ActiveRiderBuffer[i];
             if (rider == null || rider.photonView == null)
                 continue;
 

@@ -1,14 +1,20 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public sealed class SpaceMineExplosionVfx : MonoBehaviour
 {
     const float Lifetime = 1.55f;
     const float EffectZ = -0.35f;
-    const int TextureSize = 192;
-    const int CircleSegments = 96;
-    const int FireLayerCount = 5;
-    const int SmokeLayerCount = 7;
-    const int SparkCount = 18;
+    const int TextureSize = 160;
+    const int CircleSegments = 64;
+    const int FireLayerCount = 4;
+    const int SmokeLayerCount = 5;
+    const int SparkCount = 12;
+    const int LightweightCircleSegments = 40;
+    const int LightweightFireLayerCount = 3;
+    const int LightweightSmokeLayerCount = 3;
+    const int LightweightSparkCount = 6;
+    const int PoolWarmCount = 4;
 
     sealed class SpriteLayer
     {
@@ -26,6 +32,8 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
     static Material lineMaterial;
     static Sprite fireSprite;
     static Sprite smokeSprite;
+    static readonly Stack<SpaceMineExplosionVfx> Pool = new Stack<SpaceMineExplosionVfx>(PoolWarmCount);
+    static Vector3[] circleUnitPoints;
 
     readonly SpriteLayer[] fireLayers = new SpriteLayer[FireLayerCount];
     readonly SpriteLayer[] smokeLayers = new SpriteLayer[SmokeLayerCount];
@@ -36,6 +44,10 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
     Vector3 center;
     float blastRadius;
     float age;
+    int activeFireLayerCount;
+    int activeSmokeLayerCount;
+    int activeSparkCount;
+    int activeCircleSegments;
 
     readonly Color hotCore = new Color(1f, 0.88f, 0.48f, 1f);
     readonly Color amber = new Color(1f, 0.43f, 0.08f, 1f);
@@ -47,35 +59,83 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
         GetLineMaterial();
         PrewarmSpriteTexture(GetFireSprite());
         PrewarmSpriteTexture(GetSmokeSprite());
+        WarmPool(PoolWarmCount);
     }
 
-    public static void Spawn(Vector3 position, float radius, SpriteRenderer referenceRenderer = null)
+    public static void Spawn(Vector3 position, float radius, SpriteRenderer referenceRenderer = null, bool lightweight = false)
     {
         if (!RoomSettings.AreVisualEffectsEnabled())
             return;
 
-        GameObject effect = new GameObject("SpaceMineExplosionVfx");
-        SpaceMineExplosionVfx vfx = effect.AddComponent<SpaceMineExplosionVfx>();
-        vfx.Initialize(position, radius, referenceRenderer);
+        SpaceMineExplosionVfx vfx = GetFromPool();
+        vfx.Initialize(position, radius, referenceRenderer, lightweight);
     }
 
-    void Initialize(Vector3 position, float radius, SpriteRenderer referenceRenderer)
+    static void WarmPool(int count)
+    {
+        for (int i = Pool.Count; i < count; i++)
+        {
+            SpaceMineExplosionVfx vfx = CreateInstance();
+            vfx.Initialize(Vector3.zero, 1.15f, null, false);
+            vfx.ReturnToPool();
+        }
+    }
+
+    static SpaceMineExplosionVfx GetFromPool()
+    {
+        while (Pool.Count > 0)
+        {
+            SpaceMineExplosionVfx pooled = Pool.Pop();
+            if (pooled != null)
+            {
+                pooled.gameObject.SetActive(true);
+                return pooled;
+            }
+        }
+
+        SpaceMineExplosionVfx created = CreateInstance();
+        created.gameObject.SetActive(true);
+        return created;
+    }
+
+    static SpaceMineExplosionVfx CreateInstance()
+    {
+        GameObject effect = new GameObject("SpaceMineExplosionVfx");
+        effect.SetActive(false);
+        return effect.AddComponent<SpaceMineExplosionVfx>();
+    }
+
+    void Initialize(Vector3 position, float radius, SpriteRenderer referenceRenderer, bool lightweight)
     {
         center = new Vector3(position.x, position.y, EffectZ);
         transform.position = center;
         blastRadius = Mathf.Clamp(radius, 1.15f, 10f);
+        age = 0f;
+        activeFireLayerCount = lightweight ? LightweightFireLayerCount : FireLayerCount;
+        activeSmokeLayerCount = lightweight ? LightweightSmokeLayerCount : SmokeLayerCount;
+        activeSparkCount = lightweight ? LightweightSparkCount : SparkCount;
+        activeCircleSegments = lightweight ? LightweightCircleSegments : CircleSegments;
 
         int sortingLayerId = referenceRenderer != null ? referenceRenderer.sortingLayerID : ResolveForegroundSortingLayerId();
         int sortingOrder = referenceRenderer != null ? referenceRenderer.sortingOrder + 320 : 6500;
 
-        CreateFireLayers(sortingLayerId, sortingOrder);
-        CreateSmokeLayers(sortingLayerId, sortingOrder + 20);
+        CreateOrResetFireLayers(sortingLayerId, sortingOrder);
+        CreateOrResetSmokeLayers(sortingLayerId, sortingOrder + 20);
 
-        shockwave = CreateLine("MinePressureWave", 0.16f, new Color(1f, 0.72f, 0.38f, 0.7f), sortingLayerId, sortingOrder + 40, true, CircleSegments);
-        heatRing = CreateLine("MineHeatDistortionRing", 0.08f, new Color(1f, 0.9f, 0.62f, 0.42f), sortingLayerId, sortingOrder + 41, true, CircleSegments);
+        shockwave = CreateOrResetLine(shockwave, "MinePressureWave", 0.16f, new Color(1f, 0.72f, 0.38f, 0.7f), sortingLayerId, sortingOrder + 40, true, activeCircleSegments);
+        heatRing = CreateOrResetLine(heatRing, "MineHeatDistortionRing", 0.08f, new Color(1f, 0.9f, 0.62f, 0.42f), sortingLayerId, sortingOrder + 41, true, activeCircleSegments);
 
         for (int i = 0; i < sparks.Length; i++)
-            sparks[i] = CreateLine("MineEmberSpark" + i, 0.055f, amber, sortingLayerId, sortingOrder + 50);
+        {
+            if (i >= activeSparkCount)
+            {
+                if (sparks[i] != null)
+                    sparks[i].gameObject.SetActive(false);
+                continue;
+            }
+
+            sparks[i] = CreateOrResetLine(sparks[i], "MineEmberSpark" + i, 0.05f, amber, sortingLayerId, sortingOrder + 50, false, 2);
+        }
 
         UpdateVisuals(0f);
     }
@@ -87,7 +147,7 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
         UpdateVisuals(t);
 
         if (age >= Lifetime)
-            Destroy(gameObject);
+            ReturnToPool();
     }
 
     void UpdateVisuals(float t)
@@ -98,14 +158,28 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
         UpdateSparks(t);
     }
 
-    void CreateFireLayers(int sortingLayerId, int sortingOrder)
+    void ReturnToPool()
+    {
+        gameObject.SetActive(false);
+        Pool.Push(this);
+    }
+
+    void CreateOrResetFireLayers(int sortingLayerId, int sortingOrder)
     {
         Sprite sprite = GetFireSprite();
         for (int i = 0; i < fireLayers.Length; i++)
         {
-            float angle = (Mathf.PI * 2f * i) / fireLayers.Length + Hash01(i, 1) * 0.45f;
+            if (i >= activeFireLayerCount)
+            {
+                if (fireLayers[i] != null && fireLayers[i].Renderer != null)
+                    fireLayers[i].Renderer.gameObject.SetActive(false);
+                continue;
+            }
+
+            float angle = (Mathf.PI * 2f * i) / Mathf.Max(1, activeFireLayerCount) + Hash01(i, 1) * 0.45f;
             Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
-            SpriteLayer layer = CreateSpriteLayer("MineFireBloom" + i, sprite, sortingLayerId, sortingOrder + i);
+            SpriteLayer layer = fireLayers[i] ?? CreateSpriteLayer("MineFireBloom" + i, sprite, sortingLayerId, sortingOrder + i);
+            ResetSpriteLayer(layer, sprite, sortingLayerId, sortingOrder + i);
             layer.Direction = direction;
             layer.Distance = Mathf.Lerp(0.04f, 0.22f, Hash01(i, 2));
             layer.StartScale = Mathf.Lerp(0.52f, 0.78f, Hash01(i, 3));
@@ -117,14 +191,22 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
         }
     }
 
-    void CreateSmokeLayers(int sortingLayerId, int sortingOrder)
+    void CreateOrResetSmokeLayers(int sortingLayerId, int sortingOrder)
     {
         Sprite sprite = GetSmokeSprite();
         for (int i = 0; i < smokeLayers.Length; i++)
         {
-            float angle = (Mathf.PI * 2f * i) / smokeLayers.Length + Hash01(i, 8) * 0.7f;
+            if (i >= activeSmokeLayerCount)
+            {
+                if (smokeLayers[i] != null && smokeLayers[i].Renderer != null)
+                    smokeLayers[i].Renderer.gameObject.SetActive(false);
+                continue;
+            }
+
+            float angle = (Mathf.PI * 2f * i) / Mathf.Max(1, activeSmokeLayerCount) + Hash01(i, 8) * 0.7f;
             Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
-            SpriteLayer layer = CreateSpriteLayer("MineSmokePuff" + i, sprite, sortingLayerId, sortingOrder + i);
+            SpriteLayer layer = smokeLayers[i] ?? CreateSpriteLayer("MineSmokePuff" + i, sprite, sortingLayerId, sortingOrder + i);
+            ResetSpriteLayer(layer, sprite, sortingLayerId, sortingOrder + i);
             layer.Direction = direction;
             layer.Distance = Mathf.Lerp(0.14f, 0.56f, Hash01(i, 9));
             layer.StartScale = Mathf.Lerp(0.42f, 0.68f, Hash01(i, 10));
@@ -156,13 +238,28 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
         };
     }
 
+    void ResetSpriteLayer(SpriteLayer layer, Sprite sprite, int sortingLayerId, int sortingOrder)
+    {
+        if (layer == null || layer.Transform == null || layer.Renderer == null)
+            return;
+
+        layer.Renderer.gameObject.SetActive(true);
+        layer.Transform.localPosition = Vector3.zero;
+        layer.Transform.localScale = Vector3.one;
+        layer.Transform.localRotation = Quaternion.Euler(0f, 0f, Hash01(sortingOrder, 15) * 360f);
+        layer.Renderer.sprite = sprite;
+        layer.Renderer.color = Color.clear;
+        layer.Renderer.sortingLayerID = sortingLayerId;
+        layer.Renderer.sortingOrder = sortingOrder;
+    }
+
     void UpdateFire(float t)
     {
         float fireT = Mathf.Clamp01(t / 0.58f);
         float alpha = SmoothFade(0f, 0.58f, t);
         float diameter = blastRadius * 2f;
 
-        for (int i = 0; i < fireLayers.Length; i++)
+        for (int i = 0; i < activeFireLayerCount; i++)
         {
             SpriteLayer layer = fireLayers[i];
             if (layer == null || layer.Transform == null || layer.Renderer == null)
@@ -189,7 +286,7 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
         float alpha = Mathf.Sin(smokeT * Mathf.PI);
         float diameter = blastRadius * 2f;
 
-        for (int i = 0; i < smokeLayers.Length; i++)
+        for (int i = 0; i < activeSmokeLayerCount; i++)
         {
             SpriteLayer layer = smokeLayers[i];
             if (layer == null || layer.Transform == null || layer.Renderer == null)
@@ -230,13 +327,13 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
 
         float sparkT = Mathf.Clamp01(t / 0.72f);
         float alpha = Mathf.Pow(1f - sparkT, 1.4f);
-        for (int i = 0; i < sparks.Length; i++)
+        for (int i = 0; i < activeSparkCount; i++)
         {
             LineRenderer spark = sparks[i];
             if (spark == null)
                 continue;
 
-            float angle = ((Mathf.PI * 2f) / sparks.Length) * i + Hash01(i, 16) * 0.4f;
+            float angle = ((Mathf.PI * 2f) / Mathf.Max(1, activeSparkCount)) * i + Hash01(i, 16) * 0.4f;
             Vector3 direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
             float distance = blastRadius * Mathf.Lerp(0.25f, 1.15f + Hash01(i, 17) * 0.35f, sparkT);
             float length = blastRadius * Mathf.Lerp(0.1f, 0.24f, Hash01(i, 18));
@@ -265,10 +362,11 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
         if (ring == null)
             return;
 
-        for (int i = 0; i < CircleSegments; i++)
+        Vector3[] unitPoints = GetCircleUnitPoints();
+        for (int i = 0; i < activeCircleSegments; i++)
         {
-            float angle = (Mathf.PI * 2f * i) / CircleSegments;
-            ring.SetPosition(i, center + new Vector3(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius, 0f));
+            Vector3 point = unitPoints[i];
+            ring.SetPosition(i, center + new Vector3(point.x * radius, point.y * radius, 0f));
         }
 
         color.a = alpha;
@@ -279,22 +377,28 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
         ring.endWidth = width;
     }
 
-    LineRenderer CreateLine(string objectName, float width, Color color, int sortingLayerId, int sortingOrder, bool loop = false, int positionCount = 2)
+    LineRenderer CreateOrResetLine(LineRenderer line, string objectName, float width, Color color, int sortingLayerId, int sortingOrder, bool loop = false, int positionCount = 2)
     {
-        GameObject lineObject = new GameObject(objectName);
-        lineObject.transform.SetParent(transform, false);
+        if (line == null)
+        {
+            GameObject lineObject = new GameObject(objectName);
+            lineObject.transform.SetParent(transform, false);
 
-        LineRenderer line = lineObject.AddComponent<LineRenderer>();
-        line.useWorldSpace = true;
+            line = lineObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.alignment = LineAlignment.View;
+            line.textureMode = LineTextureMode.Stretch;
+            line.material = GetLineMaterial();
+        }
+
+        line.gameObject.SetActive(true);
         line.loop = loop;
         line.positionCount = Mathf.Max(2, positionCount);
         line.widthMultiplier = width;
         line.startWidth = width;
         line.endWidth = width;
-        line.numCapVertices = 6;
-        line.numCornerVertices = 4;
-        line.alignment = LineAlignment.View;
-        line.textureMode = LineTextureMode.Stretch;
+        line.numCapVertices = 4;
+        line.numCornerVertices = 3;
         line.material = GetLineMaterial();
         line.startColor = color;
         line.endColor = color;
@@ -347,6 +451,21 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
     static float Hash01(int index, int salt)
     {
         return Mathf.Repeat(Mathf.Sin((index * 127.1f) + (salt * 311.7f)) * 43758.5453f, 1f);
+    }
+
+    static Vector3[] GetCircleUnitPoints()
+    {
+        if (circleUnitPoints != null)
+            return circleUnitPoints;
+
+        circleUnitPoints = new Vector3[CircleSegments];
+        for (int i = 0; i < circleUnitPoints.Length; i++)
+        {
+            float angle = (Mathf.PI * 2f * i) / circleUnitPoints.Length;
+            circleUnitPoints[i] = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+        }
+
+        return circleUnitPoints;
     }
 
     static Sprite GetFireSprite()
@@ -443,12 +562,15 @@ public sealed class SpaceMineExplosionVfx : MonoBehaviour
 public sealed class SpaceBombExplosionVfx : MonoBehaviour
 {
     const float Lifetime = 1.28f;
-    const int RingCount = 3;
-    const int RayCount = 28;
-    const int CircleSegments = 128;
+    const int RingCount = 2;
+    const int RayCount = 18;
+    const int CircleSegments = 72;
     const float EffectZ = -0.44f;
+    const int PoolWarmCount = 3;
 
     static Material sharedMaterial;
+    static readonly Stack<SpaceBombExplosionVfx> Pool = new Stack<SpaceBombExplosionVfx>(PoolWarmCount);
+    static Vector3[] circleUnitPoints;
 
     readonly LineRenderer[] rings = new LineRenderer[RingCount];
     readonly LineRenderer[] rays = new LineRenderer[RayCount];
@@ -456,17 +578,56 @@ public sealed class SpaceBombExplosionVfx : MonoBehaviour
     float radius;
     float age;
 
+    public static void Prewarm()
+    {
+        GetMaterial();
+        WarmPool(PoolWarmCount);
+    }
+
     public static void Spawn(Vector3 position, float blastRadius)
     {
         if (!RoomSettings.AreVisualEffectsEnabled())
             return;
 
         ScreenShakeController.Request(ScreenShakeProfiles.SpaceBombExplosion, position);
-        SpaceMineExplosionVfx.Spawn(position, blastRadius);
+        SpaceMineExplosionVfx.Spawn(position, blastRadius, null, true);
 
-        GameObject effect = new GameObject("SpaceBombExplosionVfx");
-        SpaceBombExplosionVfx vfx = effect.AddComponent<SpaceBombExplosionVfx>();
+        SpaceBombExplosionVfx vfx = GetFromPool();
         vfx.Initialize(position, blastRadius);
+    }
+
+    static void WarmPool(int count)
+    {
+        for (int i = Pool.Count; i < count; i++)
+        {
+            SpaceBombExplosionVfx vfx = CreateInstance();
+            vfx.Initialize(Vector3.zero, 3.5f);
+            vfx.ReturnToPool();
+        }
+    }
+
+    static SpaceBombExplosionVfx GetFromPool()
+    {
+        while (Pool.Count > 0)
+        {
+            SpaceBombExplosionVfx pooled = Pool.Pop();
+            if (pooled != null)
+            {
+                pooled.gameObject.SetActive(true);
+                return pooled;
+            }
+        }
+
+        SpaceBombExplosionVfx created = CreateInstance();
+        created.gameObject.SetActive(true);
+        return created;
+    }
+
+    static SpaceBombExplosionVfx CreateInstance()
+    {
+        GameObject effect = new GameObject("SpaceBombExplosionVfx");
+        effect.SetActive(false);
+        return effect.AddComponent<SpaceBombExplosionVfx>();
     }
 
     void Initialize(Vector3 position, float blastRadius)
@@ -474,12 +635,13 @@ public sealed class SpaceBombExplosionVfx : MonoBehaviour
         center = new Vector3(position.x, position.y, EffectZ);
         transform.position = center;
         radius = Mathf.Clamp(blastRadius, 3.5f, 8f);
+        age = 0f;
 
         for (int i = 0; i < rings.Length; i++)
-            rings[i] = CreateLine("SpaceBombShockRing" + i, 0.12f, true, CircleSegments, 6800 + i);
+            rings[i] = CreateOrResetLine(rings[i], "SpaceBombShockRing" + i, 0.12f, true, CircleSegments, 6800 + i);
 
         for (int i = 0; i < rays.Length; i++)
-            rays[i] = CreateLine("SpaceBombBlastRay" + i, 0.07f, false, 2, 6820 + i);
+            rays[i] = CreateOrResetLine(rays[i], "SpaceBombBlastRay" + i, 0.065f, false, 2, 6820 + i);
 
         UpdateVisuals(0f);
     }
@@ -491,7 +653,13 @@ public sealed class SpaceBombExplosionVfx : MonoBehaviour
         UpdateVisuals(t);
 
         if (age >= Lifetime)
-            Destroy(gameObject);
+            ReturnToPool();
+    }
+
+    void ReturnToPool()
+    {
+        gameObject.SetActive(false);
+        Pool.Push(this);
     }
 
     void UpdateVisuals(float t)
@@ -509,11 +677,13 @@ public sealed class SpaceBombExplosionVfx : MonoBehaviour
             float alpha = Mathf.Pow(1f - localT, 1.65f) * Mathf.Lerp(0.72f, 0.38f, i / (float)rings.Length);
             float width = Mathf.Lerp(0.18f, 0.018f, localT) * Mathf.Lerp(1f, 0.72f, i / (float)rings.Length);
 
+            Vector3[] unitPoints = GetCircleUnitPoints();
             for (int point = 0; point < CircleSegments; point++)
             {
+                Vector3 unitPoint = unitPoints[point];
                 float angle = (Mathf.PI * 2f * point) / CircleSegments;
                 float wobble = Mathf.Sin(angle * 9f + i * 1.7f + age * 4f) * radius * 0.012f;
-                ring.SetPosition(point, center + new Vector3(Mathf.Cos(angle) * (ringRadius + wobble), Mathf.Sin(angle) * (ringRadius + wobble), 0f));
+                ring.SetPosition(point, center + new Vector3(unitPoint.x * (ringRadius + wobble), unitPoint.y * (ringRadius + wobble), 0f));
             }
 
             Color color = Color.Lerp(new Color(1f, 0.9f, 0.42f, 1f), new Color(1f, 0.28f, 0.04f, 1f), localT);
@@ -550,22 +720,28 @@ public sealed class SpaceBombExplosionVfx : MonoBehaviour
         }
     }
 
-    LineRenderer CreateLine(string objectName, float width, bool loop, int positionCount, int sortingOrder)
+    LineRenderer CreateOrResetLine(LineRenderer line, string objectName, float width, bool loop, int positionCount, int sortingOrder)
     {
-        GameObject lineObject = new GameObject(objectName);
-        lineObject.transform.SetParent(transform, false);
+        if (line == null)
+        {
+            GameObject lineObject = new GameObject(objectName);
+            lineObject.transform.SetParent(transform, false);
 
-        LineRenderer line = lineObject.AddComponent<LineRenderer>();
-        line.useWorldSpace = true;
+            line = lineObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.alignment = LineAlignment.View;
+            line.textureMode = LineTextureMode.Stretch;
+            line.material = GetMaterial();
+        }
+
+        line.gameObject.SetActive(true);
         line.loop = loop;
         line.positionCount = Mathf.Max(2, positionCount);
         line.widthMultiplier = width;
         line.startWidth = width;
         line.endWidth = width;
-        line.numCapVertices = 8;
-        line.numCornerVertices = 6;
-        line.alignment = LineAlignment.View;
-        line.textureMode = LineTextureMode.Stretch;
+        line.numCapVertices = 5;
+        line.numCornerVertices = 4;
         line.material = GetMaterial();
         line.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
         line.sortingOrder = sortingOrder;
@@ -593,5 +769,20 @@ public sealed class SpaceBombExplosionVfx : MonoBehaviour
     static float Hash01(int index, int salt)
     {
         return Mathf.Repeat(Mathf.Sin((index * 127.1f) + (salt * 311.7f)) * 43758.5453f, 1f);
+    }
+
+    static Vector3[] GetCircleUnitPoints()
+    {
+        if (circleUnitPoints != null)
+            return circleUnitPoints;
+
+        circleUnitPoints = new Vector3[CircleSegments];
+        for (int i = 0; i < circleUnitPoints.Length; i++)
+        {
+            float angle = (Mathf.PI * 2f * i) / circleUnitPoints.Length;
+            circleUnitPoints[i] = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+        }
+
+        return circleUnitPoints;
     }
 }

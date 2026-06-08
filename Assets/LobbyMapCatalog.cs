@@ -877,6 +877,32 @@ public static class LobbyMapCatalog
         }
     }
 
+    public static bool IsAvengerPlotEnabledByDefault(string mapId)
+    {
+        return string.Equals(mapId, DeepSpaceMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, AncientSpaceMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, ToxicAreaMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, MinefieldMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, SnowFieldMapId, System.StringComparison.Ordinal);
+    }
+
+    public static int GetDefaultViperPlotChancePercent(string mapId)
+    {
+        return string.Equals(mapId, JustSpaceMapId, System.StringComparison.Ordinal)
+            ? 0
+            : RoomSettings.DefaultViperPlotChancePercent;
+    }
+
+    public static int GetDefaultArrowPlotChancePercent(string mapId)
+    {
+        return string.Equals(mapId, MinefieldMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, SnowFieldMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, DeepSpaceMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, PirateBayMapId, System.StringComparison.Ordinal)
+            ? 20
+            : RoomSettings.DefaultArrowPlotChancePercent;
+    }
+
     public static void ApplyToProperties(LobbyMapDefinition map, Hashtable props)
     {
         if (map == null || props == null)
@@ -921,6 +947,9 @@ public static class LobbyMapCatalog
         props[RoomSettings.ParallaxBackgroundKey] = GetDefaultParallaxBackgroundId(map.Id);
         props[RoomSettings.BackgroundObjectKey] = GetDefaultBackgroundObjectId(map.Id);
         props[RoomSettings.GravityWellPhysicsEnabledKey] = map.Id == GravityWellMapId;
+        props[RoomSettings.AvengerPlotEnabledKey] = IsAvengerPlotEnabledByDefault(map.Id);
+        props[RoomSettings.ViperPlotChancePercentKey] = GetDefaultViperPlotChancePercent(map.Id);
+        props[RoomSettings.ArrowPlotChancePercentKey] = GetDefaultArrowPlotChancePercent(map.Id);
         props[RoomSettings.HiddenTreasureEnabledKey] = IsHiddenTreasureEnabledByDefault(map.Id);
         props[RoomSettings.CosmicWormEnabledKey] = RoomSettings.DefaultCosmicWormEnabled;
         props[RoomSettings.NeutralRidersEnabledKey] = AreNeutralRidersEnabledByDefault(map.Id);

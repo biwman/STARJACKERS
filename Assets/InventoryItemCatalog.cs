@@ -250,6 +250,7 @@ public static class InventoryItemCatalog
     public const string TractorBeamId = "tractor_beam";
     public const string LureBeaconId = "lure_beacon";
     public const string AutoTurretId = "auto_turret";
+    public const string RocketAutoTurretId = "rocket_auto_turret";
     public const string GuidanceSystemId = "guidance_system";
     public const string TreasureScannerId = "treasure_scanner";
     public const string ShortScannerId = "short_scanner";
@@ -273,6 +274,7 @@ public static class InventoryItemCatalog
     public const string AlienAegisCoreId = "alien_aegis_core";
     public const string AlienTransmitterId = "alien_transmitter";
     public const string PirateSymbolId = "pirate_symbol";
+    public const string AvengerStartingCodesId = "avenger_starting_codes";
 
     static readonly Dictionary<string, InventoryItemDefinition> Definitions = BuildDefinitions();
     static bool iconsPrewarmed;
@@ -629,10 +631,8 @@ public static class InventoryItemCatalog
                 return 30;
             case CargoBayExtensionId:
                 return 20;
-            case StrongPlatingId:
-                return 40;
             case ShieldCapacitorId:
-                return 55;
+                return 60;
             case AegisBatteryId:
                 return 50;
             case RegenerativeShieldMatrixId:
@@ -644,6 +644,35 @@ public static class InventoryItemCatalog
             default:
                 return 0;
         }
+    }
+
+    public static int GetHpCapacityBonus(string itemId)
+    {
+        switch (itemId)
+        {
+            case StrongPlatingId:
+                return 40;
+            default:
+                return 0;
+        }
+    }
+
+    public static int GetEquippedHpCapacityBonus(string[] equipmentSlots, int shipSkinIndex)
+    {
+        if (equipmentSlots == null)
+            return 0;
+
+        int bonus = 0;
+        for (int i = 2; i <= 3; i++)
+        {
+            if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
+                continue;
+
+            string itemId = i >= 0 && i < equipmentSlots.Length ? equipmentSlots[i] : null;
+            bonus += GetHpCapacityBonus(itemId);
+        }
+
+        return bonus;
     }
 
     public static int GetEquippedShieldCapacityBonus(string[] equipmentSlots, int shipSkinIndex)
@@ -669,8 +698,9 @@ public static class InventoryItemCatalog
         switch (itemId)
         {
             case StrongPlatingId:
-            case RegenerativeShieldMatrixId:
                 return 5;
+            case RegenerativeShieldMatrixId:
+                return 10;
             case BulwarkProjectorId:
                 return 10;
             case AlienAegisCoreId:
@@ -740,11 +770,14 @@ public static class InventoryItemCatalog
     public static int GetShopBuyValueAstrons(string itemId)
     {
         InventoryItemDefinition definition = GetDefinition(itemId);
-        if (definition == null || definition.ItemType != InventoryItemType.Equipment)
+        if (definition == null)
             return 0;
 
         if (definition.ShopBuyValueAstronsOverride > 0)
             return definition.ShopBuyValueAstronsOverride;
+
+        if (definition.ItemType != InventoryItemType.Equipment)
+            return 0;
 
         int craftingCost = PlayerProfileCraftingCatalog.GetCraftingInputSellValueForOutput(itemId);
         if (craftingCost > 0)
@@ -1589,6 +1622,21 @@ public static class InventoryItemCatalog
                 ProjectFileName = "auto_turret_top_down.png",
                 SalvageOutputs = new[] { NeutralFighterSalvageId, SpaceMineWreckId }
             },
+            [RocketAutoTurretId] = new InventoryItemDefinition
+            {
+                Id = RocketAutoTurretId,
+                DisplayName = "Rocket Auto Turret",
+                ShortLabel = "RAT",
+                Description = "A single-use deployable rocket turret that anchors behind the ship and fires straight explosive missiles at hostile ships.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 3100,
+                ShopBuyValueAstronsOverride = 11800,
+                IconResourcePath = "Items/rocket_autoturret",
+                ProjectFileName = "Resources/Items/rocket_autoturret.png",
+                SalvageOutputs = new[] { DroidScrapId, RocketLauncherId, AsteroidRareId }
+            },
             [GuidanceSystemId] = new InventoryItemDefinition
             {
                 Id = GuidanceSystemId,
@@ -1608,7 +1656,7 @@ public static class InventoryItemCatalog
                 Id = TreasureScannerId,
                 DisplayName = "Treasure Scanner",
                 ShortLabel = "SCN",
-                Description = "A support-slot scanner that pings more often as the ship gets closer to unrevealed Hidden Treasure.",
+                Description = "A passive support scanner that hunts Hidden Treasure with audio pings. The signal becomes faster, louder, and higher pitched as your ship gets closer to the hidden stash.",
                 ItemType = InventoryItemType.Equipment,
                 Category = InventoryItemCategory.Support,
                 Rarity = InventoryItemRarity.VeryRare,
@@ -1624,7 +1672,7 @@ public static class InventoryItemCatalog
                 Id = ShortScannerId,
                 DisplayName = "Short Scanner",
                 ShortLabel = "SSC",
-                Description = "Activating this support scanner reveals hidden player ships and enemy bots inside nebulas, fire nebulas, and clouds for 15 seconds. Each equipped Short Scanner grants 3 uses per round.",
+                Description = "Activate to expose ships and enemy bots hiding inside nebulas, fire nebulas, and clouds for 15 seconds. Each equipped Short Scanner adds 3 scans per round.",
                 ItemType = InventoryItemType.Equipment,
                 Category = InventoryItemCategory.Support,
                 Rarity = InventoryItemRarity.Epic,
@@ -1818,7 +1866,7 @@ public static class InventoryItemCatalog
                 Id = StrongPlatingId,
                 DisplayName = "Strong Plating",
                 ShortLabel = "PLT",
-                Description = "A shield-slot hull plating that adds 40 maximum shield capacity and halves nebula and environmental damage, but slows the ship slightly.",
+                Description = "A shield-slot hull plating that adds 40 maximum HP and halves nebula and environmental damage, but slows the ship slightly.",
                 ItemType = InventoryItemType.Equipment,
                 Category = InventoryItemCategory.Shield,
                 Rarity = InventoryItemRarity.Rare,
@@ -1833,7 +1881,7 @@ public static class InventoryItemCatalog
                 Id = ShieldCapacitorId,
                 DisplayName = "Shield Capacitor",
                 ShortLabel = "CAP",
-                Description = "A high-output capacitor that adds 55 maximum shield capacity with no handling penalty.",
+                Description = "A high-output capacitor that adds 60 maximum shield capacity with no handling penalty.",
                 ItemType = InventoryItemType.Equipment,
                 Category = InventoryItemCategory.Shield,
                 Rarity = InventoryItemRarity.Uncommon,
@@ -1863,7 +1911,7 @@ public static class InventoryItemCatalog
                 Id = RegenerativeShieldMatrixId,
                 DisplayName = "Regenerative Shield Matrix",
                 ShortLabel = "RSM",
-                Description = "A shield matrix that adds 60 maximum shield capacity and slowly regenerates active shields after a quiet moment.",
+                Description = "A shield matrix that adds 60 maximum shield capacity and slowly regenerates active shields after a quiet moment, but slows the ship.",
                 ItemType = InventoryItemType.Equipment,
                 Category = InventoryItemCategory.Shield,
                 Rarity = InventoryItemRarity.Rare,
@@ -1933,6 +1981,21 @@ public static class InventoryItemCatalog
                 IconResourcePath = "Items/pirate_symbol",
                 ProjectFileName = "Resources/Items/pirate_symbol.png",
                 RequiresSafePocket = true,
+                SalvageOutputs = Array.Empty<string>()
+            },
+            [AvengerStartingCodesId] = new InventoryItemDefinition
+            {
+                Id = AvengerStartingCodesId,
+                DisplayName = "Avenger Starting Codes",
+                ShortLabel = "AVG",
+                Description = "Encrypted military launch codes for the Avenger. Carry them into Deep Space, Ancient Space, Toxic Area, Minefield or Snow Field to reveal an operational military installation. If the Avenger escape fails, the codes are lost.",
+                ItemType = InventoryItemType.Quest,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 0,
+                ShopBuyValueAstronsOverride = 7000,
+                IconResourcePath = "Items/avenger_starting_codes",
+                ProjectFileName = "Resources/Items/avenger_starting_codes.png",
                 SalvageOutputs = Array.Empty<string>()
             }
         };
