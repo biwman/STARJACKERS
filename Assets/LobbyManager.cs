@@ -32,6 +32,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     const float LeftColumnTopY = -220f;
     const float RightTableWidth = 1120f;
     const float RightTableHeight = 620f;
+    const float MapEffectChanceTableHeight = 270f;
     const float RightTableX = 330f;
     const float RightTableY = -290f;
     const float MapSelectionButtonX = 500f;
@@ -45,6 +46,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     const float EnemyNameColumnWidth = 180f;
     const float EnemyColumnWidth = 98f;
     const float EnemyRowHeight = 56f;
+    const float MapEffectChanceNameColumnWidth = 260f;
+    const float MapEffectChanceColumnWidth = 128f;
+    const float MapEffectChanceRowHeight = 46f;
     const float FullScreenSideMargin = 34f;
     const float FullScreenTopMargin = 24f;
     const float FullScreenBottomMargin = 34f;
@@ -157,6 +161,19 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     static readonly int[] MapBackgroundOptions = Enumerable.Range(1, RoomSettings.MaxMapBackground).ToArray();
     static readonly int[] ObstacleHpOptions = { 50, 100, 150, 200, 250, 300, 350, 400, 450, 500 };
     static readonly int[] ObstacleSizePercentOptions = { 50, 100, 150, 200, 250, 300, 350, 400, 450, 500 };
+    static readonly string[] MapEffectChanceRuleIds =
+    {
+        RoomSettings.CrazyEnemiesRuleId,
+        RoomSettings.FogOfWarRuleId,
+        RoomSettings.PirateBaseRuleId,
+        RoomSettings.AsteroidShowerRuleId
+    };
+    static readonly string[] MapEffectChanceColumnLabels = { "CE", "FoW", "PB", "AS" };
+    static readonly int[] MapEffectChancePercentOptions =
+    {
+        0, 1, 5, 10, 15, 20, 25, 30, 35, 40, 45,
+        50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100
+    };
     static readonly int[] ExtractionCountOptions = { 1, 2, 3, 4 };
     static readonly string[] ExtractionTypeOptions = { RoomSettings.ExtractionTypePortal, RoomSettings.ExtractionTypeCarrier, RoomSettings.ExtractionTypeSpaceCity };
     static readonly int[] RepairBayCountOptions = { 0, 1, 2 };
@@ -395,10 +412,14 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     bool hasRecordedCurrentRound = false;
     readonly Dictionary<string, Button> enemySettingButtons = new Dictionary<string, Button>();
     readonly Dictionary<string, TMP_Text> enemySettingTexts = new Dictionary<string, TMP_Text>();
+    readonly Dictionary<string, Button> mapEffectChanceButtons = new Dictionary<string, Button>();
+    readonly Dictionary<string, TMP_Text> mapEffectChanceTexts = new Dictionary<string, TMP_Text>();
     readonly Dictionary<string, GameObject> gameplayHudObjectsByName = new Dictionary<string, GameObject>();
     readonly Dictionary<string, RectTransform> leftSectionContainers = new Dictionary<string, RectTransform>();
     readonly Dictionary<string, TMP_Text> enemyRowLabels = new Dictionary<string, TMP_Text>();
     readonly Dictionary<string, TMP_Text> enemyHeaderLabels = new Dictionary<string, TMP_Text>();
+    readonly Dictionary<string, TMP_Text> mapEffectChanceRowLabels = new Dictionary<string, TMP_Text>();
+    readonly Dictionary<string, TMP_Text> mapEffectChanceHeaderLabels = new Dictionary<string, TMP_Text>();
     readonly Dictionary<int, Sprite> mapBackgroundPreviewCache = new Dictionary<int, Sprite>();
     readonly Dictionary<string, Sprite> mapSpecificPreviewCache = new Dictionary<string, Sprite>();
     readonly List<Button> fullscreenMapTileButtons = new List<Button>();
@@ -408,6 +429,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     ScrollRect enemyTableScrollRect;
     RectTransform enemyTableViewportRect;
     RectTransform enemyTableRootRect;
+    ScrollRect mapEffectChanceTableScrollRect;
+    RectTransform mapEffectChanceTableViewportRect;
+    RectTransform mapEffectChanceTableRootRect;
     RectTransform weaponSettingsRootRect;
     GameObject mapSelectionOverlayObject;
     TMP_Text mapSelectionOverlayTitleText;
@@ -417,6 +441,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     readonly List<Button> mapSelectionTileButtons = new List<Button>();
     bool leftSettingsScrollInitialized;
     bool enemyTableScrollInitialized;
+    bool mapEffectChanceTableScrollInitialized;
     LobbyScreen currentScreen = LobbyScreen.MapSelection;
     LobbyScreen previousMapScreenBeforeDeveloperSettings = LobbyScreen.MapSelection;
     string selectedMapId;
@@ -1573,6 +1598,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                 enemyTableViewportRect.gameObject.SetActive(false);
             if (enemyTableRootRect != null)
                 enemyTableRootRect.gameObject.SetActive(false);
+            if (mapEffectChanceTableViewportRect != null)
+                mapEffectChanceTableViewportRect.gameObject.SetActive(false);
+            if (mapEffectChanceTableRootRect != null)
+                mapEffectChanceTableRootRect.gameObject.SetActive(false);
             if (weaponSettingsRootRect != null)
                 weaponSettingsRootRect.gameObject.SetActive(false);
             return;
@@ -1626,6 +1655,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             enemyTableViewportRect.gameObject.SetActive(showDeveloperSettings);
         if (enemyTableRootRect != null)
             enemyTableRootRect.gameObject.SetActive(showDeveloperSettings);
+        if (mapEffectChanceTableViewportRect != null)
+            mapEffectChanceTableViewportRect.gameObject.SetActive(showDeveloperSettings);
+        if (mapEffectChanceTableRootRect != null)
+            mapEffectChanceTableRootRect.gameObject.SetActive(showDeveloperSettings);
         if (weaponSettingsRootRect != null)
             weaponSettingsRootRect.gameObject.SetActive(false);
         if (gunSetupSettingButton != null)
@@ -2297,6 +2330,29 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             enemyTableRootRect.sizeDelta = new Vector2(RightTableWidth, ResolveEnemyTableContentHeight());
         }
 
+        RectTransform mapEffectChanceLayoutRect = mapEffectChanceTableViewportRect != null ? mapEffectChanceTableViewportRect : mapEffectChanceTableRootRect;
+        if (mapEffectChanceLayoutRect != null)
+        {
+            if (mapEffectChanceLayoutRect.transform.parent != developerSettingsRootObject.transform)
+                mapEffectChanceLayoutRect.transform.SetParent(developerSettingsRootObject.transform, false);
+            mapEffectChanceLayoutRect.anchorMin = new Vector2(0f, 1f);
+            mapEffectChanceLayoutRect.anchorMax = new Vector2(0f, 1f);
+            mapEffectChanceLayoutRect.pivot = new Vector2(0f, 1f);
+            mapEffectChanceLayoutRect.anchoredPosition = new Vector2(740f, -760f);
+            mapEffectChanceLayoutRect.sizeDelta = new Vector2(RightTableWidth, MapEffectChanceTableHeight);
+        }
+
+        if (mapEffectChanceTableRootRect != null && mapEffectChanceTableViewportRect != null)
+        {
+            if (mapEffectChanceTableRootRect.transform.parent != mapEffectChanceTableViewportRect.transform)
+                mapEffectChanceTableRootRect.transform.SetParent(mapEffectChanceTableViewportRect.transform, false);
+            mapEffectChanceTableRootRect.anchorMin = new Vector2(0f, 1f);
+            mapEffectChanceTableRootRect.anchorMax = new Vector2(0f, 1f);
+            mapEffectChanceTableRootRect.pivot = new Vector2(0f, 1f);
+            mapEffectChanceTableRootRect.anchoredPosition = Vector2.zero;
+            mapEffectChanceTableRootRect.sizeDelta = new Vector2(RightTableWidth, ResolveMapEffectChanceTableContentHeight());
+        }
+
         if (weaponSettingsRootRect != null)
         {
             if (weaponSettingsRootRect.transform.parent != developerSettingsRootObject.transform)
@@ -2389,6 +2445,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         {
             GameplayHudVisibility.ResetSuppression();
             HideLobby();
+            RoundWarmupService.ShowRoundRuleStartAnnouncementIfNeeded();
         }
         else if (RoomSettings.GetSessionState() == RoomSettings.SessionStatePreparing)
         {
@@ -2574,6 +2631,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         {
             GameplayHudVisibility.ResetSuppression();
             HideLobby();
+            RoundWarmupService.ShowRoundRuleStartAnnouncementIfNeeded();
             if (!hasRecordedCurrentRound)
             {
                 hasRecordedCurrentRound = true;
@@ -3001,6 +3059,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         LayoutLeftSectionButtons();
         EnsureEnemySettingsUiExists();
+        EnsureMapEffectChanceSettingsUiExists();
     }
 
     void EnsureLobbyNavigationUiExists()
@@ -3603,6 +3662,208 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     Vector2 GetEnemyCellPosition(int columnIndex, float rowY)
     {
         return new Vector2(EnemyNameColumnWidth + 18f + (columnIndex * EnemyColumnWidth), rowY);
+    }
+
+    void EnsureMapEffectChanceSettingsUiExists()
+    {
+        EnsureMapEffectChanceTableUiExists();
+
+        IReadOnlyList<LobbyMapDefinition> maps = LobbyMapCatalog.AllMaps;
+        for (int mapIndex = 0; mapIndex < maps.Count; mapIndex++)
+        {
+            LobbyMapDefinition map = maps[mapIndex];
+            if (map == null)
+                continue;
+
+            float rowY = -104f - (mapIndex * MapEffectChanceRowHeight);
+            EnsureMapEffectChanceRowLabel(map, new Vector2(26f, rowY));
+
+            for (int ruleIndex = 0; ruleIndex < MapEffectChanceRuleIds.Length; ruleIndex++)
+            {
+                string mapId = map.Id;
+                string ruleId = MapEffectChanceRuleIds[ruleIndex];
+                EnsureMapEffectChanceButton(mapId, ruleId, GetMapEffectChanceCellPosition(ruleIndex, rowY), () => CycleMapEffectChancePercent(mapId, ruleId));
+            }
+        }
+
+        UpdateMapEffectChanceTableContentHeight();
+    }
+
+    void EnsureMapEffectChanceTableUiExists()
+    {
+        Transform desiredParent = developerSettingsRootObject != null ? developerSettingsRootObject.transform : transform;
+
+        if (mapEffectChanceTableViewportRect == null || !mapEffectChanceTableViewportRect.gameObject.scene.IsValid())
+        {
+            GameObject viewportObject = FindOrCreateChild(developerSettingsRootObject != null ? developerSettingsRootObject : gameObject, "MapEffectChanceViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
+            mapEffectChanceTableViewportRect = viewportObject.GetComponent<RectTransform>();
+        }
+
+        if (mapEffectChanceTableViewportRect.transform.parent != desiredParent)
+            mapEffectChanceTableViewportRect.transform.SetParent(desiredParent, false);
+
+        mapEffectChanceTableViewportRect.anchorMin = new Vector2(0.5f, 1f);
+        mapEffectChanceTableViewportRect.anchorMax = new Vector2(0.5f, 1f);
+        mapEffectChanceTableViewportRect.pivot = new Vector2(0.5f, 1f);
+        mapEffectChanceTableViewportRect.anchoredPosition = new Vector2(RightTableX, RightTableY - RightTableHeight - 24f);
+        mapEffectChanceTableViewportRect.sizeDelta = new Vector2(RightTableWidth, MapEffectChanceTableHeight);
+
+        Image viewportImage = mapEffectChanceTableViewportRect.GetComponent<Image>();
+        if (viewportImage != null)
+        {
+            viewportImage.color = new Color(0f, 0f, 0f, 0f);
+            viewportImage.raycastTarget = true;
+        }
+
+        mapEffectChanceTableScrollRect = mapEffectChanceTableViewportRect.GetComponent<ScrollRect>();
+        mapEffectChanceTableScrollRect.horizontal = false;
+        mapEffectChanceTableScrollRect.vertical = true;
+        mapEffectChanceTableScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        mapEffectChanceTableScrollRect.scrollSensitivity = 32f;
+        mapEffectChanceTableScrollRect.viewport = mapEffectChanceTableViewportRect;
+
+        if (mapEffectChanceTableRootRect == null || !mapEffectChanceTableRootRect.gameObject.scene.IsValid())
+        {
+            Transform tableTransform = mapEffectChanceTableViewportRect.transform.Find("MapEffectChanceTable");
+            if (tableTransform == null && desiredParent != null)
+                tableTransform = desiredParent.Find("MapEffectChanceTable");
+
+            GameObject tableObject = tableTransform != null
+                ? tableTransform.gameObject
+                : new GameObject("MapEffectChanceTable", typeof(RectTransform), typeof(Image));
+
+            mapEffectChanceTableRootRect = tableObject.GetComponent<RectTransform>();
+            if (mapEffectChanceTableRootRect == null)
+                mapEffectChanceTableRootRect = tableObject.AddComponent<RectTransform>();
+        }
+
+        if (mapEffectChanceTableRootRect.transform.parent != mapEffectChanceTableViewportRect.transform)
+            mapEffectChanceTableRootRect.transform.SetParent(mapEffectChanceTableViewportRect.transform, false);
+
+        mapEffectChanceTableRootRect.anchorMin = new Vector2(0f, 1f);
+        mapEffectChanceTableRootRect.anchorMax = new Vector2(0f, 1f);
+        mapEffectChanceTableRootRect.pivot = new Vector2(0f, 1f);
+        mapEffectChanceTableRootRect.anchoredPosition = Vector2.zero;
+        mapEffectChanceTableRootRect.sizeDelta = new Vector2(RightTableWidth, ResolveMapEffectChanceTableContentHeight());
+
+        Image bg = mapEffectChanceTableRootRect.GetComponent<Image>();
+        bg.color = new Color(0f, 0f, 0f, 0f);
+        bg.raycastTarget = false;
+
+        mapEffectChanceTableScrollRect.content = mapEffectChanceTableRootRect;
+
+        EnsureMapEffectChanceHeaderLabel("MapEffectChanceTableTitle", "ROUND RULE CHANCES", new Vector2(24f, -18f), new Vector2(340f, 30f), 24f, TextAlignmentOptions.Left);
+        EnsureMapEffectChanceHeaderLabel("MapEffectChanceHeader_MAP", "MAP", new Vector2(26f, -58f), new Vector2(MapEffectChanceNameColumnWidth - 12f, 26f), 14f, TextAlignmentOptions.Left);
+        for (int i = 0; i < MapEffectChanceColumnLabels.Length; i++)
+        {
+            EnsureMapEffectChanceHeaderLabel(
+                "MapEffectChanceHeader_" + MapEffectChanceRuleIds[i],
+                MapEffectChanceColumnLabels[i],
+                GetMapEffectChanceHeaderPosition(i),
+                new Vector2(MapEffectChanceColumnWidth - 10f, 26f),
+                14f,
+                TextAlignmentOptions.Center);
+        }
+    }
+
+    void EnsureMapEffectChanceButton(string mapId, string ruleId, Vector2 anchoredPosition, UnityEngine.Events.UnityAction callback)
+    {
+        string key = GetMapEffectChanceUiKey(mapId, ruleId);
+        string buttonName = "MapEffectChanceButton_" + key;
+        string textName = "MapEffectChanceText_" + key;
+
+        mapEffectChanceButtons.TryGetValue(key, out Button existingButton);
+        mapEffectChanceTexts.TryGetValue(key, out TMP_Text existingText);
+
+        Button button = EnsureSettingButton(ref existingText, existingButton, buttonName, textName, anchoredPosition, callback);
+        if (button != null && mapEffectChanceTableRootRect != null)
+        {
+            button.transform.SetParent(mapEffectChanceTableRootRect, false);
+            RectTransform rect = button.GetComponent<RectTransform>();
+            if (rect != null)
+            {
+                rect.anchorMin = new Vector2(0f, 1f);
+                rect.anchorMax = new Vector2(0f, 1f);
+                rect.pivot = new Vector2(0f, 1f);
+                rect.anchoredPosition = anchoredPosition;
+                rect.sizeDelta = new Vector2(MapEffectChanceColumnWidth - 10f, 38f);
+            }
+        }
+
+        mapEffectChanceButtons[key] = button;
+        mapEffectChanceTexts[key] = existingText;
+    }
+
+    string GetMapEffectChanceUiKey(string mapId, string ruleId)
+    {
+        return (string.IsNullOrWhiteSpace(mapId) ? "unknown" : mapId.Trim()) + "_" +
+               (string.IsNullOrWhiteSpace(ruleId) ? "unknown" : ruleId.Trim());
+    }
+
+    Vector2 GetMapEffectChanceCellPosition(int columnIndex, float rowY)
+    {
+        return new Vector2(MapEffectChanceNameColumnWidth + 18f + (columnIndex * MapEffectChanceColumnWidth), rowY);
+    }
+
+    Vector2 GetMapEffectChanceHeaderPosition(int columnIndex)
+    {
+        return new Vector2(MapEffectChanceNameColumnWidth + 18f + (columnIndex * MapEffectChanceColumnWidth), -58f);
+    }
+
+    float ResolveMapEffectChanceTableContentHeight()
+    {
+        float rowsHeight = 118f + LobbyMapCatalog.AllMaps.Count * MapEffectChanceRowHeight + 20f;
+        return Mathf.Max(MapEffectChanceTableHeight, rowsHeight);
+    }
+
+    void UpdateMapEffectChanceTableContentHeight()
+    {
+        if (mapEffectChanceTableRootRect == null)
+            return;
+
+        mapEffectChanceTableRootRect.sizeDelta = new Vector2(RightTableWidth, ResolveMapEffectChanceTableContentHeight());
+        if (mapEffectChanceTableScrollRect != null && !mapEffectChanceTableScrollInitialized)
+        {
+            Canvas.ForceUpdateCanvases();
+            mapEffectChanceTableScrollRect.verticalNormalizedPosition = 1f;
+            mapEffectChanceTableScrollInitialized = true;
+        }
+    }
+
+    void EnsureMapEffectChanceRowLabel(LobbyMapDefinition map, Vector2 anchoredPosition)
+    {
+        if (map == null || mapEffectChanceTableRootRect == null)
+            return;
+
+        if (!mapEffectChanceRowLabels.TryGetValue(map.Id, out TMP_Text label) || label == null || !label.gameObject.scene.IsValid())
+        {
+            label = CreateStandaloneLabel(mapEffectChanceTableRootRect.transform, "MapEffectChanceRowLabel_" + map.Id, map.DisplayName.ToUpperInvariant(), anchoredPosition, new Vector2(MapEffectChanceNameColumnWidth - 12f, 28f), 16f, TextAlignmentOptions.Left);
+            mapEffectChanceRowLabels[map.Id] = label;
+        }
+
+        RectTransform rect = label.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = anchoredPosition;
+    }
+
+    TMP_Text EnsureMapEffectChanceHeaderLabel(string key, string value, Vector2 anchoredPosition, Vector2 size, float fontSize, TextAlignmentOptions alignment)
+    {
+        if (!mapEffectChanceHeaderLabels.TryGetValue(key, out TMP_Text label) || label == null || !label.gameObject.scene.IsValid())
+        {
+            label = CreateStandaloneLabel(mapEffectChanceTableRootRect.transform, key, value, anchoredPosition, size, fontSize, alignment);
+            mapEffectChanceHeaderLabels[key] = label;
+        }
+
+        label.text = value;
+        RectTransform rect = label.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = anchoredPosition;
+        rect.sizeDelta = size;
+        return label;
     }
 
     void EnsureSettingsLayoutContainers()
@@ -4266,6 +4527,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (EnsureDefaultMapEffectChanceProperties(props))
+            changed = true;
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.SpaceJunkDensityKey))
         {
             props[RoomSettings.SpaceJunkDensityKey] = RoomSettings.DefaultSpaceJunkDensity;
@@ -4599,6 +4863,41 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         {
             PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         }
+    }
+
+    bool EnsureDefaultMapEffectChanceProperties(Hashtable props)
+    {
+        if (props == null || PhotonNetwork.CurrentRoom == null)
+            return false;
+
+        bool changed = false;
+        string[] ruleIds =
+        {
+            RoomSettings.CrazyEnemiesRuleId,
+            RoomSettings.FogOfWarRuleId,
+            RoomSettings.PirateBaseRuleId,
+            RoomSettings.AsteroidShowerRuleId
+        };
+
+        IReadOnlyList<LobbyMapDefinition> maps = LobbyMapCatalog.AllMaps;
+        for (int mapIndex = 0; mapIndex < maps.Count; mapIndex++)
+        {
+            LobbyMapDefinition map = maps[mapIndex];
+            if (map == null)
+                continue;
+
+            for (int ruleIndex = 0; ruleIndex < ruleIds.Length; ruleIndex++)
+            {
+                string key = RoomSettings.GetMapEffectChanceKey(map.Id, ruleIds[ruleIndex]);
+                if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(key))
+                    continue;
+
+                props[key] = RoomSettings.DefaultMapEffectChancePercent;
+                changed = true;
+            }
+        }
+
+        return changed;
     }
 
     Button EnsureSettingButton(ref TMP_Text textField, Button existingButton, string buttonName, string textName, Vector2 anchoredPosition, UnityEngine.Events.UnityAction callback)
@@ -4955,6 +5254,34 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RefreshHostSettingsUi();
         RefreshMapDetailsUi();
+    }
+
+    void CycleMapEffectChancePercent(string mapId, string ruleId)
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        int current = RoomSettings.GetMapEffectChancePercent(mapId, ruleId);
+        int next = GetNextMapEffectChancePercent(current);
+        Hashtable props = new Hashtable
+        {
+            [RoomSettings.GetMapEffectChanceKey(mapId, ruleId)] = next
+        };
+
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
+    int GetNextMapEffectChancePercent(int current)
+    {
+        current = RoomSettings.NormalizeMapEffectChancePercent(current);
+        for (int i = 0; i < MapEffectChancePercentOptions.Length; i++)
+        {
+            if (MapEffectChancePercentOptions[i] > current)
+                return MapEffectChancePercentOptions[i];
+        }
+
+        return MapEffectChancePercentOptions[0];
     }
 
     double GetNextUtcHourStartMs()
@@ -5926,6 +6253,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RefreshLobbyMapSelectionUi(isHost);
         RefreshLobbyNavigationButton();
         RefreshEnemySettingTexts(isHost);
+        RefreshMapEffectChanceSettingTexts(isHost);
         RefreshLobbyTopBar();
         RefreshLobbyScreenContent();
         if (ShouldShowFullScreenLobby())
@@ -6009,6 +6337,24 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         }
     }
 
+    void RefreshMapEffectChanceSettingTexts(bool isHost)
+    {
+        IReadOnlyList<LobbyMapDefinition> maps = LobbyMapCatalog.AllMaps;
+        for (int mapIndex = 0; mapIndex < maps.Count; mapIndex++)
+        {
+            LobbyMapDefinition map = maps[mapIndex];
+            if (map == null)
+                continue;
+
+            for (int ruleIndex = 0; ruleIndex < MapEffectChanceRuleIds.Length; ruleIndex++)
+            {
+                string ruleId = MapEffectChanceRuleIds[ruleIndex];
+                SetMapEffectChanceSettingText(map.Id, ruleId, FormatMapEffectChancePercent(RoomSettings.GetMapEffectChancePercent(map.Id, ruleId)));
+                SetSettingButtonState(GetMapEffectChanceButton(map.Id, ruleId), isHost);
+            }
+        }
+    }
+
     string FormatEnemySpeed(float value)
     {
         if (Mathf.Abs(value - 0.25f) < 0.01f)
@@ -6075,6 +6421,23 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     void SetEnemySettingText(EnemyBotKind kind, string suffix, string text)
     {
         if (enemySettingTexts.TryGetValue(GetEnemySettingUiKey(kind, suffix), out TMP_Text textField) && textField != null)
+            textField.text = text;
+    }
+
+    string FormatMapEffectChancePercent(int percent)
+    {
+        return RoomSettings.NormalizeMapEffectChancePercent(percent) + "%";
+    }
+
+    Button GetMapEffectChanceButton(string mapId, string ruleId)
+    {
+        mapEffectChanceButtons.TryGetValue(GetMapEffectChanceUiKey(mapId, ruleId), out Button button);
+        return button;
+    }
+
+    void SetMapEffectChanceSettingText(string mapId, string ruleId, string text)
+    {
+        if (mapEffectChanceTexts.TryGetValue(GetMapEffectChanceUiKey(mapId, ruleId), out TMP_Text textField) && textField != null)
             textField.text = text;
     }
 
@@ -6475,6 +6838,20 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return false;
     }
 
+    bool ContainsMapEffectChanceRoomSettingChange(Hashtable changedProps)
+    {
+        if (changedProps == null)
+            return false;
+
+        foreach (System.Collections.DictionaryEntry entry in changedProps)
+        {
+            if (entry.Key is string key && RoomSettings.IsMapEffectChanceKey(key))
+                return true;
+        }
+
+        return false;
+    }
+
     bool ContainsLobbySettingChange(Hashtable changedProps)
     {
         if (changedProps == null)
@@ -6516,6 +6893,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.AsteroidShowerModeKey) ||
                changedProps.ContainsKey(RoomSettings.AsteroidShowerStartUtcMsKey) ||
                changedProps.ContainsKey(RoomSettings.AsteroidShowerActiveKey) ||
+               ContainsMapEffectChanceRoomSettingChange(changedProps) ||
                changedProps.ContainsKey(RoomSettings.SpaceJunkDensityKey) ||
                changedProps.ContainsKey(RoomSettings.ContainersDensityKey) ||
                changedProps.ContainsKey(RoomSettings.ArtifactAsteroidsDensityKey) ||

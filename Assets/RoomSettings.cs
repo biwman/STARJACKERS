@@ -34,6 +34,11 @@ public static class RoomSettings
     public const string AsteroidShowerModeKey = "mapEffect.asteroidShower.mode";
     public const string AsteroidShowerStartUtcMsKey = "mapEffect.asteroidShower.startUtcMs";
     public const string AsteroidShowerActiveKey = "mapEffect.asteroidShower.active";
+    public const string MapEffectChanceKeyPrefix = "mapEffectChance.";
+    public const string CrazyEnemiesRuleId = "CE";
+    public const string FogOfWarRuleId = "FoW";
+    public const string PirateBaseRuleId = "PB";
+    public const string AsteroidShowerRuleId = "AS";
     public const string SpaceJunkDensityKey = "spaceJunkDensity";
     public const string ContainersDensityKey = "containersDensity";
     public const string ArtifactAsteroidsDensityKey = "artifactAsteroidsDensity";
@@ -238,7 +243,8 @@ public static class RoomSettings
     public const string MapEffectModeOff = "off";
     public const string MapEffectModeAlwaysOn = "always_on";
     public const string MapEffectModeUtcStart = "utc_start";
-    public const string DefaultMapEffectMode = MapEffectModeOff;
+    public const string DefaultMapEffectMode = MapEffectModeAlwaysOn;
+    public const int DefaultMapEffectChancePercent = 5;
     public const double MapEffectActivationWindowMs = 2d * 60d * 60d * 1000d;
     public const string SpaceJunkDensityNone = "none";
     public const string SpaceJunkDensityLow = "low";
@@ -1669,6 +1675,30 @@ public static class RoomSettings
         return -1d;
     }
 
+    public static string GetMapEffectChanceKey(string mapId, string ruleId)
+    {
+        return MapEffectChanceKeyPrefix +
+               NormalizeMapEffectChanceKeyPart(mapId) +
+               "." +
+               NormalizeMapEffectChanceKeyPart(ruleId);
+    }
+
+    public static bool IsMapEffectChanceKey(string key)
+    {
+        return !string.IsNullOrWhiteSpace(key) &&
+               key.StartsWith(MapEffectChanceKeyPrefix, System.StringComparison.Ordinal);
+    }
+
+    public static int GetMapEffectChancePercent(string mapId, string ruleId)
+    {
+        return GetInt(GetMapEffectChanceKey(mapId, ruleId), DefaultMapEffectChancePercent, 0, 100);
+    }
+
+    public static int NormalizeMapEffectChancePercent(int percent)
+    {
+        return Mathf.Clamp(percent, 0, 100);
+    }
+
     public static bool ShouldMapEffectActivate(string modeKey, string startKey, double roundStartUtcMs)
     {
         string mode = GetMapEffectMode(modeKey);
@@ -1684,6 +1714,27 @@ public static class RoomSettings
 
         return roundStartUtcMs >= startUtcMs &&
                roundStartUtcMs <= startUtcMs + MapEffectActivationWindowMs;
+    }
+
+    public static bool ShouldMapEffectActivateForRound(string modeKey, string startKey, string mapId, string ruleId, double roundStartUtcMs)
+    {
+        string mode = GetMapEffectMode(modeKey);
+        if (mode == MapEffectModeAlwaysOn)
+        {
+            int chancePercent = GetMapEffectChancePercent(mapId, ruleId);
+            if (chancePercent <= 0)
+                return false;
+
+            if (chancePercent >= 100)
+                return true;
+
+            return UnityEngine.Random.Range(0, 100) < chancePercent;
+        }
+
+        if (mode != MapEffectModeUtcStart)
+            return false;
+
+        return ShouldMapEffectActivate(modeKey, startKey, roundStartUtcMs);
     }
 
     public static bool IsCrazyEnemiesActive()
@@ -1714,6 +1765,9 @@ public static class RoomSettings
         if (GetSessionState() != SessionStateInLobby)
             return false;
 
+        if (GetMapEffectMode(PirateBaseModeKey) != MapEffectModeUtcStart)
+            return false;
+
         return ShouldMapEffectActivate(
             PirateBaseModeKey,
             PirateBaseStartUtcMsKey,
@@ -1733,6 +1787,14 @@ public static class RoomSettings
         }
 
         return false;
+    }
+
+    static string NormalizeMapEffectChanceKeyPart(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "unknown";
+
+        return value.Trim().Replace(" ", "_");
     }
 
     public static string GetGunSetupRoomKey(string weaponId)

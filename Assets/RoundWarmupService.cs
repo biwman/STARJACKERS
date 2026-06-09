@@ -22,6 +22,12 @@ public sealed class RoundWarmupService : MonoBehaviour
     const string ArtifactAsteroidLayoutKey = ArtifactAsteroidSpawner.LayoutKey;
     const string LoneShipModeStartTimeKey = "loneShipModeStartTime";
     const float MaxNetworkWarmupWaitSeconds = 5f;
+    const float RoundRuleAnnouncementMaxCurtainWaitSeconds = 8.6f;
+    const float RoundRuleAnnouncementSeconds = 3.4f;
+    const string CrazyEnemiesStartAnnouncement = "Enemies are ruthless here...";
+    const string FogOfWarStartAnnouncement = "The space is so dark...";
+    const string PirateBaseStartAnnouncement = "Something is lurking for you...";
+    const string AsteroidShowerStartAnnouncement = "Watch out! Meteors incoming!";
 
     static readonly string[] PhotonPrefabResourcePaths =
     {
@@ -85,6 +91,8 @@ public sealed class RoundWarmupService : MonoBehaviour
     string readyMarkedRoundToken = string.Empty;
     string displayedCurtainRoundToken = string.Empty;
     string committedRoundToken = string.Empty;
+    string announcedRoundRuleToken = string.Empty;
+    Coroutine roundRuleAnnouncementRoutine;
     bool warmupRunning;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -120,6 +128,12 @@ public sealed class RoundWarmupService : MonoBehaviour
             observedRoundToken = roundToken;
             readyMarkedRoundToken = string.Empty;
             committedRoundToken = string.Empty;
+            announcedRoundRuleToken = string.Empty;
+            if (roundRuleAnnouncementRoutine != null)
+            {
+                StopCoroutine(roundRuleAnnouncementRoutine);
+                roundRuleAnnouncementRoutine = null;
+            }
             ResetObservedRoundState();
             MarkLocalWarmupPending(roundToken);
         }
@@ -208,6 +222,61 @@ public sealed class RoundWarmupService : MonoBehaviour
     public static string GetCurrentDisplayToken()
     {
         return TryGetCurrentWarmupToken(out string token) ? token : string.Empty;
+    }
+
+    public static void ShowRoundRuleStartAnnouncementIfNeeded()
+    {
+        EnsureInstance();
+
+        if (instance == null || !IsRoomGameStarted())
+            return;
+
+        string message = GetRoundRuleStartAnnouncement();
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+
+        string token = GetCurrentDisplayToken();
+        if (string.IsNullOrWhiteSpace(token))
+            token = PhotonNetwork.CurrentRoom != null ? PhotonNetwork.CurrentRoom.Name : "round";
+
+        if (string.Equals(instance.announcedRoundRuleToken, token, StringComparison.Ordinal))
+            return;
+
+        instance.announcedRoundRuleToken = token;
+        if (instance.roundRuleAnnouncementRoutine != null)
+            instance.StopCoroutine(instance.roundRuleAnnouncementRoutine);
+
+        instance.roundRuleAnnouncementRoutine = instance.StartCoroutine(instance.ShowRoundRuleStartAnnouncementRoutine(token, message));
+    }
+
+    static string GetRoundRuleStartAnnouncement()
+    {
+        if (RoomSettings.IsCrazyEnemiesActive())
+            return CrazyEnemiesStartAnnouncement;
+
+        if (RoomSettings.IsFogOfWarActive())
+            return FogOfWarStartAnnouncement;
+
+        if (RoomSettings.IsPirateBaseActive())
+            return PirateBaseStartAnnouncement;
+
+        if (RoomSettings.IsAsteroidShowerActive())
+            return AsteroidShowerStartAnnouncement;
+
+        return string.Empty;
+    }
+
+    IEnumerator ShowRoundRuleStartAnnouncementRoutine(string token, string message)
+    {
+        float startedAt = Time.unscaledTime;
+        while (RoundStartCurtainUI.IsVisible() && Time.unscaledTime - startedAt < RoundRuleAnnouncementMaxCurtainWaitSeconds)
+            yield return null;
+
+        roundRuleAnnouncementRoutine = null;
+        if (!IsRoomGameStarted() || !string.Equals(GetCurrentDisplayToken(), token, StringComparison.Ordinal))
+            yield break;
+
+        RoundAnnouncementUI.Show(message, RoundRuleAnnouncementSeconds);
     }
 
     public static bool IsRoundPreparing()
@@ -373,16 +442,13 @@ public sealed class RoundWarmupService : MonoBehaviour
     static Hashtable BuildRoundStartProperties()
     {
         double roundStartUtcMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        return new Hashtable
+        string selectedMapId = RoomSettings.GetSelectedLobbyMapId();
+        Hashtable props = new Hashtable
         {
             ["gameStarted"] = true,
             [RoomSettings.StartTimeKey] = PhotonNetwork.Time,
             [RoomSettings.RoundEndUtcMsKey] = roundStartUtcMs + (RoomSettings.GetRoundDuration() * 1000d),
             [RoomSettings.SessionStateKey] = RoomSettings.SessionStateInPlay,
-            [RoomSettings.CrazyEnemiesActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, roundStartUtcMs),
-            [RoomSettings.FogOfWarActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, roundStartUtcMs),
-            [RoomSettings.PirateBaseActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, roundStartUtcMs),
-            [RoomSettings.AsteroidShowerActiveKey] = RoomSettings.ShouldMapEffectActivate(RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, roundStartUtcMs),
             [LoneShipModeStartTimeKey] = -1d,
             [GameTimer.EvacuationPauseUntilKey] = -1d,
             [GameTimer.EvacuationPauseRemainingKey] = -1f,
@@ -404,6 +470,43 @@ public sealed class RoundWarmupService : MonoBehaviour
             [ScienceStationLayoutKey] = string.Empty,
             [ArtifactAsteroidLayoutKey] = string.Empty
         };
+
+        ApplySingleRoundRuleStartProperties(props, selectedMapId, roundStartUtcMs);
+        return props;
+    }
+
+    static void ApplySingleRoundRuleStartProperties(Hashtable props, string selectedMapId, double roundStartUtcMs)
+    {
+        if (props == null)
+            return;
+
+        props[RoomSettings.CrazyEnemiesActiveKey] = false;
+        props[RoomSettings.FogOfWarActiveKey] = false;
+        props[RoomSettings.PirateBaseActiveKey] = false;
+        props[RoomSettings.AsteroidShowerActiveKey] = false;
+
+        List<string> activeCandidates = new List<string>(4);
+        AddRoundRuleCandidate(activeCandidates, RoomSettings.CrazyEnemiesActiveKey, RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, selectedMapId, RoomSettings.CrazyEnemiesRuleId, roundStartUtcMs);
+        AddRoundRuleCandidate(activeCandidates, RoomSettings.FogOfWarActiveKey, RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, selectedMapId, RoomSettings.FogOfWarRuleId, roundStartUtcMs);
+        AddRoundRuleCandidate(activeCandidates, RoomSettings.PirateBaseActiveKey, RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, selectedMapId, RoomSettings.PirateBaseRuleId, roundStartUtcMs);
+        AddRoundRuleCandidate(activeCandidates, RoomSettings.AsteroidShowerActiveKey, RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, selectedMapId, RoomSettings.AsteroidShowerRuleId, roundStartUtcMs);
+
+        if (activeCandidates.Count <= 0)
+            return;
+
+        string chosenActiveKey = activeCandidates.Count == 1
+            ? activeCandidates[0]
+            : activeCandidates[UnityEngine.Random.Range(0, activeCandidates.Count)];
+        props[chosenActiveKey] = true;
+    }
+
+    static void AddRoundRuleCandidate(List<string> activeCandidates, string activeKey, string modeKey, string startKey, string selectedMapId, string ruleId, double roundStartUtcMs)
+    {
+        if (activeCandidates == null)
+            return;
+
+        if (RoomSettings.ShouldMapEffectActivateForRound(modeKey, startKey, selectedMapId, ruleId, roundStartUtcMs))
+            activeCandidates.Add(activeKey);
     }
 
     static bool IsRoomGameStarted()

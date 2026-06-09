@@ -743,6 +743,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         {
             AtlasPilotRoundTracker.RecordRoundStart(PlayerProfileService.Instance.CurrentProfile);
             RoundStartCurtainUI.ShowForRoundStart();
+            RoundWarmupService.ShowRoundRuleStartAnnouncementIfNeeded();
         }
         else
         {
@@ -976,9 +977,39 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.EnemyAttackCooldownMultiplierPercentKey] = RoomSettings.DefaultEnemyAttackCooldownMultiplierPercent
         };
 
+        AddDefaultMapEffectChanceProperties(props);
         HashSet<string> rememberedKeys = ApplyRememberedLobbySettings(props);
         ApplyRememberedMapPresetDefaults(props, rememberedKeys);
         return props;
+    }
+
+    static void AddDefaultMapEffectChanceProperties(Hashtable props)
+    {
+        if (props == null)
+            return;
+
+        string[] ruleIds =
+        {
+            RoomSettings.CrazyEnemiesRuleId,
+            RoomSettings.FogOfWarRuleId,
+            RoomSettings.PirateBaseRuleId,
+            RoomSettings.AsteroidShowerRuleId
+        };
+
+        IReadOnlyList<LobbyMapDefinition> maps = LobbyMapCatalog.AllMaps;
+        for (int mapIndex = 0; mapIndex < maps.Count; mapIndex++)
+        {
+            LobbyMapDefinition map = maps[mapIndex];
+            if (map == null)
+                continue;
+
+            for (int ruleIndex = 0; ruleIndex < ruleIds.Length; ruleIndex++)
+            {
+                string key = RoomSettings.GetMapEffectChanceKey(map.Id, ruleIds[ruleIndex]);
+                if (!props.ContainsKey(key))
+                    props[key] = RoomSettings.DefaultMapEffectChancePercent;
+            }
+        }
     }
 
     static HashSet<string> ApplyRememberedLobbySettings(Hashtable props)
@@ -1169,6 +1200,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return true;
 
         if (RoomSettings.IsGunSetupKey(key))
+            return true;
+
+        if (RoomSettings.IsMapEffectChanceKey(key))
             return true;
 
         switch (key)
@@ -1746,6 +1780,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         {
             AtlasPilotRoundTracker.RecordRoundStart(PlayerProfileService.Instance.CurrentProfile);
             RoundStartCurtainUI.ShowForRoundStart();
+            RoundWarmupService.ShowRoundRuleStartAnnouncementIfNeeded();
         }
 
         EnsureDroppedCargoManagerExists();

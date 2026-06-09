@@ -105,6 +105,13 @@ public sealed class RoundStartCurtainUI : MonoBehaviour
         instance.HideNow();
     }
 
+    public static bool IsVisible()
+    {
+        return instance != null &&
+               instance.gameObject.scene.IsValid() &&
+               instance.gameObject.activeInHierarchy;
+    }
+
     static RoundStartCurtainUI EnsureInstance()
     {
         if (instance != null && instance.gameObject.scene.IsValid())

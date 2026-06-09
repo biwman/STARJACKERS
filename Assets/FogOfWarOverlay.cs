@@ -300,6 +300,9 @@ public class FogOfWarOverlay : MonoBehaviour
         if (RoomSettings.IsFogOfWarActive())
             return true;
 
+        if (RoomSettings.GetMapEffectMode(RoomSettings.FogOfWarModeKey) != RoomSettings.MapEffectModeUtcStart)
+            return false;
+
         double nowUtcMs = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         return RoomSettings.ShouldMapEffectActivate(RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, nowUtcMs);
     }
