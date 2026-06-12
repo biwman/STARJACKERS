@@ -353,12 +353,39 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (cargo.Count <= 0)
             cargo.Add(InventoryItemCatalog.SpaceJunkStandardId);
 
-        int capacity = Mathf.Max(cargo.Count, ShipCatalog.GetShipInventoryCapacity(shipSkinIndex));
+        List<string> lootItems = new List<string>(cargo);
+        if (TryResolveArrowRaceTokenDrop(out string arrowTokenItemId))
+            lootItems.Add(arrowTokenItemId);
+
+        int capacity = Mathf.Max(lootItems.Count, ShipCatalog.GetShipInventoryCapacity(shipSkinIndex));
         string[] slots = new string[capacity];
-        for (int i = 0; i < cargo.Count && i < slots.Length; i++)
-            slots[i] = cargo[i];
+        for (int i = 0; i < lootItems.Count && i < slots.Length; i++)
+            slots[i] = lootItems[i];
 
         return PlayerProfileService.SerializeShipInventorySlots(slots);
+    }
+
+    bool TryResolveArrowRaceTokenDrop(out string tokenItemId)
+    {
+        tokenItemId = string.Empty;
+        if (!InventoryItemCatalog.TryGetArrowRaceTokenForMap(RoomSettings.GetSelectedLobbyMapId(), out string mapTokenId))
+            return false;
+
+        ShipType shipType = ShipCatalog.GetShipTypeFromSkinIndex(shipSkinIndex);
+        if (shipType == ShipType.Avenger || shipType == ShipType.CargoTruck)
+            return false;
+
+        Photon.Realtime.Player[] players = PhotonNetwork.PlayerList;
+        for (int i = 0; i < players.Length; i++)
+        {
+            if (!PlayerProfileService.PlayerCanCollectArrowRaceTokens(players[i]))
+                continue;
+
+            tokenItemId = mapTokenId;
+            return true;
+        }
+
+        return false;
     }
 
     public void MarkWreckConverted()

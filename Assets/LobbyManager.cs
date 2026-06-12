@@ -110,6 +110,14 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     static readonly float[] RoundDurationOptions = { 60f, 90f, 120f, 150f, 180f, 210f, 240f, 270f, 300f, 330f, 360f };
     static readonly string[] DensityOptions = { "none", "low", "medium", "high" };
+    static readonly string[] TreasureDensityOptions =
+    {
+        RoomSettings.TreasureDensityNone,
+        RoomSettings.TreasureDensityVeryLow,
+        RoomSettings.TreasureDensityLow,
+        RoomSettings.TreasureDensityMedium,
+        RoomSettings.TreasureDensityHigh
+    };
     static readonly string[] NebulaSizeOptions =
     {
         RoomSettings.NebulaSizeVerySmall,
@@ -120,6 +128,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     };
     static readonly string[] ResourceRichnessOptions =
     {
+        RoomSettings.ResourceRichnessExtremelyLow,
         RoomSettings.ResourceRichnessVeryLow,
         RoomSettings.ResourceRichnessLow,
         RoomSettings.ResourceRichnessMedium,
@@ -166,9 +175,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RoomSettings.CrazyEnemiesRuleId,
         RoomSettings.FogOfWarRuleId,
         RoomSettings.PirateBaseRuleId,
-        RoomSettings.AsteroidShowerRuleId
+        RoomSettings.AsteroidShowerRuleId,
+        RoomSettings.CosmicWormRuleId
     };
-    static readonly string[] MapEffectChanceColumnLabels = { "CE", "FoW", "PB", "AS" };
+    static readonly string[] MapEffectChanceColumnLabels = { "CE", "FoW", "PB", "AS", "CW" };
     static readonly int[] MapEffectChancePercentOptions =
     {
         0, 1, 5, 10, 15, 20, 25, 30, 35, 40, 45,
@@ -182,6 +192,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     static readonly int[] RandomLootWreckCountOptions = { 0, 1, 2, 3, 4, 5 };
     static readonly int[] ViperPlotChancePercentOptions = { 0, 20, 40, 60, 80, 100 };
     static readonly int[] ArrowPlotChancePercentOptions = { 0, 20, 40, 60, 80, 100 };
+    static readonly int[] BisonPlotChancePercentOptions = { 0, 20, 40, 60, 80, 100 };
+    static readonly int[] InvaderPlotChancePercentOptions = { 0, 20, 40, 60, 80, 100 };
     static readonly int[] BoosterSlowdownOptions = { 30, 40, 50, 60, 70, 80, 90, 100 };
     static readonly int[] BoosterRecoveryDelayOptions = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
     static readonly float[] LastShipTimerMultiplierOptions = { 1f, 1.5f, 2f, 3f, 4f, 5f };
@@ -289,6 +301,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text avengerPlotSettingText;
     public TMP_Text viperPlotChanceSettingText;
     public TMP_Text arrowPlotChanceSettingText;
+    public TMP_Text bisonPlotChanceSettingText;
+    public TMP_Text invaderPlotChanceSettingText;
     public TMP_Text boosterSettingText;
     public TMP_Text ammoSettingText;
     public TMP_Text boosterDelaySettingText;
@@ -370,6 +384,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button avengerPlotSettingButton;
     public Button viperPlotChanceSettingButton;
     public Button arrowPlotChanceSettingButton;
+    public Button bisonPlotChanceSettingButton;
+    public Button invaderPlotChanceSettingButton;
     public Button boosterSettingButton;
     public Button ammoSettingButton;
     public Button boosterDelaySettingButton;
@@ -2087,7 +2103,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             string unlockText = !unlocked && unlockStatus != null && !string.IsNullOrWhiteSpace(unlockStatus.RequirementText)
                 ? unlockStatus.RequirementText + "\n\n"
                 : string.Empty;
-            mapDetailsDescriptionText.text = unlockText + selectedMap.Description + BuildMapEffectsSummary();
+            mapDetailsDescriptionText.text = unlockText + selectedMap.Description;
         }
         RefreshMapDeathLossBadge(selectedMap);
 
@@ -2183,83 +2199,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             new Vector2(0.5f, 0.5f),
             100f);
         return mapDeathSkullBadgeSprite;
-    }
-
-    string BuildMapEffectsSummary()
-    {
-        List<string> activeEffects = new List<string>();
-        AddMapEffectSummary(
-            activeEffects,
-            "CRAZY ENEMIES",
-            RoomSettings.CrazyEnemiesModeKey,
-            RoomSettings.CrazyEnemiesStartUtcMsKey,
-            RoomSettings.CrazyEnemiesActiveKey,
-            "resources density +1");
-        AddMapEffectSummary(
-            activeEffects,
-            "FOG OF WAR",
-            RoomSettings.FogOfWarModeKey,
-            RoomSettings.FogOfWarStartUtcMsKey,
-            RoomSettings.FogOfWarActiveKey,
-            "resources richness +1");
-        AddMapEffectSummary(
-            activeEffects,
-            "PIRATE BASE",
-            RoomSettings.PirateBaseModeKey,
-            RoomSettings.PirateBaseStartUtcMsKey,
-            RoomSettings.PirateBaseActiveKey,
-            "resources richness +1, Pirate Base enemy");
-        AddMapEffectSummary(
-            activeEffects,
-            "ASTEROID SHOWER",
-            RoomSettings.AsteroidShowerModeKey,
-            RoomSettings.AsteroidShowerStartUtcMsKey,
-            RoomSettings.AsteroidShowerActiveKey,
-            "resources richness +1, asteroid strikes");
-
-        if (activeEffects.Count == 0)
-            return string.Empty;
-
-        return "\n\nMAP EFFECTS: " + string.Join(" | ", activeEffects);
-    }
-
-    string BuildCompactMapEffectsSummary()
-    {
-        List<string> labels = new List<string>();
-        if (RoomSettings.GetMapEffectMode(RoomSettings.CrazyEnemiesModeKey) != RoomSettings.MapEffectModeOff ||
-            IsMapEffectActive(RoomSettings.CrazyEnemiesActiveKey))
-        {
-            labels.Add("CRAZY");
-        }
-
-        if (RoomSettings.GetMapEffectMode(RoomSettings.FogOfWarModeKey) != RoomSettings.MapEffectModeOff ||
-            IsMapEffectActive(RoomSettings.FogOfWarActiveKey))
-        {
-            labels.Add("FOG");
-        }
-
-        if (RoomSettings.GetMapEffectMode(RoomSettings.PirateBaseModeKey) != RoomSettings.MapEffectModeOff ||
-            IsMapEffectActive(RoomSettings.PirateBaseActiveKey))
-        {
-            labels.Add("PIRATE");
-        }
-
-        if (RoomSettings.GetMapEffectMode(RoomSettings.AsteroidShowerModeKey) != RoomSettings.MapEffectModeOff ||
-            IsMapEffectActive(RoomSettings.AsteroidShowerActiveKey))
-        {
-            labels.Add("ASTEROID");
-        }
-
-        return labels.Count > 0 ? "\nEFFECTS: " + string.Join(" + ", labels) : string.Empty;
-    }
-
-    void AddMapEffectSummary(List<string> entries, string label, string modeKey, string startKey, string activeKey, string reward)
-    {
-        string mode = RoomSettings.GetMapEffectMode(modeKey);
-        if (mode == RoomSettings.MapEffectModeOff && !IsMapEffectActive(activeKey))
-            return;
-
-        entries.Add(label + " " + FormatMapEffectSetting(modeKey, startKey, activeKey) + " (" + reward + ")");
     }
 
     void RefreshDeveloperSettingsUi()
@@ -2581,8 +2520,21 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void StartGame()
     {
-        LobbyMapDefinition selectedMap = LobbyMapCatalog.Get(RoomSettings.GetSelectedLobbyMapId());
-        if (!IsMapUnlockedForLocalPlayer(selectedMap))
+        bool arrowFinalLaunch = TryResolveArrowFinalRaceMap(out LobbyMapDefinition arrowFinalMap);
+        if (arrowFinalLaunch && PhotonNetwork.CurrentRoom != null && PhotonNetwork.CurrentRoom.PlayerCount > 1)
+        {
+            SetReady(false);
+            RefreshPlayerStatusList();
+            RefreshLobbyScreenContent();
+            Debug.LogWarning("Arrow final race is solo only.");
+            return;
+        }
+
+        LobbyMapDefinition selectedMap = arrowFinalLaunch
+            ? arrowFinalMap
+            : LobbyMapCatalog.Get(RoomSettings.GetSelectedLobbyMapId());
+
+        if (!arrowFinalLaunch && !IsMapUnlockedForLocalPlayer(selectedMap))
         {
             selectedMapId = selectedMap != null ? selectedMap.Id : selectedMapId;
             RefreshHostSettingsUi();
@@ -2591,8 +2543,39 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             return;
         }
 
+        if (arrowFinalLaunch && selectedMap != null && PhotonNetwork.CurrentRoom != null)
+        {
+            selectedMapId = selectedMap.Id;
+            Hashtable props = new Hashtable();
+            LobbyMapCatalog.ApplyToProperties(selectedMap, props);
+            PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        }
+
         NetworkManager.RememberCurrentLobbySettings();
         GameTimer.StartGame();
+    }
+
+    bool TryResolveArrowFinalRaceMap(out LobbyMapDefinition map)
+    {
+        map = null;
+        if (!PlayerProfileService.HasInstance ||
+            !PlayerProfileService.Instance.IsInitialized ||
+            PlayerProfileService.Instance.CurrentProfile == null)
+        {
+            return false;
+        }
+
+        ArrowLicenseProgressData progress = PlayerProfileService.Instance.GetArrowLicenseProgress();
+        ArrowLicenseStage stage = (ArrowLicenseStage)Mathf.Clamp(progress.Stage, (int)ArrowLicenseStage.Locked, (int)ArrowLicenseStage.Complete);
+        if (stage != ArrowLicenseStage.FinalRunReady)
+            return false;
+
+        int selectedShipSkinIndex = PlayerProfileService.Instance.CurrentProfile.ShipSkinIndex;
+        if (ShipCatalog.GetShipTypeFromSkinIndex(selectedShipSkinIndex) != ShipType.Arrow)
+            return false;
+
+        map = LobbyMapCatalog.Get(LobbyMapCatalog.AncientSpaceMapId);
+        return map != null;
     }
 
     public override void OnRoomPropertiesUpdate(Hashtable propertiesThatChanged)
@@ -2948,6 +2931,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         avengerPlotSettingButton = EnsureSettingButton(ref avengerPlotSettingText, avengerPlotSettingButton, "AvengerPlotSettingButton", "AvengerPlotSettingText", Vector2.zero, CycleAvengerPlotEnabled);
         viperPlotChanceSettingButton = EnsureSettingButton(ref viperPlotChanceSettingText, viperPlotChanceSettingButton, "ViperPlotChanceSettingButton", "ViperPlotChanceSettingText", Vector2.zero, CycleViperPlotChancePercent);
         arrowPlotChanceSettingButton = EnsureSettingButton(ref arrowPlotChanceSettingText, arrowPlotChanceSettingButton, "ArrowPlotChanceSettingButton", "ArrowPlotChanceSettingText", Vector2.zero, CycleArrowPlotChancePercent);
+        bisonPlotChanceSettingButton = EnsureSettingButton(ref bisonPlotChanceSettingText, bisonPlotChanceSettingButton, "BisonPlotChanceSettingButton", "BisonPlotChanceSettingText", Vector2.zero, CycleBisonPlotChancePercent);
+        invaderPlotChanceSettingButton = EnsureSettingButton(ref invaderPlotChanceSettingText, invaderPlotChanceSettingButton, "InvaderPlotChanceSettingButton", "InvaderPlotChanceSettingText", Vector2.zero, CycleInvaderPlotChancePercent);
         boosterSettingButton = EnsureSettingButton(ref boosterSettingText, boosterSettingButton, "BoosterSettingButton", "BoosterSettingText", Vector2.zero, CycleBoosterSlowdown);
         HideDeprecatedSettingButton("AmmoSettingButton", "AmmoSettingText");
         boosterDelaySettingButton = EnsureSettingButton(ref boosterDelaySettingText, boosterDelaySettingButton, "BoosterDelaySettingButton", "BoosterDelaySettingText", Vector2.zero, CycleBoosterRecoveryDelay);
@@ -2957,7 +2942,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         deathTimerSettingButton = EnsureSettingButton(ref deathTimerSettingText, deathTimerSettingButton, "DeathTimerSettingButton", "DeathTimerSettingText", Vector2.zero, CycleLastShipTimerMultiplier);
         inventoryLossSettingButton = EnsureSettingButton(ref inventoryLossSettingText, inventoryLossSettingButton, "InventoryLossSettingButton", "InventoryLossSettingText", Vector2.zero, CycleInventoryLossEnabled);
         equipmentLossSettingButton = EnsureSettingButton(ref equipmentLossSettingText, equipmentLossSettingButton, "EquipmentLossSettingButton", "EquipmentLossSettingText", Vector2.zero, CycleEquipmentLossEnabled);
-        cosmicWormSettingButton = EnsureSettingButton(ref cosmicWormSettingText, cosmicWormSettingButton, "CosmicWormSettingButton", "CosmicWormSettingText", Vector2.zero, CycleCosmicWormEnabled);
+        cosmicWormSettingButton = EnsureSettingButton(ref cosmicWormSettingText, cosmicWormSettingButton, "CosmicWormSettingButton", "CosmicWormSettingText", Vector2.zero, CycleCosmicWormEffect);
         crazyEnemiesEffectSettingButton = EnsureSettingButton(ref crazyEnemiesEffectSettingText, crazyEnemiesEffectSettingButton, "CrazyEnemiesEffectSettingButton", "CrazyEnemiesEffectSettingText", Vector2.zero, CycleCrazyEnemiesEffect);
         fogOfWarEffectSettingButton = EnsureSettingButton(ref fogOfWarEffectSettingText, fogOfWarEffectSettingButton, "FogOfWarEffectSettingButton", "FogOfWarEffectSettingText", Vector2.zero, CycleFogOfWarEffect);
         pirateBaseEffectSettingButton = EnsureSettingButton(ref pirateBaseEffectSettingText, pirateBaseEffectSettingButton, "PirateBaseEffectSettingButton", "PirateBaseEffectSettingText", Vector2.zero, CyclePirateBaseEffect);
@@ -2983,73 +2968,81 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         enemyAttackWindupMultiplierSettingButton = EnsureSettingButton(ref enemyAttackWindupMultiplierSettingText, enemyAttackWindupMultiplierSettingButton, "EnemyAttackWindupMultiplierSettingButton", "EnemyAttackWindupMultiplierSettingText", Vector2.zero, CycleEnemyAttackWindupMultiplier);
         enemyAttackCooldownMultiplierSettingButton = EnsureSettingButton(ref enemyAttackCooldownMultiplierSettingText, enemyAttackCooldownMultiplierSettingButton, "EnemyAttackCooldownMultiplierSettingButton", "EnemyAttackCooldownMultiplierSettingText", Vector2.zero, CycleEnemyAttackCooldownMultiplier);
 
-        AttachLeftSectionButton(roundSettingButton, "ROUND RULES");
-        AttachLeftSectionButton(mapSizeSettingButton, "ROUND RULES");
-        AttachLeftSectionButton(deathTimerSettingButton, "ROUND RULES");
-        AttachLeftSectionButton(inventoryLossSettingButton, "ROUND RULES");
-        AttachLeftSectionButton(equipmentLossSettingButton, "ROUND RULES");
-        AttachLeftSectionButton(cosmicWormSettingButton, "ROUND RULES");
-        AttachLeftSectionButton(crazyEnemiesEffectSettingButton, "ROUND RULES");
-        AttachLeftSectionButton(fogOfWarEffectSettingButton, "ROUND RULES");
-        AttachLeftSectionButton(pirateBaseEffectSettingButton, "ROUND RULES");
-        AttachLeftSectionButton(asteroidShowerEffectSettingButton, "ROUND RULES");
+        AttachLeftSectionButton(roundSettingButton, "ROUND");
+        AttachLeftSectionButton(mapSizeSettingButton, "ROUND");
+        AttachLeftSectionButton(deathTimerSettingButton, "ROUND");
+        AttachLeftSectionButton(inventoryLossSettingButton, "ROUND");
+        AttachLeftSectionButton(equipmentLossSettingButton, "ROUND");
 
-        AttachLeftSectionButton(obstacleSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(obstacleDestroySettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(obstacleHpValueSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(obstacleSizeSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(obstacleNoBordersSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(treasureSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(radioactiveTreasureSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(resourceRichnessSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(spaceJunkSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(containersSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(artifactAsteroidsSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(randomLootWreckSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(hiddenTreasureSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(nebulaSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(fireNebulaSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(toxicNebulaSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(nebulaSizeSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(fireNebulaSizeSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(toxicNebulaSizeSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(advancedNebulaSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(cloudsSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(cloudsSizeSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(extractionSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(extractionTypeSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(repairBaySettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(spaceFactorySettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(scienceStationSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(avengerPlotSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(viperPlotChanceSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(arrowPlotChanceSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(movingObjectsSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(gravityWellPhysicsSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(obstacleWeightSettingButton, "ENVIRONMENT");
-        AttachLeftSectionButton(treasureWeightSettingButton, "ENVIRONMENT");
+        AttachLeftSectionButton(cosmicWormSettingButton, "ROUND EVENTS");
+        AttachLeftSectionButton(crazyEnemiesEffectSettingButton, "ROUND EVENTS");
+        AttachLeftSectionButton(fogOfWarEffectSettingButton, "ROUND EVENTS");
+        AttachLeftSectionButton(pirateBaseEffectSettingButton, "ROUND EVENTS");
+        AttachLeftSectionButton(asteroidShowerEffectSettingButton, "ROUND EVENTS");
+        AttachLeftSectionButton(endDisasterSettingButton, "ROUND EVENTS");
+        AttachLeftSectionButton(endDisasterTimeSettingButton, "ROUND EVENTS");
 
-        AttachLeftSectionButton(mapBackgroundSettingButton, "COSMETICS");
-        AttachLeftSectionButton(visualEffectsSettingButton, "COSMETICS");
-        AttachLeftSectionButton(advancedSpawnVfxSettingButton, "COSMETICS");
-        AttachLeftSectionButton(boomVfxSettingButton, "COSMETICS");
-        AttachLeftSectionButton(dynamicCameraZoomSettingButton, "COSMETICS");
-        AttachLeftSectionButton(parallaxBackgroundSettingButton, "COSMETICS");
-        AttachLeftSectionButton(backgroundObjectSettingButton, "COSMETICS");
+        AttachLeftSectionButton(obstacleSettingButton, "OBSTACLES");
+        AttachLeftSectionButton(obstacleDestroySettingButton, "OBSTACLES");
+        AttachLeftSectionButton(obstacleHpValueSettingButton, "OBSTACLES");
+        AttachLeftSectionButton(obstacleSizeSettingButton, "OBSTACLES");
+        AttachLeftSectionButton(obstacleNoBordersSettingButton, "OBSTACLES");
+        AttachLeftSectionButton(movingObjectsSettingButton, "OBSTACLES");
+        AttachLeftSectionButton(gravityWellPhysicsSettingButton, "OBSTACLES");
+        AttachLeftSectionButton(obstacleWeightSettingButton, "OBSTACLES");
 
-        AttachLeftSectionButton(boosterSettingButton, "FEELING");
-        AttachLeftSectionButton(boosterDelaySettingButton, "FEELING");
-        AttachLeftSectionButton(advancedBoosterSettingButton, "FEELING");
-        AttachLeftSectionButton(shipDriftSettingButton, "FEELING");
-        AttachLeftSectionButton(bulletPushSettingButton, "FEELING");
-        AttachLeftSectionButton(batteringSettingButton, "FEELING");
-        AttachLeftSectionButton(enemyDamageMultiplierSettingButton, "FEELING");
-        AttachLeftSectionButton(enemyAttackWindupMultiplierSettingButton, "FEELING");
-        AttachLeftSectionButton(enemyAttackCooldownMultiplierSettingButton, "FEELING");
-        AttachLeftSectionButton(endDisasterSettingButton, "FEELING");
-        AttachLeftSectionButton(endDisasterTimeSettingButton, "FEELING");
-        AttachLeftSectionButton(collectKeepAliveRangeBonusSettingButton, "FEELING");
-        AttachLeftSectionButton(hapticsSettingButton, "FEELING");
+        AttachLeftSectionButton(treasureSettingButton, "LOOT & RESOURCES");
+        AttachLeftSectionButton(radioactiveTreasureSettingButton, "LOOT & RESOURCES");
+        AttachLeftSectionButton(resourceRichnessSettingButton, "LOOT & RESOURCES");
+        AttachLeftSectionButton(spaceJunkSettingButton, "LOOT & RESOURCES");
+        AttachLeftSectionButton(containersSettingButton, "LOOT & RESOURCES");
+        AttachLeftSectionButton(artifactAsteroidsSettingButton, "LOOT & RESOURCES");
+        AttachLeftSectionButton(randomLootWreckSettingButton, "LOOT & RESOURCES");
+        AttachLeftSectionButton(hiddenTreasureSettingButton, "LOOT & RESOURCES");
+        AttachLeftSectionButton(treasureWeightSettingButton, "LOOT & RESOURCES");
+
+        AttachLeftSectionButton(nebulaSettingButton, "MAP HAZARDS");
+        AttachLeftSectionButton(fireNebulaSettingButton, "MAP HAZARDS");
+        AttachLeftSectionButton(toxicNebulaSettingButton, "MAP HAZARDS");
+        AttachLeftSectionButton(nebulaSizeSettingButton, "MAP HAZARDS");
+        AttachLeftSectionButton(fireNebulaSizeSettingButton, "MAP HAZARDS");
+        AttachLeftSectionButton(toxicNebulaSizeSettingButton, "MAP HAZARDS");
+        AttachLeftSectionButton(advancedNebulaSettingButton, "MAP HAZARDS");
+        AttachLeftSectionButton(cloudsSettingButton, "MAP HAZARDS");
+        AttachLeftSectionButton(cloudsSizeSettingButton, "MAP HAZARDS");
+
+        AttachLeftSectionButton(extractionSettingButton, "MAP OBJECTS");
+        AttachLeftSectionButton(extractionTypeSettingButton, "MAP OBJECTS");
+        AttachLeftSectionButton(repairBaySettingButton, "MAP OBJECTS");
+        AttachLeftSectionButton(spaceFactorySettingButton, "MAP OBJECTS");
+        AttachLeftSectionButton(scienceStationSettingButton, "MAP OBJECTS");
+
+        AttachLeftSectionButton(avengerPlotSettingButton, "MAP PLOTS");
+        AttachLeftSectionButton(viperPlotChanceSettingButton, "MAP PLOTS");
+        AttachLeftSectionButton(arrowPlotChanceSettingButton, "MAP PLOTS");
+        AttachLeftSectionButton(bisonPlotChanceSettingButton, "MAP PLOTS");
+        AttachLeftSectionButton(invaderPlotChanceSettingButton, "MAP PLOTS");
+
+        AttachLeftSectionButton(mapBackgroundSettingButton, "VISUALS");
+        AttachLeftSectionButton(visualEffectsSettingButton, "VISUALS");
+        AttachLeftSectionButton(advancedSpawnVfxSettingButton, "VISUALS");
+        AttachLeftSectionButton(boomVfxSettingButton, "VISUALS");
+        AttachLeftSectionButton(dynamicCameraZoomSettingButton, "VISUALS");
+        AttachLeftSectionButton(parallaxBackgroundSettingButton, "VISUALS");
+        AttachLeftSectionButton(backgroundObjectSettingButton, "VISUALS");
+
+        AttachLeftSectionButton(boosterSettingButton, "SHIP FEEL");
+        AttachLeftSectionButton(boosterDelaySettingButton, "SHIP FEEL");
+        AttachLeftSectionButton(advancedBoosterSettingButton, "SHIP FEEL");
+        AttachLeftSectionButton(shipDriftSettingButton, "SHIP FEEL");
+        AttachLeftSectionButton(hapticsSettingButton, "SHIP FEEL");
+
+        AttachLeftSectionButton(bulletPushSettingButton, "COMBAT FEEL");
+        AttachLeftSectionButton(batteringSettingButton, "COMBAT FEEL");
+        AttachLeftSectionButton(enemyDamageMultiplierSettingButton, "COMBAT FEEL");
+        AttachLeftSectionButton(enemyAttackWindupMultiplierSettingButton, "COMBAT FEEL");
+        AttachLeftSectionButton(enemyAttackCooldownMultiplierSettingButton, "COMBAT FEEL");
+        AttachLeftSectionButton(collectKeepAliveRangeBonusSettingButton, "COMBAT FEEL");
 
         AttachLeftSectionButton(neutralRidersEnabledSettingButton, "NEUTRAL RIDERS");
         AttachLeftSectionButton(neutralRidersCountSettingButton, "NEUTRAL RIDERS");
@@ -3385,10 +3378,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (mapSelectionText != null)
         {
-            string effectsBadge = BuildCompactMapEffectsSummary();
             string lockBadge = selectedUnlocked ? string.Empty : "\nLOCKED";
-            mapSelectionText.text = "MAP\n" + selectedMap.DisplayName + lockBadge + effectsBadge;
-            mapSelectionText.fontSize = string.IsNullOrEmpty(effectsBadge) ? 24f : 21f;
+            mapSelectionText.text = "MAP\n" + selectedMap.DisplayName + lockBadge;
+            mapSelectionText.fontSize = 24f;
             mapSelectionText.characterSpacing = 1.2f;
         }
 
@@ -3922,10 +3914,16 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         leftSettingsScrollRect.viewport = leftSettingsViewportRect;
         leftSettingsScrollRect.content = leftSettingsContentRect;
 
-        EnsureLeftSectionContainer("ROUND RULES");
-        EnsureLeftSectionContainer("ENVIRONMENT");
-        EnsureLeftSectionContainer("COSMETICS");
-        EnsureLeftSectionContainer("FEELING");
+        EnsureLeftSectionContainer("ROUND");
+        EnsureLeftSectionContainer("ROUND EVENTS");
+        EnsureLeftSectionContainer("OBSTACLES");
+        EnsureLeftSectionContainer("LOOT & RESOURCES");
+        EnsureLeftSectionContainer("MAP HAZARDS");
+        EnsureLeftSectionContainer("MAP OBJECTS");
+        EnsureLeftSectionContainer("MAP PLOTS");
+        EnsureLeftSectionContainer("VISUALS");
+        EnsureLeftSectionContainer("SHIP FEEL");
+        EnsureLeftSectionContainer("COMBAT FEEL");
         EnsureLeftSectionContainer("NEUTRAL RIDERS");
         EnsureLeftSectionContainer("DIAGNOSTICS");
     }
@@ -4527,6 +4525,27 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.CosmicWormModeKey))
+        {
+            props[RoomSettings.CosmicWormModeKey] = RoomSettings.DefaultMapEffectMode;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.CosmicWormStartUtcMsKey))
+        {
+            props[RoomSettings.CosmicWormStartUtcMsKey] = -1d;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.CosmicWormActiveKey))
+        {
+            props[RoomSettings.CosmicWormActiveKey] = false;
+            changed = true;
+        }
+
+        if (EnsureDefaultMapEffectModeProperties(props))
+            changed = true;
+
         if (EnsureDefaultMapEffectChanceProperties(props))
             changed = true;
 
@@ -4581,6 +4600,18 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ArrowPlotChancePercentKey))
         {
             props[RoomSettings.ArrowPlotChancePercentKey] = LobbyMapCatalog.GetDefaultArrowPlotChancePercent(RoomSettings.GetSelectedLobbyMapId());
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.BisonPlotChancePercentKey))
+        {
+            props[RoomSettings.BisonPlotChancePercentKey] = LobbyMapCatalog.GetDefaultBisonPlotChancePercent(RoomSettings.GetSelectedLobbyMapId());
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.InvaderPlotChancePercentKey))
+        {
+            props[RoomSettings.InvaderPlotChancePercentKey] = LobbyMapCatalog.GetDefaultInvaderPlotChancePercent(RoomSettings.GetSelectedLobbyMapId());
             changed = true;
         }
 
@@ -4871,12 +4902,14 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             return false;
 
         bool changed = false;
+        bool migrateOldDefaults = !HasCurrentMapEffectChanceDefaultsVersion();
         string[] ruleIds =
         {
             RoomSettings.CrazyEnemiesRuleId,
             RoomSettings.FogOfWarRuleId,
             RoomSettings.PirateBaseRuleId,
-            RoomSettings.AsteroidShowerRuleId
+            RoomSettings.AsteroidShowerRuleId,
+            RoomSettings.CosmicWormRuleId
         };
 
         IReadOnlyList<LobbyMapDefinition> maps = LobbyMapCatalog.AllMaps;
@@ -4889,15 +4922,79 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             for (int ruleIndex = 0; ruleIndex < ruleIds.Length; ruleIndex++)
             {
                 string key = RoomSettings.GetMapEffectChanceKey(map.Id, ruleIds[ruleIndex]);
-                if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(key))
+                int defaultPercent = RoomSettings.GetDefaultMapEffectChancePercent(map.Id, ruleIds[ruleIndex]);
+                if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(key))
+                {
+                    props[key] = defaultPercent;
+                    changed = true;
                     continue;
+                }
 
-                props[key] = RoomSettings.DefaultMapEffectChancePercent;
-                changed = true;
+                if (migrateOldDefaults &&
+                    PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(key, out object existingValue) &&
+                    existingValue is int existingPercent &&
+                    RoomSettings.IsLegacyMapEffectChanceDefault(map.Id, ruleIds[ruleIndex], existingPercent))
+                {
+                    props[key] = defaultPercent;
+                    changed = true;
+                }
             }
         }
 
+        if (migrateOldDefaults)
+        {
+            props[RoomSettings.MapEffectChanceDefaultsVersionKey] = RoomSettings.MapEffectChanceDefaultsVersion;
+            changed = true;
+        }
+
         return changed;
+    }
+
+    bool EnsureDefaultMapEffectModeProperties(Hashtable props)
+    {
+        if (props == null || PhotonNetwork.CurrentRoom == null || HasCurrentMapEffectModeDefaultsVersion())
+            return false;
+
+        string[] modeKeys =
+        {
+            RoomSettings.CrazyEnemiesModeKey,
+            RoomSettings.FogOfWarModeKey,
+            RoomSettings.PirateBaseModeKey,
+            RoomSettings.AsteroidShowerModeKey,
+            RoomSettings.CosmicWormModeKey
+        };
+
+        for (int i = 0; i < modeKeys.Length; i++)
+        {
+            string key = modeKeys[i];
+            if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(key, out object value) &&
+                value is string mode &&
+                RoomSettings.NormalizeMapEffectMode(mode) == RoomSettings.DefaultMapEffectMode)
+            {
+                continue;
+            }
+
+            props[key] = RoomSettings.DefaultMapEffectMode;
+        }
+
+        props[RoomSettings.MapEffectModeDefaultsVersionKey] = RoomSettings.MapEffectModeDefaultsVersion;
+        return true;
+    }
+
+    bool HasCurrentMapEffectModeDefaultsVersion()
+    {
+        return PhotonNetwork.CurrentRoom != null &&
+               PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.MapEffectModeDefaultsVersionKey, out object value) &&
+               value is int version &&
+               version >= RoomSettings.MapEffectModeDefaultsVersion;
+    }
+
+    bool HasCurrentMapEffectChanceDefaultsVersion()
+    {
+        return PhotonNetwork.CurrentRoom != null &&
+               PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.MapEffectChanceDefaultsVersionKey, out object value) &&
+               value is int version &&
+               version >= RoomSettings.MapEffectChanceDefaultsVersion;
     }
 
     Button EnsureSettingButton(ref TMP_Text textField, Button existingButton, string buttonName, string textName, Vector2 anchoredPosition, UnityEngine.Events.UnityAction callback)
@@ -5178,7 +5275,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     void CycleTreasureDensity()
     {
-        CycleDensitySetting(RoomSettings.TreasureDensityKey, GetTreasureDensity());
+        CycleStringSetting(RoomSettings.TreasureDensityKey, TreasureDensityOptions, GetTreasureDensity(), RoomSettings.DefaultTreasureDensity);
     }
 
     void CycleRadioactiveTreasureDensity()
@@ -5467,6 +5564,24 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             LobbyMapCatalog.GetDefaultArrowPlotChancePercent(RoomSettings.GetSelectedLobbyMapId()));
     }
 
+    void CycleBisonPlotChancePercent()
+    {
+        CycleIntSetting(
+            RoomSettings.BisonPlotChancePercentKey,
+            BisonPlotChancePercentOptions,
+            RoomSettings.GetBisonPlotChancePercent(),
+            LobbyMapCatalog.GetDefaultBisonPlotChancePercent(RoomSettings.GetSelectedLobbyMapId()));
+    }
+
+    void CycleInvaderPlotChancePercent()
+    {
+        CycleIntSetting(
+            RoomSettings.InvaderPlotChancePercentKey,
+            InvaderPlotChancePercentOptions,
+            RoomSettings.GetInvaderPlotChancePercent(),
+            LobbyMapCatalog.GetDefaultInvaderPlotChancePercent(RoomSettings.GetSelectedLobbyMapId()));
+    }
+
     void CycleBoosterSlowdown()
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
@@ -5533,15 +5648,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RefreshHostSettingsUi();
     }
 
-    void CycleCosmicWormEnabled()
+    void CycleCosmicWormEffect()
     {
-        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
-            return;
-
-        Hashtable props = new Hashtable();
-        props[RoomSettings.CosmicWormEnabledKey] = !RoomSettings.IsCosmicWormEnabled();
-        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
-        RefreshHostSettingsUi();
+        CycleMapEffect(RoomSettings.CosmicWormModeKey, RoomSettings.CosmicWormStartUtcMsKey, RoomSettings.CosmicWormActiveKey);
     }
 
     void CycleMovingObjectsEnabled()
@@ -6101,6 +6210,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (arrowPlotChanceSettingText != null)
             arrowPlotChanceSettingText.text = "ARROW UNLOCK STORY: " + RoomSettings.GetArrowPlotChancePercent() + "%";
 
+        if (bisonPlotChanceSettingText != null)
+            bisonPlotChanceSettingText.text = "BISON PLOT CHANCE: " + RoomSettings.GetBisonPlotChancePercent() + "%";
+
+        if (invaderPlotChanceSettingText != null)
+            invaderPlotChanceSettingText.text = "INVADER PLOT CHANCE: " + RoomSettings.GetInvaderPlotChancePercent() + "%";
+
         if (boosterSettingText != null)
             boosterSettingText.text = "EMPTY BOOSTER SLOWDOWN: " + GetBoosterSlowdownPercent() + "%";
 
@@ -6123,7 +6238,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             equipmentLossSettingText.text = "EQUIPMENT LOSS: " + (RoomSettings.IsEquipmentLossEnabled() ? "YES" : "NO");
 
         if (cosmicWormSettingText != null)
-            cosmicWormSettingText.text = "COSMIC WORM: " + (RoomSettings.IsCosmicWormEnabled() ? "ON" : "OFF");
+            cosmicWormSettingText.text = "COSMIC WORM: " + FormatMapEffectSetting(RoomSettings.CosmicWormModeKey, RoomSettings.CosmicWormStartUtcMsKey, RoomSettings.CosmicWormActiveKey) + " (+RICHNESS, WORM)";
 
         if (crazyEnemiesEffectSettingText != null)
             crazyEnemiesEffectSettingText.text = "CRAZY ENEMIES: " + FormatMapEffectSetting(RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, RoomSettings.CrazyEnemiesActiveKey) + " (+DENSITY)";
@@ -6222,6 +6337,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         SetSettingButtonState(scienceStationSettingButton, isHost);
         SetSettingButtonState(avengerPlotSettingButton, isHost);
         SetSettingButtonState(viperPlotChanceSettingButton, isHost);
+        SetSettingButtonState(arrowPlotChanceSettingButton, isHost);
+        SetSettingButtonState(bisonPlotChanceSettingButton, isHost);
+        SetSettingButtonState(invaderPlotChanceSettingButton, isHost);
         SetSettingButtonState(boosterSettingButton, isHost);
         SetSettingButtonState(boosterDelaySettingButton, isHost);
         SetSettingButtonState(advancedBoosterSettingButton, isHost);
@@ -6871,6 +6989,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.AvengerPlotEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.ViperPlotChancePercentKey) ||
                changedProps.ContainsKey(RoomSettings.ArrowPlotChancePercentKey) ||
+               changedProps.ContainsKey(RoomSettings.BisonPlotChancePercentKey) ||
+               changedProps.ContainsKey(RoomSettings.InvaderPlotChancePercentKey) ||
                changedProps.ContainsKey(RoomSettings.EndDisasterModeKey) ||
                changedProps.ContainsKey(RoomSettings.EndDisasterWarningSecondsKey) ||
                changedProps.ContainsKey(RoomSettings.ObstacleDensityKey) ||
@@ -6893,6 +7013,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.AsteroidShowerModeKey) ||
                changedProps.ContainsKey(RoomSettings.AsteroidShowerStartUtcMsKey) ||
                changedProps.ContainsKey(RoomSettings.AsteroidShowerActiveKey) ||
+               changedProps.ContainsKey(RoomSettings.CosmicWormModeKey) ||
+               changedProps.ContainsKey(RoomSettings.CosmicWormStartUtcMsKey) ||
+               changedProps.ContainsKey(RoomSettings.CosmicWormActiveKey) ||
                ContainsMapEffectChanceRoomSettingChange(changedProps) ||
                changedProps.ContainsKey(RoomSettings.SpaceJunkDensityKey) ||
                changedProps.ContainsKey(RoomSettings.ContainersDensityKey) ||
@@ -7218,7 +7341,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     string FormatDensity(string density)
     {
-        return density.ToUpperInvariant();
+        return density.Replace("_", " ").ToUpperInvariant();
     }
 
     string FormatNebulaSize(string size)

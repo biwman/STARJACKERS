@@ -57,7 +57,12 @@ public class TreasureCollector : MonoBehaviourPun
         AvengerBoard,
         Examine,
         Activate,
-        Escape
+        Escape,
+        Haul,
+        Drop,
+        InvaderContact,
+        InvaderStabilize,
+        InvaderSync
     }
 
     public Button collectButton;
@@ -240,6 +245,8 @@ public class TreasureCollector : MonoBehaviourPun
             TryBindHudReferences();
         }
 
+        HandleKeyboardUseShortcut();
+
         if (photonView.IsMine && IsAstronautMode())
         {
             if (isExaminingArtifact)
@@ -275,6 +282,7 @@ public class TreasureCollector : MonoBehaviourPun
             EnsureActiveCollectibleTargetStillValid();
 
         UpdateUseButtonAvailability();
+        UpdateHaulChargeUseProgress();
         UpdateCollectionBeam();
         UpdateArtifactExamineBeam();
     }
@@ -403,6 +411,12 @@ public class TreasureCollector : MonoBehaviourPun
         if (isExaminingArtifact)
             return;
 
+        PlayerHealth playerHealth = GetComponent<PlayerHealth>();
+        if (BisonIndustrialPlotController.IsHaulChargeInProgress(playerHealth))
+            return;
+        if (InvaderInvasionPlotController.IsUseChargeInProgress(playerHealth))
+            return;
+
         AvengerWarBase avengerBase = AvengerWarBase.FindClosestUsable(transform.position);
         if (avengerBase != null)
         {
@@ -430,6 +444,28 @@ public class TreasureCollector : MonoBehaviourPun
             return;
         }
 
+        if (BisonIndustrialPlotController.TryDropHaul(playerHealth))
+        {
+            CancelActiveCollection();
+            return;
+        }
+
+        if (BisonIndustrialPlotController.TryStartHaul(playerHealth))
+        {
+            CancelActiveCollection();
+            SetUseProgress(0f, true);
+            UpdateUseButtonAvailability();
+            return;
+        }
+
+        if (InvaderInvasionPlotController.TryStartUse(playerHealth))
+        {
+            CancelActiveCollection();
+            SetUseProgress(0f, true);
+            UpdateUseButtonAvailability();
+            return;
+        }
+
         currentExtraction = ResolveNearbyExtractionZone();
         if (currentExtraction != null)
         {
@@ -445,6 +481,53 @@ public class TreasureCollector : MonoBehaviourPun
         }
 
         TryStartCollectibleUse();
+    }
+
+    void HandleKeyboardUseShortcut()
+    {
+#if UNITY_EDITOR || UNITY_STANDALONE
+        if (!photonView.IsMine)
+            return;
+
+        if (!IsKeyboardUseShortcutPressedThisFrame())
+            return;
+
+        if (IsTypingInInputField())
+            return;
+
+        StartHolding();
+#endif
+    }
+
+    static bool IsKeyboardUseShortcutPressedThisFrame()
+    {
+#if UNITY_EDITOR || UNITY_STANDALONE
+#if ENABLE_INPUT_SYSTEM
+        UnityEngine.InputSystem.Keyboard keyboard = UnityEngine.InputSystem.Keyboard.current;
+        if (keyboard != null && keyboard.eKey.wasPressedThisFrame)
+            return true;
+#endif
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetKeyDown(KeyCode.E))
+            return true;
+#endif
+#endif
+
+        return false;
+    }
+
+    static bool IsTypingInInputField()
+    {
+        EventSystem eventSystem = EventSystem.current;
+        GameObject selected = eventSystem != null ? eventSystem.currentSelectedGameObject : null;
+        if (selected == null)
+            return false;
+
+        return selected.GetComponent<TMP_InputField>() != null ||
+               selected.GetComponentInParent<TMP_InputField>() != null ||
+               selected.GetComponent<UnityEngine.UI.InputField>() != null ||
+               selected.GetComponentInParent<UnityEngine.UI.InputField>() != null;
     }
 
     bool TryStartCollectibleUse()
@@ -549,6 +632,8 @@ public class TreasureCollector : MonoBehaviourPun
 
         if (isExaminingArtifact)
             CancelArtifactExamine();
+
+        InvaderInvasionPlotController.NotifyUseCanceledByShot(GetComponent<PlayerHealth>());
     }
 
     void CancelActiveCollection()
@@ -1232,6 +1317,9 @@ public class TreasureCollector : MonoBehaviourPun
             return UseActionType.None;
 
         bool astronautMode = IsAstronautMode();
+        UseActionType activeProgressAction = ResolveActiveProgressUseActionType(astronautMode);
+        if (activeProgressAction != UseActionType.None)
+            return activeProgressAction;
 
         if (!astronautMode)
         {
@@ -1250,6 +1338,17 @@ public class TreasureCollector : MonoBehaviourPun
         ArtifactAsteroid artifact = ResolveUsableArtifactAsteroid();
         if (artifact != null)
             return UseActionType.Examine;
+
+        if (!astronautMode)
+        {
+            PlayerHealth playerHealth = GetComponent<PlayerHealth>();
+            if (BisonIndustrialPlotController.CanDropHaul(playerHealth))
+                return UseActionType.Drop;
+            if (BisonIndustrialPlotController.CanStartHaul(playerHealth))
+                return UseActionType.Haul;
+            if (InvaderInvasionPlotController.TryGetUseAction(playerHealth, out InvaderPlotUseAction invaderAction))
+                return ConvertInvaderUseAction(invaderAction);
+        }
 
         ExtractionZone extractionZone = ResolveUsableExtractionZone();
         if (extractionZone != null)
@@ -1273,6 +1372,44 @@ public class TreasureCollector : MonoBehaviourPun
             return UseActionType.None;
 
         return CanStoreCurrentCollectible() ? UseActionType.Collect : UseActionType.None;
+    }
+
+    UseActionType ResolveActiveProgressUseActionType(bool astronautMode)
+    {
+        if (isActivatingExtraction)
+            return UseActionType.Activate;
+
+        if (isExaminingArtifact)
+            return UseActionType.Examine;
+
+        if (isCollecting)
+            return UseActionType.Collect;
+
+        if (!astronautMode && BisonIndustrialPlotController.IsHaulChargeInProgress(GetComponent<PlayerHealth>()))
+            return UseActionType.Haul;
+
+        if (!astronautMode &&
+            InvaderInvasionPlotController.TryGetUseChargeProgress(GetComponent<PlayerHealth>(), out _, out InvaderPlotUseAction invaderAction))
+        {
+            return ConvertInvaderUseAction(invaderAction);
+        }
+
+        return UseActionType.None;
+    }
+
+    UseActionType ConvertInvaderUseAction(InvaderPlotUseAction action)
+    {
+        switch (action)
+        {
+            case InvaderPlotUseAction.Contact:
+                return UseActionType.InvaderContact;
+            case InvaderPlotUseAction.Stabilize:
+                return UseActionType.InvaderStabilize;
+            case InvaderPlotUseAction.Sync:
+                return UseActionType.InvaderSync;
+            default:
+                return UseActionType.None;
+        }
     }
 
     ExtractionZone ResolveUsableExtractionZone()
@@ -1441,6 +1578,16 @@ public class TreasureCollector : MonoBehaviourPun
                 return "ACTIVATE";
             case UseActionType.Escape:
                 return "ESCAPE";
+            case UseActionType.Haul:
+                return "HAUL";
+            case UseActionType.Drop:
+                return "DROP";
+            case UseActionType.InvaderContact:
+                return "CONTACT";
+            case UseActionType.InvaderStabilize:
+                return "STABILIZE";
+            case UseActionType.InvaderSync:
+                return "SYNC";
             default:
                 return string.Empty;
         }
@@ -1455,7 +1602,7 @@ public class TreasureCollector : MonoBehaviourPun
 
     bool IsUseProgressActive()
     {
-        return isCollecting || isActivatingExtraction || isExaminingArtifact;
+        return ResolveActiveProgressUseActionType(IsAstronautMode()) != UseActionType.None;
     }
 
     void SetUseProgress(float progress, bool visible)
@@ -1465,6 +1612,18 @@ public class TreasureCollector : MonoBehaviourPun
 
         if (useButtonVisual != null)
             useButtonVisual.SetProgress(progress, visible);
+    }
+
+    void UpdateHaulChargeUseProgress()
+    {
+        if (!photonView.IsMine)
+            return;
+
+        if (BisonIndustrialPlotController.TryGetHaulChargeProgress(GetComponent<PlayerHealth>(), out float progress))
+            SetUseProgress(progress, true);
+
+        if (InvaderInvasionPlotController.TryGetUseChargeProgress(GetComponent<PlayerHealth>(), out float invaderProgress, out _))
+            SetUseProgress(invaderProgress, true);
     }
 
     bool IsPendingActivatedExtraction(ExtractionZone extractionZone)

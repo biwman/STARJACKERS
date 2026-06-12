@@ -556,6 +556,18 @@ public class ExtractionZone : MonoBehaviourPun
             playerView.RPC(nameof(PlayerHealth.NotifyViperWreckRecovered), playerView.Owner);
         }
 
+        if (string.Equals(outcome, "extracted", System.StringComparison.OrdinalIgnoreCase) &&
+            BisonIndustrialPlotController.TryEvacuateIndustrialPartsWithPlayer(this, playerHealth))
+        {
+            playerView.RPC(nameof(PlayerHealth.NotifyBisonIndustrialPartsDelivered), playerView.Owner);
+        }
+
+        if (string.Equals(outcome, "extracted", System.StringComparison.OrdinalIgnoreCase) &&
+            InvaderInvasionPlotController.TryCompleteStageOnEvacuation(playerHealth, out int invaderStage))
+        {
+            playerView.RPC(nameof(PlayerHealth.NotifyInvaderImprintRecovered), playerView.Owner, invaderStage);
+        }
+
         playerView.RPC(nameof(PlayerHealth.OnEvacuated), playerView.Owner, 0);
         playerView.RPC(nameof(PlayerHealth.NotifyFinalEvacuation), playerView.Owner, finalScore, outcome);
         Vector2 evacuationTarget = GetEvacuationTargetWorldPosition();

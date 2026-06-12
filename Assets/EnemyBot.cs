@@ -3654,6 +3654,7 @@ public class EnemyBot : MonoBehaviourPun
     public int PirateBaseLaunchSourceViewId => pirateBaseLaunchSourceViewId;
     public bool IsConfused => Time.time < confusedUntil;
     public float VisualTargetSize => Definition != null ? Definition.TargetSize : 1.04f;
+    float EnemyVisualScaleMultiplier => RoomSettings.GetEnemyVisualScaleMultiplier();
     public float EffectiveMoveSpeed => Definition != null && Definition.Movement != null
         ? Definition.Movement.MoveSpeed * EffectiveSpeedMultiplier * NebulaSpeedMultiplier * ElectromagneticShockStatus.GetSpeedMultiplier(gameObject) * AtlasSuppressionStatus.GetSpeedMultiplier(gameObject)
         : 1f;
@@ -3933,22 +3934,24 @@ public class EnemyBot : MonoBehaviourPun
             return;
 
         Bounds bounds = cachedRenderer.bounds;
+        float visualScale = Mathf.Max(0.05f, EnemyVisualScaleMultiplier);
+        Vector2 baseVisualSize = new Vector2(bounds.size.x / visualScale, bounds.size.y / visualScale);
         BoxCollider2D boxCollider = GetComponent<BoxCollider2D>();
         if (boxCollider != null)
         {
             Vector2 boxScale = kind == EnemyBotKind.SpaceManta
-                ? new Vector2(bounds.size.x * 0.68f, bounds.size.y * 0.46f)
+                ? new Vector2(baseVisualSize.x * 0.68f, baseVisualSize.y * 0.46f)
                 : kind == EnemyBotKind.GravitySquid
-                    ? new Vector2(bounds.size.x * 0.56f, bounds.size.y * 0.68f)
+                    ? new Vector2(baseVisualSize.x * 0.56f, baseVisualSize.y * 0.68f)
                 : kind == EnemyBotKind.HunterLance
-                    ? new Vector2(bounds.size.x * 0.48f, bounds.size.y * 0.84f)
+                    ? new Vector2(baseVisualSize.x * 0.48f, baseVisualSize.y * 0.84f)
                 : kind == EnemyBotKind.PirateBase
-                    ? new Vector2(bounds.size.x * 0.78f, bounds.size.y * 0.7f)
+                    ? new Vector2(baseVisualSize.x * 0.78f, baseVisualSize.y * 0.7f)
                 : kind == EnemyBotKind.ContainerShip
-                    ? new Vector2(bounds.size.x * 0.78f, bounds.size.y * 0.58f)
+                    ? new Vector2(baseVisualSize.x * 0.78f, baseVisualSize.y * 0.58f)
                 : kind == EnemyBotKind.CosmicWorm
-                    ? new Vector2(bounds.size.x * 0.74f, bounds.size.y * 0.5f)
-                    : new Vector2(bounds.size.x * 0.82f, bounds.size.y * 0.72f);
+                    ? new Vector2(baseVisualSize.x * 0.74f, baseVisualSize.y * 0.5f)
+                    : new Vector2(baseVisualSize.x * 0.82f, baseVisualSize.y * 0.72f);
             SetWorldBoxSize(boxCollider, boxScale);
         }
 
@@ -4295,7 +4298,7 @@ public class EnemyBot : MonoBehaviourPun
         if (largestDimension <= 0.0001f)
             return;
 
-        float scale = (targetSize * Mathf.Max(0.05f, visualScaleMultiplier)) / largestDimension;
+        float scale = (targetSize * Mathf.Max(0.05f, visualScaleMultiplier) * EnemyVisualScaleMultiplier) / largestDimension;
         renderer.transform.localScale = new Vector3(scale, scale, 1f);
     }
 

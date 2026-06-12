@@ -1207,6 +1207,9 @@ public class PlayerMovement : MonoBehaviourPun
         if (nebulaTarget != null)
             currentSpeed *= nebulaTarget.CurrentNebulaSpeedMultiplier;
 
+        if (photonView != null)
+            currentSpeed *= BisonIndustrialPlotController.GetHaulSpeedMultiplier(photonView.ViewID);
+
         return Mathf.Max(0.1f, currentSpeed);
     }
 

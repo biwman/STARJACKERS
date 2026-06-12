@@ -275,6 +275,10 @@ public static class InventoryItemCatalog
     public const string AlienTransmitterId = "alien_transmitter";
     public const string PirateSymbolId = "pirate_symbol";
     public const string AvengerStartingCodesId = "avenger_starting_codes";
+    public const string ArrowRaceTokenMinefieldId = "arrow_race_token_minefield";
+    public const string ArrowRaceTokenSnowFieldId = "arrow_race_token_snowfield";
+    public const string ArrowRaceTokenDeepSpaceId = "arrow_race_token_deep_space";
+    public const string ArrowRaceTokenPirateBayId = "arrow_race_token_pirate_bay";
 
     static readonly Dictionary<string, InventoryItemDefinition> Definitions = BuildDefinitions();
     static bool iconsPrewarmed;
@@ -356,6 +360,69 @@ public static class InventoryItemCatalog
     {
         InventoryItemDefinition definition = GetDefinition(itemId);
         return definition != null && definition.RequiresSafePocket;
+    }
+
+    public static bool IsArrowRaceToken(string itemId)
+    {
+        return string.Equals(itemId, ArrowRaceTokenMinefieldId, StringComparison.Ordinal) ||
+               string.Equals(itemId, ArrowRaceTokenSnowFieldId, StringComparison.Ordinal) ||
+               string.Equals(itemId, ArrowRaceTokenDeepSpaceId, StringComparison.Ordinal) ||
+               string.Equals(itemId, ArrowRaceTokenPirateBayId, StringComparison.Ordinal);
+    }
+
+    public static bool TryGetArrowRaceTokenForMap(string mapId, out string itemId)
+    {
+        switch (mapId)
+        {
+            case LobbyMapCatalog.MinefieldMapId:
+                itemId = ArrowRaceTokenMinefieldId;
+                return true;
+            case LobbyMapCatalog.SnowFieldMapId:
+                itemId = ArrowRaceTokenSnowFieldId;
+                return true;
+            case LobbyMapCatalog.DeepSpaceMapId:
+                itemId = ArrowRaceTokenDeepSpaceId;
+                return true;
+            case LobbyMapCatalog.PirateBayMapId:
+                itemId = ArrowRaceTokenPirateBayId;
+                return true;
+            default:
+                itemId = string.Empty;
+                return false;
+        }
+    }
+
+    public static bool TryGetArrowRaceTokenMapId(string itemId, out string mapId)
+    {
+        switch (itemId)
+        {
+            case ArrowRaceTokenMinefieldId:
+                mapId = LobbyMapCatalog.MinefieldMapId;
+                return true;
+            case ArrowRaceTokenSnowFieldId:
+                mapId = LobbyMapCatalog.SnowFieldMapId;
+                return true;
+            case ArrowRaceTokenDeepSpaceId:
+                mapId = LobbyMapCatalog.DeepSpaceMapId;
+                return true;
+            case ArrowRaceTokenPirateBayId:
+                mapId = LobbyMapCatalog.PirateBayMapId;
+                return true;
+            default:
+                mapId = string.Empty;
+                return false;
+        }
+    }
+
+    public static string[] GetArrowRaceTokenIds()
+    {
+        return new[]
+        {
+            ArrowRaceTokenMinefieldId,
+            ArrowRaceTokenSnowFieldId,
+            ArrowRaceTokenDeepSpaceId,
+            ArrowRaceTokenPirateBayId
+        };
     }
 
     public static bool IsTrackedValuableCargo(string itemId)
@@ -993,7 +1060,7 @@ public static class InventoryItemCatalog
                 ItemType = InventoryItemType.Resource,
                 Category = InventoryItemCategory.Treasure,
                 Rarity = InventoryItemRarity.Legendary,
-                SellValueAstrons = 8000,
+                SellValueAstrons = 6000,
                 IconResourcePath = "Items/pirate_case",
                 ProjectFileName = "Resources/Items/pirate_case.png",
                 CanEnterSafePocket = false,
@@ -1996,6 +2063,70 @@ public static class InventoryItemCatalog
                 ShopBuyValueAstronsOverride = 7000,
                 IconResourcePath = "Items/avenger_starting_codes",
                 ProjectFileName = "Resources/Items/avenger_starting_codes.png",
+                SalvageOutputs = Array.Empty<string>()
+            },
+            [ArrowRaceTokenMinefieldId] = new InventoryItemDefinition
+            {
+                Id = ArrowRaceTokenMinefieldId,
+                DisplayName = "Arrow Race Token - Minefield",
+                ShortLabel = "ARM",
+                Description = "A Minefield route token used to start an Arrow map race. It is consumed when the race starts.",
+                ItemType = InventoryItemType.Quest,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 0,
+                ShopBuyValueAstronsOverride = 0,
+                IconResourcePath = "Items/arrow_race_token_minefield",
+                ProjectFileName = "Resources/Items/arrow_race_token_minefield.png",
+                CanEnterSafePocket = false,
+                SalvageOutputs = Array.Empty<string>()
+            },
+            [ArrowRaceTokenSnowFieldId] = new InventoryItemDefinition
+            {
+                Id = ArrowRaceTokenSnowFieldId,
+                DisplayName = "Arrow Race Token - Snow Field",
+                ShortLabel = "ARS",
+                Description = "A Snow Field route token used to start an Arrow map race. It is consumed when the race starts.",
+                ItemType = InventoryItemType.Quest,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 0,
+                ShopBuyValueAstronsOverride = 0,
+                IconResourcePath = "Items/arrow_race_token_snowfield",
+                ProjectFileName = "Resources/Items/arrow_race_token_snowfield.png",
+                CanEnterSafePocket = false,
+                SalvageOutputs = Array.Empty<string>()
+            },
+            [ArrowRaceTokenDeepSpaceId] = new InventoryItemDefinition
+            {
+                Id = ArrowRaceTokenDeepSpaceId,
+                DisplayName = "Arrow Race Token - Deep Space",
+                ShortLabel = "ARD",
+                Description = "A Deep Space route token used to start an Arrow map race. It is consumed when the race starts.",
+                ItemType = InventoryItemType.Quest,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 0,
+                ShopBuyValueAstronsOverride = 0,
+                IconResourcePath = "Items/arrow_race_token_deep_space",
+                ProjectFileName = "Resources/Items/arrow_race_token_deep_space.png",
+                CanEnterSafePocket = false,
+                SalvageOutputs = Array.Empty<string>()
+            },
+            [ArrowRaceTokenPirateBayId] = new InventoryItemDefinition
+            {
+                Id = ArrowRaceTokenPirateBayId,
+                DisplayName = "Arrow Race Token - Pirate Bay",
+                ShortLabel = "ARP",
+                Description = "A Pirate Bay route token used to start an Arrow map race. It is consumed when the race starts.",
+                ItemType = InventoryItemType.Quest,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 0,
+                ShopBuyValueAstronsOverride = 0,
+                IconResourcePath = "Items/arrow_race_token_pirate_bay",
+                ProjectFileName = "Resources/Items/arrow_race_token_pirate_bay.png",
+                CanEnterSafePocket = false,
                 SalvageOutputs = Array.Empty<string>()
             }
         };

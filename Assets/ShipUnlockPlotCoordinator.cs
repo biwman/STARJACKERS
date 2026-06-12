@@ -9,7 +9,9 @@ public enum ShipUnlockPlotType
     None = 0,
     Avenger = 1,
     Viper = 2,
-    Arrow = 3
+    Arrow = 3,
+    Bison = 4,
+    Invader = 5
 }
 
 public sealed class ShipUnlockPlotCoordinator : MonoBehaviour
@@ -86,6 +88,8 @@ public sealed class ShipUnlockPlotCoordinator : MonoBehaviour
             case ShipUnlockPlotType.Avenger: return "avenger";
             case ShipUnlockPlotType.Viper: return "viper";
             case ShipUnlockPlotType.Arrow: return "arrow";
+            case ShipUnlockPlotType.Bison: return "bison";
+            case ShipUnlockPlotType.Invader: return "invader";
             default: return "none";
         }
     }
@@ -97,6 +101,8 @@ public sealed class ShipUnlockPlotCoordinator : MonoBehaviour
             case "avenger": return ShipUnlockPlotType.Avenger;
             case "viper": return ShipUnlockPlotType.Viper;
             case "arrow": return ShipUnlockPlotType.Arrow;
+            case "bison": return ShipUnlockPlotType.Bison;
+            case "invader": return ShipUnlockPlotType.Invader;
             default: return ShipUnlockPlotType.None;
         }
     }
@@ -165,15 +171,26 @@ public sealed class ShipUnlockPlotCoordinator : MonoBehaviour
 
     ShipUnlockPlotType ChoosePlotForRound()
     {
-        List<Candidate> candidates = new List<Candidate>(3);
+        List<Candidate> candidates = new List<Candidate>(4);
         if (IsAvengerCandidate())
             candidates.Add(new Candidate(ShipUnlockPlotType.Avenger, 35));
 
         if (IsViperCandidate())
             candidates.Add(new Candidate(ShipUnlockPlotType.Viper, 25));
 
-        if (IsArrowCandidate(out bool finalRunReady))
+        if (IsBisonCandidate())
+            candidates.Add(new Candidate(ShipUnlockPlotType.Bison, 25));
+
+        if (IsInvaderCandidate())
+            candidates.Add(new Candidate(ShipUnlockPlotType.Invader, 30));
+
+        if (IsArrowCandidate(out bool finalRunReady, out bool forcedArrow))
+        {
+            if (forcedArrow)
+                return ShipUnlockPlotType.Arrow;
+
             candidates.Add(new Candidate(ShipUnlockPlotType.Arrow, finalRunReady ? 45 : 25));
+        }
 
         if (candidates.Count == 0)
             return ShipUnlockPlotType.None;
@@ -218,26 +235,68 @@ public sealed class ShipUnlockPlotCoordinator : MonoBehaviour
         return false;
     }
 
-    bool IsArrowCandidate(out bool finalRunReady)
+    bool IsArrowCandidate(out bool finalRunReady, out bool forced)
     {
         finalRunReady = false;
-        int chancePercent = RoomSettings.GetArrowPlotChancePercent();
-        if (!RollChance(chancePercent))
-            return false;
+        forced = false;
 
         Photon.Realtime.Player[] players = PhotonNetwork.PlayerList;
-        bool anyEligible = false;
+        bool anyQualificationEligible = false;
         for (int i = 0; i < players.Length; i++)
         {
             if (!PlayerProfileService.PlayerNeedsArrowLicense(players[i]))
                 continue;
 
-            anyEligible = true;
-            if (PlayerProfileService.PlayerHasArrowFinalRunReady(players[i]))
+            if (PlayerProfileService.PlayerHasArrowRaceTokenForSelectedMap(players[i]))
+                forced = true;
+
+            if (PlayerProfileService.PlayerIsArrowFinalRoundCandidate(players[i]))
+            {
                 finalRunReady = true;
+                forced = true;
+            }
+
+            if (PlayerProfileService.PlayerNeedsArrowQualification(players[i]))
+                anyQualificationEligible = true;
         }
 
-        return anyEligible;
+        if (forced)
+            return true;
+
+        int chancePercent = RoomSettings.GetArrowPlotChancePercent();
+        return anyQualificationEligible && RollChance(chancePercent);
+    }
+
+    bool IsBisonCandidate()
+    {
+        int chancePercent = RoomSettings.GetBisonPlotChancePercent();
+        if (!RollChance(chancePercent))
+            return false;
+
+        Photon.Realtime.Player[] players = PhotonNetwork.PlayerList;
+        for (int i = 0; i < players.Length; i++)
+        {
+            if (PlayerProfileService.PlayerNeedsBisonIndustrialParts(players[i]))
+                return true;
+        }
+
+        return false;
+    }
+
+    bool IsInvaderCandidate()
+    {
+        int chancePercent = RoomSettings.GetInvaderPlotChancePercent();
+        if (!RollChance(chancePercent))
+            return false;
+
+        Photon.Realtime.Player[] players = PhotonNetwork.PlayerList;
+        for (int i = 0; i < players.Length; i++)
+        {
+            if (PlayerProfileService.PlayerNeedsInvaderImprints(players[i]))
+                return true;
+        }
+
+        return false;
     }
 
     bool AnyPlayerHasAvengerStartingCodes()

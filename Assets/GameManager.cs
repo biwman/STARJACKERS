@@ -94,6 +94,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.FogOfWarActiveKey] = false;
         props[RoomSettings.PirateBaseActiveKey] = false;
         props[RoomSettings.AsteroidShowerActiveKey] = false;
+        props[RoomSettings.CosmicWormActiveKey] = false;
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;
@@ -185,6 +186,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.FogOfWarActiveKey] = false;
         props[RoomSettings.PirateBaseActiveKey] = false;
         props[RoomSettings.AsteroidShowerActiveKey] = false;
+        props[RoomSettings.CosmicWormActiveKey] = false;
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;

@@ -22,6 +22,9 @@ public static class RoomSettings
     public const string RandomLootWreckCountKey = "randomLootWreckCount";
     public const string HiddenTreasureEnabledKey = "hiddenTreasureEnabled";
     public const string CosmicWormEnabledKey = "cosmicWormEnabled";
+    public const string CosmicWormModeKey = "mapEffect.cosmicWorm.mode";
+    public const string CosmicWormStartUtcMsKey = "mapEffect.cosmicWorm.startUtcMs";
+    public const string CosmicWormActiveKey = "mapEffect.cosmicWorm.active";
     public const string CrazyEnemiesModeKey = "mapEffect.crazyEnemies.mode";
     public const string CrazyEnemiesStartUtcMsKey = "mapEffect.crazyEnemies.startUtcMs";
     public const string CrazyEnemiesActiveKey = "mapEffect.crazyEnemies.active";
@@ -34,11 +37,16 @@ public static class RoomSettings
     public const string AsteroidShowerModeKey = "mapEffect.asteroidShower.mode";
     public const string AsteroidShowerStartUtcMsKey = "mapEffect.asteroidShower.startUtcMs";
     public const string AsteroidShowerActiveKey = "mapEffect.asteroidShower.active";
+    public const string MapEffectModeDefaultsVersionKey = "mapEffectModeDefaultsVersion";
+    public const int MapEffectModeDefaultsVersion = 1;
     public const string MapEffectChanceKeyPrefix = "mapEffectChance.";
+    public const string MapEffectChanceDefaultsVersionKey = "mapEffectChanceDefaultsVersion";
+    public const int MapEffectChanceDefaultsVersion = 2;
     public const string CrazyEnemiesRuleId = "CE";
     public const string FogOfWarRuleId = "FoW";
     public const string PirateBaseRuleId = "PB";
     public const string AsteroidShowerRuleId = "AS";
+    public const string CosmicWormRuleId = "CW";
     public const string SpaceJunkDensityKey = "spaceJunkDensity";
     public const string ContainersDensityKey = "containersDensity";
     public const string ArtifactAsteroidsDensityKey = "artifactAsteroidsDensity";
@@ -60,6 +68,8 @@ public static class RoomSettings
     public const string AvengerPlotEnabledKey = "avengerPlotEnabled";
     public const string ViperPlotChancePercentKey = "viperPlotChancePercent";
     public const string ArrowPlotChancePercentKey = "arrowPlotChancePercent";
+    public const string BisonPlotChancePercentKey = "bisonPlotChancePercent";
+    public const string InvaderPlotChancePercentKey = "invaderPlotChancePercent";
     public const string ShipUnlockPlotActiveKey = "shipUnlockPlot.active";
     public const string ShipUnlockPlotStartTimeKey = "shipUnlockPlot.startTime";
     public const string BoosterSlowdownKey = "boosterSlowdownPercent";
@@ -122,7 +132,12 @@ public static class RoomSettings
 
     public const float DefaultRoundDuration = 240f;
     public const string DefaultObstacleDensity = "high";
-    public const string DefaultTreasureDensity = "medium";
+    public const string TreasureDensityNone = "none";
+    public const string TreasureDensityVeryLow = "very_low";
+    public const string TreasureDensityLow = "low";
+    public const string TreasureDensityMedium = "medium";
+    public const string TreasureDensityHigh = "high";
+    public const string DefaultTreasureDensity = TreasureDensityMedium;
     public const string RadioactiveTreasureDensityOff = "off";
     public const string RadioactiveTreasureDensityLow = "low";
     public const string RadioactiveTreasureDensityMedium = "medium";
@@ -143,6 +158,8 @@ public static class RoomSettings
     public const bool DefaultAvengerPlotEnabled = false;
     public const int DefaultViperPlotChancePercent = 20;
     public const int DefaultArrowPlotChancePercent = 0;
+    public const int DefaultBisonPlotChancePercent = 20;
+    public const int DefaultInvaderPlotChancePercent = 0;
     public const int DefaultRandomLootWreckCount = 0;
     public const bool DefaultHiddenTreasureEnabled = false;
     public const bool DefaultCosmicWormEnabled = false;
@@ -233,6 +250,7 @@ public static class RoomSettings
     public const string MovingObjectsModeOff = "off";
     public const string MovingObjectsModeOnlyRotate = "only_rotate";
     public const string DefaultMovingObjectsMode = MovingObjectsModeOn;
+    public const string ResourceRichnessExtremelyLow = "extremely_low";
     public const string ResourceRichnessVeryLow = "very_low";
     public const string ResourceRichnessLow = "low";
     public const string ResourceRichnessMedium = "medium";
@@ -246,6 +264,8 @@ public static class RoomSettings
     public const string DefaultMapEffectMode = MapEffectModeAlwaysOn;
     public const int DefaultMapEffectChancePercent = 5;
     public const double MapEffectActivationWindowMs = 2d * 60d * 60d * 1000d;
+    public const float CrazyEnemiesVisualScaleMultiplier = 1.3f;
+    public const float CrazyEnemiesSpawnFrequencyMultiplier = 1.2f;
     public const string SpaceJunkDensityNone = "none";
     public const string SpaceJunkDensityLow = "low";
     public const string SpaceJunkDensityMedium = "medium";
@@ -425,7 +445,11 @@ public static class RoomSettings
 
     public static bool IsCosmicWormEnabled()
     {
+        if (IsCosmicWormActive())
+            return true;
+
         if (PhotonNetwork.CurrentRoom != null &&
+            !PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(CosmicWormActiveKey) &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(CosmicWormEnabledKey, out object value) &&
             value is bool enabled)
         {
@@ -720,6 +744,16 @@ public static class RoomSettings
         return GetInt(ArrowPlotChancePercentKey, DefaultArrowPlotChancePercent, 0, 100);
     }
 
+    public static int GetBisonPlotChancePercent()
+    {
+        return GetInt(BisonPlotChancePercentKey, DefaultBisonPlotChancePercent, 0, 100);
+    }
+
+    public static int GetInvaderPlotChancePercent()
+    {
+        return GetInt(InvaderPlotChancePercentKey, DefaultInvaderPlotChancePercent, 0, 100);
+    }
+
     public static int GetCollectKeepAliveRangeBonusPercent()
     {
         return GetInt(CollectKeepAliveRangeBonusPercentKey, DefaultCollectKeepAliveRangeBonusPercent, 0, 200);
@@ -906,10 +940,11 @@ public static class RoomSettings
 
         switch (normalized)
         {
-            case "none":
-            case "low":
-            case "medium":
-            case "high":
+            case TreasureDensityNone:
+            case TreasureDensityVeryLow:
+            case TreasureDensityLow:
+            case TreasureDensityMedium:
+            case TreasureDensityHigh:
                 return normalized;
             default:
                 return DefaultTreasureDensity;
@@ -940,14 +975,16 @@ public static class RoomSettings
     {
         switch (NormalizeTreasureDensity(density))
         {
-            case "none":
-                return "low";
-            case "low":
-                return "medium";
-            case "medium":
-                return "high";
+            case TreasureDensityNone:
+                return TreasureDensityVeryLow;
+            case TreasureDensityVeryLow:
+                return TreasureDensityLow;
+            case TreasureDensityLow:
+                return TreasureDensityMedium;
+            case TreasureDensityMedium:
+                return TreasureDensityHigh;
             default:
-                return "high";
+                return TreasureDensityHigh;
         }
     }
 
@@ -975,6 +1012,9 @@ public static class RoomSettings
         if (IsAsteroidShowerActive())
             richness = IncreaseResourceRichness(richness);
 
+        if (IsCosmicWormActive())
+            richness = IncreaseResourceRichness(richness);
+
         return richness;
     }
 
@@ -986,6 +1026,9 @@ public static class RoomSettings
 
         switch (normalized)
         {
+            case "extremaly_low":
+                return ResourceRichnessExtremelyLow;
+            case ResourceRichnessExtremelyLow:
             case ResourceRichnessVeryLow:
             case ResourceRichnessLow:
             case ResourceRichnessMedium:
@@ -1002,6 +1045,8 @@ public static class RoomSettings
     {
         switch (NormalizeResourceRichness(richness))
         {
+            case ResourceRichnessExtremelyLow:
+                return ResourceRichnessVeryLow;
             case ResourceRichnessVeryLow:
                 return ResourceRichnessLow;
             case ResourceRichnessLow:
@@ -1565,20 +1610,24 @@ public static class RoomSettings
         if (definition == null)
             return 0;
 
+        int spawnSecond;
         if (PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(definition.SpawnSecondRoomKey))
         {
-            return GetInt(definition.SpawnSecondRoomKey, definition.DefaultSpawnSecond, 0, 120);
+            spawnSecond = GetInt(definition.SpawnSecondRoomKey, definition.DefaultSpawnSecond, 0, 120);
         }
-
-        if (kind == EnemyBotKind.Corsair &&
+        else if (kind == EnemyBotKind.Corsair &&
             PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(CorsairSpawnSecondKey, out object legacyValue))
         {
-            return Mathf.Clamp(ConvertToInt(legacyValue, definition.DefaultSpawnSecond), 0, 120);
+            spawnSecond = Mathf.Clamp(ConvertToInt(legacyValue, definition.DefaultSpawnSecond), 0, 120);
+        }
+        else
+        {
+            spawnSecond = Mathf.Clamp(definition.DefaultSpawnSecond, 0, 120);
         }
 
-        return Mathf.Clamp(definition.DefaultSpawnSecond, 0, 120);
+        return ApplyCrazyEnemiesSpawnFrequency(spawnSecond);
     }
 
     public static bool GetEnemyRespawnEnabled(EnemyBotKind kind)
@@ -1601,9 +1650,22 @@ public static class RoomSettings
     {
         EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
         if (definition == null)
-            return DefaultEnemyRespawnIntervalSeconds;
+            return ApplyCrazyEnemiesSpawnFrequency(DefaultEnemyRespawnIntervalSeconds);
 
-        return GetInt(definition.RespawnIntervalRoomKey, DefaultEnemyRespawnIntervalSeconds, 15, 150);
+        return ApplyCrazyEnemiesSpawnFrequency(GetInt(definition.RespawnIntervalRoomKey, DefaultEnemyRespawnIntervalSeconds, 15, 150));
+    }
+
+    public static float GetEnemyVisualScaleMultiplier()
+    {
+        return IsCrazyEnemiesActive() ? CrazyEnemiesVisualScaleMultiplier : 1f;
+    }
+
+    static int ApplyCrazyEnemiesSpawnFrequency(int seconds)
+    {
+        if (!IsCrazyEnemiesActive() || seconds <= 0)
+            return Mathf.Max(0, seconds);
+
+        return Mathf.Max(1, Mathf.CeilToInt(seconds / CrazyEnemiesSpawnFrequencyMultiplier));
     }
 
     public static bool AreEnemyBotsEnabled()
@@ -1664,6 +1726,21 @@ public static class RoomSettings
         }
     }
 
+    public static bool IsSpecialMapEffectModeKey(string key)
+    {
+        switch (key)
+        {
+            case CrazyEnemiesModeKey:
+            case FogOfWarModeKey:
+            case PirateBaseModeKey:
+            case AsteroidShowerModeKey:
+            case CosmicWormModeKey:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     public static double GetMapEffectStartUtcMs(string startKey)
     {
         if (PhotonNetwork.CurrentRoom != null &&
@@ -1691,7 +1768,82 @@ public static class RoomSettings
 
     public static int GetMapEffectChancePercent(string mapId, string ruleId)
     {
-        return GetInt(GetMapEffectChanceKey(mapId, ruleId), DefaultMapEffectChancePercent, 0, 100);
+        return GetInt(GetMapEffectChanceKey(mapId, ruleId), GetDefaultMapEffectChancePercent(mapId, ruleId), 0, 100);
+    }
+
+    public static int GetDefaultMapEffectChancePercent(string mapId, string ruleId)
+    {
+        string normalizedMapId = string.IsNullOrWhiteSpace(mapId)
+            ? string.Empty
+            : mapId.Trim().ToLowerInvariant();
+        string normalizedRuleId = string.IsNullOrWhiteSpace(ruleId)
+            ? string.Empty
+            : ruleId.Trim();
+
+        switch (normalizedMapId)
+        {
+            case "just_space":
+                return 0;
+            case "noob_haven":
+                return GetDefaultMapEffectChanceForRule(normalizedRuleId, 1, 1, 0, 5, 0);
+            case "minefield":
+                return GetDefaultMapEffectChanceForRule(normalizedRuleId, 5, 5, 0, 10, 1);
+            case "snow_field":
+                return GetDefaultMapEffectChanceForRule(normalizedRuleId, 5, 1, 1, 5, 10);
+            case "deep_space":
+                return GetDefaultMapEffectChanceForRule(normalizedRuleId, 5, 20, 5, 10, 10);
+            case "pirate_bay":
+                return GetDefaultMapEffectChanceForRule(normalizedRuleId, 5, 5, 35, 5, 5);
+            case "ancient_space":
+                return GetDefaultMapEffectChanceForRule(normalizedRuleId, 5, 10, 5, 10, 15);
+            case "mothership":
+                return GetDefaultMapEffectChanceForRule(normalizedRuleId, 5, 5, 1, 10, 1);
+            case "toxic_area":
+                return GetDefaultMapEffectChanceForRule(normalizedRuleId, 5, 1, 1, 5, 1);
+            case "gravity_well":
+                return 1;
+            default:
+                return DefaultMapEffectChancePercent;
+        }
+    }
+
+    public static bool IsLegacyMapEffectChanceDefault(string mapId, string ruleId, int percent)
+    {
+        if (percent == GetDefaultMapEffectChancePercent(mapId, ruleId))
+            return false;
+
+        if (percent == DefaultMapEffectChancePercent)
+            return true;
+
+        string normalizedMapId = string.IsNullOrWhiteSpace(mapId)
+            ? string.Empty
+            : mapId.Trim().ToLowerInvariant();
+        string normalizedRuleId = string.IsNullOrWhiteSpace(ruleId)
+            ? string.Empty
+            : ruleId.Trim();
+
+        return normalizedMapId == "pirate_bay" &&
+               normalizedRuleId == PirateBaseRuleId &&
+               percent == 20;
+    }
+
+    static int GetDefaultMapEffectChanceForRule(string ruleId, int crazyEnemiesPercent, int fogOfWarPercent, int pirateBasePercent, int asteroidShowerPercent, int cosmicWormPercent)
+    {
+        switch (ruleId)
+        {
+            case CrazyEnemiesRuleId:
+                return crazyEnemiesPercent;
+            case FogOfWarRuleId:
+                return fogOfWarPercent;
+            case PirateBaseRuleId:
+                return pirateBasePercent;
+            case AsteroidShowerRuleId:
+                return asteroidShowerPercent;
+            case CosmicWormRuleId:
+                return cosmicWormPercent;
+            default:
+                return DefaultMapEffectChancePercent;
+        }
     }
 
     public static int NormalizeMapEffectChancePercent(int percent)
@@ -1755,6 +1907,11 @@ public static class RoomSettings
     public static bool IsAsteroidShowerActive()
     {
         return IsMapEffectActive(AsteroidShowerActiveKey);
+    }
+
+    public static bool IsCosmicWormActive()
+    {
+        return IsMapEffectActive(CosmicWormActiveKey);
     }
 
     static bool IsPirateBaseEffectReadyOrActive()

@@ -30,6 +30,8 @@ public class PlayerProfileService : MonoBehaviour
     const string CloudAvengerTheftAttemptKey = "profile_avenger_theft_attempt";
     const string CloudViperRecoveryProgressKey = "profile_viper_recovery_progress";
     const string CloudArrowLicenseProgressKey = "profile_arrow_license_progress";
+    const string CloudBisonIndustrialPartsDeliveredKey = "profile_bison_industrial_parts_delivered";
+    const string CloudInvaderImprintsRecoveredKey = "profile_invader_imprints_recovered";
     const string CloudMissEnigmaPurchasedBlueprintsKey = "profile_miss_enigma_purchased_blueprints";
     const string CloudPilotDroneKillsKey = "profile_pilot_drone_kills";
     const string CloudPilotSoldItemsAstronsKey = "profile_pilot_sold_items_astrons";
@@ -43,6 +45,8 @@ public class PlayerProfileService : MonoBehaviour
     const string PlayerViperRecoveryStageKey = "profile_runtime_viper_recovery_stage";
     const string PlayerArrowLicenseStageKey = "profile_runtime_arrow_license_stage";
     const string PlayerArrowFinalRunReadyKey = "profile_runtime_arrow_final_ready";
+    const string PlayerBisonIndustrialPartsDeliveredKey = "profile_runtime_bison_parts_delivered";
+    const string PlayerInvaderImprintsRecoveredKey = "profile_runtime_invader_imprints";
 
     public const int ViperNeutralFighterWrecksRequired = 8;
     public const int ViperDroneWrecksRequired = 4;
@@ -51,10 +55,13 @@ public class PlayerProfileService : MonoBehaviour
     public const int ViperTestFlightSubsystemUnlocksPerReturn = 2;
     public const string ViperCargoSubsystemId = "cargo";
     public const int ArrowQualifierChipsRequired = 2;
+    public const int ArrowMapRacesRequired = 3;
     public const int ArrowTimeTrialMinimumRank = (int)ArrowTimeTrialRank.B;
     public const string ArrowIonNozzlePartId = "ion_nozzle";
     public const string ArrowGyroStabilizerPartId = "gyro_stabilizer";
     public const string ArrowRaceTransponderPartId = "race_transponder";
+    public const int BisonIndustrialPartsRequired = 6;
+    public const int InvaderImprintsRequired = 4;
 
     static PlayerProfileService instance;
     Task initializationTask;
@@ -195,6 +202,8 @@ public class PlayerProfileService : MonoBehaviour
             CloudAvengerTheftAttemptKey,
             CloudViperRecoveryProgressKey,
             CloudArrowLicenseProgressKey,
+            CloudBisonIndustrialPartsDeliveredKey,
+            CloudInvaderImprintsRecoveredKey,
             CloudMissEnigmaPurchasedBlueprintsKey,
             CloudPilotDroneKillsKey,
             CloudPilotSoldItemsAstronsKey,
@@ -222,6 +231,8 @@ public class PlayerProfileService : MonoBehaviour
         AvengerTheftAttemptData avengerTheftAttempt = AvengerTheftAttemptData.Empty();
         ViperRecoveryProgressData viperRecoveryProgress = ViperRecoveryProgressData.Empty();
         ArrowLicenseProgressData arrowLicenseProgress = ArrowLicenseProgressData.Empty();
+        int bisonIndustrialPartsDelivered = 0;
+        int invaderImprintsRecovered = 0;
         string[] missEnigmaPurchasedBlueprintIds = Array.Empty<string>();
         int pilotDroneKills = 0;
         int pilotSoldItemsAstrons = 0;
@@ -273,6 +284,12 @@ public class PlayerProfileService : MonoBehaviour
             if (data.TryGetValue(CloudArrowLicenseProgressKey, out Item arrowLicenseProgressItem) && arrowLicenseProgressItem?.Value != null)
                 arrowLicenseProgress = DeserializeArrowLicenseProgress(arrowLicenseProgressItem.Value.GetAsString(), unlockedShipIds);
 
+            if (data.TryGetValue(CloudBisonIndustrialPartsDeliveredKey, out Item bisonIndustrialPartsItem) && bisonIndustrialPartsItem?.Value != null)
+                bisonIndustrialPartsDelivered = bisonIndustrialPartsItem.Value.GetAs<int>();
+
+            if (data.TryGetValue(CloudInvaderImprintsRecoveredKey, out Item invaderImprintsItem) && invaderImprintsItem?.Value != null)
+                invaderImprintsRecovered = invaderImprintsItem.Value.GetAs<int>();
+
             if (data.TryGetValue(CloudMissEnigmaPurchasedBlueprintsKey, out Item missEnigmaPurchasedBlueprintsItem) && missEnigmaPurchasedBlueprintsItem?.Value != null)
                 missEnigmaPurchasedBlueprintIds = DeserializeMissEnigmaBlueprintPurchases(missEnigmaPurchasedBlueprintsItem.Value.GetAsString());
 
@@ -319,6 +336,8 @@ public class PlayerProfileService : MonoBehaviour
             AvengerTheftAttempt = NormalizeAvengerTheftAttempt(avengerTheftAttempt),
             ViperRecoveryProgress = NormalizeViperRecoveryProgress(viperRecoveryProgress, unlockedShipIds),
             ArrowLicenseProgress = NormalizeArrowLicenseProgress(arrowLicenseProgress, unlockedShipIds),
+            BisonIndustrialPartsDelivered = NormalizeBisonIndustrialPartsDelivered(bisonIndustrialPartsDelivered, unlockedShipIds),
+            InvaderImprintsRecovered = NormalizeInvaderImprintsRecovered(invaderImprintsRecovered, unlockedShipIds),
             MissEnigmaPurchasedBlueprintIds = NormalizeMissEnigmaBlueprintPurchases(missEnigmaPurchasedBlueprintIds),
             PilotDroneKills = pilotDroneKills,
             PilotSoldItemsAstrons = pilotSoldItemsAstrons,
@@ -382,6 +401,8 @@ public class PlayerProfileService : MonoBehaviour
             AvengerTheftAttempt = CurrentProfile != null ? NormalizeAvengerTheftAttempt(CurrentProfile.AvengerTheftAttempt) : AvengerTheftAttemptData.Empty(),
             ViperRecoveryProgress = CurrentProfile != null ? NormalizeViperRecoveryProgress(CurrentProfile.ViperRecoveryProgress, CurrentProfile.UnlockedShipIds) : ViperRecoveryProgressData.Empty(),
             ArrowLicenseProgress = CurrentProfile != null ? NormalizeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress, CurrentProfile.UnlockedShipIds) : ArrowLicenseProgressData.Empty(),
+            BisonIndustrialPartsDelivered = CurrentProfile != null ? NormalizeBisonIndustrialPartsDelivered(CurrentProfile.BisonIndustrialPartsDelivered, CurrentProfile.UnlockedShipIds) : 0,
+            InvaderImprintsRecovered = CurrentProfile != null ? NormalizeInvaderImprintsRecovered(CurrentProfile.InvaderImprintsRecovered, CurrentProfile.UnlockedShipIds) : 0,
             MissEnigmaPurchasedBlueprintIds = CurrentProfile != null ? NormalizeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds) : Array.Empty<string>(),
             PilotDroneKills = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotDroneKills) : 0,
             PilotSoldItemsAstrons = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotSoldItemsAstrons) : 0,
@@ -433,6 +454,8 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudAvengerTheftAttemptKey] = SerializeAvengerTheftAttempt(CurrentProfile.AvengerTheftAttempt),
                 [CloudViperRecoveryProgressKey] = SerializeViperRecoveryProgress(CurrentProfile.ViperRecoveryProgress),
                 [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress),
+                [CloudBisonIndustrialPartsDeliveredKey] = CurrentProfile.BisonIndustrialPartsDelivered,
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered,
                 [CloudMissEnigmaPurchasedBlueprintsKey] = SerializeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds),
                 [CloudPilotDroneKillsKey] = CurrentProfile.PilotDroneKills,
                 [CloudPilotSoldItemsAstronsKey] = CurrentProfile.PilotSoldItemsAstrons,
@@ -480,7 +503,9 @@ public class PlayerProfileService : MonoBehaviour
             [PlayerViperCargoUnlockedKey] = IsCargoUnlockedForProfile(CurrentProfile.ShipSkinIndex),
             [PlayerViperRecoveryStageKey] = (int)GetViperRecoveryStage(),
             [PlayerArrowLicenseStageKey] = (int)GetArrowLicenseStage(),
-            [PlayerArrowFinalRunReadyKey] = GetArrowLicenseProgress().FinalRunEntryAvailable
+            [PlayerArrowFinalRunReadyKey] = GetArrowLicenseProgress().FinalRunEntryAvailable,
+            [PlayerBisonIndustrialPartsDeliveredKey] = GetBisonIndustrialPartsDeliveredCount(),
+            [PlayerInvaderImprintsRecoveredKey] = GetInvaderImprintsRecoveredCount()
         };
 
         PhotonNetwork.LocalPlayer.SetCustomProperties(props);
@@ -764,6 +789,8 @@ public class PlayerProfileService : MonoBehaviour
                 AvengerTheftAttempt = AvengerTheftAttemptData.Empty(),
                 ViperRecoveryProgress = ViperRecoveryProgressData.Empty(),
                 ArrowLicenseProgress = ArrowLicenseProgressData.Empty(),
+                BisonIndustrialPartsDelivered = 0,
+                InvaderImprintsRecovered = 0,
                 MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
                 PilotDroneKills = 0,
                 PilotSoldItemsAstrons = 0,
@@ -800,6 +827,8 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudAvengerTheftAttemptKey] = SerializeAvengerTheftAttempt(CurrentProfile.AvengerTheftAttempt),
                 [CloudViperRecoveryProgressKey] = SerializeViperRecoveryProgress(CurrentProfile.ViperRecoveryProgress),
                 [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress),
+                [CloudBisonIndustrialPartsDeliveredKey] = CurrentProfile.BisonIndustrialPartsDelivered,
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered,
                 [CloudMissEnigmaPurchasedBlueprintsKey] = SerializeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds),
                 [CloudPilotDroneKillsKey] = CurrentProfile.PilotDroneKills,
                 [CloudPilotSoldItemsAstronsKey] = CurrentProfile.PilotSoldItemsAstrons,
@@ -1338,7 +1367,11 @@ public class PlayerProfileService : MonoBehaviour
                    GetViperRecoveryStage() == ViperRecoveryStage.Complete;
 
         if (shipType == ShipType.Arrow)
-            return GetArrowLicenseStage() == ArrowLicenseStage.Complete;
+        {
+            ArrowLicenseStage stage = GetArrowLicenseStage();
+            return stage == ArrowLicenseStage.FinalRunReady ||
+                   stage == ArrowLicenseStage.Complete;
+        }
 
         string shipTypeId = ShipCatalog.GetShipTypeId(shipType);
         for (int i = 0; i < CurrentProfile.UnlockedShipIds.Length; i++)
@@ -1367,6 +1400,10 @@ public class PlayerProfileService : MonoBehaviour
             CurrentProfile.ViperRecoveryProgress = ViperRecoveryProgressData.Complete();
         else if (shipType == ShipType.Arrow)
             CurrentProfile.ArrowLicenseProgress = ArrowLicenseProgressData.Complete();
+        else if (shipType == ShipType.CargoTruck)
+            CurrentProfile.BisonIndustrialPartsDelivered = BisonIndustrialPartsRequired;
+        else if (shipType == ShipType.Invader)
+            CurrentProfile.InvaderImprintsRecovered = InvaderImprintsRequired;
 
         HashSet<string> ids = new HashSet<string>(CurrentProfile.UnlockedShipIds, StringComparer.Ordinal)
         {
@@ -1400,6 +1437,10 @@ public class PlayerProfileService : MonoBehaviour
             CurrentProfile.ViperRecoveryProgress = ViperRecoveryProgressData.Empty();
         else if (shipType == ShipType.Arrow)
             CurrentProfile.ArrowLicenseProgress = ArrowLicenseProgressData.Empty();
+        else if (shipType == ShipType.CargoTruck)
+            CurrentProfile.BisonIndustrialPartsDelivered = 0;
+        else if (shipType == ShipType.Invader)
+            CurrentProfile.InvaderImprintsRecovered = 0;
 
         if (ShipCatalog.GetShipTypeFromSkinIndex(CurrentProfile.ShipSkinIndex) == shipType)
             CurrentProfile.ShipSkinIndex = ShipCatalog.ExplorerBasicSkinIndex;
@@ -1414,6 +1455,8 @@ public class PlayerProfileService : MonoBehaviour
         CurrentProfile.UnlockedShipIds = NormalizeUnlockedShipIds(ShipCatalog.GetAllShipTypeIds());
         CurrentProfile.ViperRecoveryProgress = ViperRecoveryProgressData.Complete();
         CurrentProfile.ArrowLicenseProgress = ArrowLicenseProgressData.Complete();
+        CurrentProfile.BisonIndustrialPartsDelivered = BisonIndustrialPartsRequired;
+        CurrentProfile.InvaderImprintsRecovered = InvaderImprintsRequired;
         await SaveShipUnlocksAsync();
     }
 
@@ -1423,6 +1466,8 @@ public class PlayerProfileService : MonoBehaviour
         CurrentProfile.UnlockedShipIds = NormalizeUnlockedShipIds(ShipCatalog.GetDefaultUnlockedShipTypeIds());
         CurrentProfile.ViperRecoveryProgress = ViperRecoveryProgressData.Empty();
         CurrentProfile.ArrowLicenseProgress = ArrowLicenseProgressData.Empty();
+        CurrentProfile.BisonIndustrialPartsDelivered = 0;
+        CurrentProfile.InvaderImprintsRecovered = 0;
         CurrentProfile.ShipSkinIndex = ShipCatalog.ExplorerBasicSkinIndex;
         await SaveShipUnlocksAsync();
     }
@@ -1699,6 +1744,92 @@ public class PlayerProfileService : MonoBehaviour
         return GetArrowLicenseStage() == ArrowLicenseStage.Complete;
     }
 
+    public int GetBisonIndustrialPartsDeliveredCount()
+    {
+        EnsureShipUnlocks();
+        return CurrentProfile != null ? Mathf.Clamp(CurrentProfile.BisonIndustrialPartsDelivered, 0, BisonIndustrialPartsRequired) : 0;
+    }
+
+    public int GetInvaderImprintsRecoveredCount()
+    {
+        EnsureShipUnlocks();
+        return CurrentProfile != null ? Mathf.Clamp(CurrentProfile.InvaderImprintsRecovered, 0, InvaderImprintsRequired) : 0;
+    }
+
+    public async Task<int> RecordBisonIndustrialPartsDeliveredAsync()
+    {
+        await EnsureInitializedAsync();
+        EnsureShipUnlocks();
+
+        if (IsShipUnlocked(ShipType.CargoTruck))
+        {
+            CurrentProfile.BisonIndustrialPartsDelivered = BisonIndustrialPartsRequired;
+            return CurrentProfile.BisonIndustrialPartsDelivered;
+        }
+
+        CurrentProfile.BisonIndustrialPartsDelivered = Mathf.Clamp(
+            CurrentProfile.BisonIndustrialPartsDelivered + 1,
+            0,
+            BisonIndustrialPartsRequired);
+
+        if (CurrentProfile.BisonIndustrialPartsDelivered >= BisonIndustrialPartsRequired)
+        {
+            HashSet<string> ids = new HashSet<string>(CurrentProfile.UnlockedShipIds, StringComparer.Ordinal)
+            {
+                ShipCatalog.GetShipTypeId(ShipType.CargoTruck)
+            };
+            string[] unlockedIds = new string[ids.Count];
+            ids.CopyTo(unlockedIds);
+            CurrentProfile.UnlockedShipIds = NormalizeUnlockedShipIds(unlockedIds);
+            CurrentProfile.BisonIndustrialPartsDelivered = BisonIndustrialPartsRequired;
+        }
+
+        await SaveBisonIndustrialProgressAsync();
+        return CurrentProfile.BisonIndustrialPartsDelivered;
+    }
+
+    public async Task<int> RecordInvaderImprintRecoveredAsync(int completedStage)
+    {
+        await EnsureInitializedAsync();
+        EnsureShipUnlocks();
+
+        if (IsShipUnlocked(ShipType.Invader))
+        {
+            CurrentProfile.InvaderImprintsRecovered = InvaderImprintsRequired;
+            return CurrentProfile.InvaderImprintsRecovered;
+        }
+
+        int safeStage = Mathf.Clamp(completedStage, 1, InvaderImprintsRequired);
+        CurrentProfile.InvaderImprintsRecovered = Mathf.Clamp(
+            Mathf.Max(CurrentProfile.InvaderImprintsRecovered + 1, safeStage),
+            0,
+            InvaderImprintsRequired);
+
+        if (CurrentProfile.InvaderImprintsRecovered >= InvaderImprintsRequired)
+        {
+            HashSet<string> ids = new HashSet<string>(CurrentProfile.UnlockedShipIds, StringComparer.Ordinal)
+            {
+                ShipCatalog.GetShipTypeId(ShipType.Invader)
+            };
+            string[] unlockedIds = new string[ids.Count];
+            ids.CopyTo(unlockedIds);
+            CurrentProfile.UnlockedShipIds = NormalizeUnlockedShipIds(unlockedIds);
+            CurrentProfile.InvaderImprintsRecovered = InvaderImprintsRequired;
+        }
+
+        await SaveInvaderImprintProgressAsync();
+        return CurrentProfile.InvaderImprintsRecovered;
+    }
+
+    public bool HasArrowRaceTokenInShipForMap(string mapId)
+    {
+        EnsureInventory();
+        if (!InventoryItemCatalog.TryGetArrowRaceTokenForMap(mapId, out string tokenItemId))
+            return false;
+
+        return CountItemInSlots(CurrentProfile.Inventory.ShipSlots, GetActiveShipInventoryCapacity(), tokenItemId) > 0;
+    }
+
     public async Task<bool> RecordArrowQualifierTrialAsync()
     {
         await EnsureInitializedAsync();
@@ -1712,19 +1843,95 @@ public class PlayerProfileService : MonoBehaviour
         int chips = Mathf.Clamp(progress.QualifierChips + 1, 0, ArrowQualifierChipsRequired);
         CurrentProfile.ArrowLicenseProgress = new ArrowLicenseProgressData
         {
-            Stage = chips >= ArrowQualifierChipsRequired ? (int)ArrowLicenseStage.PartsRequired : (int)ArrowLicenseStage.Qualifying,
+            Stage = chips >= ArrowQualifierChipsRequired ? (int)ArrowLicenseStage.TokenCollectionRequired : (int)ArrowLicenseStage.Qualifying,
             QualifierChips = chips,
             IonNozzleDelivered = progress.IonNozzleDelivered,
             GyroStabilizerDelivered = progress.GyroStabilizerDelivered,
             RaceTransponderDelivered = progress.RaceTransponderDelivered,
             BestTimeTrialRank = progress.BestTimeTrialRank,
             GhostRaceWon = progress.GhostRaceWon,
+            CompletedRaceMapIds = progress.CompletedRaceMapIds,
+            ActiveRaceMapId = string.Empty,
             FinalRunEntryAvailable = progress.FinalRunEntryAvailable,
             FinalRunActive = false,
             OriginalShipSkinIndex = ShipCatalog.ExplorerBasicSkinIndex
         };
 
         await SaveArrowLicenseProgressAsync("save Arrow qualifier");
+        return true;
+    }
+
+    public async Task<string> BeginArrowMapRaceAsync(string mapId)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+        EnsureShipUnlocks();
+
+        if (!InventoryItemCatalog.TryGetArrowRaceTokenForMap(mapId, out string tokenItemId))
+            return string.Empty;
+
+        ArrowLicenseProgressData progress = NormalizeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress, CurrentProfile.UnlockedShipIds);
+        ArrowLicenseStage stage = (ArrowLicenseStage)progress.Stage;
+        if (stage != ArrowLicenseStage.TokenCollectionRequired && stage != ArrowLicenseStage.MapRacesRequired)
+            return string.Empty;
+
+        string normalizedMapId = NormalizeArrowRaceMapId(mapId);
+        if (IsArrowRaceMapCompleted(progress, normalizedMapId))
+            return string.Empty;
+
+        PlayerInventoryData workingInventory = CurrentProfile.Inventory.Clone();
+        int slotIndex = FindItemInSlots(workingInventory.ShipSlots, GetActiveShipInventoryCapacity(), tokenItemId);
+        if (slotIndex < 0)
+            return string.Empty;
+
+        workingInventory.ShipSlots[slotIndex] = null;
+        progress.Stage = (int)ArrowLicenseStage.MapRacesRequired;
+        progress.QualifierChips = ArrowQualifierChipsRequired;
+        progress.ActiveRaceMapId = normalizedMapId;
+        progress.FinalRunEntryAvailable = false;
+        progress.FinalRunActive = false;
+        progress.OriginalShipSkinIndex = ShipCatalog.ExplorerBasicSkinIndex;
+
+        CurrentProfile.Inventory = workingInventory;
+        CurrentProfile.ArrowLicenseProgress = progress;
+        await SaveInventoryAndArrowLicenseProgressAsync("begin Arrow map race");
+        return tokenItemId;
+    }
+
+    public async Task<bool> RecordArrowMapRaceCompletedAsync(string mapId)
+    {
+        await EnsureInitializedAsync();
+        EnsureShipUnlocks();
+
+        string normalizedMapId = NormalizeArrowRaceMapId(mapId);
+        if (string.IsNullOrWhiteSpace(normalizedMapId))
+            return false;
+
+        ArrowLicenseProgressData progress = NormalizeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress, CurrentProfile.UnlockedShipIds);
+        ArrowLicenseStage stage = (ArrowLicenseStage)progress.Stage;
+        if (stage != ArrowLicenseStage.TokenCollectionRequired && stage != ArrowLicenseStage.MapRacesRequired)
+            return false;
+
+        HashSet<string> completed = new HashSet<string>(NormalizeArrowCompletedRaceMapIds(progress.CompletedRaceMapIds), StringComparer.Ordinal)
+        {
+            normalizedMapId
+        };
+        string[] completedMaps = new string[completed.Count];
+        completed.CopyTo(completedMaps);
+        Array.Sort(completedMaps, StringComparer.Ordinal);
+
+        progress.CompletedRaceMapIds = completedMaps;
+        progress.ActiveRaceMapId = string.Empty;
+        progress.QualifierChips = ArrowQualifierChipsRequired;
+        progress.Stage = completedMaps.Length >= ArrowMapRacesRequired
+            ? (int)ArrowLicenseStage.FinalRunReady
+            : (int)ArrowLicenseStage.MapRacesRequired;
+        progress.FinalRunEntryAvailable = completedMaps.Length >= ArrowMapRacesRequired;
+        progress.FinalRunActive = false;
+        progress.OriginalShipSkinIndex = ShipCatalog.ExplorerBasicSkinIndex;
+
+        CurrentProfile.ArrowLicenseProgress = progress;
+        await SaveArrowLicenseProgressAsync("save Arrow map race");
         return true;
     }
 
@@ -1816,6 +2023,9 @@ public class PlayerProfileService : MonoBehaviour
         if ((ArrowLicenseStage)progress.Stage != ArrowLicenseStage.FinalRunReady || !progress.FinalRunEntryAvailable)
             return false;
 
+        if (ShipCatalog.GetShipTypeFromSkinIndex(GetActiveShipSkinIndex()) != ShipType.Arrow)
+            return false;
+
         progress.FinalRunEntryAvailable = false;
         progress.FinalRunActive = true;
         progress.OriginalShipSkinIndex = Mathf.Clamp(originalShipSkinIndex, ShipCatalog.ExplorerBasicSkinIndex, ShipCatalog.MaxShipSkinIndex);
@@ -1862,9 +2072,9 @@ public class PlayerProfileService : MonoBehaviour
         if (!progress.FinalRunActive)
             return;
 
-        progress.Stage = (int)ArrowLicenseStage.GhostRaceRequired;
-        progress.GhostRaceWon = false;
-        progress.FinalRunEntryAvailable = false;
+        progress.Stage = (int)ArrowLicenseStage.FinalRunReady;
+        progress.GhostRaceWon = true;
+        progress.FinalRunEntryAvailable = true;
         progress.FinalRunActive = false;
         progress.OriginalShipSkinIndex = ShipCatalog.ExplorerBasicSkinIndex;
         CurrentProfile.ArrowLicenseProgress = progress;
@@ -3058,7 +3268,9 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudShipSkinKey] = CurrentProfile.ShipSkinIndex,
                 [CloudUnlockedShipsKey] = SerializeShipUnlocks(CurrentProfile.UnlockedShipIds),
                 [CloudViperRecoveryProgressKey] = SerializeViperRecoveryProgress(CurrentProfile.ViperRecoveryProgress),
-                [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress)
+                [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress),
+                [CloudBisonIndustrialPartsDeliveredKey] = CurrentProfile.BisonIndustrialPartsDelivered,
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -3110,6 +3322,40 @@ public class PlayerProfileService : MonoBehaviour
         }
     }
 
+    async Task SaveInventoryAndArrowLicenseProgressAsync(string operationName)
+    {
+        try
+        {
+            IsBusy = true;
+            EnsureInventory();
+            EnsureShipUnlocks();
+
+            var data = new Dictionary<string, object>
+            {
+                [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
+                [CloudUnlockedShipsKey] = SerializeShipUnlocks(CurrentProfile.UnlockedShipIds),
+                [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress),
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                operationName);
+            InventoryRevision++;
+            ApplyProfileToPhoton();
+            NotifyProfileChanged();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("PlayerProfileService Arrow inventory/progress save failed: " + ex);
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     async Task SaveViperRecoveryProgressAsync(string operationName)
     {
         try
@@ -3120,7 +3366,8 @@ public class PlayerProfileService : MonoBehaviour
             var data = new Dictionary<string, object>
             {
                 [CloudUnlockedShipsKey] = SerializeShipUnlocks(CurrentProfile.UnlockedShipIds),
-                [CloudViperRecoveryProgressKey] = SerializeViperRecoveryProgress(CurrentProfile.ViperRecoveryProgress)
+                [CloudViperRecoveryProgressKey] = SerializeViperRecoveryProgress(CurrentProfile.ViperRecoveryProgress),
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -3151,7 +3398,8 @@ public class PlayerProfileService : MonoBehaviour
             {
                 [CloudShipSkinKey] = CurrentProfile.ShipSkinIndex,
                 [CloudUnlockedShipsKey] = SerializeShipUnlocks(CurrentProfile.UnlockedShipIds),
-                [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress)
+                [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress),
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -3183,7 +3431,8 @@ public class PlayerProfileService : MonoBehaviour
             {
                 [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
                 [CloudUnlockedShipsKey] = SerializeShipUnlocks(CurrentProfile.UnlockedShipIds),
-                [CloudViperRecoveryProgressKey] = SerializeViperRecoveryProgress(CurrentProfile.ViperRecoveryProgress)
+                [CloudViperRecoveryProgressKey] = SerializeViperRecoveryProgress(CurrentProfile.ViperRecoveryProgress),
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -3220,7 +3469,9 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudUnlockedShipsKey] = SerializeShipUnlocks(CurrentProfile.UnlockedShipIds),
                 [CloudAvengerTheftAttemptKey] = SerializeAvengerTheftAttempt(CurrentProfile.AvengerTheftAttempt),
                 [CloudViperRecoveryProgressKey] = SerializeViperRecoveryProgress(CurrentProfile.ViperRecoveryProgress),
-                [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress)
+                [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress),
+                [CloudBisonIndustrialPartsDeliveredKey] = CurrentProfile.BisonIndustrialPartsDelivered,
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -3233,6 +3484,67 @@ public class PlayerProfileService : MonoBehaviour
         catch (Exception ex)
         {
             Debug.LogError("PlayerProfileService Avenger theft completion save failed: " + ex);
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    async Task SaveBisonIndustrialProgressAsync()
+    {
+        try
+        {
+            IsBusy = true;
+            EnsureShipUnlocks();
+
+            var data = new Dictionary<string, object>
+            {
+                [CloudUnlockedShipsKey] = SerializeShipUnlocks(CurrentProfile.UnlockedShipIds),
+                [CloudBisonIndustrialPartsDeliveredKey] = CurrentProfile.BisonIndustrialPartsDelivered,
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                "save Bison industrial parts progress");
+            ApplyProfileToPhoton();
+            NotifyProfileChanged();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("PlayerProfileService Bison industrial progress save failed: " + ex);
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    async Task SaveInvaderImprintProgressAsync()
+    {
+        try
+        {
+            IsBusy = true;
+            EnsureShipUnlocks();
+
+            var data = new Dictionary<string, object>
+            {
+                [CloudUnlockedShipsKey] = SerializeShipUnlocks(CurrentProfile.UnlockedShipIds),
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                "save Invader imprint progress");
+            ApplyProfileToPhoton();
+            NotifyProfileChanged();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("PlayerProfileService Invader imprint progress save failed: " + ex);
             throw;
         }
         finally
@@ -3620,21 +3932,111 @@ public class PlayerProfileService : MonoBehaviour
                Instance.GetViperRecoveryStage() == ViperRecoveryStage.Locked;
     }
 
-    public static bool PlayerNeedsArrowLicense(Photon.Realtime.Player player)
+    public static bool PlayerNeedsBisonIndustrialParts(Photon.Realtime.Player player)
     {
         if (player == null)
             return false;
 
         if (player.CustomProperties != null &&
-            player.CustomProperties.TryGetValue(PlayerArrowLicenseStageKey, out object value))
+            player.CustomProperties.TryGetValue(PlayerBisonIndustrialPartsDeliveredKey, out object value))
         {
-            return ConvertPlayerPropertyToInt(value, (int)ArrowLicenseStage.Complete) < (int)ArrowLicenseStage.Complete;
+            return ConvertPlayerPropertyToInt(value, BisonIndustrialPartsRequired) < BisonIndustrialPartsRequired;
         }
 
         return player == PhotonNetwork.LocalPlayer &&
                HasInstance &&
                Instance.IsInitialized &&
-               Instance.GetArrowLicenseStage() != ArrowLicenseStage.Complete;
+               Instance.GetBisonIndustrialPartsDeliveredCount() < BisonIndustrialPartsRequired &&
+               !Instance.IsShipUnlocked(ShipType.CargoTruck);
+    }
+
+    public static bool PlayerNeedsInvaderImprints(Photon.Realtime.Player player)
+    {
+        if (player == null)
+            return false;
+
+        if (player.CustomProperties != null &&
+            player.CustomProperties.TryGetValue(PlayerInvaderImprintsRecoveredKey, out object value))
+        {
+            return ConvertPlayerPropertyToInt(value, InvaderImprintsRequired) < InvaderImprintsRequired;
+        }
+
+        return player == PhotonNetwork.LocalPlayer &&
+               HasInstance &&
+               Instance.IsInitialized &&
+               Instance.GetInvaderImprintsRecoveredCount() < InvaderImprintsRequired &&
+               !Instance.IsShipUnlocked(ShipType.Invader);
+    }
+
+    public static int GetPlayerInvaderImprintsRecovered(Photon.Realtime.Player player)
+    {
+        if (player == null)
+            return InvaderImprintsRequired;
+
+        if (player.CustomProperties != null &&
+            player.CustomProperties.TryGetValue(PlayerInvaderImprintsRecoveredKey, out object value))
+        {
+            return ConvertPlayerPropertyToInt(value, InvaderImprintsRequired);
+        }
+
+        return player == PhotonNetwork.LocalPlayer &&
+               HasInstance &&
+               Instance.IsInitialized
+            ? Instance.GetInvaderImprintsRecoveredCount()
+            : InvaderImprintsRequired;
+    }
+
+    public static bool PlayerNeedsArrowLicense(Photon.Realtime.Player player)
+    {
+        if (player == null)
+            return false;
+
+        return GetPlayerArrowLicenseStage(player) != ArrowLicenseStage.Complete;
+    }
+
+    public static bool PlayerNeedsArrowQualification(Photon.Realtime.Player player)
+    {
+        ArrowLicenseStage stage = GetPlayerArrowLicenseStage(player);
+        return stage == ArrowLicenseStage.Locked || stage == ArrowLicenseStage.Qualifying;
+    }
+
+    public static bool PlayerCanCollectArrowRaceTokens(Photon.Realtime.Player player)
+    {
+        ArrowLicenseStage stage = GetPlayerArrowLicenseStage(player);
+        return stage == ArrowLicenseStage.TokenCollectionRequired || stage == ArrowLicenseStage.MapRacesRequired;
+    }
+
+    public static bool PlayerHasArrowRaceTokenForSelectedMap(Photon.Realtime.Player player)
+    {
+        if (player == null)
+            return false;
+
+        ArrowLicenseStage stage = GetPlayerArrowLicenseStage(player);
+        if (stage != ArrowLicenseStage.TokenCollectionRequired && stage != ArrowLicenseStage.MapRacesRequired)
+            return false;
+
+        if (!InventoryItemCatalog.TryGetArrowRaceTokenForMap(RoomSettings.GetSelectedLobbyMapId(), out string tokenItemId))
+            return false;
+
+        string[] slots = GetPlayerShipInventorySlots(player);
+        int capacity = GetPlayerShipInventoryCapacity(player);
+        return CountItemInSlots(slots, capacity, tokenItemId) > 0;
+    }
+
+    public static bool PlayerIsArrowFinalRoundCandidate(Photon.Realtime.Player player)
+    {
+        if (player == null)
+            return false;
+
+        if (GetPlayerArrowLicenseStage(player) != ArrowLicenseStage.FinalRunReady ||
+            !PlayerHasArrowFinalRunReady(player) ||
+            !string.Equals(RoomSettings.GetSelectedLobbyMapId(), LobbyMapCatalog.AncientSpaceMapId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(player, ShipCatalog.ExplorerBasicSkinIndex);
+        return ShipCatalog.GetShipTypeFromSkinIndex(shipSkinIndex) == ShipType.Arrow;
     }
 
     public static bool PlayerHasArrowFinalRunReady(Photon.Realtime.Player player)
@@ -3653,6 +4055,24 @@ public class PlayerProfileService : MonoBehaviour
                HasInstance &&
                Instance.IsInitialized &&
                Instance.GetArrowLicenseProgress().FinalRunEntryAvailable;
+    }
+
+    static ArrowLicenseStage GetPlayerArrowLicenseStage(Photon.Realtime.Player player)
+    {
+        if (player == null)
+            return ArrowLicenseStage.Complete;
+
+        if (player.CustomProperties != null &&
+            player.CustomProperties.TryGetValue(PlayerArrowLicenseStageKey, out object value))
+        {
+            int stageValue = ConvertPlayerPropertyToInt(value, (int)ArrowLicenseStage.Complete);
+            return (ArrowLicenseStage)Mathf.Clamp(stageValue, (int)ArrowLicenseStage.Locked, (int)ArrowLicenseStage.Complete);
+        }
+
+        if (player == PhotonNetwork.LocalPlayer && HasInstance && Instance.IsInitialized)
+            return Instance.GetArrowLicenseStage();
+
+        return ArrowLicenseStage.Complete;
     }
 
     static int ConvertPlayerPropertyToInt(object value, int fallback)
@@ -4393,11 +4813,22 @@ public class PlayerProfileService : MonoBehaviour
         CurrentProfile.UnlockedShipIds = NormalizeUnlockedShipIdsForViperProgress(CurrentProfile.UnlockedShipIds, CurrentProfile.ViperRecoveryProgress);
         CurrentProfile.ArrowLicenseProgress = NormalizeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress, CurrentProfile.UnlockedShipIds);
         CurrentProfile.UnlockedShipIds = NormalizeUnlockedShipIdsForArrowProgress(CurrentProfile.UnlockedShipIds, CurrentProfile.ArrowLicenseProgress);
+        CurrentProfile.BisonIndustrialPartsDelivered = NormalizeBisonIndustrialPartsDelivered(CurrentProfile.BisonIndustrialPartsDelivered, CurrentProfile.UnlockedShipIds);
+        CurrentProfile.UnlockedShipIds = NormalizeUnlockedShipIdsForBisonProgress(CurrentProfile.UnlockedShipIds, CurrentProfile.BisonIndustrialPartsDelivered);
+        CurrentProfile.InvaderImprintsRecovered = NormalizeInvaderImprintsRecovered(CurrentProfile.InvaderImprintsRecovered, CurrentProfile.UnlockedShipIds);
+        CurrentProfile.UnlockedShipIds = NormalizeUnlockedShipIdsForInvaderProgress(CurrentProfile.UnlockedShipIds, CurrentProfile.InvaderImprintsRecovered);
 
         ShipType selectedShipType = ShipCatalog.GetShipTypeFromSkinIndex(CurrentProfile.ShipSkinIndex);
         string selectedShipId = ShipCatalog.GetShipTypeId(selectedShipType);
+        ArrowLicenseStage arrowStage = (ArrowLicenseStage)Mathf.Clamp(
+            CurrentProfile.ArrowLicenseProgress != null ? CurrentProfile.ArrowLicenseProgress.Stage : (int)ArrowLicenseStage.Locked,
+            (int)ArrowLicenseStage.Locked,
+            (int)ArrowLicenseStage.Complete);
+        bool selectedShipAllowed = selectedShipType == ShipType.Explorer ||
+                                   Array.IndexOf(CurrentProfile.UnlockedShipIds, selectedShipId) >= 0 ||
+                                   (selectedShipType == ShipType.Arrow && arrowStage == ArrowLicenseStage.FinalRunReady);
         if (selectedShipType != ShipType.Explorer &&
-            Array.IndexOf(CurrentProfile.UnlockedShipIds, selectedShipId) < 0)
+            !selectedShipAllowed)
         {
             CurrentProfile.ShipSkinIndex = ShipCatalog.ExplorerBasicSkinIndex;
         }
@@ -4498,6 +4929,22 @@ public class PlayerProfileService : MonoBehaviour
         };
     }
 
+    public static int NormalizeBisonIndustrialPartsDelivered(int deliveredCount, string[] shipIds = null)
+    {
+        if (ContainsShipTypeId(shipIds, ShipType.CargoTruck))
+            return BisonIndustrialPartsRequired;
+
+        return Mathf.Clamp(deliveredCount, 0, BisonIndustrialPartsRequired);
+    }
+
+    public static int NormalizeInvaderImprintsRecovered(int recoveredCount, string[] shipIds = null)
+    {
+        if (ContainsShipTypeId(shipIds, ShipType.Invader))
+            return InvaderImprintsRequired;
+
+        return Mathf.Clamp(recoveredCount, 0, InvaderImprintsRequired);
+    }
+
     public static ViperRecoveryProgressData NormalizeViperRecoveryProgress(ViperRecoveryProgressData progress, string[] shipIds = null)
     {
         bool shipUnlocked = ContainsShipTypeId(shipIds, ShipType.Viper);
@@ -4539,18 +4986,40 @@ public class PlayerProfileService : MonoBehaviour
             return shipUnlocked ? ArrowLicenseProgressData.Complete() : ArrowLicenseProgressData.Empty();
 
         ArrowLicenseStage stage = (ArrowLicenseStage)Mathf.Clamp(progress.Stage, (int)ArrowLicenseStage.Locked, (int)ArrowLicenseStage.Complete);
-        if (stage == ArrowLicenseStage.Locked && shipUnlocked)
+        if (shipUnlocked)
             stage = ArrowLicenseStage.Complete;
 
         if (stage == ArrowLicenseStage.Complete)
             return ArrowLicenseProgressData.Complete();
 
         int qualifierChips = Mathf.Clamp(progress.QualifierChips, 0, ArrowQualifierChipsRequired);
+        if (stage == ArrowLicenseStage.Locked && qualifierChips > 0)
+            stage = ArrowLicenseStage.Qualifying;
+
         if (stage == ArrowLicenseStage.Qualifying && qualifierChips <= 0)
             stage = ArrowLicenseStage.Locked;
 
-        if (stage >= ArrowLicenseStage.PartsRequired)
+        if (stage >= ArrowLicenseStage.TokenCollectionRequired)
             qualifierChips = ArrowQualifierChipsRequired;
+
+        if (qualifierChips >= ArrowQualifierChipsRequired && stage < ArrowLicenseStage.TokenCollectionRequired)
+            stage = ArrowLicenseStage.TokenCollectionRequired;
+
+        if (stage == ArrowLicenseStage.GhostRaceRequired)
+            stage = ArrowLicenseStage.MapRacesRequired;
+
+        string[] completedRaceMapIds = stage >= ArrowLicenseStage.TokenCollectionRequired
+            ? NormalizeArrowCompletedRaceMapIds(progress.CompletedRaceMapIds)
+            : Array.Empty<string>();
+        int completedRaceCount = completedRaceMapIds.Length;
+
+        if (completedRaceCount >= ArrowMapRacesRequired)
+            stage = ArrowLicenseStage.FinalRunReady;
+        else if (completedRaceCount > 0 && stage == ArrowLicenseStage.TokenCollectionRequired)
+            stage = ArrowLicenseStage.MapRacesRequired;
+
+        bool finalActive = stage == ArrowLicenseStage.FinalRunReady && progress.FinalRunActive;
+        bool finalEntryAvailable = stage == ArrowLicenseStage.FinalRunReady && !finalActive;
 
         ArrowLicenseProgressData normalized = new ArrowLicenseProgressData
         {
@@ -4561,10 +5030,25 @@ public class PlayerProfileService : MonoBehaviour
             RaceTransponderDelivered = progress.RaceTransponderDelivered,
             BestTimeTrialRank = Mathf.Clamp(progress.BestTimeTrialRank, (int)ArrowTimeTrialRank.None, (int)ArrowTimeTrialRank.S),
             GhostRaceWon = progress.GhostRaceWon,
-            FinalRunEntryAvailable = progress.FinalRunEntryAvailable,
-            FinalRunActive = progress.FinalRunActive,
+            CompletedRaceMapIds = completedRaceMapIds,
+            ActiveRaceMapId = stage == ArrowLicenseStage.MapRacesRequired ? NormalizeArrowRaceMapId(progress.ActiveRaceMapId) : string.Empty,
+            FinalRunEntryAvailable = finalEntryAvailable,
+            FinalRunActive = finalActive,
             OriginalShipSkinIndex = Mathf.Clamp(progress.OriginalShipSkinIndex, ShipCatalog.ExplorerBasicSkinIndex, ShipCatalog.MaxShipSkinIndex)
         };
+
+        if ((ArrowLicenseStage)normalized.Stage >= ArrowLicenseStage.TokenCollectionRequired)
+        {
+            normalized.IonNozzleDelivered = true;
+            normalized.GyroStabilizerDelivered = true;
+            normalized.RaceTransponderDelivered = true;
+        }
+
+        if ((ArrowLicenseStage)normalized.Stage >= ArrowLicenseStage.FinalRunReady)
+        {
+            normalized.BestTimeTrialRank = Mathf.Max(normalized.BestTimeTrialRank, ArrowTimeTrialMinimumRank);
+            normalized.GhostRaceWon = true;
+        }
 
         if ((ArrowLicenseStage)normalized.Stage < ArrowLicenseStage.FinalRunReady)
         {
@@ -4572,14 +5056,8 @@ public class PlayerProfileService : MonoBehaviour
             normalized.FinalRunActive = false;
         }
 
-        if ((ArrowLicenseStage)normalized.Stage < ArrowLicenseStage.GhostRaceRequired)
+        if ((ArrowLicenseStage)normalized.Stage < ArrowLicenseStage.MapRacesRequired)
             normalized.GhostRaceWon = false;
-
-        if ((ArrowLicenseStage)normalized.Stage == ArrowLicenseStage.TimeTrialRequired &&
-            !AreArrowRacingPartsDelivered(normalized))
-        {
-            normalized.Stage = (int)ArrowLicenseStage.PartsRequired;
-        }
 
         return normalized;
     }
@@ -4622,12 +5100,96 @@ public class PlayerProfileService : MonoBehaviour
         return result;
     }
 
+    static string[] NormalizeUnlockedShipIdsForBisonProgress(string[] shipIds, int deliveredCount)
+    {
+        HashSet<string> normalized = new HashSet<string>(NormalizeUnlockedShipIds(shipIds), StringComparer.Ordinal);
+        string bisonId = ShipCatalog.GetShipTypeId(ShipType.CargoTruck);
+        if (deliveredCount >= BisonIndustrialPartsRequired)
+            normalized.Add(bisonId);
+        else
+            normalized.Remove(bisonId);
+
+        string[] result = new string[normalized.Count];
+        normalized.CopyTo(result);
+        Array.Sort(result, StringComparer.Ordinal);
+        return result;
+    }
+
+    static string[] NormalizeUnlockedShipIdsForInvaderProgress(string[] shipIds, int recoveredCount)
+    {
+        HashSet<string> normalized = new HashSet<string>(NormalizeUnlockedShipIds(shipIds), StringComparer.Ordinal);
+        string invaderId = ShipCatalog.GetShipTypeId(ShipType.Invader);
+        if (recoveredCount >= InvaderImprintsRequired)
+            normalized.Add(invaderId);
+        else
+            normalized.Remove(invaderId);
+
+        string[] result = new string[normalized.Count];
+        normalized.CopyTo(result);
+        Array.Sort(result, StringComparer.Ordinal);
+        return result;
+    }
+
     static bool AreArrowRacingPartsDelivered(ArrowLicenseProgressData progress)
     {
         return progress != null &&
                progress.IonNozzleDelivered &&
                progress.GyroStabilizerDelivered &&
                progress.RaceTransponderDelivered;
+    }
+
+    public static int CountCompletedArrowRaceMaps(ArrowLicenseProgressData progress)
+    {
+        return progress != null ? NormalizeArrowCompletedRaceMapIds(progress.CompletedRaceMapIds).Length : 0;
+    }
+
+    public static bool IsArrowRaceMapCompleted(ArrowLicenseProgressData progress, string mapId)
+    {
+        string normalizedMapId = NormalizeArrowRaceMapId(mapId);
+        if (progress == null || string.IsNullOrWhiteSpace(normalizedMapId))
+            return false;
+
+        string[] completed = NormalizeArrowCompletedRaceMapIds(progress.CompletedRaceMapIds);
+        for (int i = 0; i < completed.Length; i++)
+        {
+            if (string.Equals(completed[i], normalizedMapId, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
+    public static string[] NormalizeArrowCompletedRaceMapIds(string[] mapIds)
+    {
+        if (mapIds == null || mapIds.Length == 0)
+            return Array.Empty<string>();
+
+        HashSet<string> normalized = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < mapIds.Length; i++)
+        {
+            string mapId = NormalizeArrowRaceMapId(mapIds[i]);
+            if (!string.IsNullOrWhiteSpace(mapId))
+                normalized.Add(mapId);
+        }
+
+        string[] result = new string[normalized.Count];
+        normalized.CopyTo(result);
+        Array.Sort(result, StringComparer.Ordinal);
+        return result;
+    }
+
+    public static string NormalizeArrowRaceMapId(string mapId)
+    {
+        switch (mapId)
+        {
+            case LobbyMapCatalog.MinefieldMapId:
+            case LobbyMapCatalog.SnowFieldMapId:
+            case LobbyMapCatalog.DeepSpaceMapId:
+            case LobbyMapCatalog.PirateBayMapId:
+                return mapId;
+            default:
+                return string.Empty;
+        }
     }
 
     static ArrowTimeTrialRank ResolveArrowTimeTrialRank(float elapsedSeconds)
@@ -5379,8 +5941,10 @@ public enum ArrowLicenseStage
 {
     Locked = 0,
     Qualifying = 1,
-    PartsRequired = 2,
-    TimeTrialRequired = 3,
+    TokenCollectionRequired = 2,
+    PartsRequired = TokenCollectionRequired,
+    MapRacesRequired = 3,
+    TimeTrialRequired = MapRacesRequired,
     GhostRaceRequired = 4,
     FinalRunReady = 5,
     Complete = 6
@@ -5439,6 +6003,8 @@ public class ArrowLicenseProgressData
     public bool RaceTransponderDelivered;
     public int BestTimeTrialRank;
     public bool GhostRaceWon;
+    public string[] CompletedRaceMapIds;
+    public string ActiveRaceMapId;
     public bool FinalRunEntryAvailable;
     public bool FinalRunActive;
     public int OriginalShipSkinIndex;
@@ -5454,6 +6020,8 @@ public class ArrowLicenseProgressData
             RaceTransponderDelivered = false,
             BestTimeTrialRank = (int)ArrowTimeTrialRank.None,
             GhostRaceWon = false,
+            CompletedRaceMapIds = Array.Empty<string>(),
+            ActiveRaceMapId = string.Empty,
             FinalRunEntryAvailable = false,
             FinalRunActive = false,
             OriginalShipSkinIndex = ShipCatalog.ExplorerBasicSkinIndex
@@ -5471,6 +6039,14 @@ public class ArrowLicenseProgressData
             RaceTransponderDelivered = true,
             BestTimeTrialRank = (int)ArrowTimeTrialRank.B,
             GhostRaceWon = true,
+            CompletedRaceMapIds = new[]
+            {
+                LobbyMapCatalog.MinefieldMapId,
+                LobbyMapCatalog.SnowFieldMapId,
+                LobbyMapCatalog.DeepSpaceMapId,
+                LobbyMapCatalog.PirateBayMapId
+            },
+            ActiveRaceMapId = string.Empty,
             FinalRunEntryAvailable = false,
             FinalRunActive = false,
             OriginalShipSkinIndex = ShipCatalog.ExplorerBasicSkinIndex
@@ -5488,6 +6064,8 @@ public class ArrowLicenseProgressData
             RaceTransponderDelivered = RaceTransponderDelivered,
             BestTimeTrialRank = BestTimeTrialRank,
             GhostRaceWon = GhostRaceWon,
+            CompletedRaceMapIds = CompletedRaceMapIds != null ? (string[])CompletedRaceMapIds.Clone() : Array.Empty<string>(),
+            ActiveRaceMapId = ActiveRaceMapId,
             FinalRunEntryAvailable = FinalRunEntryAvailable,
             FinalRunActive = FinalRunActive,
             OriginalShipSkinIndex = OriginalShipSkinIndex
@@ -5511,6 +6089,8 @@ public class PlayerProfileData
     public AvengerTheftAttemptData AvengerTheftAttempt;
     public ViperRecoveryProgressData ViperRecoveryProgress;
     public ArrowLicenseProgressData ArrowLicenseProgress;
+    public int BisonIndustrialPartsDelivered;
+    public int InvaderImprintsRecovered;
     public string[] MissEnigmaPurchasedBlueprintIds;
     public int PilotDroneKills;
     public int PilotSoldItemsAstrons;
@@ -5538,6 +6118,8 @@ public class PlayerProfileData
             AvengerTheftAttempt = AvengerTheftAttemptData.Empty(),
             ViperRecoveryProgress = ViperRecoveryProgressData.Empty(),
             ArrowLicenseProgress = ArrowLicenseProgressData.Empty(),
+            BisonIndustrialPartsDelivered = 0,
+            InvaderImprintsRecovered = 0,
             MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
             PilotDroneKills = 0,
             PilotSoldItemsAstrons = 0,

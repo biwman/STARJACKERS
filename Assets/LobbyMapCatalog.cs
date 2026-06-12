@@ -233,8 +233,8 @@ public static class LobbyMapCatalog
         new LobbyMapDefinition(
             "just_space",
             "JUST SPACE",
-            "Empty space. Or almost empty. Learn here how to shoot with other players.\n" +
-            "No neutral ships. No resources.\n" +
+            "A quiet training sector with only a few basic resources drifting through space.\n" +
+            "No neutral ships. Very low resource density and extremely low richness.\n" +
             "No loss of inventory.\n" +
             "No loss of equipment.\n" +
             "Only one extraction zone.",
@@ -246,8 +246,8 @@ public static class LobbyMapCatalog
             400,
             100,
             false,
-            "none",
-            RoomSettings.ResourceRichnessVeryLow,
+            RoomSettings.TreasureDensityVeryLow,
+            RoomSettings.ResourceRichnessExtremelyLow,
             "low",
             RoomSettings.DefaultFireNebulaDensity,
             RoomSettings.DefaultNebulaSize,
@@ -899,8 +899,31 @@ public static class LobbyMapCatalog
                string.Equals(mapId, SnowFieldMapId, System.StringComparison.Ordinal) ||
                string.Equals(mapId, DeepSpaceMapId, System.StringComparison.Ordinal) ||
                string.Equals(mapId, PirateBayMapId, System.StringComparison.Ordinal)
-            ? 20
+            ? 40
             : RoomSettings.DefaultArrowPlotChancePercent;
+    }
+
+    public static int GetDefaultBisonPlotChancePercent(string mapId)
+    {
+        return string.Equals(mapId, JustSpaceMapId, System.StringComparison.Ordinal)
+            ? 0
+            : RoomSettings.DefaultBisonPlotChancePercent;
+    }
+
+    public static int GetDefaultInvaderPlotChancePercent(string mapId)
+    {
+        return IsHighThreatInvaderPlotMap(mapId)
+            ? 20
+            : RoomSettings.DefaultInvaderPlotChancePercent;
+    }
+
+    static bool IsHighThreatInvaderPlotMap(string mapId)
+    {
+        return string.Equals(mapId, DeepSpaceMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, PirateBayMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, TheThreatMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, GravityWellMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, ToxicAreaMapId, System.StringComparison.Ordinal);
     }
 
     public static void ApplyToProperties(LobbyMapDefinition map, Hashtable props)
@@ -950,6 +973,8 @@ public static class LobbyMapCatalog
         props[RoomSettings.AvengerPlotEnabledKey] = IsAvengerPlotEnabledByDefault(map.Id);
         props[RoomSettings.ViperPlotChancePercentKey] = GetDefaultViperPlotChancePercent(map.Id);
         props[RoomSettings.ArrowPlotChancePercentKey] = GetDefaultArrowPlotChancePercent(map.Id);
+        props[RoomSettings.BisonPlotChancePercentKey] = GetDefaultBisonPlotChancePercent(map.Id);
+        props[RoomSettings.InvaderPlotChancePercentKey] = GetDefaultInvaderPlotChancePercent(map.Id);
         props[RoomSettings.HiddenTreasureEnabledKey] = IsHiddenTreasureEnabledByDefault(map.Id);
         props[RoomSettings.CosmicWormEnabledKey] = RoomSettings.DefaultCosmicWormEnabled;
         props[RoomSettings.NeutralRidersEnabledKey] = AreNeutralRidersEnabledByDefault(map.Id);

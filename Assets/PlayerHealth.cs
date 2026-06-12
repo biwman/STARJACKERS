@@ -663,6 +663,9 @@ public class PlayerHealth : MonoBehaviourPun
         TryRollShipDamageOnHalfHpCrossing(previousHp);
 
         int hpDamage = Mathf.Max(0, previousHp - currentHP);
+        if (absorbed > 0 || hpDamage > 0)
+            BisonIndustrialPlotController.NotifyPlayerDamaged(this, hitContext);
+
         Vector2 impactPosition = Vector2.zero;
         bool hasResolvedImpactPosition = false;
         if (playImpactAudio && (absorbed > 0 || hpDamage > 0))
@@ -770,6 +773,9 @@ public class PlayerHealth : MonoBehaviourPun
         TryRollShipDamageOnHalfHpCrossing(previousHp);
 
         int hpDamage = Mathf.Max(0, previousHp - currentHP);
+        if (absorbed > 0 || hpDamage > 0)
+            BisonIndustrialPlotController.NotifyPlayerDamaged(this, hitContext);
+
         Vector2 impactPosition = Vector2.zero;
         bool hasResolvedImpactPosition = false;
         if (playImpactAudio && (absorbed > 0 || hpDamage > 0))
@@ -859,6 +865,8 @@ public class PlayerHealth : MonoBehaviourPun
         int previousShield = currentShield;
         int absorbed = Mathf.Min(currentShield, shieldOnlyDamage);
         currentShield -= absorbed;
+        if (absorbed > 0)
+            BisonIndustrialPlotController.NotifyPlayerDamaged(this, hitContext);
         TrackDamageTakenAndShieldBreak(currentHP, previousShield);
         photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
 
@@ -2026,6 +2034,46 @@ public class PlayerHealth : MonoBehaviourPun
         }
     }
 
+    [PunRPC]
+    public async void NotifyBisonIndustrialPartsDelivered()
+    {
+        if (!photonView.IsMine)
+            return;
+
+        try
+        {
+            int delivered = await PlayerProfileService.Instance.RecordBisonIndustrialPartsDeliveredAsync();
+            if (delivered >= PlayerProfileService.BisonIndustrialPartsRequired)
+                RoundAnnouncementUI.Show("Bison unlocked.", 3f);
+            else
+                RoundAnnouncementUI.Show("Industrial parts delivered: " + delivered + "/" + PlayerProfileService.BisonIndustrialPartsRequired, 3f);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to record Bison industrial parts delivery: " + ex);
+        }
+    }
+
+    [PunRPC]
+    public async void NotifyInvaderImprintRecovered(int completedStage)
+    {
+        if (!photonView.IsMine)
+            return;
+
+        try
+        {
+            int recovered = await PlayerProfileService.Instance.RecordInvaderImprintRecoveredAsync(completedStage);
+            if (recovered >= PlayerProfileService.InvaderImprintsRequired)
+                RoundAnnouncementUI.Show("Invader unlocked.", 3f);
+            else
+                RoundAnnouncementUI.Show("Alien imprints recovered: " + recovered + "/" + PlayerProfileService.InvaderImprintsRequired, 3f);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to record Invader imprint recovery: " + ex);
+        }
+    }
+
     float ResolveCurrentRoundElapsedSeconds()
     {
         GameTimer timer = FindAnyObjectByType<GameTimer>();
@@ -2634,12 +2682,13 @@ public class PlayerHealth : MonoBehaviourPun
         switch (enemyKind)
         {
             case EnemyBotKind.PirateFighter:
-                return 0.03f;
+                return 0.05f;
             case EnemyBotKind.Corsair:
                 return 0.06f;
             case EnemyBotKind.PirateFighterElite:
-                return 0.10f;
+                return 0.15f;
             case EnemyBotKind.PirateFighterAce:
+                return 0.50f;
             case EnemyBotKind.PirateBase:
                 return 0.20f;
             default:

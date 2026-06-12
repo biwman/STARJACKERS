@@ -18,6 +18,7 @@ public class TreasureSpawner : MonoBehaviourPun
     const int RadioactiveTreasureLowCount = 3;
     const int RadioactiveTreasureMediumCount = 6;
     const int RadioactiveTreasureHighCount = 10;
+    static readonly float[] ExtremelyLowRichnessWeights = { 85f, 12f, 2.5f, 0.4f, 0.09f, 0.01f };
     static readonly float[] VeryLowRichnessWeights = { 70f, 21f, 7f, 1f, 0.8f, 0.2f };
     static readonly float[] LowRichnessWeights = { 60f, 25f, 10f, 3f, 1.5f, 0.5f };
     static readonly float[] MediumRichnessWeights = { 50f, 25f, 13f, 7f, 4f, 1f };
@@ -202,9 +203,10 @@ public class TreasureSpawner : MonoBehaviourPun
     {
         switch (RoomSettings.GetTreasureDensity())
         {
-            case "none": return 0f;
-            case "low": return 0.5f;
-            case "high": return 2f;
+            case RoomSettings.TreasureDensityNone: return 0f;
+            case RoomSettings.TreasureDensityVeryLow: return 0.25f;
+            case RoomSettings.TreasureDensityLow: return 0.5f;
+            case RoomSettings.TreasureDensityHigh: return 2f;
             default: return 1f;
         }
     }
@@ -242,6 +244,8 @@ public class TreasureSpawner : MonoBehaviourPun
     {
         switch (RoomSettings.GetResourceRichness())
         {
+            case RoomSettings.ResourceRichnessExtremelyLow:
+                return ExtremelyLowRichnessWeights;
             case RoomSettings.ResourceRichnessVeryLow:
                 return VeryLowRichnessWeights;
             case RoomSettings.ResourceRichnessLow:

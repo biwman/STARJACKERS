@@ -342,12 +342,11 @@ public static class ProjectCatalog
                 {
                     Stage("stage_1", "FIRST PAYMENT",
                         RewardWithBlueprintScrap(8000, 3, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.SpaceTrapId)),
-                        Exact("cash_suitcase", "Cash Suitcase", InventoryItemCatalog.CashSuitcaseId, 1),
+                        Exact("pirate_case", "Pirate Case", InventoryItemCatalog.PirateCaseId, 1),
                         AnyContainer("sealed_containers", "Any Container", 8)),
                     Stage("stage_2", "BLACK CASES",
                         RewardWithBlueprintScrap(12000, 3, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.LootingFriendId)),
-                        Exact("cash_suitcases", "Cash Suitcase", InventoryItemCatalog.CashSuitcaseId, 2),
-                        AnyContainer("sealed_containers", "Any Container", 16)),
+                        Exact("pirate_cases", "Pirate Case", InventoryItemCatalog.PirateCaseId, 2)),
                     Stage("stage_3", "ARMED ESCORT",
                         RewardWithBlueprintScrap(16000, 3, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.GadgetMineId)),
                         AnyWeapon("weapons", "Rare+ Weapon", 2, InventoryItemRarity.Rare),
@@ -355,7 +354,6 @@ public static class ProjectCatalog
                         Exact("pirate_fighter_wrecks", "Pirate Fighter Wreck", InventoryItemCatalog.PirateFighterSalvageId, 2)),
                     Stage("stage_4", "THE OATH",
                         RewardWithBlueprintScrap(22000, 5, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.PlasmaGunId), InventoryItemCatalog.PirateSymbolId),
-                        Exact("cash_suitcases", "Cash Suitcase", InventoryItemCatalog.CashSuitcaseId, 4),
                         AnyWeapon("weapons", "Epic+ Weapon", 2, InventoryItemRarity.Epic),
                         AnyShield("shields", "Rare+ Shield", 3, InventoryItemRarity.Rare),
                         Exact("pirate_base_core", "Pirate Base Core", InventoryItemCatalog.PirateBaseCoreId, 1))

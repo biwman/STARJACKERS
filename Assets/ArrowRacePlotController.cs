@@ -16,13 +16,16 @@ public sealed class ArrowRacePlotController : MonoBehaviour
     static ArrowRacePlotController instance;
     static Sprite ringSprite;
     static Sprite glowDotSprite;
+    static Sprite directionArrowSprite;
     static bool localFinalRunObjectivesComplete;
 
-    readonly List<Vector2> route = new List<Vector2>(16);
+    readonly List<Vector2> route = new List<Vector2>(32);
 
     GameObject markerRoot;
     GameObject beaconObject;
     GameObject checkpointObject;
+    GameObject directionIndicatorObject;
+    SpriteRenderer directionIndicatorRenderer;
     TMP_Text beaconLabel;
     TMP_Text checkpointLabel;
     ChallengeMode activeChallenge = ChallengeMode.None;
@@ -32,6 +35,9 @@ public sealed class ArrowRacePlotController : MonoBehaviour
     float challengeStartTime;
     float challengeTimeLimit;
     int checkpointIndex;
+    string activeMapRaceMapId = string.Empty;
+    bool roundAttemptFinished;
+    bool mapRaceBeginInProgress;
     bool finalRunBeginInProgress;
     bool finalRunAwaitingExtraction;
 
@@ -39,9 +45,7 @@ public sealed class ArrowRacePlotController : MonoBehaviour
     {
         None,
         Qualifier,
-        PartSprint,
-        TimeTrial,
-        GhostRace,
+        MapRace,
         FinalRun
     }
 
@@ -120,9 +124,10 @@ public sealed class ArrowRacePlotController : MonoBehaviour
             return;
         }
 
-        if (currentStartTime != handledStartTime)
+        if (Mathf.Abs((float)(currentStartTime - handledStartTime)) > PlotStartMatchTolerance)
         {
             handledStartTime = currentStartTime;
+            roundAttemptFinished = false;
             ResetChallenge();
         }
 
@@ -143,42 +148,113 @@ public sealed class ArrowRacePlotController : MonoBehaviour
 
         if (activeChallenge != ChallengeMode.None)
         {
-            TickChallenge(player, stage);
+            TickChallenge(player);
             return;
         }
 
-        EnsureBeacon(stage, player.transform.position);
-        RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, BuildBeaconHint(stage));
-        if (Vector2.Distance(player.transform.position, beaconObject.transform.position) <= BeaconActivationRadius)
-            StartChallengeForStage(stage, player);
-    }
+        if (roundAttemptFinished)
+        {
+            DestroyBeacon();
+            DestroyDirectionIndicator();
+            RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "Arrow racing attempt resolved for this round.");
+            return;
+        }
 
-    void StartChallengeForStage(ArrowLicenseStage stage, PlayerHealth player)
-    {
         switch (stage)
         {
             case ArrowLicenseStage.Locked:
             case ArrowLicenseStage.Qualifying:
-                BeginCheckpointChallenge(ChallengeMode.Qualifier, player.transform.position, 7, 65f, "Arrow qualifier started.");
+                EnsureBeacon(stage, player.transform.position);
+                RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, BuildBeaconHint(stage));
+                if (Vector2.Distance(player.transform.position, beaconObject.transform.position) <= BeaconActivationRadius)
+                    BeginCheckpointChallenge(ChallengeMode.Qualifier, player.transform.position, 8, 75f, "Arrow qualification race started.");
                 break;
-            case ArrowLicenseStage.PartsRequired:
-                BeginCheckpointChallenge(ChallengeMode.PartSprint, player.transform.position, 7, 70f, "Arrow tuning sprint started.");
-                break;
-            case ArrowLicenseStage.TimeTrialRequired:
-                BeginCheckpointChallenge(ChallengeMode.TimeTrial, player.transform.position, 12, 110f, "Arrow time trial started.");
-                break;
-            case ArrowLicenseStage.GhostRaceRequired:
-                BeginCheckpointChallenge(ChallengeMode.GhostRace, player.transform.position, 14, 105f, "Ghost racer The Needle is on track.");
+            case ArrowLicenseStage.TokenCollectionRequired:
+            case ArrowLicenseStage.MapRacesRequired:
+                TickMapRaceStart(progress, player);
                 break;
             case ArrowLicenseStage.FinalRunReady:
-                BeginFinalRun(player);
+                TickFinalRunStart(player);
+                break;
+            default:
+                DestroyBeacon();
+                DestroyDirectionIndicator();
+                RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, string.Empty);
                 break;
         }
     }
 
+    void TickMapRaceStart(ArrowLicenseProgressData progress, PlayerHealth player)
+    {
+        DestroyBeacon();
+        DestroyDirectionIndicator();
+
+        string mapId = RoomSettings.GetSelectedLobbyMapId();
+        if (PlayerProfileService.IsArrowRaceMapCompleted(progress, mapId))
+        {
+            RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "Arrow race already complete on this map.");
+            return;
+        }
+
+        if (!PlayerProfileService.Instance.HasArrowRaceTokenInShipForMap(mapId))
+        {
+            RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "Carry this map's Arrow Race Token to start the Arrow race.");
+            return;
+        }
+
+        BeginMapRace(mapId, player);
+    }
+
+    async void BeginMapRace(string mapId, PlayerHealth player)
+    {
+        if (mapRaceBeginInProgress || player == null)
+            return;
+
+        mapRaceBeginInProgress = true;
+        string consumedTokenId = string.Empty;
+        try
+        {
+            consumedTokenId = await PlayerProfileService.Instance.BeginArrowMapRaceAsync(mapId);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Failed to begin Arrow map race: " + ex);
+        }
+        finally
+        {
+            mapRaceBeginInProgress = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(consumedTokenId))
+            return;
+
+        activeMapRaceMapId = PlayerProfileService.NormalizeArrowRaceMapId(mapId);
+        BeginCheckpointChallenge(ChallengeMode.MapRace, player.transform.position, 22, 240f, "Arrow Race Token consumed. Map race started.");
+    }
+
+    void TickFinalRunStart(PlayerHealth player)
+    {
+        DestroyBeacon();
+        DestroyDirectionIndicator();
+
+        if (!string.Equals(RoomSettings.GetSelectedLobbyMapId(), LobbyMapCatalog.AncientSpaceMapId, StringComparison.Ordinal))
+        {
+            RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "Select Arrow and start a solo round to enter the final race.");
+            return;
+        }
+
+        if (ShipCatalog.GetShipTypeFromSkinIndex(RoomSettings.GetPlayerShipSkin(PhotonNetwork.LocalPlayer, ShipCatalog.ExplorerBasicSkinIndex)) != ShipType.Arrow)
+        {
+            RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "The final Arrow race requires flying Arrow.");
+            return;
+        }
+
+        BeginFinalRun(player);
+    }
+
     async void BeginFinalRun(PlayerHealth player)
     {
-        if (finalRunBeginInProgress || player == null || player.photonView == null)
+        if (finalRunBeginInProgress || player == null)
             return;
 
         finalRunBeginInProgress = true;
@@ -200,21 +276,13 @@ public sealed class ArrowRacePlotController : MonoBehaviour
         if (!started)
             return;
 
-        Vector2 launch = ResolveSafeLaunchPosition(player.transform.position);
-        player.photonView.RPC(
-            nameof(PlayerHealth.BeginAvengerShipOverrideRpc),
-            RpcTarget.All,
-            ShipCatalog.ArrowSmoothSkinIndex,
-            launch.x,
-            launch.y,
-            player.transform.eulerAngles.z);
-
-        BeginCheckpointChallenge(ChallengeMode.FinalRun, launch, 10, 180f, "Final Arrow Run started.");
+        BeginCheckpointChallenge(ChallengeMode.FinalRun, ResolveSafeLaunchPosition(player.transform.position), 28, 300f, "Final Arrow Race started.");
     }
 
     void BeginCheckpointChallenge(ChallengeMode mode, Vector2 origin, int checkpointCount, float timeLimit, string announcement)
     {
         DestroyBeacon();
+        DestroyDirectionIndicator();
         activeChallenge = mode;
         finalRunAwaitingExtraction = false;
         if (mode != ChallengeMode.FinalRun)
@@ -226,14 +294,15 @@ public sealed class ArrowRacePlotController : MonoBehaviour
         route.Clear();
         BuildRoute(origin, checkpointCount, mode, route);
         SpawnCheckpoint();
-        RoundAnnouncementUI.Show(announcement, 2.8f);
+        RoundAnnouncementUI.Show(announcement, 3f);
     }
 
-    void TickChallenge(PlayerHealth player, ArrowLicenseStage stage)
+    void TickChallenge(PlayerHealth player)
     {
         if (activeChallenge == ChallengeMode.FinalRun && finalRunAwaitingExtraction)
         {
-            RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "Final Arrow Run complete: extract alive.");
+            DestroyDirectionIndicator();
+            RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "FINAL RACE COMPLETE - EVACUATE TO UNLOCK ARROW");
             return;
         }
 
@@ -250,6 +319,7 @@ public sealed class ArrowRacePlotController : MonoBehaviour
             return;
         }
 
+        UpdateDirectionIndicator(player);
         RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, BuildChallengeHint(elapsed));
         if (Vector2.Distance(player.transform.position, checkpointObject.transform.position) > CheckpointRadius)
             return;
@@ -264,41 +334,27 @@ public sealed class ArrowRacePlotController : MonoBehaviour
     async void CompleteChallenge(float elapsed)
     {
         DestroyCheckpoint();
+        DestroyDirectionIndicator();
 
         switch (activeChallenge)
         {
             case ChallengeMode.Qualifier:
                 await PlayerProfileService.Instance.RecordArrowQualifierTrialAsync();
-                RoundAnnouncementUI.Show("Arrow qualifier complete.", 3f);
+                RoundAnnouncementUI.Show("Arrow qualification complete.", 3f);
+                roundAttemptFinished = true;
                 ResetChallenge();
                 break;
-            case ChallengeMode.PartSprint:
-                string partId = await PlayerProfileService.Instance.RecordArrowRacingPartAsync();
-                RoundAnnouncementUI.Show("Arrow part secured: " + FormatArrowPartName(partId), 3f);
-                ResetChallenge();
-                break;
-            case ChallengeMode.TimeTrial:
-                ArrowTimeTrialRank rank = await PlayerProfileService.Instance.RecordArrowTimeTrialAsync(elapsed);
-                RoundAnnouncementUI.Show("Arrow time trial rank: " + FormatTimeTrialRank(rank), 3f);
-                ResetChallenge();
-                break;
-            case ChallengeMode.GhostRace:
-                if (elapsed <= 102f)
-                {
-                    await PlayerProfileService.Instance.RecordArrowGhostRaceWonAsync();
-                    RoundAnnouncementUI.Show("The Needle defeated. Final Arrow Run ready.", 3.2f);
-                }
-                else
-                {
-                    RoundAnnouncementUI.Show("The Needle stayed ahead.", 2.8f);
-                }
-
+            case ChallengeMode.MapRace:
+                await PlayerProfileService.Instance.RecordArrowMapRaceCompletedAsync(activeMapRaceMapId);
+                int completedCount = PlayerProfileService.CountCompletedArrowRaceMaps(PlayerProfileService.Instance.GetArrowLicenseProgress());
+                RoundAnnouncementUI.Show("Arrow map race complete: " + completedCount + "/" + PlayerProfileService.ArrowMapRacesRequired + " maps.", 3.2f);
+                roundAttemptFinished = true;
                 ResetChallenge();
                 break;
             case ChallengeMode.FinalRun:
                 localFinalRunObjectivesComplete = true;
                 finalRunAwaitingExtraction = true;
-                RoundAnnouncementUI.Show("Telemetry collected. Extract alive.", 3f);
+                RoundAnnouncementUI.Show("FINAL RACE COMPLETE - EVACUATE TO UNLOCK ARROW", 4f);
                 break;
         }
     }
@@ -317,6 +373,7 @@ public sealed class ArrowRacePlotController : MonoBehaviour
             }
         }
 
+        roundAttemptFinished = true;
         RoundAnnouncementUI.Show(message, 2.8f);
         ResetChallenge();
     }
@@ -423,16 +480,22 @@ public sealed class ArrowRacePlotController : MonoBehaviour
             return;
 
         checkpointLabel.text = activeChallenge == ChallengeMode.FinalRun
-            ? "DATA\n" + (checkpointIndex + 1) + "/" + route.Count
+            ? "FINAL\n" + (checkpointIndex + 1) + "/" + route.Count
             : (checkpointIndex + 1) + "/" + route.Count;
     }
 
     void BuildRoute(Vector2 origin, int count, ChallengeMode mode, List<Vector2> output)
     {
+        if (mode == ChallengeMode.MapRace || mode == ChallengeMode.FinalRun)
+        {
+            BuildLongMapRoute(origin, count, mode, output);
+            return;
+        }
+
         Vector2 mapSize = RoomSettings.GetMapDimensions();
         float halfX = Mathf.Max(10f, mapSize.x * 0.5f - 5f);
         float halfY = Mathf.Max(10f, mapSize.y * 0.5f - 5f);
-        float baseRadius = Mathf.Min(halfX, halfY) * (mode == ChallengeMode.FinalRun ? 0.62f : 0.46f);
+        float baseRadius = Mathf.Min(halfX, halfY) * 0.42f;
         float angleOffset = Mathf.Repeat((float)PhotonNetwork.Time * 0.37f + (int)mode * 0.71f, Mathf.PI * 2f);
 
         for (int i = 0; i < count; i++)
@@ -440,9 +503,6 @@ public sealed class ArrowRacePlotController : MonoBehaviour
             float t = count <= 1 ? 0f : i / (float)(count - 1);
             float angle = angleOffset + i * 1.42f;
             float radius = Mathf.Lerp(baseRadius * 0.55f, baseRadius, (i % 3) / 2f);
-            if (mode == ChallengeMode.GhostRace)
-                radius *= 1.08f;
-
             Vector2 offset = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
             offset += new Vector2(Mathf.Cos(angle + Mathf.PI * 0.5f), Mathf.Sin(angle + Mathf.PI * 0.5f)) * Mathf.Sin(t * Mathf.PI * 2f) * 4.5f;
             Vector2 candidate = origin + offset;
@@ -450,6 +510,87 @@ public sealed class ArrowRacePlotController : MonoBehaviour
                 Mathf.Clamp(candidate.x, -halfX, halfX),
                 Mathf.Clamp(candidate.y, -halfY, halfY)));
         }
+    }
+
+    void BuildLongMapRoute(Vector2 origin, int count, ChallengeMode mode, List<Vector2> output)
+    {
+        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        float halfX = Mathf.Max(14f, mapSize.x * 0.5f - 7f);
+        float halfY = Mathf.Max(14f, mapSize.y * 0.5f - 7f);
+        float edge = mode == ChallengeMode.FinalRun ? 0.9f : 0.84f;
+        float angleOffset = Mathf.Repeat((float)PhotonNetwork.Time * 0.31f + (mode == ChallengeMode.FinalRun ? 1.7f : 0.4f), Mathf.PI * 2f);
+        Vector2 safeOrigin = new Vector2(Mathf.Clamp(origin.x, -halfX, halfX), Mathf.Clamp(origin.y, -halfY, halfY));
+
+        for (int i = 0; i < count; i++)
+        {
+            float angle = angleOffset + i * 2.399963f;
+            float band = i % 4 == 0 ? 0.96f : i % 2 == 0 ? 0.74f : 0.86f;
+            float wiggle = Mathf.Sin(i * 1.73f + angleOffset) * 0.08f;
+            float radiusX = halfX * edge * Mathf.Clamp01(band + wiggle);
+            float radiusY = halfY * edge * Mathf.Clamp01(band - wiggle * 0.5f);
+            Vector2 candidate = new Vector2(Mathf.Cos(angle) * radiusX, Mathf.Sin(angle) * radiusY);
+
+            if (i == 0)
+            {
+                Vector2 direction = candidate - safeOrigin;
+                if (direction.sqrMagnitude < 1f)
+                    direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+
+                candidate = safeOrigin + direction.normalized * Mathf.Min(Mathf.Min(halfX, halfY) * 0.28f, 18f);
+            }
+
+            output.Add(new Vector2(
+                Mathf.Clamp(candidate.x, -halfX, halfX),
+                Mathf.Clamp(candidate.y, -halfY, halfY)));
+        }
+    }
+
+    void UpdateDirectionIndicator(PlayerHealth player)
+    {
+        if (player == null || checkpointObject == null)
+        {
+            DestroyDirectionIndicator();
+            return;
+        }
+
+        EnsureDirectionIndicator();
+        Vector2 playerPosition = player.transform.position;
+        Vector2 targetPosition = checkpointObject.transform.position;
+        Vector2 direction = targetPosition - playerPosition;
+        if (direction.sqrMagnitude < 0.01f)
+        {
+            directionIndicatorObject.SetActive(false);
+            return;
+        }
+
+        direction.Normalize();
+        directionIndicatorObject.SetActive(true);
+        Vector2 position = playerPosition + direction * 1.65f;
+        directionIndicatorObject.transform.position = new Vector3(position.x, position.y, -0.35f);
+        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+        directionIndicatorObject.transform.rotation = Quaternion.Euler(0f, 0f, angle - 90f);
+        float pulse = 0.82f + Mathf.Sin(Time.time * 6.5f) * 0.08f;
+        directionIndicatorObject.transform.localScale = Vector3.one * (0.42f * pulse);
+        if (directionIndicatorRenderer != null)
+        {
+            float alpha = Mathf.Lerp(0.82f, 0.98f, 0.5f + 0.5f * Mathf.Sin(Time.time * 4.2f));
+            directionIndicatorRenderer.color = new Color(0.63f, 0.24f, 1f, alpha);
+        }
+    }
+
+    void EnsureDirectionIndicator()
+    {
+        EnsureMarkerRoot();
+        if (directionIndicatorObject != null)
+            return;
+
+        directionIndicatorObject = new GameObject("ArrowRaceDirectionIndicator");
+        directionIndicatorObject.transform.SetParent(markerRoot.transform, false);
+        directionIndicatorRenderer = directionIndicatorObject.AddComponent<SpriteRenderer>();
+        directionIndicatorRenderer.sprite = GetDirectionArrowSprite();
+        directionIndicatorRenderer.color = new Color(0.63f, 0.24f, 1f, 0.92f);
+        directionIndicatorRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        directionIndicatorRenderer.sortingOrder = 92;
     }
 
     Vector2 ResolveBeaconPosition(ArrowLicenseStage stage, Vector2 playerPosition)
@@ -496,15 +637,7 @@ public sealed class ArrowRacePlotController : MonoBehaviour
         {
             case ArrowLicenseStage.Locked:
             case ArrowLicenseStage.Qualifying:
-                return "Fly into Arrow Race Beacon: qualifier trial.";
-            case ArrowLicenseStage.PartsRequired:
-                return "Fly into Arrow Race Beacon: tuning sprint.";
-            case ArrowLicenseStage.TimeTrialRequired:
-                return "Fly into Arrow Race Beacon: time trial.";
-            case ArrowLicenseStage.GhostRaceRequired:
-                return "Fly into Arrow Race Beacon: ghost race.";
-            case ArrowLicenseStage.FinalRunReady:
-                return "Fly into Arrow Race Beacon: final Arrow Run.";
+                return "Fly into Arrow Race Beacon: qualification race.";
             default:
                 return string.Empty;
         }
@@ -518,54 +651,22 @@ public sealed class ArrowRacePlotController : MonoBehaviour
 
     string GetBeaconLabel(ArrowLicenseStage stage)
     {
-        switch (stage)
-        {
-            case ArrowLicenseStage.PartsRequired: return "ARROW\nPARTS";
-            case ArrowLicenseStage.TimeTrialRequired: return "ARROW\nTIME";
-            case ArrowLicenseStage.GhostRaceRequired: return "GHOST\nRACE";
-            case ArrowLicenseStage.FinalRunReady: return "FINAL\nRUN";
-            default: return "ARROW\nQUAL";
-        }
+        return "ARROW\nQUAL";
     }
 
     Color GetBeaconColor(ArrowLicenseStage stage)
     {
-        switch (stage)
-        {
-            case ArrowLicenseStage.PartsRequired: return new Color(0.25f, 0.9f, 0.72f, 0.86f);
-            case ArrowLicenseStage.TimeTrialRequired: return new Color(1f, 0.8f, 0.24f, 0.9f);
-            case ArrowLicenseStage.GhostRaceRequired: return new Color(0.78f, 0.55f, 1f, 0.88f);
-            case ArrowLicenseStage.FinalRunReady: return new Color(1f, 0.36f, 0.24f, 0.92f);
-            default: return new Color(0.35f, 0.75f, 1f, 0.86f);
-        }
+        return new Color(0.35f, 0.75f, 1f, 0.86f);
     }
 
     Color GetChallengeColor(ChallengeMode mode)
     {
         switch (mode)
         {
-            case ChallengeMode.PartSprint: return new Color(0.18f, 1f, 0.72f, 0.9f);
-            case ChallengeMode.TimeTrial: return new Color(1f, 0.82f, 0.22f, 0.92f);
-            case ChallengeMode.GhostRace: return new Color(0.78f, 0.54f, 1f, 0.9f);
-            case ChallengeMode.FinalRun: return new Color(1f, 0.33f, 0.22f, 0.94f);
+            case ChallengeMode.MapRace: return new Color(0.48f, 0.62f, 1f, 0.9f);
+            case ChallengeMode.FinalRun: return new Color(1f, 0.44f, 0.28f, 0.94f);
             default: return new Color(0.32f, 0.78f, 1f, 0.9f);
         }
-    }
-
-    string FormatArrowPartName(string partId)
-    {
-        switch (partId)
-        {
-            case PlayerProfileService.ArrowIonNozzlePartId: return "Ion Nozzle";
-            case PlayerProfileService.ArrowGyroStabilizerPartId: return "Gyro Stabilizer";
-            case PlayerProfileService.ArrowRaceTransponderPartId: return "Race Transponder";
-            default: return "unknown";
-        }
-    }
-
-    string FormatTimeTrialRank(ArrowTimeTrialRank rank)
-    {
-        return rank == ArrowTimeTrialRank.None ? "-" : rank.ToString();
     }
 
     void EnsureMarkerRoot()
@@ -596,20 +697,33 @@ public sealed class ArrowRacePlotController : MonoBehaviour
         checkpointLabel = null;
     }
 
+    void DestroyDirectionIndicator()
+    {
+        if (directionIndicatorObject != null)
+            Destroy(directionIndicatorObject);
+
+        directionIndicatorObject = null;
+        directionIndicatorRenderer = null;
+    }
+
     void ResetChallenge()
     {
         activeChallenge = ChallengeMode.None;
+        mapRaceBeginInProgress = false;
         finalRunBeginInProgress = false;
         finalRunAwaitingExtraction = false;
+        activeMapRaceMapId = string.Empty;
         checkpointIndex = 0;
         route.Clear();
         DestroyCheckpoint();
+        DestroyDirectionIndicator();
         RoundAnnouncementUI.ClearPersistentHint(PersistentHintOwnerKey);
     }
 
     void ResetLocalState()
     {
         handledStartTime = double.MinValue;
+        roundAttemptFinished = false;
         localFinalRunObjectivesComplete = false;
         ResetChallenge();
         DestroyBeacon();
@@ -669,6 +783,15 @@ public sealed class ArrowRacePlotController : MonoBehaviour
         texture.Apply();
         glowDotSprite = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), size);
         return glowDotSprite;
+    }
+
+    static Sprite GetDirectionArrowSprite()
+    {
+        if (directionArrowSprite != null)
+            return directionArrowSprite;
+
+        directionArrowSprite = RuntimeSpriteUtility.CreateArrowSprite();
+        return directionArrowSprite;
     }
 
     static bool IsRoundStarted(out double currentStartTime)

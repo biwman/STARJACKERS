@@ -22,6 +22,8 @@ public sealed class TractorBeamVfx : MonoBehaviour
     int sortingLayerId;
     int sortingOrder = 2400;
     Vector2 sourceLocalAnchorDirection = Vector2.up;
+    float sourceAnchorDistanceFactor = 1f;
+    float targetAnchorDistanceFactor = 1f;
 
     public static void Prewarm()
     {
@@ -36,6 +38,16 @@ public sealed class TractorBeamVfx : MonoBehaviour
 
     public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId, Vector2 sourceLocalDirection)
     {
+        StartBeam(sourcePhotonViewId, targetPhotonViewId, sourceLocalDirection, 1f);
+    }
+
+    public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId, Vector2 sourceLocalDirection, float sourceAnchorDistance)
+    {
+        StartBeam(sourcePhotonViewId, targetPhotonViewId, sourceLocalDirection, sourceAnchorDistance, 1f);
+    }
+
+    public static void StartBeam(int sourcePhotonViewId, int targetPhotonViewId, Vector2 sourceLocalDirection, float sourceAnchorDistance, float targetAnchorDistance)
+    {
         StopBeam(sourcePhotonViewId);
 
         PhotonView sourceView = PhotonView.Find(sourcePhotonViewId);
@@ -45,7 +57,7 @@ public sealed class TractorBeamVfx : MonoBehaviour
 
         GameObject effect = new GameObject("TractorBeamVfx_" + sourcePhotonViewId);
         TractorBeamVfx vfx = effect.AddComponent<TractorBeamVfx>();
-        vfx.Initialize(sourceView.transform, targetView.transform, sourcePhotonViewId, targetPhotonViewId, sourceLocalDirection);
+        vfx.Initialize(sourceView.transform, targetView.transform, sourcePhotonViewId, targetPhotonViewId, sourceLocalDirection, sourceAnchorDistance, targetAnchorDistance);
         ActiveBySourceViewId[sourcePhotonViewId] = vfx;
     }
 
@@ -70,13 +82,15 @@ public sealed class TractorBeamVfx : MonoBehaviour
             Destroy(vfx.gameObject);
     }
 
-    void Initialize(Transform sourceTransform, Transform targetTransform, int resolvedSourceViewId, int resolvedTargetViewId, Vector2 localAnchorDirection)
+    void Initialize(Transform sourceTransform, Transform targetTransform, int resolvedSourceViewId, int resolvedTargetViewId, Vector2 localAnchorDirection, float anchorDistanceFactor, float targetAnchorFactor)
     {
         source = sourceTransform;
         target = targetTransform;
         sourceViewId = resolvedSourceViewId;
         targetViewId = resolvedTargetViewId;
         sourceLocalAnchorDirection = localAnchorDirection.sqrMagnitude > 0.001f ? localAnchorDirection.normalized : Vector2.up;
+        sourceAnchorDistanceFactor = Mathf.Clamp01(anchorDistanceFactor);
+        targetAnchorDistanceFactor = Mathf.Clamp01(targetAnchorFactor);
 
         SpriteRenderer sourceRenderer = source != null ? source.GetComponentInChildren<SpriteRenderer>() : null;
         if (sourceRenderer != null)
@@ -156,10 +170,14 @@ public sealed class TractorBeamVfx : MonoBehaviour
 
     Vector3 GetSourcePoint()
     {
+        if (sourceAnchorDistanceFactor <= 0.001f)
+            return source != null ? source.position : Vector3.zero;
+
         float forwardOffset = 0.55f;
         SpriteRenderer renderer = source != null ? source.GetComponentInChildren<SpriteRenderer>() : null;
         if (renderer != null)
             forwardOffset = Mathf.Max(0.4f, Mathf.Max(renderer.bounds.extents.x, renderer.bounds.extents.y) * 0.9f);
+        forwardOffset *= sourceAnchorDistanceFactor;
 
         Vector3 anchorDirection = source != null
             ? source.TransformDirection(new Vector3(sourceLocalAnchorDirection.x, sourceLocalAnchorDirection.y, 0f)).normalized
@@ -172,9 +190,16 @@ public sealed class TractorBeamVfx : MonoBehaviour
 
     Vector3 GetTargetPoint(Vector3 sourcePoint)
     {
+        if (targetAnchorDistanceFactor <= 0.001f)
+            return target != null ? target.position : sourcePoint;
+
         Collider2D collider = target != null ? target.GetComponent<Collider2D>() : null;
         if (collider != null)
-            return collider.ClosestPoint(sourcePoint);
+        {
+            Vector3 edgePoint = collider.ClosestPoint(sourcePoint);
+            Vector3 centerPoint = target != null ? target.position : sourcePoint;
+            return Vector3.Lerp(centerPoint, edgePoint, targetAnchorDistanceFactor);
+        }
 
         return target != null ? target.position : sourcePoint;
     }

@@ -9520,6 +9520,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         bool viperNeedsParts = shipType == ShipType.Viper && viperStage == ViperRecoveryStage.WreckRecovered;
         bool viperTesting = shipType == ShipType.Viper && viperStage == ViperRecoveryStage.Testing;
         bool arrowLocked = shipType == ShipType.Arrow && !shipUnlocked && arrowStage != ArrowLicenseStage.Complete;
+        bool bisonLocked = shipType == ShipType.CargoTruck && !shipUnlocked;
+        bool invaderLocked = shipType == ShipType.Invader && !shipUnlocked;
         RectTransform cardRect = shipSelectionCardObjects[cardIndex] != null ? shipSelectionCardObjects[cardIndex].GetComponent<RectTransform>() : null;
         if (cardRect != null)
         {
@@ -9567,6 +9569,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
                     ? centerCard ? 23f : 16f
                     : arrowLocked
                         ? centerCard ? 20f : 15f
+                        : bisonLocked
+                            ? centerCard ? 24f : 17f
+                            : invaderLocked
+                                ? centerCard ? 24f : 17f
                     : centerCard ? 28f : 20f;
             RectTransform lockRect = lockText.rectTransform;
             lockRect.anchoredPosition = viperNeedsParts
@@ -9575,6 +9581,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
                     ? centerCard ? new Vector2(18f, -208f) : new Vector2(10f, -150f)
                     : arrowLocked
                         ? centerCard ? new Vector2(18f, -92f) : new Vector2(10f, -72f)
+                        : bisonLocked
+                            ? centerCard ? new Vector2(18f, -92f) : new Vector2(10f, -72f)
+                            : invaderLocked
+                                ? centerCard ? new Vector2(18f, -92f) : new Vector2(10f, -72f)
                     : centerCard ? new Vector2(18f, 18f) : new Vector2(10f, 12f);
             lockRect.sizeDelta = viperNeedsParts
                 ? centerCard ? new Vector2(640f, 190f) : new Vector2(430f, 150f)
@@ -9582,11 +9592,19 @@ public class PlayerProfilePanelUI : MonoBehaviour
                     ? centerCard ? new Vector2(560f, 104f) : new Vector2(420f, 82f)
                     : arrowLocked
                         ? centerCard ? new Vector2(640f, 190f) : new Vector2(430f, 150f)
+                        : bisonLocked
+                            ? centerCard ? new Vector2(600f, 142f) : new Vector2(430f, 104f)
+                            : invaderLocked
+                                ? centerCard ? new Vector2(600f, 142f) : new Vector2(430f, 104f)
                     : centerCard ? new Vector2(560f, 126f) : new Vector2(400f, 100f);
             lockText.color = viperTesting
                 ? new Color(1f, 0.82f, 0.48f, 0.98f)
                 : arrowLocked
                     ? new Color(0.66f, 0.9f, 1f, 0.98f)
+                    : bisonLocked
+                        ? new Color(0.92f, 0.86f, 0.56f, 0.98f)
+                        : invaderLocked
+                            ? new Color(0.76f, 0.94f, 0.88f, 0.98f)
                 : new Color(1f, 0.92f, 0.72f, 0.98f);
             lockText.transform.SetAsLastSibling();
         }
@@ -9727,33 +9745,38 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (shipType == ShipType.Avenger)
             return "LOCKED\nRECOVER AVENGER";
 
+        if (shipType == ShipType.CargoTruck && PlayerProfileService.HasInstance)
+        {
+            int delivered = PlayerProfileService.Instance.GetBisonIndustrialPartsDeliveredCount();
+            return "Bring industrial parts: " + delivered + "/" + PlayerProfileService.BisonIndustrialPartsRequired;
+        }
+
+        if (shipType == ShipType.Invader && PlayerProfileService.HasInstance)
+        {
+            int imprints = PlayerProfileService.Instance.GetInvaderImprintsRecoveredCount();
+            return "Alien imprints recovered: " + imprints + "/" + PlayerProfileService.InvaderImprintsRequired;
+        }
+
         if (shipType == ShipType.Arrow && PlayerProfileService.HasInstance)
         {
             ArrowLicenseProgressData progress = PlayerProfileService.Instance.GetArrowLicenseProgress();
             ArrowLicenseStage arrowStage = (ArrowLicenseStage)Mathf.Clamp(progress.Stage, (int)ArrowLicenseStage.Locked, (int)ArrowLicenseStage.Complete);
-            switch (arrowStage)
+            if (arrowStage == ArrowLicenseStage.Complete)
+                return string.Empty;
+
+            int qualificationCount = Mathf.Clamp(progress.QualifierChips, 0, PlayerProfileService.ArrowQualifierChipsRequired);
+            int completedMapCount = PlayerProfileService.CountCompletedArrowRaceMaps(progress);
+            if (qualificationCount <= 0)
             {
-                case ArrowLicenseStage.Locked:
-                case ArrowLicenseStage.Qualifying:
-                    return "Arrow Racing License\n" +
-                           "Complete Race Beacon qualifiers: " +
-                           progress.QualifierChips + "/" + PlayerProfileService.ArrowQualifierChipsRequired;
-                case ArrowLicenseStage.PartsRequired:
-                    return "Deliver racing parts\n" +
-                           "Ion Nozzle: " + FormatDelivered(progress.IonNozzleDelivered) + "\n" +
-                           "Gyro Stabilizer: " + FormatDelivered(progress.GyroStabilizerDelivered) + "\n" +
-                           "Race Transponder: " + FormatDelivered(progress.RaceTransponderDelivered);
-                case ArrowLicenseStage.TimeTrialRequired:
-                    return "Complete Arrow Time Trial\n" +
-                           "Required rank: B\n" +
-                           "Best rank: " + FormatArrowRank(progress.BestTimeTrialRank);
-                case ArrowLicenseStage.GhostRaceRequired:
-                    return "Defeat the ghost racer\n" +
-                           "Target: The Needle";
-                case ArrowLicenseStage.FinalRunReady:
-                    return "Final Arrow Run ready\n" +
-                           "Complete telemetry route and extract alive";
+                return "Arrow Racing License\n" +
+                       "Complete qualification races " + qualificationCount + "/" + PlayerProfileService.ArrowQualifierChipsRequired;
             }
+
+            return "Arrow Racing License\n" +
+                   "1. Complete qualification races " + qualificationCount + "/" + PlayerProfileService.ArrowQualifierChipsRequired + "\n" +
+                   "2. Collect Arrow Race Tokens from AI Players on 3 different maps.\n" +
+                   "3. Start round with Arrow Race Token and complete the race. " + completedMapCount + "/" + PlayerProfileService.ArrowMapRacesRequired + "\n" +
+                   "4. Finish the Final Race with Arrow and escape.";
         }
 
         return "LOCKED";

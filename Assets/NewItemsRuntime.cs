@@ -1216,6 +1216,7 @@ public static class PlayerDeployableRuntime
     public const string RocketAutoTurretMarker = "player_rocket_auto_turret";
     public const string WarBaseRocketAutoTurretMarker = "war_base_rocket_auto_turret";
     public const string ViperContainerHaulerMarker = "viper_container_hauler";
+    public const string BisonIndustrialPartsMarker = "bison_industrial_parts";
     public const string ContainerShipAutoCannonMarker = "container_ship_auto_cannon";
     public const string SpaceBombMarker = "player_space_bomb";
     public const string SpaceDrillMarker = "player_space_drill";
@@ -1233,6 +1234,14 @@ public static class PlayerDeployableRuntime
         RuntimeSpriteUtility.LoadSprite("dropbot_up_resource", "Assets/Resources/dropbot_up_resource.png");
         RuntimeSpriteUtility.LoadSprite("lure_beacon_onmap_resource", string.Empty);
         RuntimeSpriteUtility.LoadSprite("Items/escape_pod", string.Empty);
+        RuntimeSpriteUtility.LoadSprite("Visuals/Bases/industrial_zone", "Assets/Resources/Visuals/Bases/industrial_zone.png");
+        RuntimeSpriteUtility.PrewarmSprites(
+            "Visuals/IndustrialParts/industrial_parts_01",
+            "Visuals/IndustrialParts/industrial_parts_02",
+            "Visuals/IndustrialParts/industrial_parts_03",
+            "Visuals/IndustrialParts/industrial_parts_04",
+            "Visuals/IndustrialParts/industrial_parts_05",
+            "Visuals/IndustrialParts/industrial_parts_06");
 
         RuntimeSpriteUtility.CreateArrowSprite();
     }
@@ -1242,7 +1251,7 @@ public static class PlayerDeployableRuntime
         return data != null &&
                data.Length > 0 &&
                data[0] is string marker &&
-               (marker == AutoTurretMarker || marker == RocketAutoTurretMarker || marker == WarBaseRocketAutoTurretMarker || marker == ViperContainerHaulerMarker || marker == ContainerShipAutoCannonMarker || marker == SpaceBombMarker || marker == SpaceDrillMarker || marker == DropbotMarker);
+               (marker == AutoTurretMarker || marker == RocketAutoTurretMarker || marker == WarBaseRocketAutoTurretMarker || marker == ViperContainerHaulerMarker || marker == BisonIndustrialPartsMarker || marker == ContainerShipAutoCannonMarker || marker == SpaceBombMarker || marker == SpaceDrillMarker || marker == DropbotMarker);
     }
 
     public static bool IsContainerShipAutoCannonData(object[] data)
@@ -1272,6 +1281,14 @@ public static class PlayerDeployableRuntime
                data.Length > 0 &&
                data[0] is string marker &&
                marker == WarBaseRocketAutoTurretMarker;
+    }
+
+    public static bool IsBisonIndustrialPartsData(object[] data)
+    {
+        return data != null &&
+               data.Length > 0 &&
+               data[0] is string marker &&
+               marker == BisonIndustrialPartsMarker;
     }
 
     public static PlayerDeployableBase EnsureAttached(GameObject target)
@@ -1312,6 +1329,16 @@ public static class PlayerDeployableRuntime
 
             hauler.InitializeFromPhotonData();
             return hauler;
+        }
+
+        if (marker == BisonIndustrialPartsMarker)
+        {
+            IndustrialPartsHaulable parts = target.GetComponent<IndustrialPartsHaulable>();
+            if (parts == null)
+                parts = target.AddComponent<IndustrialPartsHaulable>();
+
+            parts.InitializeFromPhotonData();
+            return parts;
         }
 
         if (marker == SpaceBombMarker)

@@ -110,7 +110,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RoomSettings.PirateBaseActiveKey,
         RoomSettings.AsteroidShowerModeKey,
         RoomSettings.AsteroidShowerStartUtcMsKey,
-        RoomSettings.AsteroidShowerActiveKey
+        RoomSettings.AsteroidShowerActiveKey,
+        RoomSettings.CosmicWormModeKey,
+        RoomSettings.CosmicWormStartUtcMsKey,
+        RoomSettings.CosmicWormActiveKey
     };
 
     static NetworkManager instance;
@@ -937,6 +940,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.AsteroidShowerModeKey] = RoomSettings.DefaultMapEffectMode,
             [RoomSettings.AsteroidShowerStartUtcMsKey] = -1d,
             [RoomSettings.AsteroidShowerActiveKey] = false,
+            [RoomSettings.CosmicWormModeKey] = RoomSettings.DefaultMapEffectMode,
+            [RoomSettings.CosmicWormStartUtcMsKey] = -1d,
+            [RoomSettings.CosmicWormActiveKey] = false,
+            [RoomSettings.MapEffectModeDefaultsVersionKey] = RoomSettings.MapEffectModeDefaultsVersion,
             [RoomSettings.SpaceJunkDensityKey] = RoomSettings.DefaultSpaceJunkDensity,
             [RoomSettings.ContainersDensityKey] = RoomSettings.DefaultContainersDensity,
             [RoomSettings.NebulaSizeKey] = RoomSettings.DefaultNebulaSize,
@@ -988,12 +995,16 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (props == null)
             return;
 
+        if (!props.ContainsKey(RoomSettings.MapEffectChanceDefaultsVersionKey))
+            props[RoomSettings.MapEffectChanceDefaultsVersionKey] = RoomSettings.MapEffectChanceDefaultsVersion;
+
         string[] ruleIds =
         {
             RoomSettings.CrazyEnemiesRuleId,
             RoomSettings.FogOfWarRuleId,
             RoomSettings.PirateBaseRuleId,
-            RoomSettings.AsteroidShowerRuleId
+            RoomSettings.AsteroidShowerRuleId,
+            RoomSettings.CosmicWormRuleId
         };
 
         IReadOnlyList<LobbyMapDefinition> maps = LobbyMapCatalog.AllMaps;
@@ -1007,7 +1018,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             {
                 string key = RoomSettings.GetMapEffectChanceKey(map.Id, ruleIds[ruleIndex]);
                 if (!props.ContainsKey(key))
-                    props[key] = RoomSettings.DefaultMapEffectChancePercent;
+                    props[key] = RoomSettings.GetDefaultMapEffectChancePercent(map.Id, ruleIds[ruleIndex]);
             }
         }
     }
@@ -1066,6 +1077,14 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
                     value = normalizedObjectId;
                 }
+                else if (ShouldSkipRememberedMapEffectChanceDefault(entry.key, value))
+                {
+                    continue;
+                }
+                else if (ShouldSkipRememberedSpecialMapEffectMode(entry.key, value))
+                {
+                    continue;
+                }
 
                 props[entry.key] = value;
                 appliedKeys.Add(entry.key);
@@ -1073,6 +1092,41 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         }
 
         return appliedKeys;
+    }
+
+    static bool ShouldSkipRememberedSpecialMapEffectMode(string key, object value)
+    {
+        return RoomSettings.IsSpecialMapEffectModeKey(key) &&
+               value is string mode &&
+               RoomSettings.NormalizeMapEffectMode(mode) != RoomSettings.DefaultMapEffectMode;
+    }
+
+    static bool ShouldSkipRememberedMapEffectChanceDefault(string key, object value)
+    {
+        if (!RoomSettings.IsMapEffectChanceKey(key) || value is not int percent)
+            return false;
+
+        if (!TryGetMapEffectChanceParts(key, out string mapId, out string ruleId))
+            return false;
+
+        return RoomSettings.IsLegacyMapEffectChanceDefault(mapId, ruleId, percent);
+    }
+
+    static bool TryGetMapEffectChanceParts(string key, out string mapId, out string ruleId)
+    {
+        mapId = string.Empty;
+        ruleId = string.Empty;
+        if (!RoomSettings.IsMapEffectChanceKey(key))
+            return false;
+
+        string suffix = key.Substring(RoomSettings.MapEffectChanceKeyPrefix.Length);
+        int separatorIndex = suffix.LastIndexOf('.');
+        if (separatorIndex <= 0 || separatorIndex >= suffix.Length - 1)
+            return false;
+
+        mapId = suffix.Substring(0, separatorIndex);
+        ruleId = suffix.Substring(separatorIndex + 1);
+        return true;
     }
 
     static void ApplyRememberedMapPresetDefaults(Hashtable props, HashSet<string> rememberedKeys)
@@ -1233,6 +1287,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.PirateBaseStartUtcMsKey:
             case RoomSettings.AsteroidShowerModeKey:
             case RoomSettings.AsteroidShowerStartUtcMsKey:
+            case RoomSettings.CosmicWormModeKey:
+            case RoomSettings.CosmicWormStartUtcMsKey:
             case RoomSettings.SpaceJunkDensityKey:
             case RoomSettings.ContainersDensityKey:
             case RoomSettings.FireNebulaDensityKey:
@@ -1361,6 +1417,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         AddActiveEffectLabel(labels, info, state, "FOG OF WAR", RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, RoomSettings.FogOfWarActiveKey);
         AddActiveEffectLabel(labels, info, state, "PIRATE BASE", RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, RoomSettings.PirateBaseActiveKey);
         AddActiveEffectLabel(labels, info, state, "ASTEROID SHOWER", RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, RoomSettings.AsteroidShowerActiveKey);
+        AddActiveEffectLabel(labels, info, state, "COSMIC WORM", RoomSettings.CosmicWormModeKey, RoomSettings.CosmicWormStartUtcMsKey, RoomSettings.CosmicWormActiveKey);
         return labels.Count > 0 ? string.Join(", ", labels) : string.Empty;
     }
 
