@@ -292,28 +292,16 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
         targetPlayer = null;
         nextStage = 0;
 
-        Photon.Realtime.Player[] players = PhotonNetwork.PlayerList;
-        int bestProgress = PlayerProfileService.InvaderImprintsRequired;
-        for (int i = 0; i < players.Length; i++)
+        if (!ShipUnlockPlotCoordinator.TryGetRoundStarterPlayer(out targetPlayer) ||
+            !PlayerProfileService.PlayerNeedsInvaderImprints(targetPlayer))
         {
-            Photon.Realtime.Player candidate = players[i];
-            if (!PlayerProfileService.PlayerNeedsInvaderImprints(candidate))
-                continue;
-
-            int progress = Mathf.Clamp(
-                PlayerProfileService.GetPlayerInvaderImprintsRecovered(candidate),
-                0,
-                PlayerProfileService.InvaderImprintsRequired);
-            if (targetPlayer != null && progress >= bestProgress)
-                continue;
-
-            targetPlayer = candidate;
-            bestProgress = progress;
+            return false;
         }
 
-        if (targetPlayer == null)
-            return false;
-
+        int bestProgress = Mathf.Clamp(
+            PlayerProfileService.GetPlayerInvaderImprintsRecovered(targetPlayer),
+            0,
+            PlayerProfileService.InvaderImprintsRequired);
         nextStage = Mathf.Clamp(bestProgress + 1, 1, PlayerProfileService.InvaderImprintsRequired);
         return true;
     }
@@ -739,7 +727,7 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
 
     Vector2 ResolveObjectiveSpawnPosition()
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(8f, mapSize.x * 0.5f - 8f);
         float halfY = Mathf.Max(8f, mapSize.y * 0.5f - 8f);
         ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
@@ -813,6 +801,7 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
         return player != null &&
                player.photonView != null &&
                player.photonView.IsMine &&
+               ShipUnlockPlotCoordinator.IsRoundStarter(player.photonView.Owner) &&
                !player.IsAstronautControlled &&
                !player.IsWreck &&
                !player.IsEvacuationAnimating &&
@@ -871,7 +860,7 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
 
     Vector2 ClampToMapBounds(Vector2 position)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(4f, mapSize.x * 0.5f - 3f);
         float halfY = Mathf.Max(4f, mapSize.y * 0.5f - 3f);
         return new Vector2(Mathf.Clamp(position.x, -halfX, halfX), Mathf.Clamp(position.y, -halfY, halfY));

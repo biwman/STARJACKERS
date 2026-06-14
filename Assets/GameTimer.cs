@@ -44,6 +44,7 @@ public class GameTimer : MonoBehaviourPun
         ScienceStationSpawner.EnsureExists();
         FogOfWarOverlay.EnsureExists();
         NeutralRiderManager.EnsureExists();
+        ToxicBorderController.EnsureExists();
 
         GameObject obj = GameObject.Find("TimerText");
 

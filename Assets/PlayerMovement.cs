@@ -44,6 +44,7 @@ public class PlayerMovement : MonoBehaviourPun
     int equippedHybridEngineCount;
     int equippedDoubleEngineCount;
     int equippedAfterburnerStabilizerCount;
+    int equippedBlackMarketThrusterCount;
     string lastAppliedEngineSignature = string.Empty;
     string equippedEngineTrailItemId = string.Empty;
     float pilotSpeedBoostMultiplier = 1f;
@@ -84,6 +85,9 @@ public class PlayerMovement : MonoBehaviourPun
     const int DoubleEngineBoostPercentBonus = 10;
     const float DoubleEngineBoosterDurationPenalty = 0.15f;
     const float DoubleEngineTurnRatePenalty = 0.1f;
+    const float BlackMarketThrusterSpeedBonus = 0.28f;
+    const int BlackMarketThrusterBoostPercentBonus = 15;
+    const float BlackMarketThrusterTurnRatePenalty = 0.08f;
     const float AshCleanBurnBoosterDrainMultiplier = 0.88f;
     const float AfterburnerTurnRateBonus = 0.25f;
     const float AfterburnerBoosterRecoveryDelayMultiplier = 0.5f;
@@ -351,6 +355,12 @@ public class PlayerMovement : MonoBehaviourPun
         float currentSpeed = GetCurrentMovementSpeed();
         if (rb != null)
         {
+            if (HackingStatus.TryGetForcedMotion(gameObject, out Vector2 hackedDirection, out float hackedSpeedMultiplier))
+            {
+                ApplyHackedOverrideVelocity(currentSpeed, hackedDirection, hackedSpeedMultiplier);
+                return;
+            }
+
             if (IsSuperBoosterActive())
             {
                 ApplySuperBoosterVelocity(currentSpeed);
@@ -370,6 +380,24 @@ public class PlayerMovement : MonoBehaviourPun
             float nextAngle = Mathf.MoveTowardsAngle(rb.rotation, targetRotationAngle, maxTurnDelta);
             rb.MoveRotation(nextAngle);
         }
+    }
+
+    void ApplyHackedOverrideVelocity(float currentSpeed, Vector2 direction, float speedMultiplier)
+    {
+        if (rb == null)
+            return;
+
+        Vector2 safeDirection = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector2.up;
+        float hackedSpeed = Mathf.Max(0.1f, currentSpeed * Mathf.Clamp(speedMultiplier, 0.35f, 1.15f));
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, safeDirection * hackedSpeed, 0.28f);
+        rb.angularVelocity = 0f;
+        float angle = Mathf.Atan2(safeDirection.y, safeDirection.x) * Mathf.Rad2Deg - 90f;
+        rb.MoveRotation(Mathf.MoveTowardsAngle(rb.rotation, angle, BaseTurnDegreesPerSecond * 0.82f * Time.fixedDeltaTime));
+
+        boosterActiveThisFrame = false;
+        continuousBoosterTime = 0f;
+        lastBatteringEligibleSpeedTime = -999f;
+        PublishAdvancedBoosterVisualState();
     }
 
     void OnDisable()
@@ -1536,6 +1564,7 @@ public class PlayerMovement : MonoBehaviourPun
         int doubleEngineCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.DoubleEngineId);
         int superBoosterCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.SuperBoosterId);
         int afterburnerStabilizerCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.AfterburnerStabilizerId);
+        int blackMarketThrusterCount = CountEquippedEngineItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.BlackMarketThrusterId);
         int shieldSpeedPenaltyPercent = InventoryItemCatalog.GetEquippedShieldSpeedPenaltyPercent(equipmentSlots, shipSkinIndex);
         string engineTrailItemId = ResolveEngineTrailItemId(equipmentSlots, shipSkinIndex);
         bool hasFusion = fusionCount > 0;
@@ -1551,6 +1580,7 @@ public class PlayerMovement : MonoBehaviourPun
                            doubleEngineCount + ":" +
                            superBoosterCount + ":" +
                            afterburnerStabilizerCount + ":" +
+                           blackMarketThrusterCount + ":" +
                            shieldSpeedPenaltyPercent + ":" +
                            engineTrailItemId + ":" +
                            Mathf.RoundToInt(shockSpeedMultiplier * 1000f) + ":" +
@@ -1571,6 +1601,7 @@ public class PlayerMovement : MonoBehaviourPun
         equippedHybridEngineCount = hybridCount;
         equippedDoubleEngineCount = doubleEngineCount;
         equippedAfterburnerStabilizerCount = afterburnerStabilizerCount;
+        equippedBlackMarketThrusterCount = blackMarketThrusterCount;
         equippedEngineTrailItemId = engineTrailItemId;
         fusionEngineEquipped = hasFusion;
         baseSpeed = Mathf.Max(0.1f, baseShipSpeed);
@@ -1580,14 +1611,17 @@ public class PlayerMovement : MonoBehaviourPun
             IonEngineSpeedBonus * equippedIonEngineCount +
             FusionEngineSpeedBonus * equippedFusionEngineCount +
             HybridEngineSpeedBonus * equippedHybridEngineCount +
-            DoubleEngineSpeedBonus * equippedDoubleEngineCount);
+            DoubleEngineSpeedBonus * equippedDoubleEngineCount +
+            BlackMarketThrusterSpeedBonus * equippedBlackMarketThrusterCount);
         float engineTurnRateBonus =
             AfterburnerTurnRateBonus * equippedAfterburnerStabilizerCount +
             IonEngineTurnRateBonus * equippedIonEngineCount -
-            DoubleEngineTurnRatePenalty * equippedDoubleEngineCount;
+            DoubleEngineTurnRatePenalty * equippedDoubleEngineCount -
+            BlackMarketThrusterTurnRatePenalty * equippedBlackMarketThrusterCount;
         int engineBoostPercentBonus = Mathf.Min(MaxEngineBoostPercentBonus,
             PowerEngineBoostPercentBonus * equippedPowerEngineCount +
-            DoubleEngineBoostPercentBonus * equippedDoubleEngineCount);
+            DoubleEngineBoostPercentBonus * equippedDoubleEngineCount +
+            BlackMarketThrusterBoostPercentBonus * equippedBlackMarketThrusterCount);
         float engineBoosterDurationBonus =
             FuelTankBoosterDurationBonus * equippedFuelTankCount +
             HybridEngineBoosterDurationBonus * equippedHybridEngineCount -

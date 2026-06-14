@@ -713,6 +713,12 @@ public class ShipInventoryHudUI : MonoBehaviourPun
             if (string.IsNullOrWhiteSpace(removedItem))
                 return;
 
+            if (string.Equals(removedItem, InventoryItemCatalog.ShipPrototypeDocumentationId, System.StringComparison.Ordinal))
+            {
+                RoundAnnouncementUI.Show("Ship Prototype Documentation lost. Pathfinder research reset.", 3f);
+                return;
+            }
+
             DroppedCargoManager.DropItemFromShip(removedItem, transform);
         }
         catch (System.Exception ex)

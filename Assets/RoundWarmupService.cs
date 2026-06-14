@@ -170,6 +170,7 @@ public sealed class RoundWarmupService : MonoBehaviour
         AstroCutterBeamVfx.ResetForSessionTransition();
         SpaceTrapTarget.ResetForSessionTransition();
         TractorBeamVfx.ResetForSessionTransition();
+        HackingBeamVfx.ResetForSessionTransition();
     }
 
     public static void BeginRoundStartPreparation()
@@ -281,6 +282,7 @@ public sealed class RoundWarmupService : MonoBehaviour
             yield break;
 
         RoundAnnouncementUI.Show(message, RoundRuleAnnouncementSeconds);
+        AudioManager.Instance.PlayRaiserRoundStart();
     }
 
     public static bool IsRoundPreparing()
@@ -408,6 +410,10 @@ public sealed class RoundWarmupService : MonoBehaviour
 
     static Hashtable BuildRoundPreparationProperties(string roundToken)
     {
+        int starterActorNumber = ResolveRoundStarterActorNumber();
+        string starterUserId = ResolveRoundStarterUserId();
+        string starterNickname = ResolveRoundStarterNickname();
+
         return new Hashtable
         {
             ["gameStarted"] = false,
@@ -415,12 +421,17 @@ public sealed class RoundWarmupService : MonoBehaviour
             [RoomSettings.RoundWarmupTokenKey] = roundToken,
             [RoomSettings.RoundWarmupStartedAtKey] = PhotonNetwork.Time,
             [RoomSettings.StartTimeKey] = -1d,
+            [RoomSettings.RoundStarterActorNumberKey] = starterActorNumber,
+            [RoomSettings.RoundStarterUserIdKey] = starterUserId,
+            [RoomSettings.RoundStarterNicknameKey] = starterNickname,
             [RoomSettings.RoundEndUtcMsKey] = -1d,
             [RoomSettings.CrazyEnemiesActiveKey] = false,
             [RoomSettings.FogOfWarActiveKey] = false,
             [RoomSettings.PirateBaseActiveKey] = false,
             [RoomSettings.AsteroidShowerActiveKey] = false,
             [RoomSettings.CosmicWormActiveKey] = false,
+            [RoomSettings.ShipUnlockPlotStartTimeKey] = -1d,
+            [RoomSettings.ShipUnlockPlotActiveKey] = ShipUnlockPlotCoordinator.GetPlotId(ShipUnlockPlotType.None),
             [LoneShipModeStartTimeKey] = -1d,
             [GameTimer.EvacuationPauseUntilKey] = -1d,
             [GameTimer.EvacuationPauseRemainingKey] = -1f,
@@ -447,13 +458,23 @@ public sealed class RoundWarmupService : MonoBehaviour
     static Hashtable BuildRoundStartProperties()
     {
         double roundStartUtcMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        double roundStartTime = PhotonNetwork.Time;
         string selectedMapId = RoomSettings.GetSelectedLobbyMapId();
+        int starterActorNumber = ResolveRoundStarterActorNumber();
+        string starterUserId = ResolveRoundStarterUserId();
+        string starterNickname = ResolveRoundStarterNickname();
+        ShipUnlockPlotType selectedPlot = ShipUnlockPlotCoordinator.ChoosePlotForRoundStarter();
         Hashtable props = new Hashtable
         {
             ["gameStarted"] = true,
-            [RoomSettings.StartTimeKey] = PhotonNetwork.Time,
+            [RoomSettings.StartTimeKey] = roundStartTime,
+            [RoomSettings.RoundStarterActorNumberKey] = starterActorNumber,
+            [RoomSettings.RoundStarterUserIdKey] = starterUserId,
+            [RoomSettings.RoundStarterNicknameKey] = starterNickname,
             [RoomSettings.RoundEndUtcMsKey] = roundStartUtcMs + (RoomSettings.GetRoundDuration() * 1000d),
             [RoomSettings.SessionStateKey] = RoomSettings.SessionStateInPlay,
+            [RoomSettings.ShipUnlockPlotStartTimeKey] = roundStartTime,
+            [RoomSettings.ShipUnlockPlotActiveKey] = ShipUnlockPlotCoordinator.GetPlotId(selectedPlot),
             [LoneShipModeStartTimeKey] = -1d,
             [GameTimer.EvacuationPauseUntilKey] = -1d,
             [GameTimer.EvacuationPauseRemainingKey] = -1f,
@@ -477,7 +498,81 @@ public sealed class RoundWarmupService : MonoBehaviour
         };
 
         ApplySingleRoundRuleStartProperties(props, selectedMapId, roundStartUtcMs);
+        Debug.Log(
+            "RoundWarmupService: starting round with starter actor " + starterActorNumber +
+            ", rule " + ResolveActiveRoundRuleLabel(props) +
+            ", ship plot " + ShipUnlockPlotCoordinator.GetPlotId(selectedPlot) + ".");
         return props;
+    }
+
+    static int ResolveRoundStarterActorNumber()
+    {
+        int storedActorNumber = RoomSettings.GetRoundStarterActorNumber();
+        if (storedActorNumber > 0)
+            return storedActorNumber;
+
+        return PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : 0;
+    }
+
+    static string ResolveRoundStarterUserId()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.RoundStarterUserIdKey, out object storedValue) &&
+            storedValue is string storedUserId &&
+            !string.IsNullOrWhiteSpace(storedUserId))
+        {
+            return storedUserId;
+        }
+
+        return PhotonNetwork.LocalPlayer != null && !string.IsNullOrWhiteSpace(PhotonNetwork.LocalPlayer.UserId)
+            ? PhotonNetwork.LocalPlayer.UserId
+            : string.Empty;
+    }
+
+    static string ResolveRoundStarterNickname()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.RoundStarterNicknameKey, out object storedValue) &&
+            storedValue is string storedNickname &&
+            !string.IsNullOrWhiteSpace(storedNickname))
+        {
+            return storedNickname;
+        }
+
+        if (PhotonNetwork.LocalPlayer != null && !string.IsNullOrWhiteSpace(PhotonNetwork.LocalPlayer.NickName))
+            return PhotonNetwork.LocalPlayer.NickName;
+
+        return PhotonNetwork.NickName ?? string.Empty;
+    }
+
+    static string ResolveActiveRoundRuleLabel(Hashtable props)
+    {
+        if (props == null)
+            return "none";
+
+        if (IsActiveRule(props, RoomSettings.CrazyEnemiesActiveKey))
+            return RoomSettings.CrazyEnemiesRuleId;
+
+        if (IsActiveRule(props, RoomSettings.FogOfWarActiveKey))
+            return RoomSettings.FogOfWarRuleId;
+
+        if (IsActiveRule(props, RoomSettings.PirateBaseActiveKey))
+            return RoomSettings.PirateBaseRuleId;
+
+        if (IsActiveRule(props, RoomSettings.AsteroidShowerActiveKey))
+            return RoomSettings.AsteroidShowerRuleId;
+
+        if (IsActiveRule(props, RoomSettings.CosmicWormActiveKey))
+            return RoomSettings.CosmicWormRuleId;
+
+        return "none";
+    }
+
+    static bool IsActiveRule(Hashtable props, string activeKey)
+    {
+        return props.TryGetValue(activeKey, out object value) &&
+               value is bool active &&
+               active;
     }
 
     static void ApplySingleRoundRuleStartProperties(Hashtable props, string selectedMapId, double roundStartUtcMs)
@@ -578,8 +673,6 @@ public sealed class RoundWarmupService : MonoBehaviour
             return;
 
         committedRoundToken = roundToken;
-        if (PhotonNetwork.CurrentRoom != null)
-            PhotonNetwork.CurrentRoom.IsOpen = true;
 
         if (timedOut)
             Debug.LogWarning("RoundWarmupService: starting round after warmup timeout; at least one player did not report ready.");
@@ -588,6 +681,7 @@ public sealed class RoundWarmupService : MonoBehaviour
             return;
 
         PhotonNetwork.CurrentRoom.SetCustomProperties(BuildRoundStartProperties());
+        PhotonNetwork.CurrentRoom.IsOpen = true;
         RoundResultsTracker.ResetForCurrentRoom();
     }
 
@@ -679,12 +773,14 @@ public sealed class RoundWarmupService : MonoBehaviour
         BulletImpactVfx.Prewarm();
         ShieldHitVfx.Prewarm();
         HpHitSparksVfx.Prewarm();
+        LowHpHullSparksVfx.Prewarm();
         PlayerShipExplosionVfx.Prewarm();
         EnemyDeathBoomVfx.Prewarm();
         AsteroidSplitVfx.Prewarm();
         BatteringImpactVfx.Prewarm();
         EnemySpawnTeleportVfx.Prewarm();
         TractorBeamVfx.Prewarm();
+        HackingBeamVfx.Prewarm();
         MagneticBeamVfx.Prewarm();
         SpaceMineExplosionVfx.Prewarm();
         SpaceBombExplosionVfx.Prewarm();

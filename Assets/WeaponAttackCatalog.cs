@@ -525,6 +525,46 @@ public static class WeaponAttackCatalog
             return true;
         }
 
+        if (string.Equals(itemId, InventoryItemCatalog.StasisBuoyId, StringComparison.Ordinal))
+        {
+            damageType = WeaponDamageType.Ion;
+            deliveryMethod = WeaponDeliveryMethod.AreaPulse;
+            deliveryFlags = WeaponDeliveryFlags.Autonomous | WeaponDeliveryFlags.Continuous | WeaponDeliveryFlags.Delayed;
+            return true;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.TetherHarpoonId, StringComparison.Ordinal))
+        {
+            damageType = WeaponDamageType.Gravitic;
+            deliveryMethod = WeaponDeliveryMethod.Tether;
+            deliveryFlags = WeaponDeliveryFlags.Continuous;
+            return true;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceTorpedoId, StringComparison.Ordinal))
+        {
+            damageType = WeaponDamageType.Explosive;
+            deliveryMethod = WeaponDeliveryMethod.DirectProjectile;
+            deliveryFlags = WeaponDeliveryFlags.AreaDamage;
+            return true;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.BioTrapId, StringComparison.Ordinal))
+        {
+            damageType = WeaponDamageType.Environmental;
+            deliveryMethod = WeaponDeliveryMethod.Trap;
+            deliveryFlags = WeaponDeliveryFlags.None;
+            return true;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.AsteroidBreacherBombId, StringComparison.Ordinal))
+        {
+            damageType = WeaponDamageType.Explosive;
+            deliveryMethod = WeaponDeliveryMethod.RemoteStrike;
+            deliveryFlags = WeaponDeliveryFlags.AreaDamage;
+            return true;
+        }
+
         if (string.Equals(itemId, InventoryItemCatalog.SpaceTrapId, StringComparison.Ordinal))
         {
             damageType = WeaponDamageType.Explosive;

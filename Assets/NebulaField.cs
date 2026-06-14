@@ -482,7 +482,7 @@ public class NebulaField : MonoBehaviour
 
     void ConfigureCloudBounds()
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         float minX = -mapSize.x * 0.5f - CloudWrapPadding;
         float maxX = mapSize.x * 0.5f + CloudWrapPadding;
         float minY = -mapSize.y * 0.5f - CloudWrapPadding;

@@ -215,6 +215,18 @@ public sealed class LobbyMapDefinition
     }
 }
 
+public sealed class LobbyMapLandingSiteSummary
+{
+    public string Label { get; }
+    public int Count { get; }
+
+    public LobbyMapLandingSiteSummary(string label, int count)
+    {
+        Label = string.IsNullOrWhiteSpace(label) ? string.Empty : label;
+        Count = System.Math.Max(0, count);
+    }
+}
+
 public static class LobbyMapCatalog
 {
     public const string JustSpaceMapId = "just_space";
@@ -821,6 +833,36 @@ public static class LobbyMapCatalog
             : RoomSettings.DefaultScienceStationCount;
     }
 
+    public static IReadOnlyList<LobbyMapLandingSiteSummary> GetDefaultLandingSites(LobbyMapDefinition map)
+    {
+        if (map == null)
+            return System.Array.Empty<LobbyMapLandingSiteSummary>();
+
+        return BuildLandingSites(
+            map.ExtractionZoneCount,
+            map.RepairBayCount,
+            GetDefaultScienceStationCount(map.Id),
+            map.SpaceFactoryCount);
+    }
+
+    public static IReadOnlyList<LobbyMapLandingSiteSummary> BuildLandingSites(int extractionZoneCount, int repairStationCount, int scienceStationCount, int spaceFactoryCount)
+    {
+        List<LobbyMapLandingSiteSummary> landingSites = new List<LobbyMapLandingSiteSummary>(4);
+        AddLandingSite(landingSites, "Extraction Zone", extractionZoneCount);
+        AddLandingSite(landingSites, "Repair Station", repairStationCount);
+        AddLandingSite(landingSites, "Science Station", scienceStationCount);
+        AddLandingSite(landingSites, "Space Factory", spaceFactoryCount);
+        return landingSites;
+    }
+
+    static void AddLandingSite(List<LobbyMapLandingSiteSummary> landingSites, string label, int count)
+    {
+        if (landingSites == null || count <= 0)
+            return;
+
+        landingSites.Add(new LobbyMapLandingSiteSummary(label, count));
+    }
+
     public static bool IsHiddenTreasureEnabledByDefault(string mapId)
     {
         switch (mapId)
@@ -967,6 +1009,7 @@ public static class LobbyMapCatalog
         props[RoomSettings.TreasureWeightFactorKey] = map.TreasureMassFactor;
         props[RoomSettings.MapBackgroundKey] = map.MapBackgroundIndex;
         props[RoomSettings.VisualEffectsEnabledKey] = map.VisualEffectsEnabled;
+        props[RoomSettings.LowHpHullSparksEnabledKey] = RoomSettings.DefaultLowHpHullSparksEnabled;
         props[RoomSettings.ParallaxBackgroundKey] = GetDefaultParallaxBackgroundId(map.Id);
         props[RoomSettings.BackgroundObjectKey] = GetDefaultBackgroundObjectId(map.Id);
         props[RoomSettings.GravityWellPhysicsEnabledKey] = map.Id == GravityWellMapId;

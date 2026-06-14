@@ -162,7 +162,7 @@ public sealed class AvengerWarBasePlotController : MonoBehaviour
             if (Mathf.Abs((float)(masterPlotInitializationStartedTime - currentStartTime)) <= PlotMatchTimeTolerance)
                 return;
 
-            if (!AnyPlayerHasAvengerStartingCodes())
+            if (!RoundStarterHasAvengerStartingCodes())
                 return;
 
             masterPlotInitializationStartedTime = currentStartTime;
@@ -391,7 +391,7 @@ public sealed class AvengerWarBasePlotController : MonoBehaviour
     {
         ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
         if (zones == null || zones.Length == 0)
-            return ClampToMapBounds(new Vector2(0f, RoomSettings.GetMapDimensions().y * 0.42f));
+            return ClampToMapBounds(new Vector2(0f, RoomSettings.GetEnemyNavigableMapDimensions().y * 0.42f));
 
         ExtractionZone best = null;
         float bestDistance = float.MaxValue;
@@ -414,7 +414,7 @@ public sealed class AvengerWarBasePlotController : MonoBehaviour
 
     Vector2 ResolveRandomAmbushPoint(Vector2 focus, Vector2 escapePoint, float minFocusDistance, float minEscapeDistance)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(6f, mapSize.x * 0.5f - 2.2f);
         float halfY = Mathf.Max(6f, mapSize.y * 0.5f - 2.2f);
 
@@ -441,7 +441,7 @@ public sealed class AvengerWarBasePlotController : MonoBehaviour
 
     Vector2 ClampToMapBounds(Vector2 position)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(6f, mapSize.x * 0.5f - 1.6f);
         float halfY = Mathf.Max(6f, mapSize.y * 0.5f - 1.6f);
         return new Vector2(
@@ -614,8 +614,11 @@ public sealed class AvengerWarBasePlotController : MonoBehaviour
         if (localOperationalAnnouncementStartTime == currentStartTime)
             return;
 
-        if (!PlayerProfileService.PlayerHasAvengerStartingCodes(PhotonNetwork.LocalPlayer))
+        if (!ShipUnlockPlotCoordinator.IsRoundStarter(PhotonNetwork.LocalPlayer) ||
+            !PlayerProfileService.PlayerHasAvengerStartingCodes(PhotonNetwork.LocalPlayer))
+        {
             return;
+        }
 
         localOperationalAnnouncementStartTime = currentStartTime;
         RoundAnnouncementUI.Show("Military installation is operational. Beware of its defences!", 3.4f);
@@ -686,21 +689,15 @@ public sealed class AvengerWarBasePlotController : MonoBehaviour
                LobbyMapCatalog.IsAvengerPlotEnabledByDefault(mapId);
     }
 
-    bool AnyPlayerHasAvengerStartingCodes()
+    bool RoundStarterHasAvengerStartingCodes()
     {
-        Photon.Realtime.Player[] players = PhotonNetwork.PlayerList;
-        for (int i = 0; i < players.Length; i++)
-        {
-            if (PlayerProfileService.PlayerHasAvengerStartingCodes(players[i]))
-                return true;
-        }
-
-        return false;
+        return ShipUnlockPlotCoordinator.TryGetRoundStarterPlayer(out Photon.Realtime.Player starter) &&
+               PlayerProfileService.PlayerHasAvengerStartingCodes(starter);
     }
 
     Vector2 ResolveBasePosition()
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(7f, mapSize.x * 0.5f - BaseClearanceRadius);
         float halfY = Mathf.Max(7f, mapSize.y * 0.5f - BaseClearanceRadius);
         Vector2 focus = ResolveCodeCarrierPosition();
@@ -734,8 +731,11 @@ public sealed class AvengerWarBasePlotController : MonoBehaviour
             if (player == null || player.photonView == null || player.IsBotControlled || player.IsNeutralRiderControlled || player.IsAstronautControlled)
                 continue;
 
-            if (PlayerProfileService.PlayerHasAvengerStartingCodes(player.photonView.Owner))
+            if (ShipUnlockPlotCoordinator.IsRoundStarter(player.photonView.Owner) &&
+                PlayerProfileService.PlayerHasAvengerStartingCodes(player.photonView.Owner))
+            {
                 return player.transform.position;
+            }
         }
 
         return Vector2.zero;
@@ -1007,6 +1007,7 @@ public sealed class AvengerWarBase : MonoBehaviour
     {
         return defenceInactive &&
                !avengerLaunched &&
+               ShipUnlockPlotCoordinator.IsRoundStarter(PhotonNetwork.LocalPlayer) &&
                PlayerProfileService.HasInstance &&
                PlayerProfileService.Instance.HasAvengerStartingCodesInShip();
     }

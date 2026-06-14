@@ -142,7 +142,7 @@ public sealed class RandomLootWreckSpawner : MonoBehaviourPun
         Random.State previousState = Random.state;
         Random.InitState(seed);
 
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         List<Vector2> obstaclePositions = ParsePositionLayout(GetRoomLayout(ObstacleLayoutKey), 0, 1);
         List<Vector2> extractionPositions = ParsePositionLayout(GetRoomLayout(ExtractionLayoutKey), 0, 1);
         List<Vector2> nebulaPositions = ParsePositionLayout(GetRoomLayout(NebulaLayoutKey), 0, 1);

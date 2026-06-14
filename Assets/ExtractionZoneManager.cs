@@ -217,7 +217,7 @@ public class ExtractionZoneManager : MonoBehaviourPunCallbacks
 
     string BuildLayout(int count)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         List<Vector2> positions = new List<Vector2>();
         int attempts = 0;
 

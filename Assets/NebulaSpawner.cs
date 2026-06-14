@@ -173,12 +173,12 @@ public class NebulaSpawner : MonoBehaviour
 
     string BuildNebulaLayout(string densityKey, List<Vector2> reservedPositions)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         List<Vector2> positions = new List<Vector2>();
         List<Vector2> extractionPositions = ParseLayout(GetRoomLayout(ExtractionLayoutKey));
         List<Vector2> obstaclePositions = ParseLayout(GetRoomLayout(ObstacleLayoutKey));
         List<Vector2> playerPositions = GetCurrentPlayerPositions();
-        int targetCount = Mathf.Max(0, Mathf.RoundToInt(nebulaCount * GetDensityMultiplier(densityKey) * RoomSettings.GetMapAreaMultiplier()));
+        int targetCount = Mathf.Max(0, Mathf.RoundToInt(nebulaCount * GetDensityMultiplier(densityKey) * RoomSettings.GetGameplayMapAreaMultiplier()));
         int attempts = 0;
 
         while (positions.Count < targetCount && attempts < 400)
@@ -215,9 +215,9 @@ public class NebulaSpawner : MonoBehaviour
 
     string BuildCloudLayout()
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         List<Vector2> positions = new List<Vector2>();
-        int targetCount = Mathf.Max(0, Mathf.RoundToInt(nebulaCount * GetDensityMultiplier(RoomSettings.CloudsDensityKey) * RoomSettings.GetMapAreaMultiplier()));
+        int targetCount = Mathf.Max(0, Mathf.RoundToInt(nebulaCount * GetDensityMultiplier(RoomSettings.CloudsDensityKey) * RoomSettings.GetGameplayMapAreaMultiplier()));
         int attempts = 0;
 
         while (positions.Count < targetCount && attempts < 400)

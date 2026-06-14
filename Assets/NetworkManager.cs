@@ -97,6 +97,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RoomSettings.RoundWarmupTokenKey,
         RoomSettings.RoundDurationKey,
         RoomSettings.StartTimeKey,
+        RoomSettings.RoundStarterActorNumberKey,
         RoomSettings.RoundEndUtcMsKey,
         RoomSettings.SelectedMapKey,
         RoomSettings.CrazyEnemiesModeKey,
@@ -349,6 +350,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         if (string.IsNullOrWhiteSpace(PhotonNetwork.AuthValues.UserId))
             PhotonNetwork.AuthValues.UserId = GetOrCreatePhotonUserId();
+
+        PhotonNetwork.GameVersion = Application.version;
+
+        ServerSettings photonSettings = PhotonNetwork.PhotonServerSettings;
+        if (photonSettings != null && photonSettings.AppSettings != null)
+            photonSettings.AppSettings.AppVersion = Application.version;
     }
 
     string GetOrCreatePhotonUserId()
@@ -767,6 +774,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         ArtifactAsteroidSpawner.EnsureExists();
         FogOfWarOverlay.EnsureExists();
         AsteroidShowerController.EnsureExists();
+        ToxicBorderController.EnsureExists();
         if (started)
         {
             SpawnPlayerIfNeeded();
@@ -957,9 +965,14 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.SpaceFactoryCountKey] = RoomSettings.DefaultSpaceFactoryCount,
             [RoomSettings.ScienceStationCountKey] = RoomSettings.DefaultScienceStationCount,
             [RoomSettings.StartTimeKey] = -1d,
+            [RoomSettings.RoundStarterActorNumberKey] = 0,
+            [RoomSettings.RoundStarterUserIdKey] = string.Empty,
+            [RoomSettings.RoundStarterNicknameKey] = string.Empty,
             [RoomSettings.RoundEndUtcMsKey] = -1d,
             [RoomSettings.RoundWarmupTokenKey] = string.Empty,
             [RoomSettings.RoundWarmupStartedAtKey] = -1d,
+            [RoomSettings.ShipUnlockPlotStartTimeKey] = -1d,
+            [RoomSettings.ShipUnlockPlotActiveKey] = ShipUnlockPlotCoordinator.GetPlotId(ShipUnlockPlotType.None),
             ["gameStarted"] = false,
             [RoomSettings.GadgetChargesStateKey] = string.Empty,
             [RoomSettings.RepairBayOccupancyStateKey] = string.Empty,
@@ -971,6 +984,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.RoundEndReasonKey] = string.Empty,
             [RoomSettings.InventoryLossEnabledKey] = RoomSettings.DefaultInventoryLossEnabled,
             [RoomSettings.EquipmentLossEnabledKey] = RoomSettings.DefaultEquipmentLossEnabled,
+            [RoomSettings.ToxicBordersEnabledKey] = RoomSettings.DefaultToxicBordersEnabled,
+            [RoomSettings.LowHpHullSparksEnabledKey] = RoomSettings.DefaultLowHpHullSparksEnabled,
             [RoomSettings.BoomVfxEnabledKey] = RoomSettings.DefaultBoomVfxEnabled,
             [RoomSettings.ParallaxBackgroundKey] = RoomSettings.DefaultParallaxBackground,
             [RoomSettings.BackgroundObjectKey] = RoomSettings.DefaultBackgroundObject,
@@ -1264,8 +1279,10 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.SelectedMapKey:
             case RoomSettings.RoundDurationKey:
             case RoomSettings.MapSizeKey:
+            case RoomSettings.ToxicBordersEnabledKey:
             case RoomSettings.MapBackgroundKey:
             case RoomSettings.VisualEffectsEnabledKey:
+            case RoomSettings.LowHpHullSparksEnabledKey:
             case RoomSettings.BoomVfxEnabledKey:
             case RoomSettings.ParallaxBackgroundKey:
             case RoomSettings.BackgroundObjectKey:
@@ -1853,6 +1870,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         ArtifactAsteroidSpawner.EnsureExists();
         FogOfWarOverlay.EnsureExists();
         AsteroidShowerController.EnsureExists();
+        ToxicBorderController.EnsureExists();
 
         if (PhotonNetwork.LocalPlayer != null && string.IsNullOrWhiteSpace(PhotonNetwork.NickName))
         {
@@ -1915,7 +1933,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     Vector3 GetSpawnPosition()
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         float spawnX = Mathf.Max(3f, mapSize.x * 0.34f);
         float spawnY = Mathf.Max(3f, mapSize.y * 0.34f);
         Vector2[] spawnCorners =

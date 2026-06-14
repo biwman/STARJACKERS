@@ -84,6 +84,420 @@ public static class NewItemsRuntime
         return true;
     }
 
+    public static bool TryDeployStasisBuoy(PlayerShooting owner)
+    {
+        if (!PhotonNetwork.IsMasterClient || owner == null || owner.photonView == null)
+            return false;
+
+        Vector3 spawnPosition = ResolveRearSpawnPosition(owner.transform, 1.05f, 0.42f);
+        GameObject buoyObject = PhotonNetwork.InstantiateRoomObject(
+            "Player",
+            spawnPosition,
+            Quaternion.identity,
+            0,
+            new object[] { PlayerDeployableRuntime.StasisBuoyMarker, owner.photonView.ViewID });
+
+        if (buoyObject == null)
+            return false;
+
+        PlayerDeployableRuntime.EnsureAttached(buoyObject);
+        return true;
+    }
+
+    public static bool TryDeployMetalDriftWall(PlayerShooting owner)
+    {
+        if (!PhotonNetwork.IsMasterClient || owner == null || owner.photonView == null)
+            return false;
+
+        Vector2 forward = owner.transform.up.sqrMagnitude > 0.001f ? (Vector2)owner.transform.up.normalized : Vector2.up;
+        Vector3 spawnPosition = ResolveForwardSpawnPosition(owner.transform, 1.35f, 0.72f);
+        Rigidbody2D ownerBody = owner.GetComponent<Rigidbody2D>();
+        Vector2 inheritedVelocity = ownerBody != null ? ownerBody.linearVelocity * 0.28f : Vector2.zero;
+        Vector2 initialVelocity = Vector2.ClampMagnitude(inheritedVelocity + forward * 0.55f, 2.15f);
+        GameObject wallObject = PhotonNetwork.InstantiateRoomObject(
+            "Player",
+            spawnPosition,
+            Quaternion.LookRotation(Vector3.forward, forward),
+            0,
+            new object[] { PlayerDeployableRuntime.MetalDriftWallMarker, owner.photonView.ViewID, forward.x, forward.y, initialVelocity.x, initialVelocity.y });
+
+        if (wallObject == null)
+            return false;
+
+        PlayerDeployableRuntime.EnsureAttached(wallObject);
+        return true;
+    }
+
+    public static bool TryLaunchSpaceTorpedo(PlayerShooting owner)
+    {
+        if (!PhotonNetwork.IsMasterClient || owner == null || owner.photonView == null)
+            return false;
+
+        Vector2 direction = owner.transform.up.sqrMagnitude > 0.001f ? (Vector2)owner.transform.up.normalized : Vector2.up;
+        Vector3 spawnPosition = owner.transform.position + (Vector3)(direction * 0.82f);
+        GameObject torpedoObject = PhotonNetwork.InstantiateRoomObject(
+            "Player",
+            spawnPosition,
+            Quaternion.LookRotation(Vector3.forward, direction),
+            0,
+            new object[] { PlayerDeployableRuntime.SpaceTorpedoMarker, owner.photonView.ViewID, direction.x, direction.y });
+
+        if (torpedoObject == null)
+            return false;
+
+        PlayerDeployableRuntime.EnsureAttached(torpedoObject);
+        return true;
+    }
+
+    public static bool TryStartTetherHarpoon(PlayerShooting owner)
+    {
+        if (!PhotonNetwork.IsMasterClient || owner == null || owner.photonView == null)
+            return false;
+
+        PhotonView target = FindNearestEnemyShipTarget(owner, 7.2f);
+        if (target == null)
+            return false;
+
+        owner.photonView.RPC("PlayTetherHarpoonFxRpc", RpcTarget.All, target.ViewID);
+        owner.StartCoroutine(TetherHarpoonRoutine(owner, target.ViewID));
+        return true;
+    }
+
+    public static bool TryFireBioTrap(PlayerShooting owner)
+    {
+        if (!PhotonNetwork.IsMasterClient || owner == null || owner.photonView == null)
+            return false;
+
+        PhotonView target = FindNearestAstronautTarget(owner, 6f);
+        if (target == null)
+            return false;
+
+        PlayerHealth targetHealth = target.GetComponent<PlayerHealth>();
+        if (IsBioTrapProtectedEscapePod(targetHealth))
+            return false;
+
+        Vector2 origin = owner.transform.position;
+        Vector2 targetPosition = target.transform.position;
+        Vector2 drift = targetPosition - origin;
+        if (drift.sqrMagnitude <= 0.001f)
+            drift = UnityEngine.Random.insideUnitCircle;
+        if (drift.sqrMagnitude <= 0.001f)
+            drift = Vector2.up;
+
+        owner.photonView.RPC("PlayBioTrapFxRpc", RpcTarget.All, target.ViewID);
+        DroppedCargoManager.DropItemAtPosition(
+            InventoryItemCatalog.CaptiveAstronautPodId,
+            new Vector3(targetPosition.x, targetPosition.y, 0f),
+            drift.normalized * 0.65f);
+        if (targetHealth != null && targetHealth.photonView != null)
+        {
+            targetHealth.photonView.RPC(
+                nameof(PlayerHealth.ForceBioTrapAstronautDeathRpc),
+                RpcTarget.MasterClient,
+                owner.photonView.ViewID,
+                targetPosition.x,
+                targetPosition.y);
+        }
+        else
+        {
+            PhotonNetwork.Destroy(target.gameObject);
+        }
+        return true;
+    }
+
+    public static bool TryDetonateAsteroidBreacherBomb(PlayerShooting owner)
+    {
+        if (!PhotonNetwork.IsMasterClient || owner == null || owner.photonView == null)
+            return false;
+
+        ObstacleChunk target = FindNearestObstacle(owner.transform.position, 7.2f);
+        if (target == null)
+            return false;
+
+        Vector2 targetPosition = target.transform.position;
+        Vector2 direction = targetPosition - (Vector2)owner.transform.position;
+        if (direction.sqrMagnitude <= 0.001f)
+            direction = owner.transform.up.sqrMagnitude > 0.001f ? (Vector2)owner.transform.up : Vector2.up;
+        direction.Normalize();
+
+        Vector3 spawnPosition = owner.transform.position + (Vector3)(direction * 0.72f);
+        GameObject bombObject = PhotonNetwork.InstantiateRoomObject(
+            "Player",
+            spawnPosition,
+            Quaternion.LookRotation(Vector3.forward, direction),
+            0,
+            new object[] { PlayerDeployableRuntime.AsteroidBreacherBombMarker, owner.photonView.ViewID, target.StableId ?? string.Empty, targetPosition.x, targetPosition.y });
+
+        if (bombObject == null)
+            return false;
+
+        PlayerDeployableRuntime.EnsureAttached(bombObject);
+        return true;
+    }
+
+    static PhotonView FindNearestEnemyShipTarget(PlayerShooting owner, float maxRange)
+    {
+        if (owner == null || owner.photonView == null)
+            return null;
+
+        int ownerActorNumber = owner.photonView.OwnerActorNr;
+        Vector2 origin = owner.transform.position;
+        PlayerHealth[] healths = UnityEngine.Object.FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PhotonView best = null;
+        float bestDistance = float.MaxValue;
+        for (int i = 0; i < healths.Length; i++)
+        {
+            PlayerHealth candidate = healths[i];
+            if (candidate == null ||
+                candidate.IsWreck ||
+                candidate.IsAstronautControlled ||
+                candidate.IsEvacuationAnimating ||
+                candidate.photonView == null ||
+                candidate.photonView.ViewID == owner.photonView.ViewID ||
+                candidate.GetComponent<LureBeaconDecoy>() != null ||
+                candidate.GetComponent<PlayerDeployableBase>() != null)
+            {
+                continue;
+            }
+
+            EnemyBot bot = candidate.GetComponent<EnemyBot>();
+            if (bot != null && !bot.CanReceivePilotHostileEffect())
+                continue;
+
+            bool computerTarget = candidate.IsBotControlled || candidate.IsNeutralRiderControlled;
+            if (ownerActorNumber > 0 && candidate.photonView.OwnerActorNr == ownerActorNumber && !computerTarget)
+                continue;
+
+            float distance = Vector2.Distance(origin, candidate.transform.position);
+            if (distance > maxRange || distance >= bestDistance)
+                continue;
+
+            best = candidate.photonView;
+            bestDistance = distance;
+        }
+
+        return best;
+    }
+
+    static PhotonView FindNearestAstronautTarget(PlayerShooting owner, float maxRange)
+    {
+        int ownerActorNumber = owner != null && owner.photonView != null ? owner.photonView.OwnerActorNr : -1;
+        Vector2 origin = owner != null ? (Vector2)owner.transform.position : Vector2.zero;
+        PlayerHealth[] healths = UnityEngine.Object.FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PhotonView best = null;
+        float bestDistance = float.MaxValue;
+        for (int i = 0; i < healths.Length; i++)
+        {
+            PlayerHealth candidate = healths[i];
+            if (candidate == null ||
+                candidate.IsWreck ||
+                candidate.photonView == null)
+            {
+                continue;
+            }
+
+            AstronautSurvivor survivor = candidate.GetComponent<AstronautSurvivor>();
+            bool isAstronautTarget = candidate.IsAstronautControlled || candidate.IsEnemyAstronautControlled || survivor != null;
+            if (!isAstronautTarget)
+                continue;
+
+            if (IsBioTrapProtectedEscapePod(candidate))
+                continue;
+
+            if (owner != null && owner.photonView != null && candidate.photonView.ViewID == owner.photonView.ViewID)
+                continue;
+
+            bool computerAstronaut = candidate.IsEnemyAstronautControlled || (survivor != null && survivor.IsEnemySurvivor);
+            if (!computerAstronaut && ownerActorNumber > 0 && candidate.photonView.OwnerActorNr == ownerActorNumber)
+                continue;
+
+            float distance = Vector2.Distance(origin, candidate.transform.position);
+            if (distance > maxRange || distance >= bestDistance)
+                continue;
+
+            best = candidate.photonView;
+            bestDistance = distance;
+        }
+
+        return best;
+    }
+
+    static bool IsBioTrapProtectedEscapePod(PlayerHealth candidate)
+    {
+        if (candidate == null)
+            return false;
+
+        AstronautSurvivor survivor = candidate.GetComponent<AstronautSurvivor>();
+        if (survivor != null && survivor.IsEscapePodMode)
+            return true;
+
+        PhotonView view = candidate.photonView != null ? candidate.photonView : candidate.GetComponent<PhotonView>();
+        return AstronautSurvivor.IsEscapePodInstantiationData(view != null ? view.InstantiationData : null);
+    }
+
+    static ObstacleChunk FindNearestObstacle(Vector2 origin, float maxRange)
+    {
+        ObstacleChunk[] obstacles = UnityEngine.Object.FindObjectsByType<ObstacleChunk>(FindObjectsInactive.Exclude);
+        ObstacleChunk best = null;
+        float bestDistance = float.MaxValue;
+        for (int i = 0; i < obstacles.Length; i++)
+        {
+            ObstacleChunk candidate = obstacles[i];
+            if (candidate == null || string.IsNullOrWhiteSpace(candidate.StableId))
+                continue;
+
+            float distance = Vector2.Distance(origin, candidate.transform.position);
+            if (distance > maxRange || distance >= bestDistance)
+                continue;
+
+            best = candidate;
+            bestDistance = distance;
+        }
+
+        return best;
+    }
+
+    static IEnumerator TetherHarpoonRoutine(PlayerShooting owner, int targetViewId)
+    {
+        const float duration = 4.5f;
+        const float pullStrength = 42f;
+        const float selfPullStrength = 10f;
+        const float slackDistance = 2.35f;
+        const float shockTickInterval = 0.35f;
+
+        if (owner == null || owner.photonView == null)
+            yield break;
+
+        int sourceViewId = owner.photonView.ViewID;
+        owner.photonView.RPC("StartTractorBeamEffects", RpcTarget.All, sourceViewId, targetViewId);
+        float elapsed = 0f;
+        float nextShockTime = 0f;
+        WaitForFixedUpdate wait = new WaitForFixedUpdate();
+        while (elapsed < duration)
+        {
+            PhotonView target = PhotonView.Find(targetViewId);
+            if (target == null || !IsValidTetherHarpoonTarget(owner, target))
+                break;
+
+            Vector2 sourcePosition = owner.transform.position;
+            Rigidbody2D targetBody = target.GetComponent<Rigidbody2D>();
+            if (targetBody != null)
+            {
+                Vector2 toSource = sourcePosition - targetBody.position;
+                float distance = toSource.magnitude;
+                if (distance > 0.08f)
+                {
+                    float stretch = Mathf.Max(0f, distance - slackDistance);
+                    float ramp = Mathf.Clamp01(stretch / 3.5f);
+                    targetBody.linearVelocity += toSource.normalized * pullStrength * Mathf.Lerp(0.45f, 1.35f, ramp) * Time.fixedDeltaTime;
+                    targetBody.linearVelocity = Vector2.ClampMagnitude(targetBody.linearVelocity, Mathf.Lerp(5.5f, 10.5f, ramp));
+                }
+            }
+
+            Rigidbody2D ownerBody = owner.GetComponent<Rigidbody2D>();
+            if (ownerBody != null && targetBody != null)
+            {
+                Vector2 toTarget = targetBody.position - ownerBody.position;
+                if (toTarget.sqrMagnitude > slackDistance * slackDistance)
+                    ownerBody.linearVelocity += toTarget.normalized * selfPullStrength * Time.fixedDeltaTime;
+            }
+
+            if (Time.time >= nextShockTime)
+            {
+                nextShockTime = Time.time + shockTickInterval;
+                PlayerHealth targetHealth = target.GetComponent<PlayerHealth>();
+                if (targetHealth != null && targetHealth.photonView != null)
+                    targetHealth.photonView.RPC(nameof(PlayerHealth.ApplyElectromagneticShockRpc), RpcTarget.All, 0.7f, 0.45f, 1.55f);
+            }
+
+            elapsed += Time.fixedDeltaTime;
+            yield return wait;
+        }
+
+        if (owner != null && owner.photonView != null)
+            owner.photonView.RPC("StopTractorBeamEffects", RpcTarget.All, sourceViewId);
+    }
+
+    static bool IsValidTetherHarpoonTarget(PlayerShooting owner, PhotonView target)
+    {
+        if (owner == null || owner.photonView == null || target == null)
+            return false;
+
+        PlayerHealth health = target.GetComponent<PlayerHealth>();
+        return health != null &&
+               !health.IsWreck &&
+               !health.IsAstronautControlled &&
+               !health.IsEvacuationAnimating &&
+               target.GetComponent<LureBeaconDecoy>() == null &&
+               target.GetComponent<PlayerDeployableBase>() == null &&
+               target.ViewID != owner.photonView.ViewID &&
+               CanReceiveHostileGadgetEffect(health);
+    }
+
+    static bool CanReceiveHostileGadgetEffect(PlayerHealth health)
+    {
+        if (health == null)
+            return false;
+
+        EnemyBot bot = health.GetComponent<EnemyBot>();
+        return bot == null || bot.CanReceivePilotHostileEffect();
+    }
+
+    public static void ApplyBreacherExplosionDamage(Vector2 center, int ownerViewId)
+    {
+        const float radius = 1.65f;
+        const int damage = 38;
+        Collider2D[] hits = Physics2D.OverlapCircleAll(center, radius);
+        HashSet<int> damagedViews = new HashSet<int>();
+        WeaponHitContext hitContext = new WeaponHitContext(
+            WeaponDamageType.Explosive,
+            WeaponDeliveryMethod.RemoteStrike,
+            WeaponDeliveryFlags.AreaDamage,
+            PlayerHealth.DamageSourceExplosive);
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null)
+                continue;
+
+            PlayerDeployableBase deployable = hit.GetComponentInParent<PlayerDeployableBase>();
+            if (deployable != null && deployable.photonView != null && deployable.CanBeTargeted && damagedViews.Add(deployable.photonView.ViewID))
+            {
+                deployable.photonView.RPC(
+                    nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                    RpcTarget.MasterClient,
+                    damage,
+                    damage,
+                    ownerViewId,
+                    center.x,
+                    center.y,
+                    (int)hitContext.DamageType,
+                    (int)hitContext.DeliveryMethod,
+                    (int)hitContext.DeliveryFlags,
+                    hitContext.DamageSource ?? string.Empty);
+                continue;
+            }
+
+            PlayerHealth health = hit.GetComponentInParent<PlayerHealth>();
+            if (health != null && health.photonView != null && !health.IsWreck && health.photonView.ViewID != ownerViewId && damagedViews.Add(health.photonView.ViewID))
+            {
+                health.photonView.RPC(
+                    nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                    RpcTarget.MasterClient,
+                    damage,
+                    damage,
+                    ownerViewId,
+                    center.x,
+                    center.y,
+                    (int)hitContext.DamageType,
+                    (int)hitContext.DeliveryMethod,
+                    (int)hitContext.DeliveryFlags,
+                    hitContext.DamageSource ?? string.Empty);
+            }
+        }
+    }
+
     public static bool TryLaunchSpaceDrill(PlayerShooting owner)
     {
         if (!PhotonNetwork.IsMasterClient || owner == null || owner.photonView == null || owner.photonView.Owner == null)
@@ -184,6 +598,31 @@ public static class NewItemsRuntime
         }
 
         Vector2 fallback = origin - forward * distance;
+        return new Vector3(fallback.x, fallback.y, 0f);
+    }
+
+    static Vector3 ResolveForwardSpawnPosition(Transform source, float distance, float clearanceRadius)
+    {
+        Vector2 origin = source != null ? (Vector2)source.position : Vector2.zero;
+        Vector2 forward = source != null && source.up.sqrMagnitude > 0.001f ? (Vector2)source.up.normalized : Vector2.up;
+        Vector2 right = source != null && source.right.sqrMagnitude > 0.001f ? (Vector2)source.right.normalized : Vector2.right;
+        Vector2[] directions =
+        {
+            forward,
+            (forward + right * 0.42f).normalized,
+            (forward - right * 0.42f).normalized,
+            right,
+            -right
+        };
+
+        for (int i = 0; i < directions.Length; i++)
+        {
+            Vector2 candidate = origin + directions[i] * distance;
+            if (IsSpawnPositionFree(candidate, clearanceRadius, source))
+                return new Vector3(candidate.x, candidate.y, 0f);
+        }
+
+        Vector2 fallback = origin + forward * distance;
         return new Vector3(fallback.x, fallback.y, 0f);
     }
 
@@ -1219,6 +1658,10 @@ public static class PlayerDeployableRuntime
     public const string BisonIndustrialPartsMarker = "bison_industrial_parts";
     public const string ContainerShipAutoCannonMarker = "container_ship_auto_cannon";
     public const string SpaceBombMarker = "player_space_bomb";
+    public const string StasisBuoyMarker = "player_stasis_buoy";
+    public const string SpaceTorpedoMarker = "player_space_torpedo";
+    public const string AsteroidBreacherBombMarker = "player_asteroid_breacher_bomb";
+    public const string MetalDriftWallMarker = "player_metal_drift_wall";
     public const string SpaceDrillMarker = "player_space_drill";
     public const string DropbotMarker = "player_dropbot";
 
@@ -1227,6 +1670,11 @@ public static class PlayerDeployableRuntime
         RuntimeSpriteUtility.LoadSprite("auto_turret_top_down_resource", "Assets/auto_turret_top_down.png");
         RuntimeSpriteUtility.LoadSprite("Items/rocket_autoturret", "Assets/Resources/Items/rocket_autoturret.png");
         RuntimeSpriteUtility.LoadSprite("Items/space_bomb_gadget_bullet", "Assets/space_bomb_gadget_bullet.png");
+        RuntimeSpriteUtility.LoadSprite("Items/stasis_buoy", "Assets/Resources/Items/stasis_buoy.png");
+        RuntimeSpriteUtility.LoadSprite("Items/space_torpedo", "Assets/Resources/Items/space_torpedo.png");
+        RuntimeSpriteUtility.LoadSprite("Items/space_torpedo_projectile", "Assets/Resources/Items/space_torpedo_projectile.png");
+        RuntimeSpriteUtility.LoadSprite("Items/asteroid_breacher_bomb", "Assets/Resources/Items/asteroid_breacher_bomb.png");
+        RuntimeSpriteUtility.LoadSprite("Items/metal_drift_wall", "Assets/Resources/Items/metal_drift_wall.png");
         RuntimeSpriteUtility.LoadSprite("space_drill_top_down_resource", "Assets/space_drill_top_down.png");
         RuntimeSpriteUtility.LoadSprite("space_trap_top_down_resource", "Assets/space_trap_top_down.png");
         RuntimeSpriteUtility.LoadSprite("looting_friend_top_down_resource", "Assets/looting_friend_top_down.png");
@@ -1251,7 +1699,7 @@ public static class PlayerDeployableRuntime
         return data != null &&
                data.Length > 0 &&
                data[0] is string marker &&
-               (marker == AutoTurretMarker || marker == RocketAutoTurretMarker || marker == WarBaseRocketAutoTurretMarker || marker == ViperContainerHaulerMarker || marker == BisonIndustrialPartsMarker || marker == ContainerShipAutoCannonMarker || marker == SpaceBombMarker || marker == SpaceDrillMarker || marker == DropbotMarker);
+               (marker == AutoTurretMarker || marker == RocketAutoTurretMarker || marker == WarBaseRocketAutoTurretMarker || marker == ViperContainerHaulerMarker || marker == BisonIndustrialPartsMarker || marker == ContainerShipAutoCannonMarker || marker == SpaceBombMarker || marker == StasisBuoyMarker || marker == SpaceTorpedoMarker || marker == AsteroidBreacherBombMarker || marker == MetalDriftWallMarker || marker == SpaceDrillMarker || marker == DropbotMarker);
     }
 
     public static bool IsContainerShipAutoCannonData(object[] data)
@@ -1351,6 +1799,46 @@ public static class PlayerDeployableRuntime
             return bomb;
         }
 
+        if (marker == StasisBuoyMarker)
+        {
+            StasisBuoyDeployable buoy = target.GetComponent<StasisBuoyDeployable>();
+            if (buoy == null)
+                buoy = target.AddComponent<StasisBuoyDeployable>();
+
+            buoy.InitializeFromPhotonData();
+            return buoy;
+        }
+
+        if (marker == SpaceTorpedoMarker)
+        {
+            SpaceTorpedoDeployable torpedo = target.GetComponent<SpaceTorpedoDeployable>();
+            if (torpedo == null)
+                torpedo = target.AddComponent<SpaceTorpedoDeployable>();
+
+            torpedo.InitializeFromPhotonData();
+            return torpedo;
+        }
+
+        if (marker == AsteroidBreacherBombMarker)
+        {
+            AsteroidBreacherBombDeployable bomb = target.GetComponent<AsteroidBreacherBombDeployable>();
+            if (bomb == null)
+                bomb = target.AddComponent<AsteroidBreacherBombDeployable>();
+
+            bomb.InitializeFromPhotonData();
+            return bomb;
+        }
+
+        if (marker == MetalDriftWallMarker)
+        {
+            MetalDriftWallDeployable wall = target.GetComponent<MetalDriftWallDeployable>();
+            if (wall == null)
+                wall = target.AddComponent<MetalDriftWallDeployable>();
+
+            wall.InitializeFromPhotonData();
+            return wall;
+        }
+
         if (marker == SpaceDrillMarker)
         {
             SpaceDrillDeployable drill = target.GetComponent<SpaceDrillDeployable>();
@@ -1390,7 +1878,7 @@ public abstract class PlayerDeployableBase : MonoBehaviourPun
     public bool CanBeTargeted => initialized && !destroyed && currentHp > 0;
     public int OwnerShipViewId => ownerShipViewId;
     public bool IsComputerOwnedDeployable => PlayerDeployableRuntime.IsComputerOwnedDeployableData(photonView != null ? photonView.InstantiationData : null);
-    public bool CanBeTargetedByEnemyBots => CanBeTargeted && !IsComputerOwnedDeployable;
+    public virtual bool CanBeTargetedByEnemyBots => CanBeTargeted && !IsComputerOwnedDeployable;
     public WeaponHitContext LastDamageContext { get; private set; }
     public float LastDamageShieldMultiplier { get; private set; } = 1f;
     public float LastDamageHpMultiplier { get; private set; } = 1f;
@@ -2031,7 +2519,7 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
     [PunRPC]
     void PlayTurretShotRpc()
     {
-        AudioManager.Instance.PlayShootSmallAt(transform.position);
+        AudioManager.Instance.PlayAutoShootAt(transform.position);
     }
 
     [PunRPC]
@@ -2870,6 +3358,1547 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
     }
 }
 
+public sealed class StasisBuoyDeployable : PlayerDeployableBase
+{
+    const float Lifetime = 12.75f;
+    const float PulseRadius = 4.25f;
+    const float PulseInterval = 0.58f;
+    const float ShockDuration = 0.85f;
+    const float ShockSpeedMultiplier = 0.38f;
+    const float ShockFireIntervalMultiplier = 1.75f;
+    static readonly Collider2D[] PulseHits = new Collider2D[96];
+
+    float deployedAt;
+    float nextPulseTime;
+    LineRenderer outerRing;
+    LineRenderer innerRing;
+
+    protected override int MaxHp => 55;
+    protected override int MaxShield => 25;
+    protected override float VisualTargetSize => 0.88f;
+    protected override float CollisionRadius => 0.42f;
+    protected override string SpriteResourcePath => "Items/stasis_buoy";
+    protected override string EditorSpritePath => "Assets/Resources/Items/stasis_buoy.png";
+    public override bool CanBeTargetedByEnemyBots => false;
+
+    void Awake()
+    {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+    }
+
+    void Start()
+    {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+        else
+            enabled = false;
+    }
+
+    public void InitializeFromPhotonData()
+    {
+        if (initialized)
+            return;
+
+        InitializeCommon();
+        deployedAt = Time.time;
+        nextPulseTime = Time.time + 0.12f;
+        ConfigurePulseVisuals();
+        AudioManager.Instance.PlayStasisBuoyAt(transform.position);
+    }
+
+    void Update()
+    {
+        if (!initialized && PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+
+        if (!initialized || destroyed)
+            return;
+
+        UpdatePulseVisuals();
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        if (Time.time >= deployedAt + Lifetime)
+        {
+            DespawnOnMaster();
+            return;
+        }
+
+        if (Time.time >= nextPulseTime)
+        {
+            nextPulseTime = Time.time + PulseInterval;
+            PulseOnMaster();
+        }
+    }
+
+    void PulseOnMaster()
+    {
+        ContactFilter2D filter = new ContactFilter2D
+        {
+            useLayerMask = false,
+            useTriggers = true
+        };
+
+        int hitCount = Physics2D.OverlapCircle(transform.position, PulseRadius, filter, PulseHits);
+        HashSet<int> shockedViews = new HashSet<int>();
+        int ownerActorNumber = ResolveOwnerActorNumber();
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D hit = PulseHits[i];
+            PlayerHealth health = hit != null ? hit.GetComponentInParent<PlayerHealth>() : null;
+            if (!IsValidShockTarget(health, ownerActorNumber))
+                continue;
+
+            if (!shockedViews.Add(health.photonView.ViewID))
+                continue;
+
+            health.photonView.RPC(
+                nameof(PlayerHealth.ApplyElectromagneticShockRpc),
+                RpcTarget.All,
+                ShockDuration,
+                ShockSpeedMultiplier,
+                ShockFireIntervalMultiplier);
+        }
+
+        photonView.RPC(nameof(PlayStasisPulseRpc), RpcTarget.All);
+    }
+
+    bool IsValidShockTarget(PlayerHealth health, int ownerActorNumber)
+    {
+        if (health == null ||
+            health.photonView == null ||
+            health.IsWreck ||
+            health.IsEvacuationAnimating ||
+            health.GetComponent<LureBeaconDecoy>() != null ||
+            health.GetComponent<PlayerDeployableBase>() != null)
+        {
+            return false;
+        }
+
+        if (health.photonView.ViewID == ownerShipViewId)
+            return false;
+
+        bool computerTarget = health.IsBotControlled || health.IsNeutralRiderControlled || health.IsEnemyAstronautControlled;
+        return computerTarget || ownerActorNumber <= 0 || health.photonView.OwnerActorNr != ownerActorNumber;
+    }
+
+    int ResolveOwnerActorNumber()
+    {
+        PhotonView ownerView = ownerShipViewId > 0 ? PhotonView.Find(ownerShipViewId) : null;
+        if (ownerView == null)
+            return 0;
+
+        if (ownerView.Owner != null && ownerView.Owner.ActorNumber > 0)
+            return ownerView.Owner.ActorNumber;
+
+        return Mathf.Max(0, ownerView.OwnerActorNr);
+    }
+
+    [PunRPC]
+    void PlayStasisPulseRpc()
+    {
+        AudioManager.Instance.PlayStasisPulseAt(transform.position);
+    }
+
+    void ConfigurePulseVisuals()
+    {
+        outerRing = CreateRing("StasisOuterRing", 0.055f, 42);
+        innerRing = CreateRing("StasisInnerRing", 0.025f, 43);
+        UpdatePulseVisuals();
+    }
+
+    LineRenderer CreateRing(string objectName, float width, int sortingOrder)
+    {
+        GameObject ringObject = new GameObject(objectName);
+        ringObject.transform.SetParent(transform, false);
+        LineRenderer ring = ringObject.AddComponent<LineRenderer>();
+        ring.useWorldSpace = true;
+        ring.loop = true;
+        ring.positionCount = 72;
+        ring.widthMultiplier = width;
+        ring.numCapVertices = 4;
+        ring.numCornerVertices = 4;
+        ring.material = new Material(Shader.Find("Sprites/Default"));
+        ring.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        ring.sortingOrder = sortingOrder;
+        return ring;
+    }
+
+    void UpdatePulseVisuals()
+    {
+        float phase = Mathf.Repeat((Time.time - deployedAt) / PulseInterval, 1f);
+        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * 10.5f);
+        SetRing(outerRing, Mathf.Lerp(0.78f, PulseRadius, phase), new Color(0.32f, 0.95f, 1f, Mathf.Lerp(0.28f, 0.05f, phase)));
+        SetRing(innerRing, Mathf.Lerp(0.48f, 1.12f, pulse), new Color(0.92f, 0.98f, 1f, 0.44f + pulse * 0.18f));
+
+        if (spriteRenderer != null)
+            spriteRenderer.color = Color.Lerp(Color.white, new Color(0.48f, 0.92f, 1f, 1f), pulse * 0.35f);
+    }
+
+    void SetRing(LineRenderer ring, float radius, Color color)
+    {
+        if (ring == null)
+            return;
+
+        ring.startColor = color;
+        ring.endColor = new Color(color.r, color.g, color.b, color.a * 0.25f);
+        for (int i = 0; i < ring.positionCount; i++)
+        {
+            float angle = i / (float)ring.positionCount * Mathf.PI * 2f;
+            Vector2 point = (Vector2)transform.position + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+            ring.SetPosition(i, new Vector3(point.x, point.y, -0.41f));
+        }
+    }
+
+    protected override void OnDestroyedByDamage()
+    {
+        SpaceObjectMotionSync.BroadcastSpaceMineDetonation(transform.position, 1.45f);
+    }
+
+    [PunRPC]
+    public new void PlayDeployableHitRpc(bool shieldHit, float x, float y)
+    {
+        PlayDeployableHitFeedback(shieldHit, x, y);
+    }
+
+    [PunRPC]
+    public new void PlayDeployableDestroyedRpc()
+    {
+        EnemyBot.SpawnSpaceMineDetonationEffects(transform.position, 1.45f);
+    }
+}
+
+public sealed class MetalDriftWallDeployable : PlayerDeployableBase
+{
+    const float OwnerCollisionGraceDuration = 0.58f;
+    const float MaxDriftSpeed = 2.35f;
+    const float MaxAngularSpeed = 58f;
+    const float VisualSize = 3.15f;
+    const float ColliderScale = 1.08f;
+
+    Vector2 deployForward = Vector2.up;
+    Vector2 initialVelocity = Vector2.up;
+    float ownerCollisionRestoreAt;
+    bool ownerCollisionRestored;
+
+    protected override int MaxHp => 310;
+    protected override int MaxShield => 85;
+    protected override float VisualTargetSize => VisualSize;
+    protected override float CollisionRadius => 1.25f;
+    protected override string SpriteResourcePath => "Items/metal_drift_wall";
+    protected override string EditorSpritePath => "Assets/Resources/Items/metal_drift_wall.png";
+    public override bool CanBeTargetedByEnemyBots => false;
+
+    void Awake()
+    {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+    }
+
+    void Start()
+    {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+        else
+            enabled = false;
+    }
+
+    public void InitializeFromPhotonData()
+    {
+        if (initialized)
+            return;
+
+        object[] data = photonView != null ? photonView.InstantiationData : null;
+        if (data != null && data.Length > 3)
+        {
+            deployForward = new Vector2(ConvertToFloat(data[2]), ConvertToFloat(data[3]));
+            if (deployForward.sqrMagnitude <= 0.001f)
+                deployForward = Vector2.up;
+            deployForward.Normalize();
+        }
+
+        if (data != null && data.Length > 5)
+        {
+            initialVelocity = new Vector2(ConvertToFloat(data[4]), ConvertToFloat(data[5]));
+            if (initialVelocity.sqrMagnitude <= 0.001f)
+                initialVelocity = deployForward * 1.25f;
+        }
+
+        InitializeCommon();
+        transform.up = deployForward;
+        ownerCollisionRestoreAt = Time.time + OwnerCollisionGraceDuration;
+        ownerCollisionRestored = false;
+
+        if (body != null)
+        {
+            body.linearVelocity = Vector2.ClampMagnitude(initialVelocity, MaxDriftSpeed);
+            body.angularVelocity = 0f;
+        }
+
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayShieldChargeAt(transform.position);
+    }
+
+    protected override void ConfigureVisuals()
+    {
+        transform.localScale = Vector3.one;
+
+        SpriteRenderer rootRenderer = GetComponent<SpriteRenderer>();
+        if (rootRenderer != null)
+            rootRenderer.enabled = false;
+
+        Transform visualTransform = transform.Find("MetalDriftWallSprite");
+        if (visualTransform == null)
+        {
+            GameObject visualObject = new GameObject("MetalDriftWallSprite");
+            visualObject.transform.SetParent(transform, false);
+            visualTransform = visualObject.transform;
+        }
+
+        spriteRenderer = visualTransform.GetComponent<SpriteRenderer>();
+        if (spriteRenderer == null)
+            spriteRenderer = visualTransform.gameObject.AddComponent<SpriteRenderer>();
+
+        Sprite sprite = RuntimeSpriteUtility.LoadSprite(SpriteResourcePath, EditorSpritePath);
+        if (sprite != null)
+        {
+            spriteRenderer.sprite = sprite;
+            RuntimeSpriteUtility.FitRenderer(spriteRenderer, VisualTargetSize);
+        }
+
+        visualTransform.localPosition = Vector3.zero;
+        visualTransform.localRotation = Quaternion.identity;
+        spriteRenderer.color = Color.white;
+        spriteRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        spriteRenderer.sortingOrder = 47;
+    }
+
+    protected override void ConfigurePhysics()
+    {
+        if (body == null)
+            body = GetComponent<Rigidbody2D>();
+
+        if (body != null)
+        {
+            body.gravityScale = 0f;
+            body.bodyType = RigidbodyType2D.Dynamic;
+            body.simulated = true;
+            body.interpolation = RigidbodyInterpolation2D.Interpolate;
+            body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            body.mass = 14f;
+            body.linearDamping = 0.9f;
+            body.angularDamping = 3.6f;
+            body.constraints = RigidbodyConstraints2D.None;
+        }
+
+        CircleCollider2D circle = GetComponent<CircleCollider2D>();
+        if (circle != null)
+            circle.enabled = false;
+
+        BoxCollider2D rootBox = GetComponent<BoxCollider2D>();
+        if (rootBox != null)
+            rootBox.enabled = false;
+
+        ConfigureColliderSegment("MetalDriftWallColliderCenter", new Vector2(0f, 0.24f), new Vector2(0.72f, 0.4f), 0f);
+        ConfigureColliderSegment("MetalDriftWallColliderLeftMid", new Vector2(-0.55f, 0.14f), new Vector2(0.72f, 0.38f), 14f);
+        ConfigureColliderSegment("MetalDriftWallColliderRightMid", new Vector2(0.55f, 0.14f), new Vector2(0.72f, 0.38f), -14f);
+        ConfigureColliderSegment("MetalDriftWallColliderLeftEnd", new Vector2(-1.06f, -0.12f), new Vector2(0.7f, 0.46f), 33f);
+        ConfigureColliderSegment("MetalDriftWallColliderRightEnd", new Vector2(1.06f, -0.12f), new Vector2(0.7f, 0.46f), -33f);
+    }
+
+    void ConfigureColliderSegment(string objectName, Vector2 localPosition, Vector2 size, float localAngle)
+    {
+        Transform segment = transform.Find(objectName);
+        if (segment == null)
+        {
+            GameObject segmentObject = new GameObject(objectName);
+            segmentObject.transform.SetParent(transform, false);
+            segment = segmentObject.transform;
+        }
+
+        Vector2 scaledPosition = localPosition * ColliderScale;
+        segment.localPosition = new Vector3(scaledPosition.x, scaledPosition.y, 0f);
+        segment.localRotation = Quaternion.Euler(0f, 0f, localAngle);
+        segment.localScale = Vector3.one;
+
+        BoxCollider2D box = segment.GetComponent<BoxCollider2D>();
+        if (box == null)
+            box = segment.gameObject.AddComponent<BoxCollider2D>();
+
+        box.enabled = true;
+        box.isTrigger = false;
+        box.offset = Vector2.zero;
+        box.size = size * ColliderScale;
+    }
+
+    void Update()
+    {
+        if (!initialized && PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+
+        if (!initialized || destroyed)
+            return;
+
+        if (!ownerCollisionRestored && Time.time >= ownerCollisionRestoreAt)
+        {
+            ownerCollisionRestored = true;
+            SetOwnerCollisionIgnored(false);
+        }
+
+        UpdateDamageTint();
+    }
+
+    void FixedUpdate()
+    {
+        if (!initialized || destroyed || body == null)
+            return;
+
+        body.linearVelocity = Vector2.ClampMagnitude(body.linearVelocity, MaxDriftSpeed);
+        body.angularVelocity = Mathf.Clamp(body.angularVelocity, -MaxAngularSpeed, MaxAngularSpeed);
+    }
+
+    void UpdateDamageTint()
+    {
+        if (spriteRenderer == null)
+            return;
+
+        float shieldPulse = currentShield > 0 ? 0.5f + Mathf.Sin(Time.time * 8f) * 0.5f : 0f;
+        float hpRatio = Mathf.Clamp01(currentHp / (float)Mathf.Max(1, MaxHp));
+        Color intactColor = Color.Lerp(Color.white, new Color(0.76f, 0.94f, 1f, 1f), shieldPulse * 0.12f);
+        Color damagedColor = new Color(1f, 0.72f, 0.58f, 1f);
+        spriteRenderer.color = Color.Lerp(damagedColor, intactColor, Mathf.Lerp(0.45f, 1f, hpRatio));
+    }
+
+    void SetOwnerCollisionIgnored(bool ignored)
+    {
+        if (ownerShipViewId <= 0)
+            return;
+
+        PhotonView ownerView = PhotonView.Find(ownerShipViewId);
+        if (ownerView == null)
+            return;
+
+        Collider2D[] ownColliders = GetComponentsInChildren<Collider2D>(true);
+        Collider2D[] ownerColliders = ownerView.GetComponentsInChildren<Collider2D>(true);
+        for (int i = 0; i < ownColliders.Length; i++)
+        {
+            Collider2D ownCollider = ownColliders[i];
+            if (ownCollider == null)
+                continue;
+
+            for (int j = 0; j < ownerColliders.Length; j++)
+            {
+                Collider2D ownerCollider = ownerColliders[j];
+                if (ownerCollider != null)
+                    Physics2D.IgnoreCollision(ownCollider, ownerCollider, ignored);
+            }
+        }
+    }
+
+    protected override void OnDestroyedByDamage()
+    {
+        SpaceObjectMotionSync.BroadcastSpaceMineDetonation(transform.position, 1.05f);
+    }
+
+    [PunRPC]
+    public new void PlayDeployableHitRpc(bool shieldHit, float x, float y)
+    {
+        PlayDeployableHitFeedback(shieldHit, x, y);
+    }
+
+    [PunRPC]
+    public new void PlayDeployableDestroyedRpc()
+    {
+        EnemyBot.SpawnSpaceMineDetonationEffects(transform.position, 1.05f);
+    }
+}
+
+public sealed class AsteroidBreacherBombDeployable : PlayerDeployableBase
+{
+    const float FlightSpeed = 11.5f;
+    const float ArrivalDistance = 0.32f;
+    const float CountdownDuration = 3f;
+    const float MaxFlightLifetime = 4f;
+    const float ExplosionRadius = 1.65f;
+    const int ObstacleDamage = 10000;
+
+    string targetStableId = string.Empty;
+    Vector2 targetPosition;
+    float launchedAt;
+    float armedAt;
+    float nextBeepTime;
+    bool armed;
+    bool detonationStarted;
+    bool hasAttachmentOffset;
+    Vector2 attachedLocalOffset;
+    float attachedLocalRotationOffset;
+    LineRenderer countdownRing;
+    TrailRenderer flightTrail;
+
+    protected override int MaxHp => 25;
+    protected override int MaxShield => 0;
+    protected override float VisualTargetSize => 0.62f;
+    protected override float CollisionRadius => 0.22f;
+    protected override string SpriteResourcePath => "Items/asteroid_breacher_bomb";
+    protected override string EditorSpritePath => "Assets/Resources/Items/asteroid_breacher_bomb.png";
+
+    void Awake()
+    {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+    }
+
+    void Start()
+    {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+        else
+            enabled = false;
+    }
+
+    public void InitializeFromPhotonData()
+    {
+        if (initialized)
+            return;
+
+        object[] data = photonView != null ? photonView.InstantiationData : null;
+        targetStableId = data != null && data.Length > 2 ? data[2] as string ?? string.Empty : string.Empty;
+        targetPosition = data != null && data.Length > 4
+            ? new Vector2(ConvertToFloat(data[3]), ConvertToFloat(data[4]))
+            : (Vector2)transform.position;
+
+        InitializeCommon();
+        launchedAt = Time.time;
+        ConfigureFlightTrail();
+        ConfigureCountdownRing();
+        AudioManager.Instance.PlayRocketLaunchAt(transform.position);
+    }
+
+    protected override void ConfigurePhysics()
+    {
+        base.ConfigurePhysics();
+
+        if (body != null)
+        {
+            body.bodyType = RigidbodyType2D.Kinematic;
+            body.linearVelocity = Vector2.zero;
+            body.angularVelocity = 0f;
+            body.constraints = RigidbodyConstraints2D.FreezeRotation;
+        }
+
+        CircleCollider2D circle = GetComponent<CircleCollider2D>();
+        if (circle != null)
+            circle.isTrigger = true;
+    }
+
+    void Update()
+    {
+        if (!initialized && PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+
+        if (!initialized || detonationStarted)
+            return;
+
+        if (!armed)
+        {
+            ResolveLiveTargetPosition();
+            MoveTowardTarget();
+            UpdateFlightVisuals();
+
+            if (PhotonNetwork.IsMasterClient &&
+                (Vector2.Distance(transform.position, targetPosition) <= ArrivalDistance || Time.time >= launchedAt + MaxFlightLifetime))
+            {
+                ArmOnMaster();
+            }
+
+            return;
+        }
+
+        UpdateAttachedPosition();
+        UpdateCountdownVisuals();
+        TryPlayCountdownBeep();
+
+        if (PhotonNetwork.IsMasterClient && Time.time >= armedAt + CountdownDuration)
+            DetonateOnMaster(transform.position);
+    }
+
+    void ResolveLiveTargetPosition()
+    {
+        if (string.IsNullOrWhiteSpace(targetStableId))
+            return;
+
+        ObstacleChunk obstacle = FindTargetObstacle();
+        if (obstacle != null)
+            targetPosition = obstacle.transform.position;
+    }
+
+    ObstacleChunk FindTargetObstacle()
+    {
+        if (string.IsNullOrWhiteSpace(targetStableId))
+            return null;
+
+        return ObstacleChunk.Find(targetStableId);
+    }
+
+    void MoveTowardTarget()
+    {
+        Vector2 currentPosition = transform.position;
+        Vector2 toTarget = targetPosition - currentPosition;
+        if (toTarget.sqrMagnitude > 0.001f)
+            transform.up = toTarget.normalized;
+
+        Vector2 nextPosition = Vector2.MoveTowards(currentPosition, targetPosition, FlightSpeed * Time.deltaTime);
+        if (body != null)
+            body.MovePosition(nextPosition);
+        else
+            transform.position = new Vector3(nextPosition.x, nextPosition.y, transform.position.z);
+    }
+
+    void ArmOnMaster()
+    {
+        if (!PhotonNetwork.IsMasterClient || armed || detonationStarted)
+            return;
+
+        Vector2 armPosition = transform.position;
+        Vector2 localOffset = Vector2.zero;
+        float localRotationOffset = 0f;
+        int attachFlag = 0;
+
+        ObstacleChunk obstacle = FindTargetObstacle();
+        if (obstacle != null)
+        {
+            attachFlag = 1;
+            localOffset = obstacle.transform.InverseTransformPoint(armPosition);
+            localRotationOffset = Mathf.DeltaAngle(obstacle.transform.eulerAngles.z, transform.eulerAngles.z);
+        }
+
+        photonView.RPC(
+            nameof(SetBreacherArmedRpc),
+            RpcTarget.All,
+            armPosition.x,
+            armPosition.y,
+            localOffset.x,
+            localOffset.y,
+            localRotationOffset,
+            attachFlag);
+    }
+
+    [PunRPC]
+    void SetBreacherArmedRpc(float x, float y, float localOffsetX, float localOffsetY, float localRotationOffset, int attachFlag)
+    {
+        targetPosition = new Vector2(x, y);
+        attachedLocalOffset = new Vector2(localOffsetX, localOffsetY);
+        attachedLocalRotationOffset = localRotationOffset;
+        hasAttachmentOffset = attachFlag != 0;
+        armed = true;
+        armedAt = Time.time;
+        nextBeepTime = Time.time;
+
+        if (UpdateAttachedPosition())
+        {
+            if (flightTrail != null)
+                flightTrail.emitting = false;
+            return;
+        }
+
+        if (body != null)
+        {
+            body.linearVelocity = Vector2.zero;
+            body.angularVelocity = 0f;
+            body.MovePosition(targetPosition);
+        }
+        else
+        {
+            transform.position = new Vector3(targetPosition.x, targetPosition.y, transform.position.z);
+        }
+
+        if (flightTrail != null)
+            flightTrail.emitting = false;
+    }
+
+    bool UpdateAttachedPosition()
+    {
+        if (!hasAttachmentOffset)
+            return false;
+
+        ObstacleChunk obstacle = FindTargetObstacle();
+        if (obstacle == null)
+            return false;
+
+        Vector3 worldPosition = obstacle.transform.TransformPoint(attachedLocalOffset);
+        targetPosition = worldPosition;
+        transform.position = new Vector3(worldPosition.x, worldPosition.y, transform.position.z);
+        transform.rotation = Quaternion.Euler(0f, 0f, obstacle.transform.eulerAngles.z + attachedLocalRotationOffset);
+
+        if (body != null)
+        {
+            body.linearVelocity = Vector2.zero;
+            body.angularVelocity = 0f;
+            body.position = targetPosition;
+            body.rotation = transform.eulerAngles.z;
+        }
+
+        return true;
+    }
+
+    void TryPlayCountdownBeep()
+    {
+        if (Time.time < nextBeepTime)
+            return;
+
+        nextBeepTime = Time.time + 0.5f;
+        AudioManager.Instance.PlayRocketLockAt(transform.position);
+    }
+
+    void DetonateOnMaster(Vector3 worldPosition)
+    {
+        if (!PhotonNetwork.IsMasterClient || detonationStarted)
+            return;
+
+        detonationStarted = true;
+        destroyed = true;
+        BroadcastDetonationEffectsAndDamage(worldPosition);
+        if (PhotonNetwork.InRoom)
+            PhotonNetwork.Destroy(gameObject);
+        else
+            Destroy(gameObject);
+    }
+
+    protected override void OnDestroyedByDamage()
+    {
+        if (detonationStarted)
+            return;
+
+        detonationStarted = true;
+        BroadcastDetonationEffectsAndDamage(transform.position);
+    }
+
+    void BroadcastDetonationEffectsAndDamage(Vector3 worldPosition)
+    {
+        photonView.RPC(nameof(PlayBreacherExplosionRpc), RpcTarget.All, worldPosition.x, worldPosition.y);
+        SpaceObjectMotionSync.BroadcastSpaceMineDetonation(worldPosition, ExplosionRadius);
+
+        ObstacleChunk targetObstacle = FindTargetObstacle();
+        if (targetObstacle != null && !string.IsNullOrWhiteSpace(targetObstacle.StableId) && RoomSettings.AreObstaclesDestructible())
+            SpaceObjectMotionSync.RequestObstacleDamage(targetObstacle.StableId, ObstacleDamage);
+
+        NewItemsRuntime.ApplyBreacherExplosionDamage(worldPosition, ownerShipViewId);
+    }
+
+    [PunRPC]
+    void PlayBreacherExplosionRpc(float x, float y)
+    {
+        AudioManager.Instance.PlayAsteroidBreacherAt(new Vector3(x, y, transform.position.z));
+    }
+
+    void ConfigureFlightTrail()
+    {
+        GameObject trailObject = new GameObject("AsteroidBreacherFuseTrail");
+        trailObject.transform.SetParent(transform, false);
+        trailObject.transform.localPosition = new Vector3(0f, -0.18f, 0.04f);
+        flightTrail = trailObject.AddComponent<TrailRenderer>();
+        EngineTrailVisualUtility.ConfigureTrailBase(flightTrail);
+        flightTrail.time = 0.28f;
+        flightTrail.minVertexDistance = 0.02f;
+        flightTrail.widthMultiplier = 0.075f;
+        flightTrail.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        flightTrail.sortingOrder = 36;
+        flightTrail.emitting = true;
+
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[] { new GradientColorKey(new Color(1f, 0.55f, 0.14f), 0f), new GradientColorKey(new Color(0.38f, 0.78f, 1f), 1f) },
+            new[] { new GradientAlphaKey(0.88f, 0f), new GradientAlphaKey(0f, 1f) });
+        flightTrail.colorGradient = gradient;
+    }
+
+    void ConfigureCountdownRing()
+    {
+        GameObject ringObject = new GameObject("AsteroidBreacherCountdownRing");
+        ringObject.transform.SetParent(transform, false);
+        countdownRing = ringObject.AddComponent<LineRenderer>();
+        countdownRing.useWorldSpace = true;
+        countdownRing.loop = true;
+        countdownRing.positionCount = 72;
+        countdownRing.widthMultiplier = 0.035f;
+        countdownRing.numCapVertices = 3;
+        countdownRing.numCornerVertices = 3;
+        countdownRing.material = new Material(Shader.Find("Sprites/Default"));
+        countdownRing.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        countdownRing.sortingOrder = 42;
+        countdownRing.enabled = false;
+    }
+
+    void UpdateFlightVisuals()
+    {
+        if (spriteRenderer == null)
+            return;
+
+        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * 16f);
+        spriteRenderer.color = Color.Lerp(Color.white, new Color(1f, 0.58f, 0.22f, 1f), pulse * 0.22f);
+    }
+
+    void UpdateCountdownVisuals()
+    {
+        float t = Mathf.Clamp01((Time.time - armedAt) / CountdownDuration);
+        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * 18f);
+        if (spriteRenderer != null)
+            spriteRenderer.color = Color.Lerp(Color.white, new Color(1f, 0.22f, 0.08f, 1f), 0.25f + pulse * 0.45f);
+
+        if (countdownRing == null)
+            return;
+
+        countdownRing.enabled = true;
+        float radius = Mathf.Lerp(0.58f, ExplosionRadius, pulse * 0.3f + t * 0.7f);
+        Color color = Color.Lerp(new Color(1f, 0.72f, 0.18f, 0.42f), new Color(1f, 0.08f, 0.02f, 0.78f), t);
+        countdownRing.startColor = color;
+        countdownRing.endColor = new Color(color.r, color.g, color.b, color.a * 0.32f);
+        for (int i = 0; i < countdownRing.positionCount; i++)
+        {
+            float angle = i / (float)countdownRing.positionCount * Mathf.PI * 2f;
+            Vector2 point = (Vector2)transform.position + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+            countdownRing.SetPosition(i, new Vector3(point.x, point.y, -0.39f));
+        }
+    }
+
+    protected override void OnDestroy()
+    {
+        if (flightTrail != null)
+            flightTrail.emitting = false;
+
+        base.OnDestroy();
+    }
+
+    [PunRPC]
+    public new void PlayDeployableHitRpc(bool shieldHit, float x, float y)
+    {
+        PlayDeployableHitFeedback(shieldHit, x, y);
+    }
+
+    [PunRPC]
+    public new void PlayDeployableDestroyedRpc()
+    {
+        if (!detonationStarted)
+            EnemyBot.SpawnSpaceMineDetonationEffects(transform.position, 0.9f);
+    }
+}
+
+public sealed class SpaceTorpedoDeployable : PlayerDeployableBase
+{
+    const float FlightSpeed = 9.4f;
+    const float MaxFlightLifetime = 4.1f;
+    const float ExplosionRange = 2.35f;
+    const float ExplosionCoreRadius = 0.42f;
+    const float ExplosionHalfAngleDegrees = 34f;
+    const int ExplosionDamage = 82;
+    const int ObstacleDamage = 115;
+    static readonly Collider2D[] ExplosionHits = new Collider2D[128];
+
+    Vector2 launchDirection = Vector2.up;
+    float launchedAt;
+    bool detonationStarted;
+    TrailRenderer engineTrail;
+    SpriteRenderer noseGlowRenderer;
+
+    protected override int MaxHp => 30;
+    protected override int MaxShield => 10;
+    protected override float VisualTargetSize => 0.64f;
+    protected override float CollisionRadius => 0.2f;
+    protected override string SpriteResourcePath => "Items/space_torpedo_projectile";
+    protected override string EditorSpritePath => "Assets/Resources/Items/space_torpedo_projectile.png";
+
+    void Awake()
+    {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+    }
+
+    void Start()
+    {
+        if (PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+        else
+            enabled = false;
+    }
+
+    public void InitializeFromPhotonData()
+    {
+        if (initialized)
+            return;
+
+        object[] data = photonView != null ? photonView.InstantiationData : null;
+        if (data != null && data.Length > 3)
+        {
+            launchDirection = new Vector2(ConvertToFloat(data[2]), ConvertToFloat(data[3]));
+            if (launchDirection.sqrMagnitude <= 0.001f)
+                launchDirection = Vector2.up;
+            launchDirection.Normalize();
+        }
+
+        InitializeCommon();
+        transform.up = launchDirection;
+        launchedAt = Time.time;
+        ConfigureEngineTrail();
+        if (body != null)
+            body.linearVelocity = launchDirection * FlightSpeed;
+
+        AudioManager.Instance.PlayRocketLaunchAt(transform.position);
+    }
+
+    protected override void ConfigurePhysics()
+    {
+        if (body == null)
+            body = GetComponent<Rigidbody2D>();
+
+        if (body != null)
+        {
+            body.gravityScale = 0f;
+            body.bodyType = RigidbodyType2D.Dynamic;
+            body.simulated = true;
+            body.interpolation = RigidbodyInterpolation2D.Interpolate;
+            body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            body.mass = 0.18f;
+            body.linearDamping = 0f;
+            body.angularDamping = 0f;
+            body.constraints = RigidbodyConstraints2D.FreezeRotation;
+        }
+
+        CircleCollider2D circle = GetComponent<CircleCollider2D>();
+        if (circle == null)
+            circle = gameObject.AddComponent<CircleCollider2D>();
+
+        circle.enabled = true;
+        circle.isTrigger = false;
+        SetWorldRadius(circle, CollisionRadius);
+
+        BoxCollider2D box = GetComponent<BoxCollider2D>();
+        if (box != null)
+            box.enabled = false;
+    }
+
+    void Update()
+    {
+        if (!initialized && PlayerDeployableRuntime.IsInstantiationData(photonView != null ? photonView.InstantiationData : null))
+            InitializeFromPhotonData();
+
+        if (!initialized || detonationStarted)
+            return;
+
+        transform.up = launchDirection;
+        UpdateEngineVisuals();
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        if (body != null)
+            body.linearVelocity = launchDirection * FlightSpeed;
+
+        if (Time.time >= launchedAt + MaxFlightLifetime)
+            DetonateOnMaster(transform.position);
+    }
+
+    void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (!PhotonNetwork.IsMasterClient || detonationStarted || collision == null)
+            return;
+
+        Collider2D hit = collision.collider;
+        if (!IsBlockingCollider(hit))
+            return;
+
+        Vector2 point = collision.contactCount > 0 ? collision.GetContact(0).point : (Vector2)transform.position;
+        DetonateOnMaster(point);
+    }
+
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        if (!PhotonNetwork.IsMasterClient || detonationStarted)
+            return;
+
+        if (IsBlockingCollider(other))
+            DetonateOnMaster(transform.position);
+    }
+
+    bool IsBlockingCollider(Collider2D hit)
+    {
+        if (hit == null)
+            return false;
+
+        if (hit.transform == transform || hit.transform.IsChildOf(transform))
+            return false;
+
+        if (hit.GetComponentInParent<Bullet>() != null)
+            return false;
+
+        PlayerHealth health = hit.GetComponentInParent<PlayerHealth>();
+        if (health != null && health.photonView != null && health.photonView.ViewID == ownerShipViewId)
+            return false;
+
+        if (!hit.isTrigger)
+            return true;
+
+        return health != null ||
+               hit.GetComponentInParent<PlayerDeployableBase>() != null ||
+               hit.GetComponentInParent<ObstacleChunk>() != null ||
+               hit.GetComponentInParent<MovingSpaceObject>() != null ||
+               hit.GetComponentInParent<Treasure>() != null ||
+               hit.GetComponentInParent<ShipWreck>() != null ||
+               hit.GetComponentInParent<DroppedCargoCrate>() != null;
+    }
+
+    void DetonateOnMaster(Vector3 worldPosition)
+    {
+        if (!PhotonNetwork.IsMasterClient || detonationStarted)
+            return;
+
+        detonationStarted = true;
+        destroyed = true;
+        BroadcastDetonationEffectsAndDamage(worldPosition);
+        if (PhotonNetwork.InRoom)
+            PhotonNetwork.Destroy(gameObject);
+        else
+            Destroy(gameObject);
+    }
+
+    protected override void OnDestroyedByDamage()
+    {
+        if (detonationStarted)
+            return;
+
+        detonationStarted = true;
+        BroadcastDetonationEffectsAndDamage(transform.position);
+    }
+
+    void BroadcastDetonationEffectsAndDamage(Vector3 worldPosition)
+    {
+        photonView.RPC(
+            nameof(PlaySpaceTorpedoConeExplosionRpc),
+            RpcTarget.All,
+            worldPosition.x,
+            worldPosition.y,
+            launchDirection.x,
+            launchDirection.y);
+        ApplyExplosionDamage(worldPosition);
+    }
+
+    [PunRPC]
+    void PlaySpaceTorpedoConeExplosionRpc(float x, float y, float directionX, float directionY)
+    {
+        Vector2 direction = new Vector2(directionX, directionY);
+        if (direction.sqrMagnitude <= 0.001f)
+            direction = Vector2.up;
+        direction.Normalize();
+
+        Vector3 worldPosition = new Vector3(x, y, transform.position.z);
+        SpaceTorpedoConeExplosionVfx.Spawn(worldPosition, direction, ExplosionRange, ExplosionHalfAngleDegrees);
+        AudioManager.Instance.PlaySpaceTorpedoExplosionAt(worldPosition);
+    }
+
+    void ApplyExplosionDamage(Vector2 center)
+    {
+        ContactFilter2D filter = new ContactFilter2D
+        {
+            useLayerMask = false,
+            useTriggers = true
+        };
+
+        int hitCount = Physics2D.OverlapCircle(center, ExplosionRange, filter, ExplosionHits);
+        HashSet<int> damagedViews = new HashSet<int>();
+        HashSet<string> damagedObstacles = new HashSet<string>(StringComparer.Ordinal);
+        WeaponHitContext hitContext = new WeaponHitContext(
+            WeaponDamageType.Explosive,
+            WeaponDeliveryMethod.DirectProjectile,
+            WeaponDeliveryFlags.AreaDamage,
+            PlayerHealth.DamageSourceExplosive);
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D hit = ExplosionHits[i];
+            if (hit == null || hit.transform == transform || hit.transform.IsChildOf(transform))
+                continue;
+
+            if (!IsInsideExplosionCone(hit, center))
+                continue;
+
+            PlayerDeployableBase deployable = hit.GetComponentInParent<PlayerDeployableBase>();
+            if (deployable != null && deployable != this && deployable.photonView != null && deployable.CanBeTargeted && damagedViews.Add(deployable.photonView.ViewID))
+            {
+                deployable.photonView.RPC(
+                    nameof(PlayerDeployableBase.TakeDeployableDamageWithContextAt),
+                    RpcTarget.MasterClient,
+                    ExplosionDamage,
+                    ExplosionDamage,
+                    ownerShipViewId,
+                    center.x,
+                    center.y,
+                    (int)hitContext.DamageType,
+                    (int)hitContext.DeliveryMethod,
+                    (int)hitContext.DeliveryFlags,
+                    hitContext.DamageSource ?? string.Empty);
+                continue;
+            }
+
+            PlayerHealth health = hit.GetComponentInParent<PlayerHealth>();
+            if (health != null && health.photonView != null && !health.IsWreck && health.photonView.ViewID != ownerShipViewId && damagedViews.Add(health.photonView.ViewID))
+            {
+                health.photonView.RPC(
+                    nameof(PlayerHealth.TakeDamageProfileWithContextAt),
+                    RpcTarget.MasterClient,
+                    ExplosionDamage,
+                    ExplosionDamage,
+                    ownerShipViewId,
+                    center.x,
+                    center.y,
+                    (int)hitContext.DamageType,
+                    (int)hitContext.DeliveryMethod,
+                    (int)hitContext.DeliveryFlags,
+                    hitContext.DamageSource ?? string.Empty);
+                continue;
+            }
+
+            ObstacleChunk obstacle = hit.GetComponentInParent<ObstacleChunk>();
+            if (obstacle != null && !string.IsNullOrWhiteSpace(obstacle.StableId) && damagedObstacles.Add(obstacle.StableId) && RoomSettings.AreObstaclesDestructible())
+            {
+                SpaceObjectMotionSync.RequestObstacleDamage(obstacle.StableId, ObstacleDamage);
+                continue;
+            }
+
+            MovingSpaceObject movingObject = hit.GetComponentInParent<MovingSpaceObject>();
+            if (movingObject != null && !string.IsNullOrWhiteSpace(movingObject.StableId) && damagedObstacles.Add(movingObject.StableId))
+            {
+                Vector2 push = launchDirection;
+                if (push.sqrMagnitude <= 0.001f)
+                    push = Vector2.up;
+                SpaceObjectMotionSync.RequestImpulse(movingObject.StableId, push.normalized * 4.3f);
+            }
+        }
+    }
+
+    bool IsInsideExplosionCone(Collider2D hit, Vector2 center)
+    {
+        Vector2 closest = hit.ClosestPoint(center);
+        Vector2 toHit = closest - center;
+        float sqrDistance = toHit.sqrMagnitude;
+        if (sqrDistance <= ExplosionCoreRadius * ExplosionCoreRadius)
+            return true;
+
+        if (sqrDistance > ExplosionRange * ExplosionRange)
+            return false;
+
+        Vector2 direction = launchDirection.sqrMagnitude > 0.001f ? launchDirection.normalized : Vector2.up;
+        float dot = Vector2.Dot(direction, toHit.normalized);
+        return dot >= Mathf.Cos(ExplosionHalfAngleDegrees * Mathf.Deg2Rad);
+    }
+
+    void ConfigureEngineTrail()
+    {
+        GameObject trailObject = new GameObject("SpaceTorpedoTrail");
+        trailObject.transform.SetParent(transform, false);
+        trailObject.transform.localPosition = new Vector3(0f, -0.24f, 0.05f);
+        engineTrail = trailObject.AddComponent<TrailRenderer>();
+        EngineTrailVisualUtility.ConfigureTrailBase(engineTrail);
+        engineTrail.time = 0.34f;
+        engineTrail.minVertexDistance = 0.015f;
+        engineTrail.widthMultiplier = 0.08f;
+        engineTrail.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        engineTrail.sortingOrder = 36;
+        engineTrail.emitting = true;
+
+        Gradient trailGradient = new Gradient();
+        trailGradient.SetKeys(
+            new[] { new GradientColorKey(new Color(0.45f, 0.96f, 1f), 0f), new GradientColorKey(new Color(1f, 0.22f, 0.06f), 1f) },
+            new[] { new GradientAlphaKey(0.92f, 0f), new GradientAlphaKey(0f, 1f) });
+        engineTrail.colorGradient = trailGradient;
+
+        GameObject glowObject = new GameObject("SpaceTorpedoNoseGlow");
+        glowObject.transform.SetParent(transform, false);
+        glowObject.transform.localPosition = new Vector3(0f, 0.34f, -0.02f);
+        glowObject.transform.localScale = Vector3.one * 0.16f;
+        noseGlowRenderer = glowObject.AddComponent<SpriteRenderer>();
+        noseGlowRenderer.sprite = RuntimeSpriteUtility.CreateArrowSprite();
+        noseGlowRenderer.color = new Color(0.42f, 0.96f, 1f, 0.52f);
+        noseGlowRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        noseGlowRenderer.sortingOrder = 50;
+    }
+
+    void UpdateEngineVisuals()
+    {
+        if (noseGlowRenderer == null)
+            return;
+
+        float pulse = 0.82f + Mathf.Sin(Time.time * 19f) * 0.18f;
+        noseGlowRenderer.transform.localScale = Vector3.one * (0.16f * pulse);
+    }
+
+    protected override void OnDestroy()
+    {
+        if (engineTrail != null)
+            engineTrail.emitting = false;
+
+        base.OnDestroy();
+    }
+
+    [PunRPC]
+    public new void PlayDeployableHitRpc(bool shieldHit, float x, float y)
+    {
+        PlayDeployableHitFeedback(shieldHit, x, y);
+    }
+
+    [PunRPC]
+    public new void PlayDeployableDestroyedRpc()
+    {
+        if (!detonationStarted)
+            SpaceTorpedoConeExplosionVfx.Spawn(transform.position, launchDirection, ExplosionRange, ExplosionHalfAngleDegrees);
+    }
+}
+
+public sealed class SpaceTorpedoConeExplosionVfx : MonoBehaviour
+{
+    const float Lifetime = 0.68f;
+    const float EffectZ = -0.36f;
+    const int RayCount = 11;
+    const int ArcSegments = 18;
+
+    static Material sharedMaterial;
+
+    readonly LineRenderer[] rays = new LineRenderer[RayCount];
+    LineRenderer frontArc;
+    LineRenderer coreJet;
+    Vector3 center;
+    Vector2 direction = Vector2.up;
+    float range;
+    float halfAngle;
+    float age;
+
+    public static void Spawn(Vector3 position, Vector2 forward, float coneRange, float coneHalfAngleDegrees)
+    {
+        if (!RoomSettings.AreVisualEffectsEnabled())
+            return;
+
+        GameObject effectObject = new GameObject("SpaceTorpedoConeExplosionVfx");
+        SpaceTorpedoConeExplosionVfx effect = effectObject.AddComponent<SpaceTorpedoConeExplosionVfx>();
+        effect.Initialize(position, forward, coneRange, coneHalfAngleDegrees);
+    }
+
+    void Initialize(Vector3 position, Vector2 forward, float coneRange, float coneHalfAngleDegrees)
+    {
+        center = new Vector3(position.x, position.y, EffectZ);
+        transform.position = center;
+        direction = forward.sqrMagnitude > 0.001f ? forward.normalized : Vector2.up;
+        range = Mathf.Max(0.5f, coneRange);
+        halfAngle = Mathf.Clamp(coneHalfAngleDegrees, 8f, 85f);
+        age = 0f;
+
+        for (int i = 0; i < rays.Length; i++)
+            rays[i] = CreateLine("TorpedoConeRay_" + i.ToString("00"), 0.055f, false, 2, 6900 + i);
+
+        frontArc = CreateLine("TorpedoConeFrontArc", 0.075f, false, ArcSegments, 6920);
+        coreJet = CreateLine("TorpedoConeCoreJet", 0.18f, false, 2, 6925);
+        UpdateVisuals(0f);
+    }
+
+    void Update()
+    {
+        age += Time.deltaTime;
+        float t = Mathf.Clamp01(age / Lifetime);
+        UpdateVisuals(t);
+
+        if (age >= Lifetime)
+            Destroy(gameObject);
+    }
+
+    void UpdateVisuals(float t)
+    {
+        float expansion = 1f - Mathf.Pow(1f - t, 2.2f);
+        float fade = Mathf.Pow(1f - t, 1.35f);
+        Vector3 origin = center + (Vector3)(direction * Mathf.Lerp(0.04f, 0.18f, expansion));
+
+        for (int i = 0; i < rays.Length; i++)
+        {
+            LineRenderer ray = rays[i];
+            if (ray == null)
+                continue;
+
+            float normalized = rays.Length <= 1 ? 0.5f : i / (float)(rays.Length - 1);
+            float angle = Mathf.Lerp(-halfAngle, halfAngle, normalized) + Mathf.Sin(i * 7.13f) * 2.5f;
+            Vector2 rayDirection = Rotate(direction, angle);
+            float length = range * Mathf.Lerp(0.72f, 1.08f, Hash01(i, 3)) * expansion;
+            Vector3 end = center + (Vector3)(rayDirection * length);
+            ray.SetPosition(0, origin);
+            ray.SetPosition(1, end);
+
+            Color start = new Color(1f, 0.88f, 0.42f, 0.88f * fade);
+            Color finish = new Color(1f, 0.18f, 0.02f, 0f);
+            ray.startColor = start;
+            ray.endColor = finish;
+            ray.widthMultiplier = Mathf.Lerp(0.08f, 0.012f, t) * Mathf.Lerp(0.78f, 1.22f, Hash01(i, 9));
+        }
+
+        UpdateFrontArc(expansion, fade);
+        UpdateCoreJet(expansion, fade);
+    }
+
+    void UpdateFrontArc(float expansion, float fade)
+    {
+        if (frontArc == null)
+            return;
+
+        float currentRange = range * expansion;
+        for (int i = 0; i < frontArc.positionCount; i++)
+        {
+            float normalized = frontArc.positionCount <= 1 ? 0.5f : i / (float)(frontArc.positionCount - 1);
+            float angle = Mathf.Lerp(-halfAngle, halfAngle, normalized);
+            Vector2 arcDirection = Rotate(direction, angle);
+            Vector3 point = center + (Vector3)(arcDirection * currentRange);
+            frontArc.SetPosition(i, point);
+        }
+
+        Color arcColor = new Color(0.52f, 0.96f, 1f, 0.55f * fade);
+        frontArc.startColor = arcColor;
+        frontArc.endColor = new Color(1f, 0.35f, 0.08f, 0.2f * fade);
+        frontArc.widthMultiplier = Mathf.Lerp(0.12f, 0.018f, 1f - fade);
+    }
+
+    void UpdateCoreJet(float expansion, float fade)
+    {
+        if (coreJet == null)
+            return;
+
+        Vector3 start = center - (Vector3)(direction * 0.08f);
+        Vector3 end = center + (Vector3)(direction * range * Mathf.Lerp(0.42f, 0.92f, expansion));
+        coreJet.SetPosition(0, start);
+        coreJet.SetPosition(1, end);
+        coreJet.startColor = new Color(1f, 0.96f, 0.72f, 0.92f * fade);
+        coreJet.endColor = new Color(0.4f, 0.86f, 1f, 0f);
+        coreJet.widthMultiplier = Mathf.Lerp(0.22f, 0.035f, 1f - fade);
+    }
+
+    LineRenderer CreateLine(string objectName, float width, bool loop, int positionCount, int sortingOrder)
+    {
+        GameObject lineObject = new GameObject(objectName);
+        lineObject.transform.SetParent(transform, false);
+        LineRenderer line = lineObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.loop = loop;
+        line.positionCount = Mathf.Max(2, positionCount);
+        line.widthMultiplier = width;
+        line.startWidth = width;
+        line.endWidth = width;
+        line.numCapVertices = 5;
+        line.numCornerVertices = 4;
+        line.alignment = LineAlignment.View;
+        line.textureMode = LineTextureMode.Stretch;
+        line.material = GetMaterial();
+        line.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        line.sortingOrder = sortingOrder;
+        return line;
+    }
+
+    static Material GetMaterial()
+    {
+        if (sharedMaterial != null)
+            return sharedMaterial;
+
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null)
+            shader = Shader.Find("Unlit/Color");
+
+        sharedMaterial = new Material(shader)
+        {
+            name = "SpaceTorpedoConeExplosionVfxMaterial",
+            color = Color.white
+        };
+        sharedMaterial.renderQueue = 5000;
+        return sharedMaterial;
+    }
+
+    static Vector2 Rotate(Vector2 vector, float degrees)
+    {
+        float radians = degrees * Mathf.Deg2Rad;
+        float sin = Mathf.Sin(radians);
+        float cos = Mathf.Cos(radians);
+        return new Vector2(vector.x * cos - vector.y * sin, vector.x * sin + vector.y * cos);
+    }
+
+    static float Hash01(int index, int salt)
+    {
+        return Mathf.Repeat(Mathf.Sin(index * 127.1f + salt * 311.7f) * 43758.5453f, 1f);
+    }
+}
+
+public sealed class LootHookSnatchVfx : MonoBehaviour
+{
+    Transform source;
+    Transform target;
+    float endsAt;
+    LineRenderer glowLine;
+    LineRenderer coreLine;
+
+    public static void Spawn(Transform sourceTransform, Transform targetTransform)
+    {
+        if (sourceTransform == null || targetTransform == null)
+            return;
+
+        GameObject effectObject = new GameObject("LootHookSnatchVfx");
+        LootHookSnatchVfx effect = effectObject.AddComponent<LootHookSnatchVfx>();
+        effect.Initialize(sourceTransform, targetTransform);
+    }
+
+    void Initialize(Transform sourceTransform, Transform targetTransform)
+    {
+        source = sourceTransform;
+        target = targetTransform;
+        endsAt = Time.time + 0.58f;
+        glowLine = CreateLine("Glow", 0.19f, 76, new Color(1f, 0.68f, 0.12f, 0.34f));
+        coreLine = CreateLine("Core", 0.045f, 77, new Color(1f, 0.96f, 0.58f, 0.92f));
+        UpdateLines();
+    }
+
+    void Update()
+    {
+        if (source == null || target == null || Time.time >= endsAt)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        UpdateLines();
+    }
+
+    LineRenderer CreateLine(string objectName, float width, int sortingOrder, Color color)
+    {
+        GameObject lineObject = new GameObject(objectName);
+        lineObject.transform.SetParent(transform, false);
+        LineRenderer line = lineObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.positionCount = 10;
+        line.widthMultiplier = width;
+        line.numCapVertices = 8;
+        line.numCornerVertices = 4;
+        line.material = new Material(Shader.Find("Sprites/Default"));
+        line.startColor = color;
+        line.endColor = new Color(color.r, color.g, color.b, 0f);
+        line.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        line.sortingOrder = sortingOrder;
+        return line;
+    }
+
+    void UpdateLines()
+    {
+        Vector2 start = source.position;
+        Vector2 end = target.position;
+        Vector2 direction = end - start;
+        if (direction.sqrMagnitude <= 0.001f)
+            direction = Vector2.up;
+
+        Vector2 normal = new Vector2(-direction.y, direction.x).normalized;
+        float tLife = Mathf.Clamp01((endsAt - Time.time) / 0.58f);
+        SetHookLine(glowLine, start, end, normal, 0.18f * tLife);
+        SetHookLine(coreLine, start, end, normal, 0.08f * tLife);
+    }
+
+    void SetHookLine(LineRenderer line, Vector2 start, Vector2 end, Vector2 normal, float amplitude)
+    {
+        if (line == null)
+            return;
+
+        for (int i = 0; i < line.positionCount; i++)
+        {
+            float t = i / (float)(line.positionCount - 1);
+            float wave = Mathf.Sin(t * Mathf.PI * 3f + Time.time * 26f) * amplitude;
+            Vector2 point = Vector2.Lerp(start, end, t) + normal * wave;
+            line.SetPosition(i, new Vector3(point.x, point.y, -0.44f));
+        }
+    }
+}
+
+public sealed class BioTrapCaptureVfx : MonoBehaviour
+{
+    const int StrandCount = 7;
+    readonly LineRenderer[] strands = new LineRenderer[StrandCount];
+    Vector2 source;
+    Vector2 target;
+    float startedAt;
+    float duration;
+
+    public static void Spawn(Vector3 sourcePosition, Vector3 targetPosition)
+    {
+        GameObject effectObject = new GameObject("BioTrapCaptureVfx");
+        BioTrapCaptureVfx effect = effectObject.AddComponent<BioTrapCaptureVfx>();
+        effect.Initialize(sourcePosition, targetPosition);
+    }
+
+    void Initialize(Vector3 sourcePosition, Vector3 targetPosition)
+    {
+        source = sourcePosition;
+        target = targetPosition;
+        startedAt = Time.time;
+        duration = 0.68f;
+        for (int i = 0; i < strands.Length; i++)
+            strands[i] = CreateStrand(i);
+
+        UpdateStrands();
+    }
+
+    void Update()
+    {
+        if (Time.time >= startedAt + duration)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        UpdateStrands();
+    }
+
+    LineRenderer CreateStrand(int index)
+    {
+        GameObject strandObject = new GameObject("BioTrapStrand_" + index.ToString("00"));
+        strandObject.transform.SetParent(transform, false);
+        LineRenderer strand = strandObject.AddComponent<LineRenderer>();
+        strand.useWorldSpace = true;
+        strand.positionCount = 5;
+        strand.widthMultiplier = 0.025f;
+        strand.numCapVertices = 4;
+        strand.numCornerVertices = 3;
+        strand.material = new Material(Shader.Find("Sprites/Default"));
+        strand.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        strand.sortingOrder = 78 + index;
+        return strand;
+    }
+
+    void UpdateStrands()
+    {
+        float age = Mathf.Clamp01((Time.time - startedAt) / Mathf.Max(0.001f, duration));
+        Vector2 direction = target - source;
+        if (direction.sqrMagnitude <= 0.001f)
+            direction = Vector2.up;
+
+        Vector2 normal = new Vector2(-direction.y, direction.x).normalized;
+        float netRadius = Mathf.Lerp(0.78f, 0.12f, age);
+        Color color = Color.Lerp(new Color(0.38f, 1f, 0.72f, 0.88f), new Color(1f, 0.86f, 0.38f, 0.1f), age);
+        for (int i = 0; i < strands.Length; i++)
+        {
+            LineRenderer strand = strands[i];
+            if (strand == null)
+                continue;
+
+            float side = i - (strands.Length - 1) * 0.5f;
+            Vector2 strandTarget = target + normal * (side * netRadius * 0.32f);
+            for (int p = 0; p < strand.positionCount; p++)
+            {
+                float t = p / (float)(strand.positionCount - 1);
+                float curve = Mathf.Sin(t * Mathf.PI) * netRadius * (0.25f + Mathf.Abs(side) * 0.04f);
+                Vector2 point = Vector2.Lerp(source, strandTarget, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t + age * 0.24f))) + normal * curve * Mathf.Sign(side == 0f ? 1f : side);
+                strand.SetPosition(p, new Vector3(point.x, point.y, -0.45f));
+            }
+
+            strand.startColor = color;
+            strand.endColor = new Color(color.r, color.g, color.b, color.a * 0.18f);
+        }
+    }
+}
+
 public sealed class SpaceDrillDeployable : PlayerDeployableBase
 {
     enum DrillState
@@ -3235,13 +5264,13 @@ public sealed class SpaceDrillDeployable : PlayerDeployableBase
 
     void SetupMiningAudio()
     {
-        if (miningAudioSource != null || AudioManager.Instance.DrillingClip == null)
+        if (miningAudioSource != null || AudioManager.Instance.SpaceDrillMiningClip == null)
             return;
 
         GameObject audioObject = new GameObject("SpaceDrillMiningAudio");
         audioObject.transform.SetParent(transform, false);
         miningAudioSource = audioObject.AddComponent<AudioSource>();
-        miningAudioSource.clip = AudioManager.Instance.DrillingClip;
+        miningAudioSource.clip = AudioManager.Instance.SpaceDrillMiningClip;
         miningAudioSource.playOnAwake = false;
         AudioManager.Instance.ConfigureSpatialSource(miningAudioSource, 0.42f);
         miningAudioSource.loop = true;
@@ -3908,6 +5937,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
     PhotonView currentTarget;
     float nextScanTime;
     bool visualActive;
+    bool forcedForNeutralRider;
 
     float CollectRange => Treasure.CollectRange * CollectRangeMultiplier;
 
@@ -3939,6 +5969,9 @@ public sealed class LootingFriendController : MonoBehaviourPun
         if (currentTarget != null && beam != null && beam.enabled)
             SetCollectAudio(true);
 
+        if (forcedForNeutralRider)
+            return;
+
         if (!photonView.IsMine)
             return;
 
@@ -3965,6 +5998,26 @@ public sealed class LootingFriendController : MonoBehaviourPun
         enabled = false;
     }
 
+    public void SetForcedForNeutralRider(bool forced)
+    {
+        forcedForNeutralRider = forced;
+        if (forced)
+            enabled = true;
+        else
+            StopCollecting();
+    }
+
+    public void SetNeutralRiderCollectFx(int targetViewId, bool active)
+    {
+        if (photonView != null)
+        {
+            photonView.RPC(nameof(SetLootingFriendCollectFxRpc), RpcTarget.All, targetViewId, active);
+            return;
+        }
+
+        SetLootingFriendCollectFxRpc(targetViewId, active);
+    }
+
     bool CanLootingFriendRun()
     {
         PlayerHealth health = GetComponent<PlayerHealth>();
@@ -3977,6 +6030,9 @@ public sealed class LootingFriendController : MonoBehaviourPun
 
     bool IsLootingFriendEquipped()
     {
+        if (forcedForNeutralRider)
+            return true;
+
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
         string[] equipment = PlayerProfileService.GetPlayerEquipmentSlots(owner);
@@ -4358,11 +6414,11 @@ public sealed class LootingFriendController : MonoBehaviourPun
 
     void SetupCollectAudio()
     {
-        if (collectAudioSource != null || visualRenderer == null || AudioManager.Instance.DrillingClip == null)
+        if (collectAudioSource != null || visualRenderer == null || AudioManager.Instance.LootingFriendDrillClip == null)
             return;
 
         collectAudioSource = visualRenderer.gameObject.AddComponent<AudioSource>();
-        collectAudioSource.clip = AudioManager.Instance.DrillingClip;
+        collectAudioSource.clip = AudioManager.Instance.LootingFriendDrillClip;
         collectAudioSource.loop = true;
         collectAudioSource.playOnAwake = false;
         AudioManager.Instance.ConfigureSpatialSource(collectAudioSource, 0.42f);
@@ -4458,6 +6514,7 @@ public sealed class FiringFriendController : MonoBehaviourPun
     float reloadUntil;
     int shotsInBurst;
     bool visualActive;
+    bool forcedForNeutralRider;
     Vector2 recentAimDirection = Vector2.up;
     float recentAimUntil;
 
@@ -4534,6 +6591,13 @@ public sealed class FiringFriendController : MonoBehaviourPun
         enabled = false;
     }
 
+    public void SetForcedForNeutralRider(bool forced)
+    {
+        forcedForNeutralRider = forced;
+        if (forced)
+            enabled = true;
+    }
+
     bool CanFiringFriendRun()
     {
         PlayerHealth health = GetComponent<PlayerHealth>();
@@ -4546,6 +6610,9 @@ public sealed class FiringFriendController : MonoBehaviourPun
 
     bool IsFiringFriendEquipped()
     {
+        if (forcedForNeutralRider)
+            return true;
+
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
         string[] equipment = PlayerProfileService.GetPlayerEquipmentSlots(owner);
@@ -4773,7 +6840,7 @@ public sealed class FiringFriendController : MonoBehaviourPun
         }
 
         if (AudioManager.Instance != null)
-            AudioManager.Instance.PlayShootSmallAt(new Vector3(x, y, z));
+            AudioManager.Instance.PlayAutoShootAt(new Vector3(x, y, z));
     }
 }
 

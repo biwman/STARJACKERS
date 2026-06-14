@@ -61,8 +61,7 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
         movement = GetComponent<PlayerMovement>();
         shooting = GetComponent<PlayerShooting>();
         body = GetComponent<Rigidbody2D>();
-        originalScale = transform.localScale;
-        dockedScale = originalScale * DockedScaleMultiplier;
+        RefreshDockingScales(transform.localScale);
     }
 
     void OnDisable()
@@ -354,6 +353,7 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
         AudioManager.Instance.PlayRepairBayLandingAt(landingPoint);
 
         Vector3 startPosition = transform.position;
+        RefreshDockingScales(transform.localScale);
         Vector3 startScale = transform.localScale;
         float elapsed = 0f;
         while (elapsed < LandingDuration)
@@ -561,6 +561,12 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
         ZeroVelocity();
     }
 
+    void RefreshDockingScales(Vector3 undockedScale)
+    {
+        originalScale = undockedScale;
+        dockedScale = originalScale * DockedScaleMultiplier;
+    }
+
     Vector3 ResolveActiveLandingPoint(Vector3 fallback)
     {
         RepairBay bay = RepairBay.Find(activeBayId);
@@ -744,6 +750,24 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
             scienceExchangeRoutine = null;
             yield break;
         }
+
+        System.Threading.Tasks.Task<PathfinderResearchStationResult> pathfinderTask =
+            PlayerProfileService.Instance.ProcessPathfinderResearchStationAsync(RoomSettings.GetSelectedLobbyMapId());
+        while (!pathfinderTask.IsCompleted)
+        {
+            if (state != DockState.Repairing || dockMode != DockMode.ScienceStation)
+            {
+                scienceExchangeRoutine = null;
+                yield break;
+            }
+
+            yield return null;
+        }
+
+        if (pathfinderTask.IsFaulted)
+            Debug.LogError("Science Station Pathfinder research step failed: " + pathfinderTask.Exception);
+        else
+            ShowPathfinderScienceStationResult(pathfinderTask.Result);
 
         int processedScrapCount = 0;
         while (state == DockState.Repairing && dockMode == DockMode.ScienceStation)
@@ -1008,6 +1032,31 @@ public sealed class PlayerRepairDocking : MonoBehaviourPun
             return;
 
         RoundAnnouncementUI.Show("BLUEPRINT DECODED: " + InventoryItemCatalog.GetDisplayName(itemId));
+    }
+
+    void ShowPathfinderScienceStationResult(PathfinderResearchStationResult result)
+    {
+        if (!photonView.IsMine || result == null)
+            return;
+
+        switch (result.Status)
+        {
+            case PathfinderResearchStationStatus.DocumentationDelivered:
+                RoundAnnouncementUI.Show("Research Station is working on new ship type - but it needs more resources", 4f);
+                break;
+            case PathfinderResearchStationStatus.ValuableItemsDelivered:
+                if (result.ResourcesCompleted)
+                    RoundAnnouncementUI.Show("Project almost finalized. Visit another Research Station to finalize the research", 4f);
+                else
+                    RoundAnnouncementUI.Show("Pathfinder research resources delivered: " + result.DeliveredValuableItemsTotal + "/" + PlayerProfileService.PathfinderValuableItemsRequired, 3f);
+                break;
+            case PathfinderResearchStationStatus.DifferentMapRequired:
+                RoundAnnouncementUI.Show("Visit another Research Station on a different map", 3f);
+                break;
+            case PathfinderResearchStationStatus.Finalized:
+                RoundAnnouncementUI.Show("Pathfinder blueprints uploaded to central database", 4f);
+                break;
+        }
     }
 
     bool TryReserveRepairBayOccupancy(string bayId, int actorNumber)

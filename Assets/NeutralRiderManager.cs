@@ -167,7 +167,7 @@ public sealed class NeutralRiderManager : MonoBehaviour
 
     Vector2 GetSpawnPosition(int ordinal)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(6f, mapSize.x * 0.5f - 5f);
         float halfY = Mathf.Max(6f, mapSize.y * 0.5f - 5f);
 

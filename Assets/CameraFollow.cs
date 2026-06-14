@@ -2,6 +2,8 @@ using UnityEngine;
 
 public class CameraFollow : MonoBehaviour
 {
+    const float ReferenceAspect = 16f / 9f;
+
     public Transform target;
     public float mapSizeX = 25f;
     public float mapSizeY = 25f;
@@ -10,6 +12,7 @@ public class CameraFollow : MonoBehaviour
     float camHalfWidth;
     float camHalfHeight;
     float baseOrthographicSize;
+    float baseHorizontalHalfSize;
     float dynamicZoomMultiplier = 1f;
     Vector3 smoothedPosition;
     bool hasSmoothedPosition;
@@ -51,12 +54,12 @@ public class CameraFollow : MonoBehaviour
         {
             cachedCamera = cam;
             camHalfHeight = cam.orthographicSize;
-            camHalfWidth = camHalfHeight * Screen.width / Screen.height;
+            camHalfWidth = camHalfHeight * GetCameraAspect(cam);
         }
         else if (cachedCamera != null)
         {
             camHalfHeight = cachedCamera.orthographicSize;
-            camHalfWidth = camHalfHeight * Screen.width / Screen.height;
+            camHalfWidth = camHalfHeight * GetCameraAspect(cachedCamera);
         }
     }
 
@@ -64,7 +67,10 @@ public class CameraFollow : MonoBehaviour
     {
         Camera cam = Camera.main;
         if (cam != null && cam.orthographic && baseOrthographicSize <= 0f)
+        {
             baseOrthographicSize = cam.orthographicSize;
+            baseHorizontalHalfSize = baseOrthographicSize * ReferenceAspect;
+        }
     }
 
     void LateUpdate()
@@ -98,7 +104,10 @@ public class CameraFollow : MonoBehaviour
             return;
 
         if (baseOrthographicSize <= 0f)
+        {
             baseOrthographicSize = cam.orthographicSize / Mathf.Max(0.001f, dynamicZoomMultiplier);
+            baseHorizontalHalfSize = baseOrthographicSize * ReferenceAspect;
+        }
 
         Vector3 cameraBasePosition = hasSmoothedPosition ? smoothedPosition : transform.position;
         DynamicCameraZoomState zoomState = DynamicCameraZoomController.GetState(cameraBasePosition);
@@ -110,8 +119,19 @@ public class CameraFollow : MonoBehaviour
         if (Mathf.Abs(dynamicZoomMultiplier - 1f) < 0.001f && Mathf.Approximately(targetMultiplier, 1f))
             dynamicZoomMultiplier = 1f;
 
-        cam.orthographicSize = baseOrthographicSize * dynamicZoomMultiplier;
+        float aspect = GetCameraAspect(cam);
+        float verticalFitSize = baseOrthographicSize;
+        float horizontalFitSize = baseHorizontalHalfSize / Mathf.Max(0.01f, aspect);
+        cam.orthographicSize = Mathf.Max(verticalFitSize, horizontalFitSize) * dynamicZoomMultiplier;
         RefreshCameraExtents();
+    }
+
+    static float GetCameraAspect(Camera cam)
+    {
+        if (cam != null && cam.aspect > 0.01f)
+            return cam.aspect;
+
+        return Screen.height > 0 ? (float)Screen.width / Screen.height : ReferenceAspect;
     }
 
     void OnDisable()

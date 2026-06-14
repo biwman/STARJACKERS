@@ -748,7 +748,7 @@ public class MovingSpaceObject : MonoBehaviour
             return;
         }
 
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         float halfX = mapSize.x * 0.5f;
         float halfY = mapSize.y * 0.5f;
         float boundsRadius = GetBoundsRadius();
@@ -803,7 +803,7 @@ public class MovingSpaceObject : MonoBehaviour
 
     void WrapAcrossMapBounds()
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         float halfX = mapSize.x * 0.5f;
         float halfY = mapSize.y * 0.5f;
         float boundsRadius = GetBoundsRadius();

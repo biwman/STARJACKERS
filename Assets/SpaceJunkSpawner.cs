@@ -144,7 +144,7 @@ public sealed class SpaceJunkSpawner : MonoBehaviourPun
             return;
         }
 
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         List<Vector2> obstaclePositions = ParsePositionLayout(GetRoomLayout(ObstacleLayoutKey), 0, 1);
         List<Vector2> extractionPositions = ParsePositionLayout(GetRoomLayout(ExtractionLayoutKey), 0, 1);
         List<Vector2> nebulaPositions = ParsePositionLayout(GetRoomLayout(NebulaLayoutKey), 0, 1);
@@ -210,7 +210,7 @@ public sealed class SpaceJunkSpawner : MonoBehaviourPun
         if (baseCount <= 0)
             return 0;
 
-        return Mathf.Max(1, Mathf.RoundToInt(baseCount * RoomSettings.GetMapAreaMultiplier()));
+        return Mathf.Max(1, Mathf.RoundToInt(baseCount * RoomSettings.GetGameplayMapAreaMultiplier()));
     }
 
     float GetMinDistanceFromObstacle()

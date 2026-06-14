@@ -7,6 +7,7 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
     public bool rescaleInputAfterDeadZone;
     public float responseExponent = 1f;
     public bool recenterOnPointerDown;
+    public bool centerInputOnPointerDownInsideHandle;
     public float maxRawInputMagnitude = 1f;
     public RectTransform background;
     public RectTransform handle;
@@ -28,7 +29,9 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
     Vector2 defaultBackgroundAnchorMin;
     Vector2 defaultBackgroundAnchorMax;
     Vector2 defaultBackgroundPivot;
+    Vector2 pointerDownInputOrigin;
     bool defaultPositionCaptured;
+    bool hasPointerDownInputOrigin;
 
     void Awake()
     {
@@ -39,9 +42,13 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
     {
         IsPressed = true;
         IsExternalControlActive = recenterOnPointerDown;
+        hasPointerDownInputOrigin = false;
 
         if (recenterOnPointerDown)
             SetBackgroundScreenPosition(eventData.position, eventData.pressEventCamera);
+
+        if (centerInputOnPointerDownInsideHandle && IsScreenPointInsideHandle(eventData.position, eventData.pressEventCamera))
+            CapturePointerDownInputOrigin(eventData.position, eventData.pressEventCamera);
 
         ApplyPointer(eventData.position, eventData.pressEventCamera);
     }
@@ -76,6 +83,7 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
     public void BeginExternalControl(Vector2 screenPoint, Camera eventCamera, bool relocateBackground)
     {
         CaptureDefaultBackgroundPosition();
+        hasPointerDownInputOrigin = false;
 
         if (relocateBackground)
             SetBackgroundScreenPosition(screenPoint, eventCamera);
@@ -129,6 +137,7 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
     {
         IsPressed = false;
         IsExternalControlActive = false;
+        hasPointerDownInputOrigin = false;
         inputVector = Vector2.zero;
         rawInputVector = Vector2.zero;
 
@@ -140,18 +149,11 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
 
     void ApplyPointer(Vector2 screenPoint, Camera eventCamera)
     {
-        if (background == null)
+        if (!TryGetNormalizedPointerPosition(screenPoint, eventCamera, out Vector2 pos))
             return;
 
-        Vector2 pos;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            background,
-            screenPoint,
-            eventCamera,
-            out pos);
-
-        pos.x = pos.x / (background.sizeDelta.x / 2f);
-        pos.y = pos.y / (background.sizeDelta.y / 2f);
+        if (hasPointerDownInputOrigin)
+            pos -= pointerDownInputOrigin;
 
         float rawLimit = Mathf.Max(1f, maxRawInputMagnitude);
         if (pos.magnitude > rawLimit)
@@ -180,6 +182,34 @@ public class Joystick : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoint
         float radius = (background.sizeDelta.x - handle.sizeDelta.x) / 2f;
         Vector2 handleVector = rawInputVector.magnitude > 1f ? rawInputVector : inputVector;
         handle.anchoredPosition = new Vector2(handleVector.x * radius, handleVector.y * radius);
+    }
+
+    void CapturePointerDownInputOrigin(Vector2 screenPoint, Camera eventCamera)
+    {
+        if (!TryGetNormalizedPointerPosition(screenPoint, eventCamera, out pointerDownInputOrigin))
+            return;
+
+        hasPointerDownInputOrigin = true;
+    }
+
+    bool TryGetNormalizedPointerPosition(Vector2 screenPoint, Camera eventCamera, out Vector2 normalizedPosition)
+    {
+        normalizedPosition = Vector2.zero;
+        if (background == null)
+            return false;
+
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(background, screenPoint, eventCamera, out Vector2 localPoint))
+            return false;
+
+        normalizedPosition = new Vector2(
+            localPoint.x / (background.sizeDelta.x / 2f),
+            localPoint.y / (background.sizeDelta.y / 2f));
+        return true;
+    }
+
+    bool IsScreenPointInsideHandle(Vector2 screenPoint, Camera eventCamera)
+    {
+        return handle != null && RectTransformUtility.RectangleContainsScreenPoint(handle, screenPoint, eventCamera);
     }
 
     void CaptureDefaultBackgroundPosition()

@@ -391,6 +391,9 @@ public sealed class BisonIndustrialPlotController : MonoBehaviour
         if (playerView == null || parts == null || parts.IsMissionResolved)
             return false;
 
+        if (!ShipUnlockPlotCoordinator.IsRoundStarter(playerView.Owner))
+            return false;
+
         bool hauledByPlayer = parts.IsHauledBy(playerView.ViewID);
         bool partsInsideZone = zone.GetInteractionDistanceToPoint(parts.transform.position) <= PartsExtractionGraceDistance;
         if (!hauledByPlayer && !partsInsideZone)
@@ -536,7 +539,7 @@ public sealed class BisonIndustrialPlotController : MonoBehaviour
 
     Vector2 ResolveZoneSpawnPosition()
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(8f, mapSize.x * 0.5f - 7f);
         float halfY = Mathf.Max(8f, mapSize.y * 0.5f - 7f);
         ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
@@ -571,7 +574,7 @@ public sealed class BisonIndustrialPlotController : MonoBehaviour
 
     Vector2 ClampToMapBounds(Vector2 position)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(4f, mapSize.x * 0.5f - 3f);
         float halfY = Mathf.Max(4f, mapSize.y * 0.5f - 3f);
         return new Vector2(Mathf.Clamp(position.x, -halfX, halfX), Mathf.Clamp(position.y, -halfY, halfY));
@@ -579,14 +582,8 @@ public sealed class BisonIndustrialPlotController : MonoBehaviour
 
     bool AnyPlayerEligibleForMission()
     {
-        Photon.Realtime.Player[] players = PhotonNetwork.PlayerList;
-        for (int i = 0; i < players.Length; i++)
-        {
-            if (PlayerProfileService.PlayerNeedsBisonIndustrialParts(players[i]))
-                return true;
-        }
-
-        return false;
+        return ShipUnlockPlotCoordinator.TryGetRoundStarterPlayer(out Photon.Realtime.Player starter) &&
+               PlayerProfileService.PlayerNeedsBisonIndustrialParts(starter);
     }
 
     bool TryReadPlotState(double currentStartTime, out PlotState state)
@@ -914,6 +911,9 @@ public sealed class IndustrialPartsHaulable : PlayerDeployableBase
             return false;
 
         if (!GameTimer.IsActiveRoundPlayer(player) || player.IsAstronautControlled)
+            return false;
+
+        if (!ShipUnlockPlotCoordinator.IsRoundStarter(player.photonView.Owner))
             return false;
 
         return Vector2.Distance(player.transform.position, transform.position) <= HaulStartRange;

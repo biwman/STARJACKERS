@@ -373,14 +373,8 @@ public sealed class ViperRecoveryPlotController : MonoBehaviour
 
     bool AnyPlayerEligibleForMission()
     {
-        Photon.Realtime.Player[] players = PhotonNetwork.PlayerList;
-        for (int i = 0; i < players.Length; i++)
-        {
-            if (PlayerProfileService.PlayerNeedsViperRecovery(players[i]))
-                return true;
-        }
-
-        return false;
+        return ShipUnlockPlotCoordinator.TryGetRoundStarterPlayer(out Photon.Realtime.Player starter) &&
+               PlayerProfileService.PlayerNeedsViperRecovery(starter);
     }
 
     bool WasRollHandledForRound(double currentStartTime)
@@ -467,7 +461,7 @@ public sealed class ViperRecoveryPlotController : MonoBehaviour
 
     Vector2 ResolveHaulerSpawn(Vector2 direction)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(8f, mapSize.x * 0.5f - 4f);
         float halfY = Mathf.Max(8f, mapSize.y * 0.5f - 4f);
         Vector2 edgeNormal = -direction;
@@ -664,7 +658,7 @@ public sealed class ViperContainerHaulerDeployable : PlayerDeployableBase
 
     void KeepInsideMapBounds(float currentSpeed)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(6f, mapSize.x * 0.5f - 3.5f);
         float halfY = Mathf.Max(6f, mapSize.y * 0.5f - 3.5f);
         Vector2 position = transform.position;

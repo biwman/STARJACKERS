@@ -477,6 +477,109 @@ public static class PlayerProfileCraftingCatalog
         },
         new PlayerProfileCraftingRecipe
         {
+            Id = "loot_hook_from_tractor_parts",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.TractorBeamId,
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.SpaceJunkStandardId,
+                InventoryItemCatalog.AsteroidGoldId
+            },
+            OutputItemId = InventoryItemCatalog.LootHookId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "stasis_buoy_from_mine_battery",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.BatteryId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.SpaceJunkStandardId
+            },
+            OutputItemId = InventoryItemCatalog.StasisBuoyId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "tether_harpoon_from_tractor_beam",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.TractorBeamId,
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.TetherHarpoonId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "space_torpedo_from_rocket_launcher",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.RocketLauncherId,
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.AsteroidGoldId,
+                InventoryItemCatalog.SpaceJunkStandardId
+            },
+            OutputItemId = InventoryItemCatalog.SpaceTorpedoId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "bio_trap_from_space_trap",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceTrapId,
+                InventoryItemCatalog.RescueShipSalvageId,
+                InventoryItemCatalog.SpaceAnimalRemainsId,
+                InventoryItemCatalog.AsteroidRareId
+            },
+            OutputItemId = InventoryItemCatalog.BioTrapId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "asteroid_breacher_bomb_from_space_bomb",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.SpaceBombId,
+                InventoryItemCatalog.SpaceMineWreckId,
+                InventoryItemCatalog.AsteroidRareId,
+                InventoryItemCatalog.SpaceJunkStandardId
+            },
+            OutputItemId = InventoryItemCatalog.AsteroidBreacherBombId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "overclocked_magazine_from_droid_parts",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.DroidScrapId,
+                InventoryItemCatalog.SpaceJunkStandardId,
+                InventoryItemCatalog.AsteroidGoldId
+            },
+            OutputItemId = InventoryItemCatalog.OverclockedMagazineId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
+            Id = "black_market_thruster_from_fusion_parts",
+            Inputs = new[]
+            {
+                InventoryItemCatalog.FusionEngineId,
+                InventoryItemCatalog.PirateFighterSalvageId,
+                InventoryItemCatalog.SpaceTruckWreckId,
+                InventoryItemCatalog.AsteroidEpicId
+            },
+            OutputItemId = InventoryItemCatalog.BlackMarketThrusterId,
+            OutputCount = 1
+        },
+        new PlayerProfileCraftingRecipe
+        {
             Id = "emergency_suit_beacon_from_common_parts",
             Inputs = new[]
             {

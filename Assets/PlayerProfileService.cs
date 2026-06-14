@@ -32,6 +32,7 @@ public class PlayerProfileService : MonoBehaviour
     const string CloudArrowLicenseProgressKey = "profile_arrow_license_progress";
     const string CloudBisonIndustrialPartsDeliveredKey = "profile_bison_industrial_parts_delivered";
     const string CloudInvaderImprintsRecoveredKey = "profile_invader_imprints_recovered";
+    const string CloudPathfinderResearchProgressKey = "profile_pathfinder_research_progress";
     const string CloudMissEnigmaPurchasedBlueprintsKey = "profile_miss_enigma_purchased_blueprints";
     const string CloudPilotDroneKillsKey = "profile_pilot_drone_kills";
     const string CloudPilotSoldItemsAstronsKey = "profile_pilot_sold_items_astrons";
@@ -62,6 +63,8 @@ public class PlayerProfileService : MonoBehaviour
     public const string ArrowRaceTransponderPartId = "race_transponder";
     public const int BisonIndustrialPartsRequired = 6;
     public const int InvaderImprintsRequired = 4;
+    public const int PathfinderHackedShipTypesRequired = 7;
+    public const int PathfinderValuableItemsRequired = 5;
 
     static PlayerProfileService instance;
     Task initializationTask;
@@ -204,6 +207,7 @@ public class PlayerProfileService : MonoBehaviour
             CloudArrowLicenseProgressKey,
             CloudBisonIndustrialPartsDeliveredKey,
             CloudInvaderImprintsRecoveredKey,
+            CloudPathfinderResearchProgressKey,
             CloudMissEnigmaPurchasedBlueprintsKey,
             CloudPilotDroneKillsKey,
             CloudPilotSoldItemsAstronsKey,
@@ -233,6 +237,7 @@ public class PlayerProfileService : MonoBehaviour
         ArrowLicenseProgressData arrowLicenseProgress = ArrowLicenseProgressData.Empty();
         int bisonIndustrialPartsDelivered = 0;
         int invaderImprintsRecovered = 0;
+        PathfinderResearchProgressData pathfinderResearchProgress = PathfinderResearchProgressData.Empty();
         string[] missEnigmaPurchasedBlueprintIds = Array.Empty<string>();
         int pilotDroneKills = 0;
         int pilotSoldItemsAstrons = 0;
@@ -290,6 +295,9 @@ public class PlayerProfileService : MonoBehaviour
             if (data.TryGetValue(CloudInvaderImprintsRecoveredKey, out Item invaderImprintsItem) && invaderImprintsItem?.Value != null)
                 invaderImprintsRecovered = invaderImprintsItem.Value.GetAs<int>();
 
+            if (data.TryGetValue(CloudPathfinderResearchProgressKey, out Item pathfinderResearchItem) && pathfinderResearchItem?.Value != null)
+                pathfinderResearchProgress = DeserializePathfinderResearchProgress(pathfinderResearchItem.Value.GetAsString(), unlockedShipIds);
+
             if (data.TryGetValue(CloudMissEnigmaPurchasedBlueprintsKey, out Item missEnigmaPurchasedBlueprintsItem) && missEnigmaPurchasedBlueprintsItem?.Value != null)
                 missEnigmaPurchasedBlueprintIds = DeserializeMissEnigmaBlueprintPurchases(missEnigmaPurchasedBlueprintsItem.Value.GetAsString());
 
@@ -338,6 +346,7 @@ public class PlayerProfileService : MonoBehaviour
             ArrowLicenseProgress = NormalizeArrowLicenseProgress(arrowLicenseProgress, unlockedShipIds),
             BisonIndustrialPartsDelivered = NormalizeBisonIndustrialPartsDelivered(bisonIndustrialPartsDelivered, unlockedShipIds),
             InvaderImprintsRecovered = NormalizeInvaderImprintsRecovered(invaderImprintsRecovered, unlockedShipIds),
+            PathfinderResearchProgress = NormalizePathfinderResearchProgress(pathfinderResearchProgress, unlockedShipIds),
             MissEnigmaPurchasedBlueprintIds = NormalizeMissEnigmaBlueprintPurchases(missEnigmaPurchasedBlueprintIds),
             PilotDroneKills = pilotDroneKills,
             PilotSoldItemsAstrons = pilotSoldItemsAstrons,
@@ -403,6 +412,7 @@ public class PlayerProfileService : MonoBehaviour
             ArrowLicenseProgress = CurrentProfile != null ? NormalizeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress, CurrentProfile.UnlockedShipIds) : ArrowLicenseProgressData.Empty(),
             BisonIndustrialPartsDelivered = CurrentProfile != null ? NormalizeBisonIndustrialPartsDelivered(CurrentProfile.BisonIndustrialPartsDelivered, CurrentProfile.UnlockedShipIds) : 0,
             InvaderImprintsRecovered = CurrentProfile != null ? NormalizeInvaderImprintsRecovered(CurrentProfile.InvaderImprintsRecovered, CurrentProfile.UnlockedShipIds) : 0,
+            PathfinderResearchProgress = CurrentProfile != null ? NormalizePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress, CurrentProfile.UnlockedShipIds) : PathfinderResearchProgressData.Empty(),
             MissEnigmaPurchasedBlueprintIds = CurrentProfile != null ? NormalizeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds) : Array.Empty<string>(),
             PilotDroneKills = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotDroneKills) : 0,
             PilotSoldItemsAstrons = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotSoldItemsAstrons) : 0,
@@ -456,6 +466,7 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress),
                 [CloudBisonIndustrialPartsDeliveredKey] = CurrentProfile.BisonIndustrialPartsDelivered,
                 [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered,
+                [CloudPathfinderResearchProgressKey] = SerializePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress),
                 [CloudMissEnigmaPurchasedBlueprintsKey] = SerializeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds),
                 [CloudPilotDroneKillsKey] = CurrentProfile.PilotDroneKills,
                 [CloudPilotSoldItemsAstronsKey] = CurrentProfile.PilotSoldItemsAstrons,
@@ -791,6 +802,7 @@ public class PlayerProfileService : MonoBehaviour
                 ArrowLicenseProgress = ArrowLicenseProgressData.Empty(),
                 BisonIndustrialPartsDelivered = 0,
                 InvaderImprintsRecovered = 0,
+                PathfinderResearchProgress = PathfinderResearchProgressData.Empty(),
                 MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
                 PilotDroneKills = 0,
                 PilotSoldItemsAstrons = 0,
@@ -829,6 +841,7 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress),
                 [CloudBisonIndustrialPartsDeliveredKey] = CurrentProfile.BisonIndustrialPartsDelivered,
                 [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered,
+                [CloudPathfinderResearchProgressKey] = SerializePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress),
                 [CloudMissEnigmaPurchasedBlueprintsKey] = SerializeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds),
                 [CloudPilotDroneKillsKey] = CurrentProfile.PilotDroneKills,
                 [CloudPilotSoldItemsAstronsKey] = CurrentProfile.PilotSoldItemsAstrons,
@@ -1404,6 +1417,8 @@ public class PlayerProfileService : MonoBehaviour
             CurrentProfile.BisonIndustrialPartsDelivered = BisonIndustrialPartsRequired;
         else if (shipType == ShipType.Invader)
             CurrentProfile.InvaderImprintsRecovered = InvaderImprintsRequired;
+        else if (shipType == ShipType.Pathfinder)
+            CurrentProfile.PathfinderResearchProgress = PathfinderResearchProgressData.Complete();
 
         HashSet<string> ids = new HashSet<string>(CurrentProfile.UnlockedShipIds, StringComparer.Ordinal)
         {
@@ -1441,6 +1456,8 @@ public class PlayerProfileService : MonoBehaviour
             CurrentProfile.BisonIndustrialPartsDelivered = 0;
         else if (shipType == ShipType.Invader)
             CurrentProfile.InvaderImprintsRecovered = 0;
+        else if (shipType == ShipType.Pathfinder)
+            CurrentProfile.PathfinderResearchProgress = PathfinderResearchProgressData.Empty();
 
         if (ShipCatalog.GetShipTypeFromSkinIndex(CurrentProfile.ShipSkinIndex) == shipType)
             CurrentProfile.ShipSkinIndex = ShipCatalog.ExplorerBasicSkinIndex;
@@ -1457,6 +1474,7 @@ public class PlayerProfileService : MonoBehaviour
         CurrentProfile.ArrowLicenseProgress = ArrowLicenseProgressData.Complete();
         CurrentProfile.BisonIndustrialPartsDelivered = BisonIndustrialPartsRequired;
         CurrentProfile.InvaderImprintsRecovered = InvaderImprintsRequired;
+        CurrentProfile.PathfinderResearchProgress = PathfinderResearchProgressData.Complete();
         await SaveShipUnlocksAsync();
     }
 
@@ -1468,6 +1486,7 @@ public class PlayerProfileService : MonoBehaviour
         CurrentProfile.ArrowLicenseProgress = ArrowLicenseProgressData.Empty();
         CurrentProfile.BisonIndustrialPartsDelivered = 0;
         CurrentProfile.InvaderImprintsRecovered = 0;
+        CurrentProfile.PathfinderResearchProgress = PathfinderResearchProgressData.Empty();
         CurrentProfile.ShipSkinIndex = ShipCatalog.ExplorerBasicSkinIndex;
         await SaveShipUnlocksAsync();
     }
@@ -1819,6 +1838,288 @@ public class PlayerProfileService : MonoBehaviour
 
         await SaveInvaderImprintProgressAsync();
         return CurrentProfile.InvaderImprintsRecovered;
+    }
+
+    public PathfinderResearchStage GetPathfinderResearchStage()
+    {
+        EnsureShipUnlocks();
+        PathfinderResearchProgressData progress = CurrentProfile != null
+            ? CurrentProfile.PathfinderResearchProgress
+            : PathfinderResearchProgressData.Empty();
+        return (PathfinderResearchStage)Mathf.Clamp(progress != null ? progress.Stage : 0, (int)PathfinderResearchStage.Locked, (int)PathfinderResearchStage.Complete);
+    }
+
+    public PathfinderResearchProgressData GetPathfinderResearchProgress()
+    {
+        EnsureShipUnlocks();
+        PathfinderResearchProgressData progress = CurrentProfile != null
+            ? NormalizePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress, CurrentProfile.UnlockedShipIds)
+            : PathfinderResearchProgressData.Empty();
+        return progress.Clone();
+    }
+
+    public int GetPathfinderHackedShipTypeCount()
+    {
+        PathfinderResearchProgressData progress = GetPathfinderResearchProgress();
+        return progress.HackedShipTypeIds != null ? Mathf.Clamp(progress.HackedShipTypeIds.Length, 0, PathfinderHackedShipTypesRequired) : 0;
+    }
+
+    public bool ShouldShowPathfinderHackOpportunity()
+    {
+        EnsureInventory();
+        EnsureShipUnlocks();
+
+        if (IsShipUnlocked(ShipType.Pathfinder) || GetPathfinderResearchStage() != PathfinderResearchStage.Locked)
+            return false;
+
+        int shipSkinIndex = GetActiveShipSkinIndex();
+        return InventoryItemCatalog.HasEquippedItem(CurrentProfile.Inventory.EquipmentSlots, shipSkinIndex, InventoryItemCatalog.HackingDeviceId);
+    }
+
+    public async Task<PathfinderHackRecordResult> RecordPathfinderHackedShipTypeAsync(string rawShipTypeId)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+        EnsureShipUnlocks();
+
+        PathfinderHackRecordResult result = new PathfinderHackRecordResult();
+        PathfinderResearchProgressData progress = NormalizePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress, CurrentProfile.UnlockedShipIds);
+        result.Count = progress.HackedShipTypeIds != null ? progress.HackedShipTypeIds.Length : 0;
+
+        if (IsShipUnlocked(ShipType.Pathfinder))
+            return result;
+
+        string shipTypeId = NormalizePathfinderHackedShipTypeId(rawShipTypeId);
+        if (string.IsNullOrWhiteSpace(shipTypeId))
+            return result;
+
+        PathfinderResearchStage stage = (PathfinderResearchStage)progress.Stage;
+        if (stage > PathfinderResearchStage.DocumentationReady)
+            return result;
+
+        if (stage == PathfinderResearchStage.DocumentationReady)
+        {
+            bool documentationPresent = TryEnsurePathfinderDocumentationItem();
+            result.Count = PathfinderHackedShipTypesRequired;
+            result.DocumentationReady = true;
+            result.DocumentationCreated = documentationPresent;
+            result.InventoryFull = !documentationPresent;
+
+            if (documentationPresent)
+                await SaveInventoryAndPathfinderResearchProgressAsync("save Pathfinder documentation item");
+            return result;
+        }
+
+        HashSet<string> hackedTypes = new HashSet<string>(
+            NormalizePathfinderHackedShipTypeIds(progress.HackedShipTypeIds),
+            StringComparer.Ordinal);
+        if (!hackedTypes.Add(shipTypeId))
+        {
+            result.Duplicate = true;
+            result.Count = hackedTypes.Count;
+            return result;
+        }
+
+        string[] hackedArray = new string[hackedTypes.Count];
+        hackedTypes.CopyTo(hackedArray);
+        Array.Sort(hackedArray, StringComparer.Ordinal);
+
+        bool started = stage == PathfinderResearchStage.Locked && progress.HackedShipTypeIds.Length == 0;
+        bool complete = hackedArray.Length >= PathfinderHackedShipTypesRequired;
+        CurrentProfile.PathfinderResearchProgress = new PathfinderResearchProgressData
+        {
+            Stage = complete ? (int)PathfinderResearchStage.DocumentationReady : (int)PathfinderResearchStage.CollectingData,
+            HackedShipTypeIds = ClampPathfinderHackedShipTypeIds(hackedArray),
+            DeliveredValuableItems = 0,
+            ResourceCompletionMapId = string.Empty
+        };
+
+        bool documentationCreated = false;
+        bool inventoryFull = false;
+        if (complete)
+        {
+            documentationCreated = TryEnsurePathfinderDocumentationItem();
+            inventoryFull = !documentationCreated;
+        }
+
+        result.Started = started;
+        result.Added = true;
+        result.Count = Mathf.Clamp(hackedArray.Length, 0, PathfinderHackedShipTypesRequired);
+        result.DocumentationReady = complete;
+        result.DocumentationCreated = documentationCreated;
+        result.InventoryFull = inventoryFull;
+
+        if (documentationCreated)
+            await SaveInventoryAndPathfinderResearchProgressAsync("save Pathfinder hack completion");
+        else
+            await SavePathfinderResearchProgressAsync("save Pathfinder hack progress");
+
+        return result;
+    }
+
+    public async Task ResetPathfinderDocumentationLostAsync()
+    {
+        await EnsureInitializedAsync();
+        EnsureShipUnlocks();
+
+        if (IsShipUnlocked(ShipType.Pathfinder))
+            return;
+
+        PathfinderResearchProgressData progress = NormalizePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress, CurrentProfile.UnlockedShipIds);
+        PathfinderResearchStage stage = (PathfinderResearchStage)progress.Stage;
+        if (stage < PathfinderResearchStage.DocumentationReady || stage >= PathfinderResearchStage.Complete)
+            return;
+
+        CurrentProfile.PathfinderResearchProgress = PathfinderResearchProgressData.Empty();
+        await SavePathfinderResearchProgressAsync("reset Pathfinder documentation loss");
+    }
+
+    public async Task<PathfinderResearchStationResult> ProcessPathfinderResearchStationAsync(string mapId)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+        EnsureShipUnlocks();
+
+        PathfinderResearchStationResult result = new PathfinderResearchStationResult();
+        if (IsShipUnlocked(ShipType.Pathfinder))
+            return result;
+
+        PathfinderResearchProgressData progress = NormalizePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress, CurrentProfile.UnlockedShipIds);
+        PathfinderResearchStage stage = (PathfinderResearchStage)progress.Stage;
+        string normalizedMapId = LobbyMapUnlockCatalog.NormalizeMapId(mapId);
+
+        if (stage == PathfinderResearchStage.DocumentationReady)
+        {
+            if (!RemoveFirstShipItemLocal(InventoryItemCatalog.ShipPrototypeDocumentationId))
+                return result;
+
+            CurrentProfile.PathfinderResearchProgress = new PathfinderResearchProgressData
+            {
+                Stage = (int)PathfinderResearchStage.ResourcesRequired,
+                HackedShipTypeIds = ClampPathfinderHackedShipTypeIds(progress.HackedShipTypeIds),
+                DeliveredValuableItems = 0,
+                ResourceCompletionMapId = string.Empty
+            };
+
+            result.Status = PathfinderResearchStationStatus.DocumentationDelivered;
+            await SaveInventoryAndPathfinderResearchProgressAsync("deliver Pathfinder documentation");
+            return result;
+        }
+
+        if (stage == PathfinderResearchStage.ResourcesRequired)
+        {
+            int needed = Mathf.Clamp(PathfinderValuableItemsRequired - progress.DeliveredValuableItems, 0, PathfinderValuableItemsRequired);
+            if (needed <= 0)
+                return result;
+
+            int deliveredNow = RemovePathfinderValuableResearchItemsLocal(needed);
+            if (deliveredNow <= 0)
+                return result;
+
+            int deliveredTotal = Mathf.Clamp(progress.DeliveredValuableItems + deliveredNow, 0, PathfinderValuableItemsRequired);
+            bool completedResources = deliveredTotal >= PathfinderValuableItemsRequired;
+            CurrentProfile.PathfinderResearchProgress = new PathfinderResearchProgressData
+            {
+                Stage = completedResources ? (int)PathfinderResearchStage.FinalVisitRequired : (int)PathfinderResearchStage.ResourcesRequired,
+                HackedShipTypeIds = ClampPathfinderHackedShipTypeIds(progress.HackedShipTypeIds),
+                DeliveredValuableItems = deliveredTotal,
+                ResourceCompletionMapId = completedResources ? normalizedMapId : string.Empty
+            };
+
+            result.Status = PathfinderResearchStationStatus.ValuableItemsDelivered;
+            result.DeliveredValuableItemsNow = deliveredNow;
+            result.DeliveredValuableItemsTotal = deliveredTotal;
+            result.ResourcesCompleted = completedResources;
+            await SaveInventoryAndPathfinderResearchProgressAsync("deliver Pathfinder research resources");
+            return result;
+        }
+
+        if (stage == PathfinderResearchStage.FinalVisitRequired)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedMapId) ||
+                string.Equals(normalizedMapId, progress.ResourceCompletionMapId, StringComparison.Ordinal))
+            {
+                result.Status = PathfinderResearchStationStatus.DifferentMapRequired;
+                return result;
+            }
+
+            CurrentProfile.PathfinderResearchProgress = PathfinderResearchProgressData.Complete();
+            HashSet<string> ids = new HashSet<string>(CurrentProfile.UnlockedShipIds, StringComparer.Ordinal)
+            {
+                ShipCatalog.GetShipTypeId(ShipType.Pathfinder)
+            };
+            string[] unlockedIds = new string[ids.Count];
+            ids.CopyTo(unlockedIds);
+            CurrentProfile.UnlockedShipIds = NormalizeUnlockedShipIds(unlockedIds);
+
+            result.Status = PathfinderResearchStationStatus.Finalized;
+            await SavePathfinderResearchProgressAsync("finalize Pathfinder research");
+            return result;
+        }
+
+        return result;
+    }
+
+    bool TryEnsurePathfinderDocumentationItem()
+    {
+        EnsureInventory();
+        if (CountItemInSlots(CurrentProfile.Inventory.ShipSlots, GetActiveShipInventoryCapacity(), InventoryItemCatalog.ShipPrototypeDocumentationId) > 0)
+            return true;
+
+        int shipSkinIndex = GetActiveShipSkinIndex();
+        return CurrentProfile.Inventory.TryAddToShip(InventoryItemCatalog.ShipPrototypeDocumentationId, GetActiveShipInventoryCapacity(), shipSkinIndex);
+    }
+
+    bool RemoveFirstShipItemLocal(string matchItemId)
+    {
+        if (string.IsNullOrWhiteSpace(matchItemId))
+            return false;
+
+        EnsureInventory();
+        int capacity = GetActiveShipInventoryCapacity();
+        CurrentProfile.Inventory.Normalize();
+        for (int i = 0; i < CurrentProfile.Inventory.ShipSlots.Length && i < capacity; i++)
+        {
+            if (!string.Equals(CurrentProfile.Inventory.ShipSlots[i], matchItemId, StringComparison.Ordinal))
+                continue;
+
+            CurrentProfile.Inventory.ShipSlots[i] = null;
+            return true;
+        }
+
+        return false;
+    }
+
+    int RemovePathfinderValuableResearchItemsLocal(int maxCount)
+    {
+        int targetCount = Mathf.Clamp(maxCount, 0, PathfinderValuableItemsRequired);
+        if (targetCount <= 0)
+            return 0;
+
+        EnsureInventory();
+        int removed = 0;
+        int capacity = GetActiveShipInventoryCapacity();
+        CurrentProfile.Inventory.Normalize();
+        for (int i = 0; i < CurrentProfile.Inventory.ShipSlots.Length && i < capacity; i++)
+        {
+            string itemId = CurrentProfile.Inventory.ShipSlots[i];
+            if (!IsPathfinderValuableResearchItem(itemId))
+                continue;
+
+            CurrentProfile.Inventory.ShipSlots[i] = null;
+            removed++;
+            if (removed >= targetCount)
+                break;
+        }
+
+        return removed;
+    }
+
+    public static bool IsPathfinderValuableResearchItem(string itemId)
+    {
+        return string.Equals(itemId, InventoryItemCatalog.AsteroidLegendaryId, StringComparison.Ordinal) ||
+               string.Equals(itemId, InventoryItemCatalog.CashSuitcaseId, StringComparison.Ordinal) ||
+               string.Equals(itemId, InventoryItemCatalog.PirateCaseId, StringComparison.Ordinal);
     }
 
     public bool HasArrowRaceTokenInShipForMap(string mapId)
@@ -2203,7 +2504,9 @@ public class PlayerProfileService : MonoBehaviour
         return string.Equals(itemId, InventoryItemCatalog.LootingFriendId, StringComparison.Ordinal) ||
                string.Equals(itemId, InventoryItemCatalog.FiringFriendId, StringComparison.Ordinal) ||
                string.Equals(itemId, InventoryItemCatalog.DropbotId, StringComparison.Ordinal) ||
-               string.Equals(itemId, InventoryItemCatalog.EscapePodId, StringComparison.Ordinal);
+               string.Equals(itemId, InventoryItemCatalog.EscapePodId, StringComparison.Ordinal) ||
+               string.Equals(itemId, InventoryItemCatalog.OverclockedMagazineId, StringComparison.Ordinal) ||
+               string.Equals(itemId, InventoryItemCatalog.BlackMarketThrusterId, StringComparison.Ordinal);
     }
 
     bool TryMoveOverflowShipCargoToPlayer(PlayerInventoryData inventory, int shipSkinIndex)
@@ -2806,6 +3109,13 @@ public class PlayerProfileService : MonoBehaviour
         if (string.IsNullOrWhiteSpace(removedItem))
             return null;
 
+        if (string.Equals(removedItem, InventoryItemCatalog.ShipPrototypeDocumentationId, StringComparison.Ordinal))
+        {
+            CurrentProfile.PathfinderResearchProgress = PathfinderResearchProgressData.Empty();
+            await SaveInventoryAndPathfinderResearchProgressAsync("drop Pathfinder documentation");
+            return removedItem;
+        }
+
         await SaveInventoryOnlyAsync();
         return removedItem;
     }
@@ -2824,6 +3134,31 @@ public class PlayerProfileService : MonoBehaviour
             return null;
 
         if (slotIndex < 0 || slotIndex >= capacity || slotIndex >= CurrentProfile.Inventory.ShipSlots.Length)
+            return null;
+
+        string removedItem = CurrentProfile.Inventory.ShipSlots[slotIndex];
+        if (!string.Equals(removedItem, expectedItemId, StringComparison.Ordinal))
+            return null;
+
+        CurrentProfile.Inventory.ShipSlots[slotIndex] = null;
+        MarkInventoryChangedDeferred();
+        return removedItem;
+    }
+
+    public async Task<string> RemoveLootHookCargoItemDeferredSaveAsync(int slotIndex, string expectedItemId)
+    {
+        await EnsureInitializedAsync();
+        EnsureInventory();
+
+        if (string.IsNullOrWhiteSpace(expectedItemId))
+            return null;
+
+        int shipSkinIndex = GetActiveShipSkinIndex();
+        int capacity = GetActiveShipInventoryCapacity();
+        if (slotIndex < 0 || slotIndex >= capacity || slotIndex >= CurrentProfile.Inventory.ShipSlots.Length)
+            return null;
+
+        if (IsSafePocketIndex(shipSkinIndex, slotIndex) || IsAstronautCargoIndex(shipSkinIndex, capacity, slotIndex))
             return null;
 
         string removedItem = CurrentProfile.Inventory.ShipSlots[slotIndex];
@@ -3270,7 +3605,8 @@ public class PlayerProfileService : MonoBehaviour
                 [CloudViperRecoveryProgressKey] = SerializeViperRecoveryProgress(CurrentProfile.ViperRecoveryProgress),
                 [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress),
                 [CloudBisonIndustrialPartsDeliveredKey] = CurrentProfile.BisonIndustrialPartsDelivered,
-                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered,
+                [CloudPathfinderResearchProgressKey] = SerializePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress)
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -3545,6 +3881,69 @@ public class PlayerProfileService : MonoBehaviour
         catch (Exception ex)
         {
             Debug.LogError("PlayerProfileService Invader imprint progress save failed: " + ex);
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    async Task SavePathfinderResearchProgressAsync(string operationName)
+    {
+        try
+        {
+            IsBusy = true;
+            EnsureShipUnlocks();
+
+            var data = new Dictionary<string, object>
+            {
+                [CloudUnlockedShipsKey] = SerializeShipUnlocks(CurrentProfile.UnlockedShipIds),
+                [CloudPathfinderResearchProgressKey] = SerializePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress)
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                operationName);
+            ApplyProfileToPhoton();
+            NotifyProfileChanged();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("PlayerProfileService Pathfinder research save failed: " + ex);
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    async Task SaveInventoryAndPathfinderResearchProgressAsync(string operationName)
+    {
+        try
+        {
+            IsBusy = true;
+            EnsureInventory();
+            EnsureShipUnlocks();
+
+            var data = new Dictionary<string, object>
+            {
+                [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
+                [CloudUnlockedShipsKey] = SerializeShipUnlocks(CurrentProfile.UnlockedShipIds),
+                [CloudPathfinderResearchProgressKey] = SerializePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress)
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                operationName);
+            InventoryRevision++;
+            ApplyProfileToPhoton();
+            NotifyProfileChanged();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("PlayerProfileService Pathfinder inventory/progress save failed: " + ex);
             throw;
         }
         finally
@@ -4613,6 +5012,7 @@ public class PlayerProfileService : MonoBehaviour
             AvengerTheftAttempt = AvengerTheftAttemptData.Empty(),
             ViperRecoveryProgress = ViperRecoveryProgressData.Empty(),
             ArrowLicenseProgress = ArrowLicenseProgressData.Empty(),
+            PathfinderResearchProgress = PathfinderResearchProgressData.Empty(),
             MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
             PilotDroneKills = 0,
             PilotSoldItemsAstrons = 0,
@@ -4817,6 +5217,8 @@ public class PlayerProfileService : MonoBehaviour
         CurrentProfile.UnlockedShipIds = NormalizeUnlockedShipIdsForBisonProgress(CurrentProfile.UnlockedShipIds, CurrentProfile.BisonIndustrialPartsDelivered);
         CurrentProfile.InvaderImprintsRecovered = NormalizeInvaderImprintsRecovered(CurrentProfile.InvaderImprintsRecovered, CurrentProfile.UnlockedShipIds);
         CurrentProfile.UnlockedShipIds = NormalizeUnlockedShipIdsForInvaderProgress(CurrentProfile.UnlockedShipIds, CurrentProfile.InvaderImprintsRecovered);
+        CurrentProfile.PathfinderResearchProgress = NormalizePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress, CurrentProfile.UnlockedShipIds);
+        CurrentProfile.UnlockedShipIds = NormalizeUnlockedShipIdsForPathfinderProgress(CurrentProfile.UnlockedShipIds, CurrentProfile.PathfinderResearchProgress);
 
         ShipType selectedShipType = ShipCatalog.GetShipTypeFromSkinIndex(CurrentProfile.ShipSkinIndex);
         string selectedShipId = ShipCatalog.GetShipTypeId(selectedShipType);
@@ -4943,6 +5345,138 @@ public class PlayerProfileService : MonoBehaviour
             return InvaderImprintsRequired;
 
         return Mathf.Clamp(recoveredCount, 0, InvaderImprintsRequired);
+    }
+
+    public static PathfinderResearchProgressData NormalizePathfinderResearchProgress(PathfinderResearchProgressData progress, string[] shipIds = null)
+    {
+        bool shipUnlocked = ContainsShipTypeId(shipIds, ShipType.Pathfinder);
+        if (progress == null)
+            return shipUnlocked ? PathfinderResearchProgressData.Complete() : PathfinderResearchProgressData.Empty();
+
+        PathfinderResearchStage stage = (PathfinderResearchStage)Mathf.Clamp(
+            progress.Stage,
+            (int)PathfinderResearchStage.Locked,
+            (int)PathfinderResearchStage.Complete);
+        if (shipUnlocked)
+            stage = PathfinderResearchStage.Complete;
+
+        if (stage == PathfinderResearchStage.Complete)
+            return PathfinderResearchProgressData.Complete();
+
+        string[] hackedTypeIds = NormalizePathfinderHackedShipTypeIds(progress.HackedShipTypeIds);
+        int deliveredValuables = Mathf.Clamp(progress.DeliveredValuableItems, 0, PathfinderValuableItemsRequired);
+        string completionMapId = LobbyMapUnlockCatalog.NormalizeMapId(progress.ResourceCompletionMapId);
+
+        if (stage == PathfinderResearchStage.Locked && hackedTypeIds.Length > 0)
+            stage = PathfinderResearchStage.CollectingData;
+
+        if (hackedTypeIds.Length >= PathfinderHackedShipTypesRequired && stage < PathfinderResearchStage.DocumentationReady)
+            stage = PathfinderResearchStage.DocumentationReady;
+
+        if (stage >= PathfinderResearchStage.DocumentationReady)
+            hackedTypeIds = ClampPathfinderHackedShipTypeIds(hackedTypeIds);
+        else
+        {
+            deliveredValuables = 0;
+            completionMapId = string.Empty;
+        }
+
+        if (stage >= PathfinderResearchStage.ResourcesRequired)
+        {
+            if (deliveredValuables >= PathfinderValuableItemsRequired)
+                stage = PathfinderResearchStage.FinalVisitRequired;
+        }
+        else
+        {
+            deliveredValuables = 0;
+            completionMapId = string.Empty;
+        }
+
+        if (stage == PathfinderResearchStage.FinalVisitRequired && string.IsNullOrWhiteSpace(completionMapId))
+            stage = PathfinderResearchStage.ResourcesRequired;
+
+        if (stage < PathfinderResearchStage.FinalVisitRequired)
+            completionMapId = string.Empty;
+
+        return new PathfinderResearchProgressData
+        {
+            Stage = (int)stage,
+            HackedShipTypeIds = hackedTypeIds,
+            DeliveredValuableItems = deliveredValuables,
+            ResourceCompletionMapId = completionMapId
+        };
+    }
+
+    static string[] ClampPathfinderHackedShipTypeIds(string[] typeIds)
+    {
+        string[] normalized = NormalizePathfinderHackedShipTypeIds(typeIds);
+        if (normalized.Length <= PathfinderHackedShipTypesRequired)
+            return normalized;
+
+        string[] clamped = new string[PathfinderHackedShipTypesRequired];
+        Array.Copy(normalized, clamped, clamped.Length);
+        return clamped;
+    }
+
+    static string[] NormalizePathfinderHackedShipTypeIds(string[] typeIds)
+    {
+        if (typeIds == null || typeIds.Length == 0)
+            return Array.Empty<string>();
+
+        HashSet<string> normalized = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < typeIds.Length; i++)
+        {
+            string typeId = NormalizePathfinderHackedShipTypeId(typeIds[i]);
+            if (!string.IsNullOrWhiteSpace(typeId))
+                normalized.Add(typeId);
+        }
+
+        string[] result = new string[normalized.Count];
+        normalized.CopyTo(result);
+        Array.Sort(result, StringComparer.Ordinal);
+        return result;
+    }
+
+    public static string NormalizePathfinderHackedShipTypeId(string typeId)
+    {
+        if (string.IsNullOrWhiteSpace(typeId))
+            return string.Empty;
+
+        string normalized = typeId.Trim().ToLowerInvariant();
+        const string enemyPrefix = "enemy:";
+        const string playerPrefix = "player:";
+
+        if (normalized.StartsWith(enemyPrefix, StringComparison.Ordinal))
+        {
+            string rawKind = normalized.Substring(enemyPrefix.Length).Replace("_", string.Empty);
+            if (Enum.TryParse(rawKind, true, out EnemyBotKind enemyKind) &&
+                Enum.IsDefined(typeof(EnemyBotKind), enemyKind))
+            {
+                return BuildPathfinderEnemyHackTypeId(enemyKind);
+            }
+
+            return string.Empty;
+        }
+
+        if (normalized.StartsWith(playerPrefix, StringComparison.Ordinal))
+        {
+            string rawShipType = normalized.Substring(playerPrefix.Length);
+            return ShipCatalog.TryGetShipTypeFromId(rawShipType, out ShipType shipType)
+                ? BuildPathfinderPlayerHackTypeId(shipType)
+                : string.Empty;
+        }
+
+        return string.Empty;
+    }
+
+    public static string BuildPathfinderEnemyHackTypeId(EnemyBotKind enemyKind)
+    {
+        return "enemy:" + enemyKind.ToString().ToLowerInvariant();
+    }
+
+    public static string BuildPathfinderPlayerHackTypeId(ShipType shipType)
+    {
+        return "player:" + ShipCatalog.GetShipTypeId(shipType);
     }
 
     public static ViperRecoveryProgressData NormalizeViperRecoveryProgress(ViperRecoveryProgressData progress, string[] shipIds = null)
@@ -5123,6 +5657,25 @@ public class PlayerProfileService : MonoBehaviour
             normalized.Add(invaderId);
         else
             normalized.Remove(invaderId);
+
+        string[] result = new string[normalized.Count];
+        normalized.CopyTo(result);
+        Array.Sort(result, StringComparer.Ordinal);
+        return result;
+    }
+
+    static string[] NormalizeUnlockedShipIdsForPathfinderProgress(string[] shipIds, PathfinderResearchProgressData progress)
+    {
+        HashSet<string> normalized = new HashSet<string>(NormalizeUnlockedShipIds(shipIds), StringComparer.Ordinal);
+        string pathfinderId = ShipCatalog.GetShipTypeId(ShipType.Pathfinder);
+        PathfinderResearchStage stage = progress != null
+            ? (PathfinderResearchStage)Mathf.Clamp(progress.Stage, (int)PathfinderResearchStage.Locked, (int)PathfinderResearchStage.Complete)
+            : PathfinderResearchStage.Locked;
+
+        if (stage == PathfinderResearchStage.Complete)
+            normalized.Add(pathfinderId);
+        else
+            normalized.Remove(pathfinderId);
 
         string[] result = new string[normalized.Count];
         normalized.CopyTo(result);
@@ -5828,6 +6381,28 @@ public class PlayerProfileService : MonoBehaviour
         }
     }
 
+    string SerializePathfinderResearchProgress(PathfinderResearchProgressData progress)
+    {
+        return JsonUtility.ToJson(NormalizePathfinderResearchProgress(progress, CurrentProfile != null ? CurrentProfile.UnlockedShipIds : null));
+    }
+
+    PathfinderResearchProgressData DeserializePathfinderResearchProgress(string json, string[] shipIds)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return NormalizePathfinderResearchProgress(null, shipIds);
+
+        try
+        {
+            PathfinderResearchProgressData progress = JsonUtility.FromJson<PathfinderResearchProgressData>(json);
+            return NormalizePathfinderResearchProgress(progress, shipIds);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("Failed to deserialize Pathfinder research progress: " + ex.Message);
+            return NormalizePathfinderResearchProgress(null, shipIds);
+        }
+    }
+
     string SerializeMissEnigmaBlueprintPurchases(string[] blueprintIds)
     {
         BlueprintPurchaseSnapshot snapshot = new BlueprintPurchaseSnapshot
@@ -5959,6 +6534,25 @@ public enum ArrowTimeTrialRank
     S = 4
 }
 
+public enum PathfinderResearchStage
+{
+    Locked = 0,
+    CollectingData = 1,
+    DocumentationReady = 2,
+    ResourcesRequired = 3,
+    FinalVisitRequired = 4,
+    Complete = 5
+}
+
+public enum PathfinderResearchStationStatus
+{
+    None = 0,
+    DocumentationDelivered = 1,
+    ValuableItemsDelivered = 2,
+    DifferentMapRequired = 3,
+    Finalized = 4
+}
+
 [Serializable]
 public class ViperRecoveryProgressData
 {
@@ -6074,6 +6668,67 @@ public class ArrowLicenseProgressData
 }
 
 [Serializable]
+public class PathfinderResearchProgressData
+{
+    public int Stage;
+    public string[] HackedShipTypeIds;
+    public int DeliveredValuableItems;
+    public string ResourceCompletionMapId;
+
+    public static PathfinderResearchProgressData Empty()
+    {
+        return new PathfinderResearchProgressData
+        {
+            Stage = (int)PathfinderResearchStage.Locked,
+            HackedShipTypeIds = Array.Empty<string>(),
+            DeliveredValuableItems = 0,
+            ResourceCompletionMapId = string.Empty
+        };
+    }
+
+    public static PathfinderResearchProgressData Complete()
+    {
+        return new PathfinderResearchProgressData
+        {
+            Stage = (int)PathfinderResearchStage.Complete,
+            HackedShipTypeIds = Array.Empty<string>(),
+            DeliveredValuableItems = PlayerProfileService.PathfinderValuableItemsRequired,
+            ResourceCompletionMapId = string.Empty
+        };
+    }
+
+    public PathfinderResearchProgressData Clone()
+    {
+        return new PathfinderResearchProgressData
+        {
+            Stage = Stage,
+            HackedShipTypeIds = HackedShipTypeIds != null ? (string[])HackedShipTypeIds.Clone() : Array.Empty<string>(),
+            DeliveredValuableItems = DeliveredValuableItems,
+            ResourceCompletionMapId = ResourceCompletionMapId
+        };
+    }
+}
+
+public class PathfinderHackRecordResult
+{
+    public bool Started;
+    public bool Added;
+    public bool Duplicate;
+    public int Count;
+    public bool DocumentationReady;
+    public bool DocumentationCreated;
+    public bool InventoryFull;
+}
+
+public class PathfinderResearchStationResult
+{
+    public PathfinderResearchStationStatus Status;
+    public int DeliveredValuableItemsNow;
+    public int DeliveredValuableItemsTotal;
+    public bool ResourcesCompleted;
+}
+
+[Serializable]
 public class PlayerProfileData
 {
     public string Nickname;
@@ -6091,6 +6746,7 @@ public class PlayerProfileData
     public ArrowLicenseProgressData ArrowLicenseProgress;
     public int BisonIndustrialPartsDelivered;
     public int InvaderImprintsRecovered;
+    public PathfinderResearchProgressData PathfinderResearchProgress;
     public string[] MissEnigmaPurchasedBlueprintIds;
     public int PilotDroneKills;
     public int PilotSoldItemsAstrons;
@@ -6120,6 +6776,7 @@ public class PlayerProfileData
             ArrowLicenseProgress = ArrowLicenseProgressData.Empty(),
             BisonIndustrialPartsDelivered = 0,
             InvaderImprintsRecovered = 0,
+            PathfinderResearchProgress = PathfinderResearchProgressData.Empty(),
             MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
             PilotDroneKills = 0,
             PilotSoldItemsAstrons = 0,

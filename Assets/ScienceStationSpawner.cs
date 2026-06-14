@@ -158,7 +158,7 @@ public sealed class ScienceStationSpawner : MonoBehaviourPunCallbacks
         if (count <= 0)
             return EmptyLayoutSentinel;
 
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         Random.State previousState = Random.state;
         Random.InitState(seed);
 

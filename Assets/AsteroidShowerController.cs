@@ -139,7 +139,7 @@ public sealed class AsteroidShowerController : MonoBehaviour, IOnEventCallback
 
     Vector2 GetRandomStrikePoint(float radius)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         float halfX = mapSize.x * 0.5f;
         float halfY = mapSize.y * 0.5f;
 
@@ -560,7 +560,7 @@ public sealed class AsteroidShowerStrikeVfx : MonoBehaviour
     void PlayImpact()
     {
         Vector3 world = new Vector3(center.x, center.y, 0f);
-        AudioManager.Instance.PlayExplosionAt(world);
+        AudioManager.Instance.PlayAsteroidImpactAt(world);
         SpaceMineExplosionVfx.Spawn(world, radius, asteroidRenderer);
         ScreenShakeController.Request(ScreenShakeProfiles.AsteroidShowerImpact, world);
     }

@@ -12,6 +12,7 @@ public class AudioManager : MonoBehaviour
     const float ClickSoundCooldownSeconds = 0.055f;
     const string MenuMusicResourcePath = "Audio/Music/Abandoned Orbital Dock";
     const string ShipReturnMusicResourcePath = "Audio/Music/victory_orbit";
+    const string AstronautReturnMusicResourcePath = "Audio/Music/victory_orbit_astronaut_remix";
     const float MenuMusicVolume = 0.42f;
     const int SpatialAudioPoolSize = 24;
     const int MaxSpatialOneShotsPerFrame = 12;
@@ -21,6 +22,9 @@ public class AudioManager : MonoBehaviour
     AudioClip laserClip;
     AudioClip corsairLaserClip;
     AudioClip drillingClip;
+    AudioClip spaceDrillMiningClip;
+    AudioClip lootingFriendDrillClip;
+    AudioClip pirateBaseDrillClip;
     AudioClip clickClip;
     AudioClip cashClip;
     AudioClip engineClip;
@@ -57,6 +61,7 @@ public class AudioManager : MonoBehaviour
     AudioClip guidanceSystemClip;
     AudioClip shortScannerClip;
     AudioClip cloakActivationClip;
+    AudioClip hackingDeviceClip;
     AudioClip treasureScannerPingClip;
     AudioClip spaceDrillDeliveryClip;
     AudioClip spaceMantaWarningClip;
@@ -68,10 +73,24 @@ public class AudioManager : MonoBehaviour
     AudioClip rocketLockClip;
     AudioClip rocketFlyLoopClip;
     AudioClip rocketExplosionClip;
+    AudioClip lootHookClip;
+    AudioClip stasisBuoyClip;
+    AudioClip stasisPulseClip;
+    AudioClip tetherHarpoonClip;
+    AudioClip bioTrapCaptureClip;
+    AudioClip asteroidBreacherClip;
+    AudioClip asteroidImpactClip;
+    AudioClip animalDeathClip;
+    AudioClip animalHitClip;
+    AudioClip autoShootClip;
+    AudioClip raiserRoundStartClip;
+    AudioClip spaceTorpedoExplosionClip;
     AudioClip cosmicWormShotClip;
     AudioClip alienArtifactActivationClip;
     AudioClip menuMusicClip;
     AudioClip shipReturnMusicClip;
+    AudioClip astronautReturnMusicClip;
+    AudioClip activeShipReturnMusicClip;
 
     AudioSource oneShotSource;
     AudioSource drillingLoopSource;
@@ -80,6 +99,7 @@ public class AudioManager : MonoBehaviour
     Coroutine evacBuzzerRoutine;
     Coroutine resumeMenuMusicRoutine;
     bool shipReturnMusicPending;
+    bool shipReturnMusicPendingAsAstronaut;
     bool shipReturnMusicPlaying;
     float lastClickSoundTime = -100f;
     readonly List<AudioSource> spatialOneShotSources = new List<AudioSource>(SpatialAudioPoolSize);
@@ -103,6 +123,9 @@ public class AudioManager : MonoBehaviour
     public AudioClip RadarShipEngineClip => radarShipEngineClip != null ? radarShipEngineClip : mothershipEngineClip != null ? mothershipEngineClip : engineClip;
     public AudioClip RescueShipEngineClip => rescueShipEngineClip != null ? rescueShipEngineClip : radarShipEngineClip != null ? radarShipEngineClip : mothershipEngineClip != null ? mothershipEngineClip : engineClip;
     public AudioClip DrillingClip => drillingClip;
+    public AudioClip SpaceDrillMiningClip => spaceDrillMiningClip != null ? spaceDrillMiningClip : drillingClip;
+    public AudioClip LootingFriendDrillClip => lootingFriendDrillClip != null ? lootingFriendDrillClip : drillingClip;
+    public AudioClip PirateBaseDrillClip => pirateBaseDrillClip != null ? pirateBaseDrillClip : drillingClip;
     public AudioClip AlarmClip => alarmClip;
     public AudioClip CorsairLaserClip => corsairLaserClip;
     public AudioClip BeaconSignalClip => beaconSignalClip != null ? beaconSignalClip : alarmClip;
@@ -178,9 +201,13 @@ public class AudioManager : MonoBehaviour
         laserClip = Resources.Load<AudioClip>("Audio/strzal_pistol_cut");
         corsairLaserClip = Resources.Load<AudioClip>("Audio/laser_classic_corsair");
         drillingClip = Resources.Load<AudioClip>("Audio/drilling");
+        spaceDrillMiningClip = Resources.Load<AudioClip>("Audio/space_drill_mining");
+        lootingFriendDrillClip = Resources.Load<AudioClip>("Audio/looting_friend_drill");
+        pirateBaseDrillClip = Resources.Load<AudioClip>("Audio/pirate_base_drill");
         clickClip = Resources.Load<AudioClip>("Audio/click");
         menuMusicClip = Resources.Load<AudioClip>(MenuMusicResourcePath);
         shipReturnMusicClip = Resources.Load<AudioClip>(ShipReturnMusicResourcePath);
+        astronautReturnMusicClip = Resources.Load<AudioClip>(AstronautReturnMusicResourcePath);
         cashClip = Resources.Load<AudioClip>("Audio/cash_sound");
         engineClip = Resources.Load<AudioClip>("Audio/silnik");
         fusionEngineClip = Resources.Load<AudioClip>("Audio/fusion_engine_sound");
@@ -216,6 +243,7 @@ public class AudioManager : MonoBehaviour
         guidanceSystemClip = Resources.Load<AudioClip>("Audio/guidance_system_sound");
         shortScannerClip = Resources.Load<AudioClip>("Audio/short_scanner");
         cloakActivationClip = Resources.Load<AudioClip>("Audio/cloak_activation");
+        hackingDeviceClip = Resources.Load<AudioClip>("Audio/hacking_sound");
         treasureScannerPingClip = Resources.Load<AudioClip>("Audio/treasure_scanner_ping");
         spaceDrillDeliveryClip = Resources.Load<AudioClip>("Audio/space_drill_delivery_sound");
         spaceMantaWarningClip = Resources.Load<AudioClip>("Audio/space_manta_warning");
@@ -229,6 +257,18 @@ public class AudioManager : MonoBehaviour
             rocketLockClip = CreateRocketLockConfirmationClip();
         rocketFlyLoopClip = Resources.Load<AudioClip>("Audio/rocket_fly_loop");
         rocketExplosionClip = Resources.Load<AudioClip>("Audio/rocket_boom_sound");
+        lootHookClip = Resources.Load<AudioClip>("Audio/loot_hook_snatch");
+        stasisBuoyClip = Resources.Load<AudioClip>("Audio/stasis_buoy_deploy");
+        stasisPulseClip = Resources.Load<AudioClip>("Audio/stasis_pulse");
+        tetherHarpoonClip = Resources.Load<AudioClip>("Audio/tether_harpoon_fire");
+        bioTrapCaptureClip = Resources.Load<AudioClip>("Audio/bio_trap_capture");
+        asteroidBreacherClip = Resources.Load<AudioClip>("Audio/asteroid_breacher_blast");
+        asteroidImpactClip = Resources.Load<AudioClip>("Audio/asteroid_impact");
+        animalDeathClip = Resources.Load<AudioClip>("Audio/animal_death");
+        animalHitClip = Resources.Load<AudioClip>("Audio/animal_hit");
+        autoShootClip = Resources.Load<AudioClip>("Audio/auto_shoot");
+        raiserRoundStartClip = Resources.Load<AudioClip>("Audio/raiser_round_start");
+        spaceTorpedoExplosionClip = Resources.Load<AudioClip>("Audio/space_torpedo_explosion");
         cosmicWormShotClip = Resources.Load<AudioClip>("Audio/cosmic_worm_shot");
         alienArtifactActivationClip = Resources.Load<AudioClip>("Audio/alien_artifact_activate");
         if (cosmicWormShotClip == null)
@@ -396,6 +436,11 @@ public class AudioManager : MonoBehaviour
         PlayOneShot(cashClip != null ? cashClip : clickClip, 0.86f);
     }
 
+    public void PlayRaiserRoundStart()
+    {
+        PlayOneShot(raiserRoundStartClip != null ? raiserRoundStartClip : alarmClip, 0.9f);
+    }
+
     public void PlayMenuMusic()
     {
         if (menuMusicClip == null)
@@ -405,8 +450,8 @@ public class AudioManager : MonoBehaviour
             return;
 
         if (shipReturnMusicPlaying &&
-            shipReturnMusicClip != null &&
-            menuMusicSource.clip == shipReturnMusicClip &&
+            activeShipReturnMusicClip != null &&
+            menuMusicSource.clip == activeShipReturnMusicClip &&
             menuMusicSource.isPlaying)
         {
             return;
@@ -414,6 +459,7 @@ public class AudioManager : MonoBehaviour
 
         CancelMenuMusicResumeRoutine();
         shipReturnMusicPlaying = false;
+        activeShipReturnMusicClip = null;
 
         if (menuMusicSource.clip != menuMusicClip)
             menuMusicSource.clip = menuMusicClip;
@@ -439,7 +485,9 @@ public class AudioManager : MonoBehaviour
     {
         CancelMenuMusicResumeRoutine();
         shipReturnMusicPending = false;
+        shipReturnMusicPendingAsAstronaut = false;
         shipReturnMusicPlaying = false;
+        activeShipReturnMusicClip = null;
 
         if (menuMusicSource != null && menuMusicSource.isPlaying)
             menuMusicSource.Stop();
@@ -461,9 +509,10 @@ public class AudioManager : MonoBehaviour
                started;
     }
 
-    public void RequestShipReturnMusicForNextMenu()
+    public void RequestShipReturnMusicForNextMenu(bool returnedAsAstronaut = false)
     {
         shipReturnMusicPending = true;
+        shipReturnMusicPendingAsAstronaut = returnedAsAstronaut;
         TryPlayPendingShipReturnMusic();
     }
 
@@ -475,28 +524,47 @@ public class AudioManager : MonoBehaviour
         if (PhotonNetwork.InRoom || ShouldMuteMenuMusicForRound())
             return;
 
+        bool returnedAsAstronaut = shipReturnMusicPendingAsAstronaut;
         shipReturnMusicPending = false;
-        PlayShipReturnMusic();
+        shipReturnMusicPendingAsAstronaut = false;
+        PlayShipReturnMusic(returnedAsAstronaut);
     }
 
-    public void PlayShipReturnMusic()
+    public void PlayShipReturnMusic(bool returnedAsAstronaut = false)
     {
-        if (shipReturnMusicClip == null)
-            shipReturnMusicClip = Resources.Load<AudioClip>(ShipReturnMusicResourcePath);
+        AudioClip returnMusicClip = ResolveShipReturnMusicClip(returnedAsAstronaut);
 
-        if (shipReturnMusicClip == null || menuMusicSource == null)
+        if (returnMusicClip == null || menuMusicSource == null)
             return;
 
         CancelMenuMusicResumeRoutine();
         shipReturnMusicPlaying = true;
+        activeShipReturnMusicClip = returnMusicClip;
 
         menuMusicSource.Stop();
-        menuMusicSource.clip = shipReturnMusicClip;
+        menuMusicSource.clip = returnMusicClip;
         menuMusicSource.loop = false;
         menuMusicSource.volume = MenuMusicVolume;
         menuMusicSource.Play();
 
-        resumeMenuMusicRoutine = StartCoroutine(ResumeMenuMusicAfterShipReturn(shipReturnMusicClip));
+        resumeMenuMusicRoutine = StartCoroutine(ResumeMenuMusicAfterShipReturn(returnMusicClip));
+    }
+
+    AudioClip ResolveShipReturnMusicClip(bool returnedAsAstronaut)
+    {
+        if (returnedAsAstronaut)
+        {
+            if (astronautReturnMusicClip == null)
+                astronautReturnMusicClip = Resources.Load<AudioClip>(AstronautReturnMusicResourcePath);
+
+            if (astronautReturnMusicClip != null)
+                return astronautReturnMusicClip;
+        }
+
+        if (shipReturnMusicClip == null)
+            shipReturnMusicClip = Resources.Load<AudioClip>(ShipReturnMusicResourcePath);
+
+        return shipReturnMusicClip;
     }
 
     IEnumerator ResumeMenuMusicAfterShipReturn(AudioClip playedClip)
@@ -509,6 +577,7 @@ public class AudioManager : MonoBehaviour
             yield break;
 
         shipReturnMusicPlaying = false;
+        activeShipReturnMusicClip = null;
         PlayMenuMusic();
     }
 
@@ -539,6 +608,11 @@ public class AudioManager : MonoBehaviour
     public void PlayShootSmallAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(shootSmallClip != null ? shootSmallClip : laserClip, worldPosition, 0.58f);
+    }
+
+    public void PlayAutoShootAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(autoShootClip != null ? autoShootClip : shootSmallClip != null ? shootSmallClip : laserClip, worldPosition, 0.6f);
     }
 
     public void PlayArtilleryGunAt(Vector3 worldPosition)
@@ -574,6 +648,21 @@ public class AudioManager : MonoBehaviour
     public void PlayExplosionAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(explosionClip, worldPosition, 0.75f);
+    }
+
+    public void PlayAsteroidImpactAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(asteroidImpactClip != null ? asteroidImpactClip : explosionClip, worldPosition, 0.88f);
+    }
+
+    public void PlayAnimalDeathAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(animalDeathClip != null ? animalDeathClip : explosionClip, worldPosition, 0.86f);
+    }
+
+    public void PlayAnimalHitAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(animalHitClip != null ? animalHitClip : hpHitClip, worldPosition, 0.76f);
     }
 
     public void PlayReloadAt(Vector3 worldPosition)
@@ -646,6 +735,41 @@ public class AudioManager : MonoBehaviour
         PlaySpatialOneShot(magneticBeamClip != null ? magneticBeamClip : shieldChargeClip, worldPosition, 0.88f);
     }
 
+    public void PlayLootHookAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(lootHookClip != null ? lootHookClip : magneticBeamClip != null ? magneticBeamClip : cashClip, worldPosition, 0.82f);
+    }
+
+    public void PlayStasisBuoyAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(stasisBuoyClip != null ? stasisBuoyClip : shieldChargeClip != null ? shieldChargeClip : beaconSignalClip, worldPosition, 0.76f);
+    }
+
+    public void PlayStasisPulseAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(stasisPulseClip != null ? stasisPulseClip : shortScannerClip != null ? shortScannerClip : shieldChargeClip, worldPosition, 0.58f);
+    }
+
+    public void PlayTetherHarpoonAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(tetherHarpoonClip != null ? tetherHarpoonClip : magneticBeamClip != null ? magneticBeamClip : gravitySquidTetherClip, worldPosition, 0.84f);
+    }
+
+    public void PlayBioTrapCaptureAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(bioTrapCaptureClip != null ? bioTrapCaptureClip : cloakActivationClip != null ? cloakActivationClip : shieldChargeClip, worldPosition, 0.82f);
+    }
+
+    public void PlayAsteroidBreacherAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(asteroidBreacherClip != null ? asteroidBreacherClip : spaceMineBoomClip != null ? spaceMineBoomClip : explosionClip, worldPosition, 0.92f);
+    }
+
+    public void PlaySpaceTorpedoExplosionAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(spaceTorpedoExplosionClip != null ? spaceTorpedoExplosionClip : rocketExplosionClip != null ? rocketExplosionClip : explosionClip, worldPosition, 0.88f);
+    }
+
     public void PlaySuperBoosterAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(superBoosterClip != null ? superBoosterClip : fusionEngineClip != null ? fusionEngineClip : engineClip, worldPosition, 0.92f);
@@ -696,6 +820,11 @@ public class AudioManager : MonoBehaviour
     public void PlayCloakActivationAt(Vector3 worldPosition)
     {
         PlaySpatialOneShot(cloakActivationClip != null ? cloakActivationClip : guidanceSystemClip != null ? guidanceSystemClip : beaconSignalClip, worldPosition, 0.82f);
+    }
+
+    public void PlayHackingDeviceAt(Vector3 worldPosition)
+    {
+        PlaySpatialOneShot(hackingDeviceClip != null ? hackingDeviceClip : shortScannerClip != null ? shortScannerClip : guidanceSystemClip, worldPosition, 0.86f);
     }
 
     public void PlaySpaceDrillDeliveryAt(Vector3 worldPosition)

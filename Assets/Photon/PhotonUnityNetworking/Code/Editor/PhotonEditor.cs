@@ -794,15 +794,17 @@ namespace Photon.Pun
             }
 
 
+            List<string> allUniqueRpcs = allRpcs.Distinct().ToList();
+
             if (additionalRpcs.Count + PhotonNetwork.PhotonServerSettings.RpcList.Count >= byte.MaxValue)
             {
-                if (allRpcs.Count <= byte.MaxValue)
+                if (allUniqueRpcs.Count <= byte.MaxValue)
                 {
                     bool clearList = EditorUtility.DisplayDialog(CurrentLang.IncorrectRPCListTitle, CurrentLang.IncorrectRPCListLabel, CurrentLang.RemoveOutdatedRPCsLabel, CurrentLang.CancelButton);
                     if (clearList)
                     {
                         PhotonNetwork.PhotonServerSettings.RpcList.Clear();
-                        additionalRpcs = allRpcs.Distinct().ToList();   // we add all unique names
+                        additionalRpcs = allUniqueRpcs;   // we add all unique names
                     }
                     else
                     {

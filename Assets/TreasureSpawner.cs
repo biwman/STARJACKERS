@@ -32,7 +32,7 @@ public class TreasureSpawner : MonoBehaviourPun
 
     void Start()
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         mapSizeX = mapSize.x;
         mapSizeY = mapSize.y;
 
@@ -58,7 +58,7 @@ public class TreasureSpawner : MonoBehaviourPun
 
     void SpawnTreasures()
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         mapSizeX = mapSize.x;
         mapSizeY = mapSize.y;
 
@@ -69,7 +69,7 @@ public class TreasureSpawner : MonoBehaviourPun
         nebulaPositions.AddRange(ParseLayout(ToxicNebulaLayoutKey));
         int spawned = 0;
         int attempts = 0;
-        int targetCount = Mathf.Max(0, Mathf.RoundToInt(treasureCount * GetDensityMultiplier() * RoomSettings.GetMapAreaMultiplier()));
+        int targetCount = Mathf.Max(0, Mathf.RoundToInt(treasureCount * GetDensityMultiplier() * RoomSettings.GetGameplayMapAreaMultiplier()));
 
         while (spawned < targetCount && attempts < 300)
         {
@@ -105,7 +105,7 @@ public class TreasureSpawner : MonoBehaviourPun
 
     int SpawnRadioactiveTreasures(List<Vector2> obstaclePositions, List<Vector2> extractionPositions, List<Vector2> nebulaPositions)
     {
-        int targetCount = Mathf.Max(0, Mathf.RoundToInt(RollRadioactiveTargetCount(RoomSettings.GetRadioactiveTreasureDensity()) * RoomSettings.GetMapAreaMultiplier()));
+        int targetCount = Mathf.Max(0, Mathf.RoundToInt(RollRadioactiveTargetCount(RoomSettings.GetRadioactiveTreasureDensity()) * RoomSettings.GetGameplayMapAreaMultiplier()));
         int spawned = 0;
         int attempts = 0;
 

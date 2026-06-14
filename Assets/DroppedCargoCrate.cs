@@ -276,7 +276,7 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
 
     void BounceAgainstMapBounds()
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         Vector2 position = rb != null ? rb.position : (Vector2)transform.position;
         bool bounced = false;
 

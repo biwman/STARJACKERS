@@ -429,6 +429,7 @@ public class UIRuntimeStyler : MonoBehaviour
                name.StartsWith("CraftingRecipeCloseButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShipInventoryUnloadButton", System.StringComparison.Ordinal) ||
                name.StartsWith("PlayerInventoryFilterButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("PlayerInventorySortButton", System.StringComparison.Ordinal) ||
                name.StartsWith("PlayerInventoryExtendButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShopBuyButton", System.StringComparison.Ordinal) ||
                name.StartsWith("ShopSortButton", System.StringComparison.Ordinal) ||

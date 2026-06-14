@@ -26,7 +26,6 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     const float CollectSeconds = 3f;
     const float WreckCollectSeconds = 3.25f;
     const float ExtractionUseSeconds = 2.5f;
-    const float CombatRange = 10.5f;
     const float DetectionRange = 14f;
     const float PlayerRivalryRange = 11f;
     const float FleeHealthRatio = 0.34f;
@@ -40,22 +39,44 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     const float NameplateRefreshInterval = 0.12f;
     const int HumanOnlyDisablePassCount = 4;
     const float NameplateYOffset = 0.92f;
+    const float HitAndRunBreakAwayDuration = 1.85f;
+    const float HitAndRunMinimumAttackDuration = 0.95f;
+    const float BotUtilityGlobalCooldownMin = 9f;
+    const float BotUtilityGlobalCooldownMax = 18f;
+    const float BotUtilityUseChance = 0.36f;
+    const float BotLootingFriendRange = 4.25f;
+    const float BotLootingFriendCollectSeconds = 4.8f;
+    const float BotLootingFriendScanInterval = 0.55f;
+    const float BotEscapePodHpRatio = 0.16f;
 
     static readonly HashSet<NeutralRiderController> ActiveRiders = new HashSet<NeutralRiderController>();
 
-    struct WeaponLoadout
+    enum CombatTactic
     {
-        public float FireRate;
-        public int MaxAmmo;
-        public float ReloadDuration;
-        public int Damage;
-        public float BulletScale;
-        public Color BulletColor;
-        public float MuzzleOffset;
-        public float BulletSpeed;
-        public string ShotSoundId;
-        public float RangeMultiplier;
-        public float FlightTime;
+        Orbit,
+        HitAndRun,
+        Kite,
+        Brawler,
+        Avoidant
+    }
+
+    sealed class BotUtilityRuntime
+    {
+        public string ItemId;
+        public int Charges;
+        public float Cooldown;
+        public float NextUseTime;
+    }
+
+    struct NeutralRiderCombatLoadout
+    {
+        public string WeaponId;
+        public WeaponAttackProfile WeaponProfile;
+        public CombatTactic Tactic;
+        public string[] GadgetItemIds;
+        public bool HasFiringFriend;
+        public bool HasLootingFriend;
+        public bool HasEscapePod;
     }
 
     enum Mode
@@ -71,6 +92,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     Rigidbody2D rb;
     PlayerHealth health;
     PlayerShooting shooting;
+    LootingFriendController lootingFriend;
     SpriteRenderer spriteRenderer;
     TextMeshPro nameplate;
     PhotonView view;
@@ -96,6 +118,8 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     float hostilePlayerUntil;
     int shipSkinIndex;
     int spawnOrdinal;
+    NeutralRiderCombatLoadout combatLoadout;
+    readonly List<BotUtilityRuntime> botUtilities = new List<BotUtilityRuntime>();
     string riderName = "Rider";
     GameTimer cachedTimer;
     bool initialized;
@@ -105,8 +129,17 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     bool humanOnlyComponentsDisabled;
     bool registeredActiveRider;
     bool nameplateVisible;
+    bool botRescueUsed;
+    bool fallbackJunkStolenByLootHook;
     string lastNameplateText = string.Empty;
     int forcedAggressiveTargetViewId;
+    float hitAndRunBreakAwayUntil;
+    float hitAndRunAttackStartedAt;
+    Vector2 hitAndRunBreakAwayDirection = Vector2.up;
+    float nextBotUtilityUseTime;
+    int botLootingFriendTargetViewId;
+    float botLootingFriendStartedAt = -1f;
+    float nextBotLootingFriendScanTime;
 
     public int ShipSkinIndex => shipSkinIndex;
     public bool IsEvacuated => mode == Mode.Evacuated;
@@ -121,6 +154,105 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
             return total;
         }
+    }
+
+    public bool TrySelectLootHookCargo(out string itemId)
+    {
+        itemId = string.Empty;
+        if (!CanLoseLootHookCargo())
+            return false;
+
+        int cargoIndex = GetRandomLootHookCargoIndex();
+        if (cargoIndex >= 0)
+        {
+            itemId = cargo[cargoIndex];
+            return !string.IsNullOrWhiteSpace(itemId);
+        }
+
+        if (!fallbackJunkStolenByLootHook)
+        {
+            itemId = InventoryItemCatalog.SpaceJunkStandardId;
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool TryRemoveLootHookCargo(string expectedItemId, out string removedItemId)
+    {
+        removedItemId = string.Empty;
+        if (!CanLoseLootHookCargo() || string.IsNullOrWhiteSpace(expectedItemId))
+            return false;
+
+        int cargoIndex = GetRandomLootHookCargoIndex(expectedItemId);
+        if (cargoIndex >= 0)
+        {
+            removedItemId = cargo[cargoIndex];
+            cargo.RemoveAt(cargoIndex);
+            return !string.IsNullOrWhiteSpace(removedItemId);
+        }
+
+        if (!fallbackJunkStolenByLootHook &&
+            string.Equals(expectedItemId, InventoryItemCatalog.SpaceJunkStandardId, StringComparison.Ordinal))
+        {
+            fallbackJunkStolenByLootHook = true;
+            removedItemId = InventoryItemCatalog.SpaceJunkStandardId;
+            return true;
+        }
+
+        return false;
+    }
+
+    public void RestoreLootHookCargo(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        InitializeFromPhotonData();
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceJunkStandardId, StringComparison.Ordinal) &&
+            fallbackJunkStolenByLootHook)
+        {
+            fallbackJunkStolenByLootHook = false;
+            if (cargo.Count <= 0)
+                return;
+        }
+
+        AddCargo(itemId);
+    }
+
+    bool CanLoseLootHookCargo()
+    {
+        InitializeFromPhotonData();
+        return initialized &&
+               gameObject.activeInHierarchy &&
+               !wreckConverted &&
+               mode != Mode.Evacuated &&
+               health != null &&
+               !health.IsWreck;
+    }
+
+    int GetRandomLootHookCargoIndex(string requiredItemId = null)
+    {
+        List<int> candidateIndexes = new List<int>();
+        for (int i = 0; i < cargo.Count; i++)
+        {
+            string candidateItemId = cargo[i];
+            if (string.IsNullOrWhiteSpace(candidateItemId))
+                continue;
+
+            if (!string.IsNullOrWhiteSpace(requiredItemId) &&
+                !string.Equals(candidateItemId, requiredItemId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            candidateIndexes.Add(i);
+        }
+
+        if (candidateIndexes.Count <= 0)
+            return -1;
+
+        return candidateIndexes[UnityEngine.Random.Range(0, candidateIndexes.Count)];
     }
 
     public static bool IsNeutralRider(GameObject target)
@@ -226,6 +358,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         rb = GetComponent<Rigidbody2D>();
         health = GetComponent<PlayerHealth>();
         shooting = GetComponent<PlayerShooting>();
+        lootingFriend = GetComponent<LootingFriendController>();
         spriteRenderer = GetComponent<SpriteRenderer>();
 
         object[] data = view.InstantiationData;
@@ -268,7 +401,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             hostilePlayerViewId = forcedAggressiveTargetViewId;
             hostilePlayerUntil = float.PositiveInfinity;
             targetViewId = forcedAggressiveTargetViewId;
-            mode = Mode.Combat;
+            mode = CanUseMainWeapon() ? Mode.Combat : Mode.Flee;
         }
 
         initialized = true;
@@ -312,18 +445,26 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (view == null || !view.IsMine || !IsGameStarted() || health == null || health.IsWreck || wreckConverted || mode == Mode.Evacuated)
             return;
 
+        if (HackingStatus.TryGetForcedMotion(gameObject, out Vector2 hackedDirection, out float hackedSpeedMultiplier))
+        {
+            TickHackedOverride(hackedDirection, hackedSpeedMultiplier);
+            return;
+        }
+
         TickMovement();
         TickAction();
     }
 
     void OnDisable()
     {
+        StopBotLootingFriendTarget(true);
         ReleaseCollectionTarget();
         UnregisterActiveRider();
     }
 
     void OnDestroy()
     {
+        StopBotLootingFriendTarget(true);
         ReleaseCollectionTarget();
         UnregisterActiveRider();
     }
@@ -344,13 +485,13 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             hostilePlayerUntil = Time.time + ResolveRivalryDuration();
             AbandonCollectionTarget();
             targetViewId = attackerViewId;
-            mode = ShouldFlee() ? Mode.Flee : Mode.Combat;
+            mode = ShouldFlee() || !CanUseMainWeapon() ? Mode.Flee : Mode.Combat;
         }
     }
 
     public string BuildWreckLootJson()
     {
-        if (cargo.Count <= 0)
+        if (cargo.Count <= 0 && !fallbackJunkStolenByLootHook)
             cargo.Add(InventoryItemCatalog.SpaceJunkStandardId);
 
         List<string> lootItems = new List<string>(cargo);
@@ -390,6 +531,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
     public void MarkWreckConverted()
     {
+        StopBotLootingFriendTarget(true);
         wreckConverted = true;
         mode = Mode.Evacuated;
         if (nameplate != null)
@@ -444,67 +586,281 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (shooting == null)
             return;
 
-        WeaponLoadout loadout = ResolveWeaponLoadout();
+        combatLoadout = ResolveCombatLoadout();
+        ConfigureBotUtilities();
+        ConfigureBotSupport();
 
-        shooting.ConfigureWeaponProfile(
-            loadout.FireRate,
-            loadout.MaxAmmo,
-            loadout.ReloadDuration,
-            loadout.Damage,
-            loadout.BulletScale,
-            loadout.BulletColor,
-            loadout.MuzzleOffset,
-            false,
-            loadout.BulletSpeed,
-            loadout.ShotSoundId,
-            loadout.RangeMultiplier,
-            string.Empty,
-            loadout.FlightTime);
+        if (!CanUseMainWeapon() || combatLoadout.WeaponProfile == null)
+            return;
+
+        shooting.ConfigureBotWeaponAttackProfile(
+            combatLoadout.WeaponProfile,
+            ResolveWeaponMuzzleOffset(),
+            Mathf.Max(1, ShipCatalog.GetMainGunSlots(shipSkinIndex)),
+            false);
     }
 
-    WeaponLoadout ResolveWeaponLoadout()
+    NeutralRiderCombatLoadout ResolveCombatLoadout()
     {
-        int variant = Mathf.Abs((spawnOrdinal * 17) + shipSkinIndex) % 3;
-        switch (archetype)
+        ShipType shipType = ShipCatalog.GetShipTypeFromSkinIndex(shipSkinIndex);
+        if (shipType == ShipType.CargoTruck || ShipCatalog.GetMainGunSlots(shipSkinIndex) <= 0)
         {
-            case NeutralRiderArchetype.Hunter:
-                return variant == 0
-                    ? Weapon(0.48f, 5, 3.8f, 18, 1.12f, new Color(1f, 0.42f, 0.14f, 1f), 0.58f, 12.8f, "lazer3", 14.5f, 10f)
-                    : Weapon(0.34f, 7, 3.2f, 13, 0.96f, new Color(1f, 0.62f, 0.22f, 1f), 0.56f, 11.4f, "lazer2", 13.2f, 10f);
-
-            case NeutralRiderArchetype.Raider:
-                return variant == 1
-                    ? Weapon(0.26f, 12, 3.7f, 7, 0.72f, new Color(0.42f, 1f, 0.58f, 1f), 0.5f, 10.8f, "shoot_small", 10.8f, 9f)
-                    : Weapon(0.36f, 9, 3.1f, 10, 0.86f, new Color(0.28f, 1f, 0.88f, 1f), 0.52f, 11.2f, "lazer1", 11.8f, 9.5f);
-
-            case NeutralRiderArchetype.Coward:
-                return variant == 2
-                    ? Weapon(0.42f, 8, 3.5f, 8, 0.78f, new Color(0.62f, 0.9f, 1f, 1f), 0.48f, 10f, "lazer1", 10.2f, 8.5f)
-                    : Weapon(0.55f, 6, 3.8f, 9, 0.82f, new Color(0.72f, 0.82f, 1f, 1f), 0.5f, 9.4f, "shoot_small", 9.8f, 8.5f);
-
-            default:
-                return variant == 0
-                    ? Weapon(0.5f, 8, 3.4f, 8, 0.8f, new Color(0.36f, 0.92f, 1f, 1f), 0.5f, 10.2f, "lazer1", 10.5f, 9f)
-                    : Weapon(0.44f, 9, 3.2f, 7, 0.76f, new Color(0.22f, 1f, 0.68f, 1f), 0.48f, 10.8f, "shoot_small", 10.8f, 9f);
+            return new NeutralRiderCombatLoadout
+            {
+                WeaponId = string.Empty,
+                WeaponProfile = null,
+                Tactic = CombatTactic.Avoidant,
+                GadgetItemIds = System.Array.Empty<string>(),
+                HasFiringFriend = false,
+                HasLootingFriend = archetype == NeutralRiderArchetype.Scavenger,
+                HasEscapePod = false
+            };
         }
+
+        int seed = Mathf.Abs((spawnOrdinal * 97) + (shipSkinIndex * 31) + ((int)archetype * 13));
+        string weaponId = ResolveBotWeaponId(shipType, seed);
+        WeaponAttackProfile profile = WeaponAttackCatalog.GetNormalAttackByWeaponId(weaponId);
+
+        return new NeutralRiderCombatLoadout
+        {
+            WeaponId = weaponId,
+            WeaponProfile = profile,
+            Tactic = ResolveCombatTactic(shipType, weaponId, seed),
+            GadgetItemIds = ResolveBotGadgetItems(shipType, seed),
+            HasFiringFriend = ShipCatalog.GetSupportSlots(shipSkinIndex) > 0 &&
+                              (archetype == NeutralRiderArchetype.Hunter || archetype == NeutralRiderArchetype.Raider) &&
+                              seed % 5 == 0,
+            HasLootingFriend = ShipCatalog.GetSupportSlots(shipSkinIndex) > 0 &&
+                               (archetype == NeutralRiderArchetype.Scavenger || seed % 7 == 0),
+            HasEscapePod = ShipCatalog.GetRescueSlots(shipSkinIndex) > 0 &&
+                           archetype != NeutralRiderArchetype.Hunter &&
+                           seed % 4 == 0
+        };
     }
 
-    static WeaponLoadout Weapon(float fireRate, int maxAmmo, float reloadDuration, int damage, float bulletScale, Color color, float muzzleOffset, float bulletSpeed, string shotSoundId, float rangeMultiplier, float flightTime)
+    string ResolveBotWeaponId(ShipType shipType, int seed)
     {
-        return new WeaponLoadout
+        string[] pool;
+        switch (shipType)
         {
-            FireRate = fireRate,
-            MaxAmmo = maxAmmo,
-            ReloadDuration = reloadDuration,
-            Damage = damage,
-            BulletScale = bulletScale,
-            BulletColor = color,
-            MuzzleOffset = muzzleOffset,
-            BulletSpeed = bulletSpeed,
-            ShotSoundId = shotSoundId,
-            RangeMultiplier = rangeMultiplier,
-            FlightTime = flightTime
-        };
+            case ShipType.Viper:
+                pool = new[]
+                {
+                    WeaponAttackCatalog.GatlingGunId,
+                    WeaponAttackCatalog.PlasmaGunId,
+                    WeaponAttackCatalog.RailGunId,
+                    WeaponAttackCatalog.DoubleIonizerId,
+                    WeaponAttackCatalog.RocketLauncherId
+                };
+                break;
+            case ShipType.Avenger:
+                pool = new[]
+                {
+                    WeaponAttackCatalog.ArtilleryGunId,
+                    WeaponAttackCatalog.RocketLauncherId,
+                    WeaponAttackCatalog.DoubleRocketLauncherId,
+                    WeaponAttackCatalog.PlasmaGunId,
+                    WeaponAttackCatalog.RailGunId,
+                    WeaponAttackCatalog.GatlingGunId
+                };
+                break;
+            case ShipType.Arrow:
+                pool = new[]
+                {
+                    WeaponAttackCatalog.GatlingGunId,
+                    WeaponAttackCatalog.TripleGunId,
+                    WeaponAttackCatalog.PulseDisruptorId,
+                    WeaponAttackCatalog.PlasmaGunId,
+                    WeaponAttackCatalog.RocketLauncherId
+                };
+                break;
+            case ShipType.Invader:
+                pool = new[]
+                {
+                    WeaponAttackCatalog.DoubleIonizerId,
+                    WeaponAttackCatalog.PlasmaGunId,
+                    WeaponAttackCatalog.PulseDisruptorId,
+                    WeaponAttackCatalog.AstroCutterId,
+                    WeaponAttackCatalog.DoubleRocketLauncherId
+                };
+                break;
+            case ShipType.Pathfinder:
+                pool = new[]
+                {
+                    WeaponAttackCatalog.RailGunId,
+                    WeaponAttackCatalog.PulseDisruptorId,
+                    WeaponAttackCatalog.AstroCutterId,
+                    WeaponAttackCatalog.DoubleIonizerId,
+                    WeaponAttackCatalog.ArtilleryGunId
+                };
+                break;
+            default:
+                pool = new[]
+                {
+                    WeaponAttackCatalog.SimpleGunId,
+                    WeaponAttackCatalog.PlasmaGunId,
+                    WeaponAttackCatalog.TripleGunId,
+                    WeaponAttackCatalog.GatlingGunId,
+                    WeaponAttackCatalog.ArtilleryGunId,
+                    WeaponAttackCatalog.RocketLauncherId,
+                    WeaponAttackCatalog.RailGunId
+                };
+                break;
+        }
+
+        return pool[Mathf.Abs(seed) % pool.Length];
+    }
+
+    CombatTactic ResolveCombatTactic(ShipType shipType, string weaponId, int seed)
+    {
+        if (archetype == NeutralRiderArchetype.Coward)
+            return CombatTactic.Avoidant;
+
+        if (string.Equals(weaponId, WeaponAttackCatalog.ArtilleryGunId, StringComparison.Ordinal) ||
+            string.Equals(weaponId, WeaponAttackCatalog.RailGunId, StringComparison.Ordinal) ||
+            string.Equals(weaponId, WeaponAttackCatalog.RocketLauncherId, StringComparison.Ordinal) ||
+            string.Equals(weaponId, WeaponAttackCatalog.DoubleRocketLauncherId, StringComparison.Ordinal))
+        {
+            return CombatTactic.Kite;
+        }
+
+        if (string.Equals(weaponId, WeaponAttackCatalog.GatlingGunId, StringComparison.Ordinal) ||
+            string.Equals(weaponId, WeaponAttackCatalog.TripleGunId, StringComparison.Ordinal))
+        {
+            return seed % 2 == 0 ? CombatTactic.HitAndRun : CombatTactic.Brawler;
+        }
+
+        if (shipType == ShipType.Arrow || archetype == NeutralRiderArchetype.Raider)
+            return CombatTactic.HitAndRun;
+
+        if (archetype == NeutralRiderArchetype.Hunter)
+            return seed % 3 == 0 ? CombatTactic.Kite : CombatTactic.Brawler;
+
+        return seed % 2 == 0 ? CombatTactic.Orbit : CombatTactic.Kite;
+    }
+
+    string[] ResolveBotGadgetItems(ShipType shipType, int seed)
+    {
+        if (ShipCatalog.GetGadgetSlots(shipSkinIndex) <= 0 || shipType == ShipType.CargoTruck)
+            return System.Array.Empty<string>();
+
+        List<string> items = new List<string>(2);
+        if (archetype == NeutralRiderArchetype.Coward)
+        {
+            items.Add(seed % 2 == 0 ? InventoryItemCatalog.StasisBuoyId : InventoryItemCatalog.SpaceBombId);
+        }
+        else if (archetype == NeutralRiderArchetype.Hunter)
+        {
+            items.Add(seed % 3 == 0 ? InventoryItemCatalog.RocketAutoTurretId : InventoryItemCatalog.SpaceTorpedoId);
+        }
+        else if (archetype == NeutralRiderArchetype.Raider)
+        {
+            items.Add(seed % 2 == 0 ? InventoryItemCatalog.GadgetMineId : InventoryItemCatalog.SpaceTorpedoId);
+        }
+        else
+        {
+            items.Add(seed % 2 == 0 ? InventoryItemCatalog.GadgetMineId : InventoryItemCatalog.StasisBuoyId);
+        }
+
+        if (ShipCatalog.GetGadgetSlots(shipSkinIndex) > 1 && seed % 4 == 0)
+            items.Add(archetype == NeutralRiderArchetype.Hunter ? InventoryItemCatalog.AutoTurretId : InventoryItemCatalog.SpaceBombId);
+
+        return items.ToArray();
+    }
+
+    float ResolveWeaponMuzzleOffset()
+    {
+        SpriteRenderer renderer = spriteRenderer != null ? spriteRenderer : GetComponentInChildren<SpriteRenderer>();
+        if (renderer != null)
+            return Mathf.Clamp(Mathf.Max(renderer.bounds.extents.x, renderer.bounds.extents.y) * 0.34f, 0.38f, 1.25f);
+
+        return 0.55f;
+    }
+
+    void ConfigureBotUtilities()
+    {
+        botUtilities.Clear();
+        string[] itemIds = combatLoadout.GadgetItemIds;
+        if (itemIds == null || itemIds.Length == 0)
+            return;
+
+        int seed = Mathf.Abs((spawnOrdinal * 53) + (shipSkinIndex * 19) + (int)archetype);
+        for (int i = 0; i < itemIds.Length; i++)
+        {
+            string itemId = itemIds[i];
+            if (string.IsNullOrWhiteSpace(itemId))
+                continue;
+
+            botUtilities.Add(new BotUtilityRuntime
+            {
+                ItemId = itemId,
+                Charges = ResolveBotUtilityCharges(itemId, seed + i),
+                Cooldown = ResolveBotUtilityCooldown(itemId),
+                NextUseTime = Time.time + 5f + ((seed + i * 11) % 7)
+            });
+        }
+
+        nextBotUtilityUseTime = Time.time + 6f + (seed % 6);
+    }
+
+    void ConfigureBotSupport()
+    {
+        if (combatLoadout.HasLootingFriend)
+        {
+            if (lootingFriend == null)
+                lootingFriend = GetComponent<LootingFriendController>();
+
+            if (lootingFriend == null)
+                lootingFriend = gameObject.AddComponent<LootingFriendController>();
+
+            lootingFriend.SetForcedForNeutralRider(true);
+        }
+
+        if (!combatLoadout.HasFiringFriend)
+            return;
+
+        FiringFriendController firingFriend = GetComponent<FiringFriendController>();
+        if (firingFriend == null)
+            firingFriend = gameObject.AddComponent<FiringFriendController>();
+
+        firingFriend.SetForcedForNeutralRider(true);
+    }
+
+    int ResolveBotUtilityCharges(string itemId, int seed)
+    {
+        if (string.Equals(itemId, InventoryItemCatalog.RocketAutoTurretId, StringComparison.Ordinal) ||
+            string.Equals(itemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal))
+        {
+            return 1;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceTorpedoId, StringComparison.Ordinal))
+            return seed % 3 == 0 ? 2 : 1;
+
+        return 2;
+    }
+
+    float ResolveBotUtilityCooldown(string itemId)
+    {
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceTorpedoId, StringComparison.Ordinal))
+            return 18f;
+
+        if (string.Equals(itemId, InventoryItemCatalog.RocketAutoTurretId, StringComparison.Ordinal) ||
+            string.Equals(itemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal))
+        {
+            return 32f;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.StasisBuoyId, StringComparison.Ordinal))
+            return 22f;
+
+        return 16f;
+    }
+
+    bool CanUseMainWeapon()
+    {
+        return ShipCatalog.GetMainGunSlots(shipSkinIndex) > 0 &&
+               ShipCatalog.GetShipTypeFromSkinIndex(shipSkinIndex) != ShipType.CargoTruck;
     }
 
     void DisableHumanOnlyComponents()
@@ -540,9 +896,12 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
     void Think()
     {
+        if (TryUseBotRescue())
+            return;
+
         if (forcedAggressive)
         {
-            if (forcedAggressiveTargetViewId > 0 && IsValidCombatTarget(forcedAggressiveTargetViewId))
+            if (CanUseMainWeapon() && forcedAggressiveTargetViewId > 0 && IsValidCombatTarget(forcedAggressiveTargetViewId))
             {
                 hostilePlayerViewId = forcedAggressiveTargetViewId;
                 hostilePlayerUntil = float.PositiveInfinity;
@@ -593,28 +952,31 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
         targetViewId = 0;
 
-        if (Time.time < hostilePlayerUntil && hostilePlayerViewId > 0 && IsValidCombatTarget(hostilePlayerViewId))
+        if (CanUseMainWeapon() && Time.time < hostilePlayerUntil && hostilePlayerViewId > 0 && IsValidCombatTarget(hostilePlayerViewId))
         {
             targetViewId = hostilePlayerViewId;
             mode = Mode.Combat;
             return;
         }
 
-        int enemyTarget = FindBestEnemyTargetViewId();
-        if (enemyTarget > 0)
+        if (CanUseMainWeapon())
         {
-            targetViewId = enemyTarget;
-            mode = Mode.Combat;
-            return;
-        }
+            int enemyTarget = FindBestEnemyTargetViewId();
+            if (enemyTarget > 0)
+            {
+                targetViewId = enemyTarget;
+                mode = Mode.Combat;
+                return;
+            }
 
-        if (ShouldStartUnprovokedRivalry(out int playerTarget))
-        {
-            hostilePlayerViewId = playerTarget;
-            hostilePlayerUntil = Time.time + ResolveRivalryDuration() * 0.65f;
-            targetViewId = playerTarget;
-            mode = Mode.Combat;
-            return;
+            if (ShouldStartUnprovokedRivalry(out int playerTarget))
+            {
+                hostilePlayerViewId = playerTarget;
+                hostilePlayerUntil = Time.time + ResolveRivalryDuration() * 0.65f;
+                targetViewId = playerTarget;
+                mode = Mode.Combat;
+                return;
+            }
         }
 
         if (HasCargoSpace && FindBestCollectibleViewId(out int collectibleViewId))
@@ -636,6 +998,12 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             desired = patrolDirection.sqrMagnitude > 0.001f ? patrolDirection : Vector2.up;
 
         float speed = ResolveSpeed();
+        desired = RoomSettings.ApplyEnemyToxicBorderSteering(
+            rb.position,
+            desired,
+            Mathf.Clamp(speed * 0.65f, 1.1f, 4.2f),
+            1.05f,
+            1.15f);
         Vector2 targetVelocity = desired.normalized * speed;
         rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, targetVelocity, mode == Mode.Combat ? 0.18f : 0.24f);
         rb.angularVelocity = 0f;
@@ -647,6 +1015,9 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
     void TickAction()
     {
+        TickBotUtilities();
+        TickBotLootingFriend();
+
         if (mode == Mode.Combat)
         {
             TryShootTarget();
@@ -655,6 +1026,9 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
         if (mode == Mode.Scavenge)
         {
+            if (botLootingFriendTargetViewId > 0)
+                return;
+
             TryCollectTarget();
             return;
         }
@@ -665,32 +1039,180 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         }
     }
 
+    void TickHackedOverride(Vector2 direction, float speedMultiplier)
+    {
+        if (rb == null)
+            return;
+
+        Vector2 safeDirection = direction.sqrMagnitude > 0.001f ? direction.normalized : patrolDirection.sqrMagnitude > 0.001f ? patrolDirection : Vector2.up;
+        float speed = Mathf.Clamp(ResolveSpeed() * Mathf.Clamp(speedMultiplier, 0.35f, 1.15f), 1.8f, 7.4f);
+        rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, safeDirection * speed, 0.3f);
+        rb.angularVelocity = 0f;
+        float angle = Mathf.Atan2(safeDirection.y, safeDirection.x) * Mathf.Rad2Deg - 90f;
+        rb.MoveRotation(Mathf.MoveTowardsAngle(rb.rotation, angle, 620f * Time.fixedDeltaTime));
+
+        if (shooting != null && HackingStatus.TryConsumeRandomShot(gameObject, out Vector2 shotDirection))
+            shooting.TryFireBot(shotDirection);
+    }
+
     Vector2 ResolveDesiredDirection()
     {
         if (mode == Mode.Combat && TryGetTargetPosition(targetViewId, out Vector2 combatPosition))
         {
-            Vector2 toTarget = combatPosition - rb.position;
-            float distance = toTarget.magnitude;
-            if (distance <= 0.001f)
-                return patrolDirection;
-
-            Vector2 toward = toTarget / distance;
-            Vector2 tangent = spawnOrdinal % 2 == 0 ? new Vector2(-toward.y, toward.x) : new Vector2(toward.y, -toward.x);
-            if (distance > 8f)
-                return (toward * 0.85f + tangent * 0.18f).normalized;
-            if (distance < 4.2f)
-                return (-toward * 0.55f + tangent * 0.82f).normalized;
-
-            return (tangent * 0.82f + toward * 0.2f).normalized;
+            combatPosition = RoomSettings.ClampToEnemyNavigableBounds(combatPosition, MapMargin * 0.55f);
+            return ResolveCombatDesiredDirection(combatPosition);
         }
 
         if ((mode == Mode.Scavenge || mode == Mode.Extract) && TryGetTargetPosition(targetViewId, out Vector2 targetPosition))
+        {
+            targetPosition = RoomSettings.ClampToEnemyNavigableBounds(targetPosition, MapMargin * 0.55f);
             return (targetPosition - rb.position).normalized;
+        }
 
         if (mode == Mode.Flee)
             return ResolveFleeDirection();
 
-        return (destination - rb.position).normalized;
+        Vector2 safeDestination = RoomSettings.ClampToEnemyNavigableBounds(destination, MapMargin * 0.55f);
+        return (safeDestination - rb.position).normalized;
+    }
+
+    Vector2 ResolveCombatDesiredDirection(Vector2 combatPosition)
+    {
+        if (!CanUseMainWeapon())
+            return ResolveFleeDirection();
+
+        Vector2 toTarget = combatPosition - rb.position;
+        float distance = toTarget.magnitude;
+        if (distance <= 0.001f)
+            return patrolDirection.sqrMagnitude > 0.001f ? patrolDirection.normalized : Vector2.up;
+
+        Vector2 toward = toTarget / distance;
+        Vector2 tangent = spawnOrdinal % 2 == 0 ? new Vector2(-toward.y, toward.x) : new Vector2(toward.y, -toward.x);
+        float weaponRange = ResolveCombatWeaponRange();
+        float preferredDistance = ResolvePreferredCombatDistance(weaponRange);
+        float minimumDistance = ResolveMinimumCombatDistance(weaponRange);
+
+        if (combatLoadout.Tactic == CombatTactic.HitAndRun)
+        {
+            if (Time.time < hitAndRunBreakAwayUntil)
+            {
+                Vector2 breakAway = hitAndRunBreakAwayDirection.sqrMagnitude > 0.001f
+                    ? hitAndRunBreakAwayDirection.normalized
+                    : (-toward * 0.82f + tangent * 0.38f).normalized;
+                return breakAway;
+            }
+
+            if (hitAndRunAttackStartedAt <= 0f)
+                hitAndRunAttackStartedAt = Time.time;
+
+            if (distance > preferredDistance)
+                return (toward * 0.94f + tangent * 0.12f).normalized;
+
+            if (Time.time - hitAndRunAttackStartedAt >= HitAndRunMinimumAttackDuration && distance < preferredDistance * 0.72f)
+            {
+                BeginHitAndRunBreakAway(toward, tangent);
+                return hitAndRunBreakAwayDirection;
+            }
+
+            return (toward * 0.26f + tangent * 0.76f).normalized;
+        }
+
+        if (combatLoadout.Tactic == CombatTactic.Kite)
+        {
+            if (distance < minimumDistance)
+                return (-toward * 0.92f + tangent * 0.38f).normalized;
+
+            if (distance > preferredDistance)
+                return (toward * 0.72f + tangent * 0.16f).normalized;
+
+            return (tangent * 0.62f - toward * 0.18f).normalized;
+        }
+
+        if (combatLoadout.Tactic == CombatTactic.Brawler)
+        {
+            if (distance > preferredDistance)
+                return (toward * 0.92f + tangent * 0.22f).normalized;
+
+            if (distance < minimumDistance)
+                return (-toward * 0.42f + tangent * 0.82f).normalized;
+
+            return (toward * 0.34f + tangent * 0.74f).normalized;
+        }
+
+        if (combatLoadout.Tactic == CombatTactic.Avoidant)
+        {
+            if (distance < preferredDistance)
+                return (-toward * 0.86f + tangent * 0.48f).normalized;
+
+            if (distance > weaponRange * 0.92f)
+                return (toward * 0.5f + tangent * 0.28f).normalized;
+
+            return (tangent * 0.74f - toward * 0.28f).normalized;
+        }
+
+        if (distance > preferredDistance)
+            return (toward * 0.78f + tangent * 0.24f).normalized;
+
+        if (distance < minimumDistance)
+            return (-toward * 0.64f + tangent * 0.58f).normalized;
+
+        return (tangent * 0.84f + toward * 0.16f).normalized;
+    }
+
+    void BeginHitAndRunBreakAway(Vector2 towardTarget, Vector2 tangent)
+    {
+        hitAndRunBreakAwayDirection = (-towardTarget * 0.86f + tangent * 0.42f).normalized;
+        hitAndRunBreakAwayUntil = Time.time + HitAndRunBreakAwayDuration;
+        hitAndRunAttackStartedAt = Time.time + HitAndRunBreakAwayDuration;
+    }
+
+    float ResolveCombatWeaponRange()
+    {
+        WeaponAttackProfile profile = combatLoadout.WeaponProfile;
+        float rangeMultiplier = profile != null ? Mathf.Max(0.1f, profile.RangeMultiplier) : 10.5f;
+        float rawRange = ResolveOwnerLengthForCombatRange() * rangeMultiplier;
+        return Mathf.Clamp(rawRange, 6.8f, 18f);
+    }
+
+    float ResolveOwnerLengthForCombatRange()
+    {
+        SpriteRenderer renderer = spriteRenderer != null ? spriteRenderer : GetComponentInChildren<SpriteRenderer>();
+        if (renderer != null)
+            return Mathf.Max(0.55f, Mathf.Max(renderer.bounds.size.x, renderer.bounds.size.y));
+
+        Collider2D collider = GetComponentInChildren<Collider2D>();
+        if (collider != null)
+            return Mathf.Max(0.55f, Mathf.Max(collider.bounds.size.x, collider.bounds.size.y));
+
+        return 1f;
+    }
+
+    float ResolvePreferredCombatDistance(float weaponRange)
+    {
+        float factor = combatLoadout.Tactic switch
+        {
+            CombatTactic.Kite => 0.78f,
+            CombatTactic.HitAndRun => 0.58f,
+            CombatTactic.Brawler => 0.46f,
+            CombatTactic.Avoidant => 0.88f,
+            _ => 0.64f
+        };
+
+        return Mathf.Clamp(weaponRange * factor, 3.4f, 14f);
+    }
+
+    float ResolveMinimumCombatDistance(float weaponRange)
+    {
+        float factor = combatLoadout.Tactic switch
+        {
+            CombatTactic.Kite => 0.48f,
+            CombatTactic.HitAndRun => 0.34f,
+            CombatTactic.Brawler => 0.24f,
+            CombatTactic.Avoidant => 0.68f,
+            _ => 0.38f
+        };
+
+        return Mathf.Clamp(weaponRange * factor, 2.2f, 9.5f);
     }
 
     Vector2 ResolveFacingDirection(Vector2 moveDirection)
@@ -763,7 +1285,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
     Vector2 ApplyMapSteering(Vector2 desired)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(2f, mapSize.x * 0.5f - MapMargin);
         float halfY = Mathf.Max(2f, mapSize.y * 0.5f - MapMargin);
         Vector2 inward = Vector2.zero;
@@ -799,15 +1321,336 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
     void TryShootTarget()
     {
+        if (!CanUseMainWeapon())
+            return;
+
         if (!TryGetTargetPosition(targetViewId, out Vector2 targetPosition))
             return;
 
         Vector2 toTarget = targetPosition - (Vector2)transform.position;
-        if (toTarget.sqrMagnitude > CombatRange * CombatRange)
+        float weaponRange = ResolveCombatWeaponRange();
+        if (toTarget.sqrMagnitude > weaponRange * weaponRange)
             return;
 
-        if (shooting != null)
-            shooting.TryFireBot(toTarget.normalized);
+        if (shooting == null)
+            return;
+
+        int homingTargetViewId = IsRocketWeapon(combatLoadout.WeaponId) ? targetViewId : 0;
+        bool fired = shooting.TryFireBotAtPoint(toTarget.normalized, targetPosition, homingTargetViewId);
+        if (!fired)
+            return;
+
+        if (combatLoadout.Tactic == CombatTactic.HitAndRun)
+        {
+            Vector2 toward = toTarget.sqrMagnitude > 0.001f ? toTarget.normalized : (Vector2)transform.up;
+            Vector2 tangent = spawnOrdinal % 2 == 0 ? new Vector2(-toward.y, toward.x) : new Vector2(toward.y, -toward.x);
+            BeginHitAndRunBreakAway(toward, tangent);
+        }
+    }
+
+    bool IsRocketWeapon(string weaponId)
+    {
+        return string.Equals(weaponId, WeaponAttackCatalog.RocketLauncherId, StringComparison.Ordinal) ||
+               string.Equals(weaponId, WeaponAttackCatalog.DoubleRocketLauncherId, StringComparison.Ordinal);
+    }
+
+    void TickBotUtilities()
+    {
+        if (botUtilities.Count == 0 || shooting == null || !PhotonNetwork.IsMasterClient || !view.IsMine || mode == Mode.Evacuated)
+            return;
+
+        if (mode != Mode.Combat && mode != Mode.Flee)
+            return;
+
+        if (Time.time < nextBotUtilityUseTime)
+            return;
+
+        if (UnityEngine.Random.value > BotUtilityUseChance)
+        {
+            nextBotUtilityUseTime = Time.time + UnityEngine.Random.Range(1.5f, 4.2f);
+            return;
+        }
+
+        for (int i = 0; i < botUtilities.Count; i++)
+        {
+            BotUtilityRuntime utility = botUtilities[i];
+            if (utility == null || utility.Charges <= 0 || Time.time < utility.NextUseTime)
+                continue;
+
+            if (!ShouldUseBotUtility(utility.ItemId))
+                continue;
+
+            if (!shooting.TryExecuteNeutralRiderBotItem(utility.ItemId))
+                continue;
+
+            utility.Charges--;
+            utility.NextUseTime = Time.time + utility.Cooldown;
+            nextBotUtilityUseTime = Time.time + UnityEngine.Random.Range(BotUtilityGlobalCooldownMin, BotUtilityGlobalCooldownMax);
+            return;
+        }
+
+        nextBotUtilityUseTime = Time.time + UnityEngine.Random.Range(2f, 5f);
+    }
+
+    bool ShouldUseBotUtility(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        bool hasThreat = TryGetCurrentThreatPosition(out Vector2 threatPosition, out float threatDistance);
+        if (string.Equals(itemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal) ||
+            string.Equals(itemId, InventoryItemCatalog.SpaceBombId, StringComparison.Ordinal))
+        {
+            return hasThreat && threatDistance <= 6.2f && (mode == Mode.Flee || Time.time < hitAndRunBreakAwayUntil);
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.StasisBuoyId, StringComparison.Ordinal))
+            return hasThreat && threatDistance <= 7.2f && (mode == Mode.Flee || GetHealthRatio() <= 0.42f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceTorpedoId, StringComparison.Ordinal))
+        {
+            return mode == Mode.Combat &&
+                   hasThreat &&
+                   threatDistance >= 3.2f &&
+                   threatDistance <= ResolveCombatWeaponRange() + 1.5f &&
+                   IsPointAhead(threatPosition, 0.58f);
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal) ||
+            string.Equals(itemId, InventoryItemCatalog.RocketAutoTurretId, StringComparison.Ordinal))
+        {
+            return mode == Mode.Combat && hasThreat && threatDistance <= 9.5f && GetHealthRatio() > 0.28f;
+        }
+
+        return false;
+    }
+
+    bool TryGetCurrentThreatPosition(out Vector2 position, out float distance)
+    {
+        int candidateViewId = mode == Mode.Flee && hostilePlayerViewId > 0 ? hostilePlayerViewId : targetViewId;
+        if (candidateViewId > 0 && TryGetTargetPosition(candidateViewId, out position))
+        {
+            distance = Vector2.Distance(transform.position, position);
+            return true;
+        }
+
+        position = Vector2.zero;
+        distance = float.MaxValue;
+        return false;
+    }
+
+    bool IsPointAhead(Vector2 point, float requiredDot)
+    {
+        Vector2 toPoint = point - (Vector2)transform.position;
+        if (toPoint.sqrMagnitude <= 0.001f)
+            return false;
+
+        return Vector2.Dot(transform.up, toPoint.normalized) >= requiredDot;
+    }
+
+    float GetHealthRatio()
+    {
+        if (health == null)
+            return 1f;
+
+        return health.CurrentHP / (float)Mathf.Max(1, ShipCatalog.GetBaseHp(shipSkinIndex));
+    }
+
+    void TickBotLootingFriend()
+    {
+        if (!combatLoadout.HasLootingFriend || mode == Mode.Combat || mode == Mode.Flee || mode == Mode.Evacuated || !HasCargoSpace)
+        {
+            StopBotLootingFriendTarget(true);
+            return;
+        }
+
+        if (collectionTargetLocked || collectStartedAt >= 0f)
+            return;
+
+        if (botLootingFriendTargetViewId > 0)
+        {
+            PhotonView activeTarget = PhotonView.Find(botLootingFriendTargetViewId);
+            if (!IsBotLootingFriendTargetValid(activeTarget, true) ||
+                Vector2.Distance(transform.position, activeTarget.transform.position) > BotLootingFriendRange + 0.65f)
+            {
+                StopBotLootingFriendTarget(true);
+                return;
+            }
+
+            if (Time.time - botLootingFriendStartedAt < BotLootingFriendCollectSeconds)
+                return;
+
+            ResolveCollectible(activeTarget);
+            StopBotLootingFriendTarget(false);
+            nextBotLootingFriendScanTime = Time.time + BotLootingFriendScanInterval * 2f;
+            return;
+        }
+
+        if (Time.time < nextBotLootingFriendScanTime)
+            return;
+
+        nextBotLootingFriendScanTime = Time.time + BotLootingFriendScanInterval;
+        if (!FindBestBotLootingFriendTargetViewId(out int targetId))
+            return;
+
+        PhotonView targetView = PhotonView.Find(targetId);
+        if (!IsBotLootingFriendTargetValid(targetView))
+            return;
+
+        botLootingFriendTargetViewId = targetId;
+        botLootingFriendStartedAt = Time.time;
+        SetCollectibleBusy(targetView, true);
+        StartBotLootingFriendCollectFx(targetId);
+    }
+
+    bool FindBestBotLootingFriendTargetViewId(out int viewId)
+    {
+        viewId = 0;
+        float bestScore = float.MaxValue;
+        Vector2 origin = transform.position;
+
+        Treasure[] treasures = RuntimeSceneQueryCache.GetTreasures();
+        for (int i = 0; i < treasures.Length; i++)
+        {
+            Treasure treasure = treasures[i];
+            if (treasure == null || !treasure.gameObject.activeInHierarchy || treasure.isBeingCollected || string.IsNullOrWhiteSpace(treasure.itemId))
+                continue;
+
+            PhotonView candidateView = treasure.photonView;
+            if (candidateView == null)
+                continue;
+
+            float distance = Vector2.Distance(origin, treasure.transform.position);
+            if (distance > BotLootingFriendRange)
+                continue;
+
+            float score = distance - Mathf.Clamp(InventoryItemCatalog.GetSellValueAstrons(treasure.itemId) / 300f, 0f, 3.5f);
+            if (score < bestScore)
+            {
+                bestScore = score;
+                viewId = candidateView.ViewID;
+            }
+        }
+
+        DroppedCargoCrate[] crates = RuntimeSceneQueryCache.GetDroppedCargoCrates();
+        for (int i = 0; i < crates.Length; i++)
+        {
+            DroppedCargoCrate crate = crates[i];
+            if (crate == null || !crate.gameObject.activeInHierarchy || crate.isBeingCollected || !crate.HasLoot)
+                continue;
+
+            PhotonView candidateView = crate.photonView;
+            if (candidateView == null)
+                continue;
+
+            float distance = Vector2.Distance(origin, crate.transform.position);
+            if (distance > BotLootingFriendRange)
+                continue;
+
+            float score = distance - 1.2f;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                viewId = candidateView.ViewID;
+            }
+        }
+
+        ShipWreck[] wrecks = RuntimeSceneQueryCache.GetShipWrecks();
+        for (int i = 0; i < wrecks.Length; i++)
+        {
+            ShipWreck wreck = wrecks[i];
+            if (wreck == null || !wreck.gameObject.activeInHierarchy || wreck.isBeingCollected || !wreck.HasLoot)
+                continue;
+
+            PhotonView candidateView = wreck.photonView;
+            if (candidateView == null || candidateView.ViewID == (view != null ? view.ViewID : 0))
+                continue;
+
+            float distance = Vector2.Distance(origin, wreck.transform.position);
+            if (distance > BotLootingFriendRange)
+                continue;
+
+            float score = distance - 0.9f;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                viewId = candidateView.ViewID;
+            }
+        }
+
+        return viewId > 0;
+    }
+
+    bool IsBotLootingFriendTargetValid(PhotonView targetView, bool allowBusy = false)
+    {
+        if (targetView == null || !targetView.gameObject.activeInHierarchy || !HasCargoSpace)
+            return false;
+
+        Treasure treasure = targetView.GetComponent<Treasure>();
+        if (treasure != null)
+            return (allowBusy || !treasure.isBeingCollected) && !string.IsNullOrWhiteSpace(treasure.itemId);
+
+        DroppedCargoCrate crate = targetView.GetComponent<DroppedCargoCrate>();
+        if (crate != null)
+            return (allowBusy || !crate.isBeingCollected) && crate.HasLoot && !string.IsNullOrWhiteSpace(crate.StoredItemId);
+
+        ShipWreck wreck = targetView.GetComponent<ShipWreck>();
+        return wreck != null && (allowBusy || !wreck.isBeingCollected) && wreck.HasLoot;
+    }
+
+    void StopBotLootingFriendTarget(bool releaseBusy)
+    {
+        if (botLootingFriendTargetViewId <= 0)
+            return;
+
+        PhotonView targetView = PhotonView.Find(botLootingFriendTargetViewId);
+        if (releaseBusy && targetView != null)
+            SetCollectibleBusy(targetView, false);
+
+        StopBotLootingFriendCollectFx();
+        botLootingFriendTargetViewId = 0;
+        botLootingFriendStartedAt = -1f;
+    }
+
+    void StartBotLootingFriendCollectFx(int targetViewIdToCollect)
+    {
+        if (lootingFriend != null)
+        {
+            lootingFriend.SetNeutralRiderCollectFx(targetViewIdToCollect, true);
+            return;
+        }
+
+        StartCollectionBeam(targetViewIdToCollect);
+    }
+
+    void StopBotLootingFriendCollectFx()
+    {
+        if (lootingFriend != null)
+        {
+            lootingFriend.SetNeutralRiderCollectFx(0, false);
+            return;
+        }
+
+        StopCollectionBeam();
+    }
+
+    bool TryUseBotRescue()
+    {
+        if (!combatLoadout.HasEscapePod || botRescueUsed || health == null || ShipCatalog.GetShipTypeFromSkinIndex(shipSkinIndex) == ShipType.CargoTruck)
+            return false;
+
+        if (GetHealthRatio() > BotEscapePodHpRatio)
+            return false;
+
+        botRescueUsed = true;
+        AbandonCollectionTarget();
+        StopBotLootingFriendTarget(true);
+        mode = Mode.Evacuated;
+        wreckConverted = true;
+        if (view != null)
+            view.RPC(nameof(NeutralRiderEvacuatedRpc), RpcTarget.All, transform.position.x, transform.position.y);
+
+        return true;
     }
 
     void TryCollectTarget()
@@ -1364,7 +2207,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
     Vector2 PickPatrolDestination()
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(4f, mapSize.x * 0.5f - MapMargin);
         float halfY = Mathf.Max(4f, mapSize.y * 0.5f - MapMargin);
         return new Vector2(UnityEngine.Random.Range(-halfX, halfX), UnityEngine.Random.Range(-halfY, halfY));
@@ -1380,7 +2223,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (away.sqrMagnitude <= 0.001f)
             away = patrolDirection;
 
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(4f, mapSize.x * 0.5f - MapMargin);
         float halfY = Mathf.Max(4f, mapSize.y * 0.5f - MapMargin);
         Vector2 candidate = (Vector2)transform.position + away * 12f;

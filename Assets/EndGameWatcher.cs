@@ -33,12 +33,11 @@ public class EndGameWatcher : MonoBehaviour
             return;
         }
 
-        if (!PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value))
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) ||
+            value is not bool isGameStarted)
         {
             return;
         }
-
-        bool isGameStarted = (bool)value;
 
         if (isGameStarted)
         {
@@ -47,7 +46,7 @@ public class EndGameWatcher : MonoBehaviour
             return;
         }
 
-        if (!hasSeenRunningGame || endScreenShown)
+        if (!hasSeenRunningGame || endScreenShown || !HasOfficialRoundSummary())
         {
             return;
         }
@@ -64,12 +63,15 @@ public class EndGameWatcher : MonoBehaviour
         while (IsLocalPlayerEvacuationAnimating() && Time.unscaledTime < waitUntil)
             yield return null;
 
+        if (!HasOfficialRoundSummary())
+        {
+            endScreenShown = false;
+            yield break;
+        }
+
         GameplayHudVisibility.SuppressForRoundSummary();
         PlayerMovement.gameStarted = false;
         PlayerShooting.gameStarted = false;
-        EarlyRoundExitUI.HideAll();
-        HideLobbyUnderSummary();
-        AwardRoundXpIfNeeded();
 
         GameObject endScreenRoot = FindObjectEvenIfDisabled("EndScreen");
         if (endScreenRoot != null)
@@ -94,6 +96,28 @@ public class EndGameWatcher : MonoBehaviour
         {
             Debug.LogError("EndGameWatcher: EndScreenUI NOT FOUND");
         }
+
+        EarlyRoundExitUI.HideAll();
+        HideLobbyUnderSummary();
+        AwardRoundXpIfNeeded();
+    }
+
+    bool HasOfficialRoundSummary()
+    {
+        if (PhotonNetwork.CurrentRoom == null)
+            return false;
+
+        if (RoomSettings.GetSessionState() == RoomSettings.SessionStateSummary)
+            return true;
+
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.RoundResultsKey, out object snapshotValue) &&
+            snapshotValue is string snapshot &&
+            !string.IsNullOrWhiteSpace(snapshot))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     bool IsLocalPlayerEvacuationAnimating()
@@ -524,14 +548,16 @@ public class EndGameWatcher : MonoBehaviour
 
     void OnBackButtonClicked()
     {
-        if (DidLocalPlayerExtract())
-            AudioManager.Instance.RequestShipReturnMusicForNextMenu();
+        if (TryGetLocalPlayerSuccessfulReturn(out bool returnedAsAstronaut))
+            AudioManager.Instance.RequestShipReturnMusicForNextMenu(returnedAsAstronaut);
 
         NetworkManager.ReturnToSessionBrowserFromRound();
     }
 
-    bool DidLocalPlayerExtract()
+    bool TryGetLocalPlayerSuccessfulReturn(out bool returnedAsAstronaut)
     {
+        returnedAsAstronaut = false;
+
         if (PhotonNetwork.LocalPlayer == null)
             return false;
 
@@ -547,6 +573,14 @@ public class EndGameWatcher : MonoBehaviour
                 entry.actorNumber == actorNumber &&
                 string.Equals(entry.outcome, "extracted", System.StringComparison.OrdinalIgnoreCase))
             {
+                return true;
+            }
+
+            if (entry != null &&
+                entry.actorNumber == actorNumber &&
+                string.Equals(entry.outcome, "evacuated", System.StringComparison.OrdinalIgnoreCase))
+            {
+                returnedAsAstronaut = true;
                 return true;
             }
         }

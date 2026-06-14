@@ -39,6 +39,7 @@ public class PlayerHealth : MonoBehaviourPun
     public const string DamageSourceExplosive = "explosive";
     public const string DamageSourceLaser = "laser";
     public const string DamageSourceRadioactiveCargo = "radioactive_cargo";
+    public const string DamageSourceBioTrap = "bio_trap";
 
     public int maxHP = 50;
     public int maxShield = 50;
@@ -144,7 +145,7 @@ public class PlayerHealth : MonoBehaviourPun
         {
             int shipSkinIndex = RoomSettings.GetPlayerShipSkin(photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer, 0);
             maxHP = ShipCatalog.GetBaseHp(shipSkinIndex) + GetEquippedHpCapacityBonus(shipSkinIndex);
-            maxShield = ShipCatalog.GetBaseShield(shipSkinIndex) + GetEquippedShieldCapacityBonus(shipSkinIndex);
+            maxShield = GetConfiguredMaxShield(shipSkinIndex);
         }
 
         currentHP = maxHP;
@@ -164,6 +165,11 @@ public class PlayerHealth : MonoBehaviourPun
         if (IsHumanShipControlled && GetComponent<ShipDamageState>() == null)
         {
             gameObject.AddComponent<ShipDamageState>();
+        }
+
+        if (IsHumanShipControlled)
+        {
+            LowHpHullSparksVfx.AttachIfNeeded(gameObject);
         }
 
         if (IsHumanShipControlled)
@@ -314,6 +320,19 @@ public class PlayerHealth : MonoBehaviourPun
             bonus = Mathf.CeilToInt(bonus * 1.3f);
 
         return bonus;
+    }
+
+    int GetConfiguredMaxShield(int shipSkinIndex)
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        if (InventoryItemCatalog.HasShieldDisablingUpgrade(equipmentSlots, shipSkinIndex))
+            return 0;
+
+        int baseShield = ShipCatalog.GetBaseShield(shipSkinIndex);
+        int bonus = GetEquippedShieldCapacityBonus(shipSkinIndex);
+        int penalty = InventoryItemCatalog.GetEquippedShieldCapacityPenalty(equipmentSlots, shipSkinIndex);
+        return Mathf.Max(0, baseShield + bonus - penalty);
     }
 
     int GetEquippedHpCapacityBonus(int shipSkinIndex)
@@ -1418,6 +1437,56 @@ public class PlayerHealth : MonoBehaviourPun
         ApplyAstronautKillMeAuthority();
     }
 
+    [PunRPC]
+    public void ForceBioTrapAstronautDeathRpc(int attackerViewID, float impactX, float impactY)
+    {
+        if (PhotonNetwork.IsConnected && PhotonNetwork.InRoom && !PhotonNetwork.IsMasterClient)
+            return;
+
+        if (!IsAstronautControlled || IsWreck || isEvacuationAnimating || deathHandled || currentHP <= 0)
+            return;
+
+        AstronautSurvivor survivor = GetComponent<AstronautSurvivor>();
+        if ((survivor != null && survivor.IsEscapePodMode) ||
+            AstronautSurvivor.IsEscapePodInstantiationData(photonView != null ? photonView.InstantiationData : null))
+        {
+            return;
+        }
+
+        WeaponHitContext hitContext = new WeaponHitContext(
+            WeaponDamageType.Ion,
+            WeaponDeliveryMethod.Trap,
+            WeaponDeliveryFlags.None,
+            DamageSourceBioTrap);
+        RememberDamageContext(hitContext, WeaponDamageMultipliers.Neutral);
+
+        int previousHp = currentHP;
+        int previousShield = currentShield;
+        currentShield = 0;
+        currentHP = 0;
+
+        if (PhotonNetwork.IsConnected && PhotonNetwork.InRoom && photonView != null)
+            photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
+        else
+            SyncVitals(currentHP, currentShield);
+
+        if (previousShield > 0)
+        {
+            photonView.RPC(nameof(PlayShieldHitAudio), RpcTarget.All);
+            photonView.RPC(nameof(PlayShieldHitVisual), RpcTarget.All, impactX, impactY);
+        }
+
+        if (previousHp > 0)
+        {
+            photonView.RPC(nameof(PlayHpHitAudio), RpcTarget.All);
+            photonView.RPC(nameof(PlayHpHitVisual), RpcTarget.All, impactX, impactY);
+            RoundXpTracker.RecordDamage(attackerViewID, photonView, previousShield, previousHp);
+            RoundXpTracker.RecordKill(attackerViewID, this);
+        }
+
+        HandleDeath(attackerViewID);
+    }
+
     bool CanApplyAstronautKillMeAuthority()
     {
         return IsAstronautControlled &&
@@ -1533,6 +1602,7 @@ public class PlayerHealth : MonoBehaviourPun
             gameObject.AddComponent<PilotActiveAbilityController>();
         if (GetComponent<RoundChatCommandUI>() == null)
             gameObject.AddComponent<RoundChatCommandUI>();
+        LowHpHullSparksVfx.AttachIfNeeded(gameObject);
 
         if (photonView.IsMine)
         {
@@ -2297,11 +2367,27 @@ public class PlayerHealth : MonoBehaviourPun
 
         if (photonView.IsMine)
         {
-            if (hasPendingEvacuationSummary)
-                EarlyRoundExitUI.ShowFinishedRoundSummary(pendingEvacuationFinalScore, pendingEvacuationOutcome);
+            if (hasPendingEvacuationSummary && HasOtherActiveRoundPlayers())
+                EarlyRoundExitUI.ShowFinishedRoundSummaryDelayed(pendingEvacuationFinalScore, pendingEvacuationOutcome);
 
             TryDestroyOwnedPhotonObject();
         }
+    }
+
+    bool HasOtherActiveRoundPlayers()
+    {
+        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < players.Length; i++)
+        {
+            PlayerHealth player = players[i];
+            if (player == null || player == this)
+                continue;
+
+            if (GameTimer.IsActiveRoundPlayer(player))
+                return true;
+        }
+
+        return false;
     }
 
     [PunRPC]
@@ -2876,6 +2962,13 @@ public class PlayerHealth : MonoBehaviourPun
     [PunRPC]
     void PlayHpHitAudio()
     {
+        EnemyBot bot = GetComponent<EnemyBot>();
+        if (bot != null && EnemyBot.IsSpaceAnimalKind(bot.Kind))
+        {
+            AudioManager.Instance.PlayAnimalHitAt(transform.position);
+            return;
+        }
+
         AudioManager.Instance.PlayHpHitAt(transform.position);
     }
 
@@ -3598,8 +3691,8 @@ public class ShieldBarUI : MonoBehaviourPun
     const string ShieldLabelName = "ShieldLabel";
     const string ShieldValueName = "ShieldValue";
     const float BarWidth = 440f;
-    const float BarHeight = 36f;
-    const float VerticalSpacing = 18f;
+    const float BarHeight = 42f;
+    const float VerticalSpacing = 48f;
 
     PlayerHealth health;
     Slider shieldBar;
@@ -3675,10 +3768,16 @@ public class ShieldBarUI : MonoBehaviourPun
         DestroyIfExists(clone.transform, ShieldValueName);
 
         if (backgroundImage != null)
-            backgroundImage.color = new Color(0.05f, 0.08f, 0.16f, 0.95f);
+        {
+            backgroundImage.color = new Color(0.02f, 0.045f, 0.075f, 0.96f);
+            ConfigurePanelDepth(backgroundImage.gameObject, new Color(0f, 0f, 0f, 0.72f), new Color(0.36f, 0.9f, 1f, 0.5f));
+        }
 
         if (fillImage != null)
-            fillImage.color = new Color(0.24f, 0.62f, 1f, 1f);
+        {
+            fillImage.color = new Color(0.2f, 0.88f, 1f, 1f);
+            ConfigureFillAccent(fillImage.gameObject, new Color(0.72f, 1f, 1f, 0.26f));
+        }
 
         labelText = CreateText(clone.transform, ShieldLabelName, new Vector2(12f, 0f), TMPro.TextAlignmentOptions.Left, "SHIELD");
         valueText = CreateText(clone.transform, ShieldValueName, new Vector2(-12f, 0f), TMPro.TextAlignmentOptions.Right, string.Empty);
@@ -3699,7 +3798,7 @@ public class ShieldBarUI : MonoBehaviourPun
 
         float normalized = shieldBar.maxValue > 0f ? shieldBar.value / shieldBar.maxValue : 0f;
         if (fillImage != null)
-            fillImage.color = Color.Lerp(new Color(0.08f, 0.18f, 0.55f, 1f), new Color(0.36f, 0.78f, 1f, 1f), normalized);
+            fillImage.color = Color.Lerp(new Color(0.08f, 0.36f, 0.88f, 1f), new Color(0.34f, 0.96f, 1f, 1f), normalized);
 
         HideHandle();
     }
@@ -3756,10 +3855,13 @@ public class ShieldBarUI : MonoBehaviourPun
 
         TMPro.TextMeshProUGUI text = labelObject.GetComponent<TMPro.TextMeshProUGUI>();
         text.text = initialText;
-        text.fontSize = 14f;
+        text.fontSize = 15f;
         text.color = Color.white;
         text.alignment = alignment;
         text.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
+        text.fontStyle = FontStyles.Bold;
+        text.raycastTarget = false;
+        ConfigureTextShadow(text.gameObject);
 
         TMPro.TMP_Text referenceText = Object.FindAnyObjectByType<TMPro.TMP_Text>();
         if (referenceText != null)
@@ -3796,6 +3898,52 @@ public class ShieldBarUI : MonoBehaviourPun
 
         handleImage.enabled = false;
         handleImage.raycastTarget = false;
+    }
+
+    void ConfigurePanelDepth(GameObject target, Color shadowColor, Color outlineColor)
+    {
+        if (target == null)
+            return;
+
+        Shadow shadow = target.GetComponent<Shadow>();
+        if (shadow == null)
+            shadow = target.AddComponent<Shadow>();
+        shadow.effectColor = shadowColor;
+        shadow.effectDistance = new Vector2(0f, -3f);
+        shadow.useGraphicAlpha = false;
+
+        Outline outline = target.GetComponent<Outline>();
+        if (outline == null)
+            outline = target.AddComponent<Outline>();
+        outline.effectColor = outlineColor;
+        outline.effectDistance = new Vector2(2f, 2f);
+        outline.useGraphicAlpha = false;
+    }
+
+    void ConfigureFillAccent(GameObject target, Color color)
+    {
+        if (target == null)
+            return;
+
+        Outline outline = target.GetComponent<Outline>();
+        if (outline == null)
+            outline = target.AddComponent<Outline>();
+        outline.effectColor = color;
+        outline.effectDistance = new Vector2(1f, 1f);
+        outline.useGraphicAlpha = true;
+    }
+
+    void ConfigureTextShadow(GameObject target)
+    {
+        if (target == null)
+            return;
+
+        Shadow shadow = target.GetComponent<Shadow>();
+        if (shadow == null)
+            shadow = target.AddComponent<Shadow>();
+        shadow.effectColor = new Color(0f, 0f, 0f, 0.78f);
+        shadow.effectDistance = new Vector2(1.6f, -1.6f);
+        shadow.useGraphicAlpha = false;
     }
 }
 
@@ -4230,7 +4378,7 @@ public class AstronautSurvivor : MonoBehaviourPun
 
     Vector2 ApplyEnemyAstronautMapEdgeSteering(Vector2 currentPosition, Vector2 desiredDirection)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         if (mapSize.x <= 0f || mapSize.y <= 0f)
             return desiredDirection;
 
@@ -4524,7 +4672,7 @@ public class AstronautSurvivor : MonoBehaviourPun
 
     static Vector2 ResolveFallbackEnemyAstronautTarget(Vector2 origin, int ordinal)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         if (mapSize.x <= 0f || mapSize.y <= 0f)
             mapSize = new Vector2(64f, 48f);
 

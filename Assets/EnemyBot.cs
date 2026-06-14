@@ -482,7 +482,7 @@ public sealed class PirateBaseCollectionBeamVfx : MonoBehaviour
 
     void CreateAudioSource()
     {
-        AudioClip clip = AudioManager.Instance.DrillingClip;
+        AudioClip clip = AudioManager.Instance.PirateBaseDrillClip;
         if (clip == null)
             return;
 
@@ -1058,7 +1058,7 @@ public sealed class SpaceAnimalDeathVfx : MonoBehaviour
             FitRendererToTargetSize(spriteRenderer, targetSize * 1.12f);
         }
 
-        AudioManager.Instance.PlayExplosionAt(transform.position);
+        AudioManager.Instance.PlayAnimalDeathAt(transform.position);
     }
 
     void Update()
@@ -3865,6 +3865,33 @@ public class EnemyBot : MonoBehaviourPun
         }
 
         behavior?.TickBehavior();
+        ApplyToxicBorderVelocityCorrection();
+    }
+
+    void ApplyToxicBorderVelocityCorrection()
+    {
+        if (!RoomSettings.AreToxicBordersEnabled() || rb == null || isOwnedMine || IsSpaceMine || IsPirateBase)
+            return;
+
+        Vector2 currentVelocity = rb.linearVelocity;
+        Vector2 desiredDirection = currentVelocity.sqrMagnitude > 0.001f
+            ? currentVelocity.normalized
+            : (Vector2)transform.up;
+        float bodyRadius = Mathf.Clamp(VisualTargetSize * 0.52f, 0.35f, 2.4f);
+        float lookAhead = Mathf.Clamp(currentVelocity.magnitude * 0.55f, 1.1f, 4.4f);
+        if (!RoomSettings.TryGetEnemyToxicBorderAvoidance(rb.position, desiredDirection, lookAhead, bodyRadius, out _, out float strength))
+            return;
+
+        float currentSpeed = currentVelocity.magnitude;
+        float targetSpeed = Mathf.Max(currentSpeed, EffectiveMoveSpeed * Mathf.Lerp(0.42f, 1f, strength));
+        Vector2 targetVelocity = RoomSettings.ApplyEnemyToxicBorderSteering(
+            rb.position,
+            desiredDirection,
+            lookAhead,
+            bodyRadius,
+            1.2f) * targetSpeed;
+        float blend = Mathf.Lerp(0.16f, 0.64f, strength);
+        rb.linearVelocity = Vector2.Lerp(currentVelocity, targetVelocity, blend);
     }
 
     [PunRPC]
@@ -4969,9 +4996,12 @@ public abstract class EnemyBotBehaviorBase : MonoBehaviour
         return Mathf.Max(0.01f, duration * RoomSettings.GetEnemyAttackWindupMultiplier());
     }
 
-    protected static float ScaleEnemyAttackCooldown(float cooldown)
+    protected float ScaleEnemyAttackCooldown(float cooldown)
     {
-        return Mathf.Max(0.05f, cooldown * RoomSettings.GetEnemyAttackCooldownMultiplier());
+        float effectMultiplier = bot != null
+            ? ElectromagneticShockStatus.GetFireIntervalMultiplier(bot.gameObject) * AtlasSuppressionStatus.GetFireIntervalMultiplier(bot.gameObject)
+            : 1f;
+        return Mathf.Max(0.05f, cooldown * effectMultiplier * RoomSettings.GetEnemyAttackCooldownMultiplier());
     }
 
     public abstract void TickBehavior();
@@ -5160,7 +5190,7 @@ public class EnemyCorsairBehavior : EnemyBotBehaviorBase
         movement = owner.Definition != null ? owner.Definition.Movement : null;
         weapon = owner.Definition != null ? owner.Definition.Weapon : null;
 
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         orbitCenter = Vector2.zero;
         orbitRadius = Mathf.Max(6f, Mathf.Min(mapSize.x, mapSize.y) * movement.OrbitRadiusFactor);
         int orbitSeed = view != null ? view.ViewID : 0;
@@ -5628,7 +5658,7 @@ public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
 
     Vector2 ResolveMapBoundarySteering(Vector2 desiredDirection, out float strength, out Vector2 inwardNormal)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float bodyRadius = Mathf.Clamp(bot != null ? bot.VisualTargetSize * 0.58f : 0.55f, 0.35f, 1.2f);
         float halfX = Mathf.Max(3f, mapSize.x * 0.5f - bodyRadius);
         float halfY = Mathf.Max(3f, mapSize.y * 0.5f - bodyRadius);
@@ -6417,7 +6447,7 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
     Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : patrolDirection;
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
         float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
         Vector2 predicted = rb.position + desired * Mathf.Max(1.2f, bot.EffectiveMoveSpeed * 1.35f);
@@ -7080,7 +7110,7 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
     Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
         float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
         Vector2 predicted = rb.position + desired * Mathf.Max(1.2f, bot.EffectiveMoveSpeed * 1.8f);
@@ -7650,7 +7680,7 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
     Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
         float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
         Vector2 predicted = rb.position + desired * Mathf.Max(1.2f, bot.EffectiveMoveSpeed * 1.9f);
@@ -8211,7 +8241,7 @@ public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
     Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
         float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
         Vector2 predicted = rb.position + desired * Mathf.Max(1.2f, bot.EffectiveMoveSpeed * 1.85f);
@@ -8326,7 +8356,7 @@ public class EnemyMothershipBehavior : EnemyBotBehaviorBase
         movement = owner.Definition != null ? owner.Definition.Movement : null;
         weapon = owner.Definition != null ? owner.Definition.Weapon : null;
 
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         orbitCenter = Vector2.zero;
         orbitRadius = Mathf.Max(7f, Mathf.Min(mapSize.x, mapSize.y) * (movement != null ? movement.OrbitRadiusFactor : 0.38f));
         int seed = view != null ? view.ViewID : 1;
@@ -8603,7 +8633,7 @@ public class EnemyMothershipBehavior : EnemyBotBehaviorBase
             if (shooting.FireBotProjectileFromWorld(muzzleDirection, muzzlePosition))
             {
                 turret.Ammo--;
-                turret.NextFireTime = Time.time + Mathf.Max(0.05f, weapon.FireRate * AtlasSuppressionStatus.GetFireIntervalMultiplier(gameObject) * RoomSettings.GetEnemyAttackCooldownMultiplier());
+                turret.NextFireTime = Time.time + Mathf.Max(0.05f, weapon.FireRate * ElectromagneticShockStatus.GetFireIntervalMultiplier(gameObject) * AtlasSuppressionStatus.GetFireIntervalMultiplier(gameObject) * RoomSettings.GetEnemyAttackCooldownMultiplier());
                 if (turret.Ammo <= 0)
                 {
                     turret.Reloading = true;
@@ -8870,7 +8900,7 @@ public class EnemyContainerShipBehavior : EnemyBotBehaviorBase
         health = owner.GetComponent<PlayerHealth>();
         movement = owner.Definition != null ? owner.Definition.Movement : null;
 
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         orbitCenter = Vector2.zero;
         orbitRadius = Mathf.Max(5.6f, Mathf.Min(mapSize.x, mapSize.y) * (movement != null ? movement.OrbitRadiusFactor : 0.38f));
         int seed = view != null ? view.ViewID : Random.Range(1, 9999);
@@ -9011,7 +9041,7 @@ public class EnemyContainerShipBehavior : EnemyBotBehaviorBase
             return desiredVelocity;
 
         Vector2 desiredDirection = desiredVelocity.normalized;
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
         float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
         Vector2 predicted = rb.position + desiredDirection * Mathf.Max(1.6f, bot.EffectiveMoveSpeed * 2.2f);
@@ -9542,7 +9572,7 @@ public class EnemyRescueShipBehavior : EnemyBotBehaviorBase
     Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
         float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
         Vector2 predicted = rb.position + desired * Mathf.Max(1.2f, bot.EffectiveMoveSpeed * 1.8f);
@@ -9566,7 +9596,7 @@ public class EnemyRescueShipBehavior : EnemyBotBehaviorBase
 
     bool IsInsidePlayableBounds(Vector2 position)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = mapSize.x * 0.5f;
         float halfY = mapSize.y * 0.5f;
         return Mathf.Abs(position.x) <= halfX && Mathf.Abs(position.y) <= halfY;
@@ -9574,7 +9604,7 @@ public class EnemyRescueShipBehavior : EnemyBotBehaviorBase
 
     bool IsNearMapEdge(Vector2 position, float threshold)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = mapSize.x * 0.5f;
         float halfY = mapSize.y * 0.5f;
         return halfX - Mathf.Abs(position.x) <= threshold || halfY - Mathf.Abs(position.y) <= threshold;
@@ -9582,7 +9612,7 @@ public class EnemyRescueShipBehavior : EnemyBotBehaviorBase
 
     Vector2 GetHealAnchorPoint(Vector2 targetPoint)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = mapSize.x * 0.5f;
         float halfY = mapSize.y * 0.5f;
         float leftClearance = targetPoint.x + halfX;
@@ -10286,7 +10316,7 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
     Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
         float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
         Vector2 predicted = rb.position + desired * Mathf.Max(1.1f, bot.EffectiveMoveSpeed * 2f);
@@ -10721,7 +10751,7 @@ public class EnemyRadarShipBehavior : EnemyBotBehaviorBase
     Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.up;
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
         float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
         Vector2 predicted = rb.position + desired * Mathf.Max(1.4f, bot.EffectiveMoveSpeed * 1.8f);

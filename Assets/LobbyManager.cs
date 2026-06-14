@@ -259,9 +259,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text playerStatusListText;
     public TMP_Text roundSettingText;
     public TMP_Text mapSizeSettingText;
+    public TMP_Text toxicBordersSettingText;
     public TMP_Text mapBackgroundSettingText;
     public TMP_Text visualEffectsSettingText;
     public TMP_Text advancedSpawnVfxSettingText;
+    public TMP_Text lowHpHullSparksSettingText;
     public TMP_Text boomVfxSettingText;
     public TMP_Text dynamicCameraZoomSettingText;
     public TMP_Text advancedBackgroundSettingText;
@@ -342,9 +344,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text gunSetupSettingText;
     public Button roundSettingButton;
     public Button mapSizeSettingButton;
+    public Button toxicBordersSettingButton;
     public Button mapBackgroundSettingButton;
     public Button visualEffectsSettingButton;
     public Button advancedSpawnVfxSettingButton;
+    public Button lowHpHullSparksSettingButton;
     public Button boomVfxSettingButton;
     public Button dynamicCameraZoomSettingButton;
     public Button advancedBackgroundSettingButton;
@@ -510,6 +514,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     Image mapDetailsPreviewImage;
     TMP_Text mapDetailsNameText;
     TMP_Text mapDetailsDescriptionText;
+    TMP_Text mapDetailsLandingSitesText;
     GameObject mapDetailsLossBadgeObject;
     Image mapDetailsLossBadgeImage;
     Image mapDetailsLossSkullImage;
@@ -1015,8 +1020,30 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             mapDetailsRootObject.transform.SetParent(fullScreenRoot.transform, false);
         }
 
+        EnsureMapDetailsLandingSitesText();
         EnsureMapDetailsLossBadge();
         ConfigureMapDetailsTextStyles();
+    }
+
+    void EnsureMapDetailsLandingSitesText()
+    {
+        if (mapDetailsRootObject == null)
+            return;
+
+        Transform existing = mapDetailsRootObject.transform.Find("MapDetailsLandingSites");
+        mapDetailsLandingSitesText = existing != null
+            ? existing.GetComponent<TMP_Text>()
+            : CreateStandaloneLabel(mapDetailsRootObject.transform, "MapDetailsLandingSites", string.Empty, new Vector2(1048f, -620f), new Vector2(460f, 156f), 22f, TextAlignmentOptions.TopLeft);
+
+        if (mapDetailsLandingSitesText == null)
+            return;
+
+        mapDetailsLandingSitesText.fontSize = 22f;
+        mapDetailsLandingSitesText.fontStyle = FontStyles.Bold;
+        mapDetailsLandingSitesText.textWrappingMode = TextWrappingModes.Normal;
+        mapDetailsLandingSitesText.lineSpacing = 4f;
+        mapDetailsLandingSitesText.color = new Color(0.78f, 0.9f, 1f, 0.98f);
+        mapDetailsLandingSitesText.raycastTarget = false;
     }
 
     void EnsureMapDetailsLossBadge()
@@ -1096,6 +1123,14 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             mapDetailsDescriptionText.fontStyle = FontStyles.Normal;
             mapDetailsDescriptionText.textWrappingMode = TextWrappingModes.Normal;
             mapDetailsDescriptionText.lineSpacing = 8f;
+        }
+
+        if (mapDetailsLandingSitesText != null)
+        {
+            mapDetailsLandingSitesText.fontSize = 22f;
+            mapDetailsLandingSitesText.fontStyle = FontStyles.Bold;
+            mapDetailsLandingSitesText.textWrappingMode = TextWrappingModes.Normal;
+            mapDetailsLandingSitesText.lineSpacing = 4f;
         }
     }
 
@@ -1856,9 +1891,37 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
             if (mapDetailsDescriptionText != null)
             {
+                const float descriptionTopOffset = 64f;
+                const float landingSitesGap = 14f;
+                const float badgeSafetyGap = 18f;
+                float detailsAvailableBeforeBadge = Mathf.Max(220f, detailsBadgeTopOffset - descriptionTopOffset - badgeSafetyGap);
+                float landingSitesHeight = mapDetailsLandingSitesText != null
+                    ? Mathf.Clamp(detailsAvailableBeforeBadge * 0.34f, 86f, 126f)
+                    : 0f;
+                float descriptionHeight = Mathf.Max(120f, detailsAvailableBeforeBadge - landingSitesHeight - (landingSitesHeight > 0f ? landingSitesGap : 0f));
+
                 RectTransform descRect = mapDetailsDescriptionText.rectTransform;
-                descRect.anchoredPosition = new Vector2(detailsStartX, -contentTop - 64f);
-                descRect.sizeDelta = new Vector2(detailsWidth, Mathf.Max(240f, detailsBadgeTopOffset - 92f));
+                descRect.anchoredPosition = new Vector2(detailsStartX, -contentTop - descriptionTopOffset);
+                descRect.sizeDelta = new Vector2(detailsWidth, descriptionHeight);
+
+                if (mapDetailsLandingSitesText != null)
+                {
+                    RectTransform landingSitesRect = mapDetailsLandingSitesText.rectTransform;
+                    landingSitesRect.anchorMin = new Vector2(0f, 1f);
+                    landingSitesRect.anchorMax = new Vector2(0f, 1f);
+                    landingSitesRect.pivot = new Vector2(0f, 1f);
+                    landingSitesRect.anchoredPosition = new Vector2(detailsStartX, -contentTop - descriptionTopOffset - descriptionHeight - landingSitesGap);
+                    landingSitesRect.sizeDelta = new Vector2(detailsWidth, Mathf.Max(0f, landingSitesHeight));
+                }
+            }
+            else if (mapDetailsLandingSitesText != null)
+            {
+                RectTransform landingSitesRect = mapDetailsLandingSitesText.rectTransform;
+                landingSitesRect.anchorMin = new Vector2(0f, 1f);
+                landingSitesRect.anchorMax = new Vector2(0f, 1f);
+                landingSitesRect.pivot = new Vector2(0f, 1f);
+                landingSitesRect.anchoredPosition = new Vector2(detailsStartX, -contentTop - 64f);
+                landingSitesRect.sizeDelta = new Vector2(detailsWidth, 126f);
             }
         }
     }
@@ -2105,6 +2168,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                 : string.Empty;
             mapDetailsDescriptionText.text = unlockText + selectedMap.Description;
         }
+        if (mapDetailsLandingSitesText != null)
+        {
+            string landingSitesText = BuildMapLandingSitesText(selectedMap);
+            mapDetailsLandingSitesText.text = landingSitesText;
+            mapDetailsLandingSitesText.gameObject.SetActive(!string.IsNullOrWhiteSpace(landingSitesText));
+        }
         RefreshMapDeathLossBadge(selectedMap);
 
         if (launchButton != null)
@@ -2116,6 +2185,45 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                                         unlocked &&
                                         IsMapUnlockedForLocalPlayer(activeRoomMap);
         }
+    }
+
+    string BuildMapLandingSitesText(LobbyMapDefinition selectedMap)
+    {
+        IReadOnlyList<LobbyMapLandingSiteSummary> landingSites = ResolveMapLandingSites(selectedMap);
+        if (landingSites == null || landingSites.Count == 0)
+            return string.Empty;
+
+        StringBuilder builder = new StringBuilder("LANDING SITES");
+        for (int i = 0; i < landingSites.Count; i++)
+        {
+            LobbyMapLandingSiteSummary site = landingSites[i];
+            if (site == null || site.Count <= 0 || string.IsNullOrWhiteSpace(site.Label))
+                continue;
+
+            builder.Append('\n');
+            builder.Append(site.Label);
+            builder.Append(": ");
+            builder.Append(site.Count);
+        }
+
+        return builder.Length > "LANDING SITES".Length ? builder.ToString() : string.Empty;
+    }
+
+    IReadOnlyList<LobbyMapLandingSiteSummary> ResolveMapLandingSites(LobbyMapDefinition selectedMap)
+    {
+        if (selectedMap == null)
+            return System.Array.Empty<LobbyMapLandingSiteSummary>();
+
+        bool selectedRoomMap = PhotonNetwork.CurrentRoom != null &&
+                               string.Equals(RoomSettings.GetSelectedLobbyMapId(), selectedMap.Id, System.StringComparison.Ordinal);
+        if (!selectedRoomMap)
+            return LobbyMapCatalog.GetDefaultLandingSites(selectedMap);
+
+        return LobbyMapCatalog.BuildLandingSites(
+            RoomSettings.GetExtractionCount(),
+            RoomSettings.GetRepairBayCount(),
+            RoomSettings.GetScienceStationCount(),
+            RoomSettings.GetSpaceFactoryCount());
     }
 
     void RefreshMapDeathLossBadge(LobbyMapDefinition selectedMap)
@@ -2889,9 +2997,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         roundSettingButton = EnsureSettingButton(ref roundSettingText, roundSettingButton, "RoundSettingButton", "RoundSettingText", Vector2.zero, CycleRoundDuration);
         mapSizeSettingButton = EnsureSettingButton(ref mapSizeSettingText, mapSizeSettingButton, "MapSizeSettingButton", "MapSizeSettingText", Vector2.zero, CycleMapSize);
+        toxicBordersSettingButton = EnsureSettingButton(ref toxicBordersSettingText, toxicBordersSettingButton, "ToxicBordersSettingButton", "ToxicBordersSettingText", Vector2.zero, CycleToxicBordersEnabled);
         mapBackgroundSettingButton = EnsureSettingButton(ref mapBackgroundSettingText, mapBackgroundSettingButton, "MapBackgroundSettingButton", "MapBackgroundSettingText", Vector2.zero, CycleMapBackground);
         visualEffectsSettingButton = EnsureSettingButton(ref visualEffectsSettingText, visualEffectsSettingButton, "VisualEffectsSettingButton", "VisualEffectsSettingText", Vector2.zero, CycleVisualEffectsEnabled);
         advancedSpawnVfxSettingButton = EnsureSettingButton(ref advancedSpawnVfxSettingText, advancedSpawnVfxSettingButton, "AdvancedSpawnVfxSettingButton", "AdvancedSpawnVfxSettingText", Vector2.zero, CycleAdvancedSpawnVfxEnabled);
+        lowHpHullSparksSettingButton = EnsureSettingButton(ref lowHpHullSparksSettingText, lowHpHullSparksSettingButton, "LowHpHullSparksSettingButton", "LowHpHullSparksSettingText", Vector2.zero, CycleLowHpHullSparksEnabled);
         boomVfxSettingButton = EnsureSettingButton(ref boomVfxSettingText, boomVfxSettingButton, "BoomVfxSettingButton", "BoomVfxSettingText", Vector2.zero, CycleBoomVfxEnabled);
         dynamicCameraZoomSettingButton = EnsureSettingButton(ref dynamicCameraZoomSettingText, dynamicCameraZoomSettingButton, "DynamicCameraZoomSettingButton", "DynamicCameraZoomSettingText", Vector2.zero, CycleDynamicCameraZoomEnabled);
         HideDeprecatedSettingButton("AdvancedBackgroundSettingButton", "AdvancedBackgroundSettingText");
@@ -3001,6 +3111,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(hiddenTreasureSettingButton, "LOOT & RESOURCES");
         AttachLeftSectionButton(treasureWeightSettingButton, "LOOT & RESOURCES");
 
+        AttachLeftSectionButton(toxicBordersSettingButton, "MAP HAZARDS");
         AttachLeftSectionButton(nebulaSettingButton, "MAP HAZARDS");
         AttachLeftSectionButton(fireNebulaSettingButton, "MAP HAZARDS");
         AttachLeftSectionButton(toxicNebulaSettingButton, "MAP HAZARDS");
@@ -3026,6 +3137,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         AttachLeftSectionButton(mapBackgroundSettingButton, "VISUALS");
         AttachLeftSectionButton(visualEffectsSettingButton, "VISUALS");
         AttachLeftSectionButton(advancedSpawnVfxSettingButton, "VISUALS");
+        AttachLeftSectionButton(lowHpHullSparksSettingButton, "VISUALS");
         AttachLeftSectionButton(boomVfxSettingButton, "VISUALS");
         AttachLeftSectionButton(dynamicCameraZoomSettingButton, "VISUALS");
         AttachLeftSectionButton(parallaxBackgroundSettingButton, "VISUALS");
@@ -3926,6 +4038,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         EnsureLeftSectionContainer("COMBAT FEEL");
         EnsureLeftSectionContainer("NEUTRAL RIDERS");
         EnsureLeftSectionContainer("DIAGNOSTICS");
+        RemoveLeftSectionContainer("MAP RULES");
     }
 
     void ApplyLeftSettingsViewportLayout()
@@ -4161,6 +4274,27 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return rect;
     }
 
+    void RemoveLeftSectionContainer(string sectionName)
+    {
+        if (string.IsNullOrWhiteSpace(sectionName))
+            return;
+
+        if (leftSectionContainers.TryGetValue(sectionName, out RectTransform existing))
+        {
+            leftSectionContainers.Remove(sectionName);
+            if (existing != null)
+                Destroy(existing.gameObject);
+        }
+
+        if (leftSettingsContentRect == null)
+            return;
+
+        string safeName = sectionName.Replace(" ", string.Empty);
+        Transform stale = leftSettingsContentRect.Find("LobbySection_" + safeName);
+        if (stale != null)
+            Destroy(stale.gameObject);
+    }
+
     void AttachLeftSectionButton(Button button, string sectionName)
     {
         if (button == null)
@@ -4372,6 +4506,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ToxicBordersEnabledKey))
+        {
+            props[RoomSettings.ToxicBordersEnabledKey] = RoomSettings.DefaultToxicBordersEnabled;
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.MapBackgroundKey))
         {
             props[RoomSettings.MapBackgroundKey] = RoomSettings.DefaultMapBackground;
@@ -4387,6 +4527,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AdvancedSpawnVfxEnabledKey))
         {
             props[RoomSettings.AdvancedSpawnVfxEnabledKey] = RoomSettings.DefaultAdvancedSpawnVfxEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.LowHpHullSparksEnabledKey))
+        {
+            props[RoomSettings.LowHpHullSparksEnabledKey] = RoomSettings.DefaultLowHpHullSparksEnabled;
             changed = true;
         }
 
@@ -5138,6 +5284,18 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RefreshHostSettingsUi();
     }
 
+    void CycleToxicBordersEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.ToxicBordersEnabledKey] = !RoomSettings.AreToxicBordersEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        GameVisualTheme.RequestRuntimeRefresh();
+        RefreshHostSettingsUi();
+    }
+
     void CycleMapBackground()
     {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
@@ -5176,6 +5334,17 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         Hashtable props = new Hashtable();
         props[RoomSettings.AdvancedSpawnVfxEnabledKey] = !RoomSettings.IsAdvancedSpawnVfxEnabled();
+        PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+        RefreshHostSettingsUi();
+    }
+
+    void CycleLowHpHullSparksEnabled()
+    {
+        if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
+            return;
+
+        Hashtable props = new Hashtable();
+        props[RoomSettings.LowHpHullSparksEnabledKey] = !RoomSettings.AreLowHpHullSparksEnabled();
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RefreshHostSettingsUi();
     }
@@ -6090,6 +6259,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (mapSizeSettingText != null)
             mapSizeSettingText.text = "MAP SIZE: " + FormatMapSize(GetMapSize());
 
+        if (toxicBordersSettingText != null)
+            toxicBordersSettingText.text = "TOXIC BORDERS: " + (RoomSettings.AreToxicBordersEnabled() ? "ON" : "OFF");
+
         if (mapBackgroundSettingText != null)
             mapBackgroundSettingText.text = "MAP BACKGROUND: " + FormatMapBackground(GetMapBackground());
 
@@ -6098,6 +6270,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (advancedSpawnVfxSettingText != null)
             advancedSpawnVfxSettingText.text = "ADVANCED SPAWN VFX: " + (RoomSettings.IsAdvancedSpawnVfxEnabled() ? "ON" : "OFF");
+
+        if (lowHpHullSparksSettingText != null)
+            lowHpHullSparksSettingText.text = "DAMAGE SPARKS: " + (RoomSettings.AreLowHpHullSparksEnabled() ? "ON" : "OFF");
 
         if (boomVfxSettingText != null)
             boomVfxSettingText.text = "BOOM VFX: " + (RoomSettings.AreBoomVfxEnabled() ? "ON" : "OFF");
@@ -6299,9 +6474,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         SetSettingButtonState(roundSettingButton, isHost);
         SetSettingButtonState(mapSizeSettingButton, isHost);
+        SetSettingButtonState(toxicBordersSettingButton, isHost);
         SetSettingButtonState(mapBackgroundSettingButton, isHost);
         SetSettingButtonState(visualEffectsSettingButton, isHost);
         SetSettingButtonState(advancedSpawnVfxSettingButton, isHost);
+        SetSettingButtonState(lowHpHullSparksSettingButton, isHost);
         SetSettingButtonState(boomVfxSettingButton, isHost);
         SetSettingButtonState(dynamicCameraZoomSettingButton, isHost);
         SetSettingButtonState(parallaxBackgroundSettingButton, isHost);
@@ -6977,10 +7154,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         return changedProps.ContainsKey(RoomSettings.RoundDurationKey) ||
                changedProps.ContainsKey(RoomSettings.MapSizeKey) ||
+               changedProps.ContainsKey(RoomSettings.ToxicBordersEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.MapBackgroundKey) ||
                changedProps.ContainsKey(RoomSettings.SelectedMapKey) ||
                changedProps.ContainsKey(RoomSettings.VisualEffectsEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.AdvancedSpawnVfxEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.LowHpHullSparksEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.BoomVfxEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.DynamicCameraZoomEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.ParallaxBackgroundKey) ||

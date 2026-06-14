@@ -382,9 +382,10 @@ public class EnemyBotManager : MonoBehaviour
 
     bool SpawnEnemy(EnemyBotDefinition definition, int spawnOrdinal, bool forceOffscreen = false, bool hasEntryFocus = false, Vector2 entryFocusPosition = default)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         Vector2 spawn;
-        if (forceOffscreen)
+        bool allowOffscreenEntry = forceOffscreen && !RoomSettings.AreToxicBordersEnabled();
+        if (allowOffscreenEntry)
         {
             spawn = GetOffscreenSpawnPosition(definition, mapSize, hasEntryFocus, entryFocusPosition);
         }

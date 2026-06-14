@@ -9,8 +9,8 @@ public class BoosterBarUI : MonoBehaviourPun
     const string BoosterBarName = "Booster_Bar";
     const string PercentName = "BoosterPercent";
     const float BarWidth = 440f;
-    const float BarHeight = 36f;
-    const float VerticalSpacing = 18f;
+    const float BarHeight = 42f;
+    const float VerticalSpacing = 48f;
 
     PlayerMovement movement;
     Slider boosterBar;
@@ -92,12 +92,14 @@ public class BoosterBarUI : MonoBehaviourPun
 
         if (backgroundImage != null)
         {
-            backgroundImage.color = new Color(0.08f, 0.12f, 0.18f, 0.9f);
+            backgroundImage.color = new Color(0.045f, 0.035f, 0.02f, 0.95f);
+            ConfigurePanelDepth(backgroundImage.gameObject, new Color(0f, 0f, 0f, 0.68f), new Color(1f, 0.82f, 0.24f, 0.38f));
         }
 
         if (fillImage != null)
         {
-            fillImage.color = new Color(1f, 0.9f, 0.18f, 1f);
+            fillImage.color = new Color(1f, 0.86f, 0.12f, 1f);
+            ConfigureFillAccent(fillImage.gameObject, new Color(1f, 0.96f, 0.58f, 0.2f));
         }
 
         CreateLabel(clone.transform);
@@ -241,9 +243,12 @@ public class BoosterBarUI : MonoBehaviourPun
 
         TextMeshProUGUI text = labelObject.GetComponent<TextMeshProUGUI>();
         text.text = "BOOSTER";
-        text.fontSize = 14f;
+        text.fontSize = 15f;
         text.color = Color.white;
         text.alignment = TextAlignmentOptions.Left;
+        text.fontStyle = FontStyles.Bold;
+        text.raycastTarget = false;
+        ConfigureTextShadow(text.gameObject);
 
         TMP_Text referenceText = FindAnyObjectByType<TMP_Text>();
         if (referenceText != null)
@@ -264,9 +269,12 @@ public class BoosterBarUI : MonoBehaviourPun
 
         percentText = percentObject.GetComponent<TextMeshProUGUI>();
         percentText.text = "100%";
-        percentText.fontSize = 14f;
+        percentText.fontSize = 15f;
         percentText.color = Color.white;
         percentText.alignment = TextAlignmentOptions.Right;
+        percentText.fontStyle = FontStyles.Bold;
+        percentText.raycastTarget = false;
+        ConfigureTextShadow(percentText.gameObject);
 
         if (referenceText != null)
         {
@@ -282,5 +290,51 @@ public class BoosterBarUI : MonoBehaviourPun
 
         handleImage.enabled = false;
         handleImage.raycastTarget = false;
+    }
+
+    void ConfigurePanelDepth(GameObject target, Color shadowColor, Color outlineColor)
+    {
+        if (target == null)
+            return;
+
+        Shadow shadow = target.GetComponent<Shadow>();
+        if (shadow == null)
+            shadow = target.AddComponent<Shadow>();
+        shadow.effectColor = shadowColor;
+        shadow.effectDistance = new Vector2(0f, -3f);
+        shadow.useGraphicAlpha = false;
+
+        Outline outline = target.GetComponent<Outline>();
+        if (outline == null)
+            outline = target.AddComponent<Outline>();
+        outline.effectColor = outlineColor;
+        outline.effectDistance = new Vector2(2f, 2f);
+        outline.useGraphicAlpha = false;
+    }
+
+    void ConfigureFillAccent(GameObject target, Color color)
+    {
+        if (target == null)
+            return;
+
+        Outline outline = target.GetComponent<Outline>();
+        if (outline == null)
+            outline = target.AddComponent<Outline>();
+        outline.effectColor = color;
+        outline.effectDistance = new Vector2(1f, 1f);
+        outline.useGraphicAlpha = true;
+    }
+
+    void ConfigureTextShadow(GameObject target)
+    {
+        if (target == null)
+            return;
+
+        Shadow shadow = target.GetComponent<Shadow>();
+        if (shadow == null)
+            shadow = target.AddComponent<Shadow>();
+        shadow.effectColor = new Color(0f, 0f, 0f, 0.78f);
+        shadow.effectDistance = new Vector2(1.6f, -1.6f);
+        shadow.useGraphicAlpha = false;
     }
 }

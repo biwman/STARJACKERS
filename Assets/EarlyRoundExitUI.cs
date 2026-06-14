@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Text;
 using System.Threading.Tasks;
 using Photon.Pun;
@@ -10,6 +11,7 @@ public class EarlyRoundExitUI : MonoBehaviour
 {
     const string ExitButtonLabel = "EXIT";
     const string ExitButtonPendingLabel = "EXITING...";
+    const float FinishedSummaryDelaySeconds = 0.65f;
 
     static EarlyRoundExitUI instance;
     static bool buttonRequested;
@@ -26,6 +28,7 @@ public class EarlyRoundExitUI : MonoBehaviour
     TextMeshProUGUI summaryScoreText;
     TextMeshProUGUI summaryOutcomeText;
     TextMeshProUGUI summaryListText;
+    Coroutine deferredSummaryRoutine;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -48,6 +51,24 @@ public class EarlyRoundExitUI : MonoBehaviour
     public static void ShowFinishedRoundSummary(int finalScore, string outcome)
     {
         EnsureInstance();
+        instance.CancelDeferredSummary();
+        instance.ShowFinishedRoundSummaryImmediate(finalScore, outcome);
+    }
+
+    public static void ShowFinishedRoundSummaryDelayed(int finalScore, string outcome)
+    {
+        EnsureInstance();
+        instance.BeginDeferredFinishedRoundSummary(finalScore, outcome);
+    }
+
+    void ShowFinishedRoundSummaryImmediate(int finalScore, string outcome)
+    {
+        if (!CanShowDuringActiveRound())
+        {
+            HideAll();
+            return;
+        }
+
         cachedFinalScore = Mathf.Max(0, finalScore);
         cachedOutcome = string.IsNullOrWhiteSpace(outcome) ? "finished" : outcome;
         buttonRequested = false;
@@ -60,13 +81,33 @@ public class EarlyRoundExitUI : MonoBehaviour
         _ = instance.AwardRoundXpIfNeeded();
     }
 
+    void BeginDeferredFinishedRoundSummary(int finalScore, string outcome)
+    {
+        CancelDeferredSummary();
+        deferredSummaryRoutine = StartCoroutine(ShowFinishedRoundSummaryAfterDelay(Mathf.Max(0, finalScore), outcome));
+    }
+
+    IEnumerator ShowFinishedRoundSummaryAfterDelay(int finalScore, string outcome)
+    {
+        yield return new WaitForSecondsRealtime(FinishedSummaryDelaySeconds);
+        deferredSummaryRoutine = null;
+
+        if (!CanShowDuringActiveRound())
+            yield break;
+
+        ShowFinishedRoundSummaryImmediate(finalScore, outcome);
+    }
+
     public static void HideAll()
     {
         buttonRequested = false;
         summaryRequested = false;
         exitRequested = false;
         if (instance != null)
+        {
+            instance.CancelDeferredSummary();
             instance.Refresh();
+        }
     }
 
     static void EnsureInstance()
@@ -95,8 +136,18 @@ public class EarlyRoundExitUI : MonoBehaviour
     void OnDestroy()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
+        CancelDeferredSummary();
         if (instance == this)
             instance = null;
+    }
+
+    void CancelDeferredSummary()
+    {
+        if (deferredSummaryRoutine == null)
+            return;
+
+        StopCoroutine(deferredSummaryRoutine);
+        deferredSummaryRoutine = null;
     }
 
     void Update()
@@ -156,6 +207,11 @@ public class EarlyRoundExitUI : MonoBehaviour
         if (!buttonRequested && !summaryRequested)
             return false;
 
+        return CanShowDuringActiveRound();
+    }
+
+    static bool CanShowDuringActiveRound()
+    {
         if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null)
             return false;
 
@@ -169,14 +225,32 @@ public class EarlyRoundExitUI : MonoBehaviour
             return false;
         }
 
+        return !HasOfficialRoundSummary();
+    }
+
+    static bool HasOfficialRoundSummary()
+    {
+        if (PhotonNetwork.CurrentRoom == null)
+            return false;
+
+        if (RoomSettings.GetSessionState() == RoomSettings.SessionStateSummary)
+            return true;
+
         if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.RoundResultsKey, out object snapshotValue) &&
             snapshotValue is string snapshot &&
             !string.IsNullOrWhiteSpace(snapshot))
         {
-            return false;
+            return true;
         }
 
-        return true;
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoomSettings.RoundEndReasonKey, out object reasonValue) &&
+            reasonValue is string reason &&
+            !string.IsNullOrWhiteSpace(reason))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     void EnsureButton(Transform parent)
@@ -565,11 +639,18 @@ public class EarlyRoundExitUI : MonoBehaviour
 
     void OnBackClicked()
     {
-        if (string.Equals(cachedOutcome, "extracted", System.StringComparison.OrdinalIgnoreCase))
-            AudioManager.Instance.RequestShipReturnMusicForNextMenu();
+        if (TryGetSuccessfulReturn(out bool returnedAsAstronaut))
+            AudioManager.Instance.RequestShipReturnMusicForNextMenu(returnedAsAstronaut);
 
         HideAll();
         NetworkManager.ReturnToSessionBrowserFromFinishedRound();
+    }
+
+    bool TryGetSuccessfulReturn(out bool returnedAsAstronaut)
+    {
+        returnedAsAstronaut = string.Equals(cachedOutcome, "evacuated", System.StringComparison.OrdinalIgnoreCase);
+        return returnedAsAstronaut ||
+               string.Equals(cachedOutcome, "extracted", System.StringComparison.OrdinalIgnoreCase);
     }
 
     async Task AwardRoundXpIfNeeded()

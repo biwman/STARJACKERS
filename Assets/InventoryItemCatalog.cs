@@ -242,12 +242,20 @@ public static class InventoryItemCatalog
     public const string FuelTankId = "fuel_tank";
     public const string SuperBoosterId = "super_booster";
     public const string AfterburnerStabilizerId = "afterburner_stabilizer";
+    public const string BlackMarketThrusterId = "black_market_thruster";
     public const string GadgetMineId = "gadget_mine";
     public const string SpaceBombId = "space_bomb";
     public const string DropbotId = "dropbot";
     public const string BatteryId = "battery";
     public const string MagneticBeamId = "magnetic_beam";
     public const string TractorBeamId = "tractor_beam";
+    public const string LootHookId = "loot_hook";
+    public const string StasisBuoyId = "stasis_buoy";
+    public const string TetherHarpoonId = "tether_harpoon";
+    public const string SpaceTorpedoId = "space_torpedo";
+    public const string BioTrapId = "bio_trap";
+    public const string AsteroidBreacherBombId = "asteroid_breacher_bomb";
+    public const string MetalDriftWallId = "metal_drift_wall";
     public const string LureBeaconId = "lure_beacon";
     public const string AutoTurretId = "auto_turret";
     public const string RocketAutoTurretId = "rocket_auto_turret";
@@ -255,6 +263,7 @@ public static class InventoryItemCatalog
     public const string TreasureScannerId = "treasure_scanner";
     public const string ShortScannerId = "short_scanner";
     public const string CloakDeviceId = "cloak_device";
+    public const string HackingDeviceId = "hacking_device";
     public const string LootingFriendId = "looting_friend";
     public const string FiringFriendId = "firing_friend";
     public const string SpaceDrillId = "space_drill";
@@ -272,8 +281,11 @@ public static class InventoryItemCatalog
     public const string RegenerativeShieldMatrixId = "regenerative_shield_matrix";
     public const string BulwarkProjectorId = "bulwark_projector";
     public const string AlienAegisCoreId = "alien_aegis_core";
+    public const string OverclockedMagazineId = "overclocked_magazine";
+    public const string CaptiveAstronautPodId = "captive_astronaut_pod";
     public const string AlienTransmitterId = "alien_transmitter";
     public const string PirateSymbolId = "pirate_symbol";
+    public const string ShipPrototypeDocumentationId = "ship_prototype_documentation";
     public const string AvengerStartingCodesId = "avenger_starting_codes";
     public const string ArrowRaceTokenMinefieldId = "arrow_race_token_minefield";
     public const string ArrowRaceTokenSnowFieldId = "arrow_race_token_snowfield";
@@ -795,6 +807,56 @@ public static class InventoryItemCatalog
         return Mathf.Clamp(penalty, 0, 75);
     }
 
+    public static bool DisablesShields(string itemId)
+    {
+        return string.Equals(itemId, OverclockedMagazineId, StringComparison.Ordinal);
+    }
+
+    public static bool HasShieldDisablingUpgrade(string[] equipmentSlots, int shipSkinIndex)
+    {
+        if (equipmentSlots == null)
+            return false;
+
+        for (int i = 0; i < equipmentSlots.Length; i++)
+        {
+            if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
+                continue;
+
+            if (DisablesShields(equipmentSlots[i]))
+                return true;
+        }
+
+        return false;
+    }
+
+    public static int GetShieldCapacityPenalty(string itemId)
+    {
+        switch (itemId)
+        {
+            case BlackMarketThrusterId:
+                return 35;
+            default:
+                return 0;
+        }
+    }
+
+    public static int GetEquippedShieldCapacityPenalty(string[] equipmentSlots, int shipSkinIndex)
+    {
+        if (equipmentSlots == null)
+            return 0;
+
+        int penalty = 0;
+        for (int i = 0; i < equipmentSlots.Length; i++)
+        {
+            if (!ShipCatalog.IsEquipmentSlotEnabled(i, shipSkinIndex))
+                continue;
+
+            penalty += GetShieldCapacityPenalty(equipmentSlots[i]);
+        }
+
+        return Mathf.Max(0, penalty);
+    }
+
     public static InventoryItemRarity GetRarity(string itemId)
     {
         InventoryItemDefinition definition = GetDefinition(itemId);
@@ -1308,6 +1370,21 @@ public static class InventoryItemCatalog
                 ProjectFileName = "Resources/space_animal_remains_resource.png",
                 SalvageOutputs = new[] { AsteroidRareId, AsteroidGoldId }
             },
+            [CaptiveAstronautPodId] = new InventoryItemDefinition
+            {
+                Id = CaptiveAstronautPodId,
+                DisplayName = "Captive Astronaut Pod",
+                ShortLabel = "CAP",
+                Description = "A sealed pod containing a captured hostile astronaut. It is contraband cargo with a high black-market sale value.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Treasure,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 2600,
+                ShopBuyValueAstronsOverride = 0,
+                IconResourcePath = "Items/captive_astronaut_pod",
+                ProjectFileName = "Resources/Items/captive_astronaut_pod.png",
+                SalvageOutputs = new[] { RescueShipSalvageId, AsteroidGoldId }
+            },
             [PlasmaGunId] = new InventoryItemDefinition
             {
                 Id = PlasmaGunId,
@@ -1575,6 +1652,21 @@ public static class InventoryItemCatalog
                 ProjectFileName = "Resources/Items/afterburner_stabilizer.png",
                 SalvageOutputs = new[] { DroidScrapId, AsteroidGoldId }
             },
+            [BlackMarketThrusterId] = new InventoryItemDefinition
+            {
+                Id = BlackMarketThrusterId,
+                DisplayName = "Black Market Thruster",
+                ShortLabel = "BMT",
+                Description = "An illegal engine-slot overdrive that gives a large speed and boost-output bonus, but destabilizes shield systems and removes 35 maximum shield capacity.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Engine,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 2600,
+                ShopBuyValueAstronsOverride = 10500,
+                IconResourcePath = "Items/black_market_thruster",
+                ProjectFileName = "Resources/Items/black_market_thruster.png",
+                SalvageOutputs = new[] { FusionEngineId, PirateFighterSalvageId, AsteroidRareId }
+            },
             [GadgetMineId] = new InventoryItemDefinition
             {
                 Id = GadgetMineId,
@@ -1660,6 +1752,111 @@ public static class InventoryItemCatalog
                 IconResourcePath = "tractor_beam_resource",
                 ProjectFileName = "tractor_beam.png",
                 SalvageOutputs = new[] { AsteroidGoldId, AsteroidRareId }
+            },
+            [LootHookId] = new InventoryItemDefinition
+            {
+                Id = LootHookId,
+                DisplayName = "Loot Hook",
+                ShortLabel = "LHK",
+                Description = "A contraband grapple that steals one unsecured cargo item from the nearest enemy ship without needing to destroy it. SAFE and astronaut cargo slots are ignored.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1800,
+                ShopBuyValueAstronsOverride = 6800,
+                IconResourcePath = "Items/loot_hook",
+                ProjectFileName = "Resources/Items/loot_hook.png",
+                SalvageOutputs = new[] { TractorBeamId, AsteroidGoldId }
+            },
+            [StasisBuoyId] = new InventoryItemDefinition
+            {
+                Id = StasisBuoyId,
+                DisplayName = "Stasis Buoy",
+                ShortLabel = "STB",
+                Description = "A deployable paralyzing buoy that pulses for several seconds, heavily slowing nearby ships and enemies while making their weapons sluggish.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1700,
+                ShopBuyValueAstronsOverride = 6400,
+                IconResourcePath = "Items/stasis_buoy",
+                ProjectFileName = "Resources/Items/stasis_buoy.png",
+                SalvageOutputs = new[] { SpaceMineWreckId, AsteroidRareId }
+            },
+            [TetherHarpoonId] = new InventoryItemDefinition
+            {
+                Id = TetherHarpoonId,
+                DisplayName = "Tether Harpoon",
+                ShortLabel = "THP",
+                Description = "A player-targeting tractor harpoon. Tap to latch onto the nearest enemy ship, drag it toward you, and slow its weapons for a short burst.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 2500,
+                ShopBuyValueAstronsOverride = 9300,
+                IconResourcePath = "Items/tether_harpoon",
+                ProjectFileName = "Resources/Items/tether_harpoon.png",
+                SalvageOutputs = new[] { TractorBeamId, DroidScrapId, AsteroidRareId }
+            },
+            [SpaceTorpedoId] = new InventoryItemDefinition
+            {
+                Id = SpaceTorpedoId,
+                DisplayName = "Space Torpedo",
+                ShortLabel = "TOR",
+                Description = "A fast single-shot torpedo fired from the ship nose. It detonates on impact for focused explosive damage in a compact radius.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 2200,
+                ShopBuyValueAstronsOverride = 8500,
+                IconResourcePath = "Items/space_torpedo",
+                ProjectFileName = "Resources/Items/space_torpedo.png",
+                SalvageOutputs = new[] { RocketLauncherId, AsteroidGoldId, SpaceJunkStandardId }
+            },
+            [BioTrapId] = new InventoryItemDefinition
+            {
+                Id = BioTrapId,
+                DisplayName = "Bio Trap",
+                ShortLabel = "BIO",
+                Description = "A black-market net capsule that catches a nearby astronaut and converts the target into a collectible Captive Astronaut Pod.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 2600,
+                ShopBuyValueAstronsOverride = 10000,
+                IconResourcePath = "Items/bio_trap",
+                ProjectFileName = "Resources/Items/bio_trap.png",
+                SalvageOutputs = new[] { SpaceTrapId, RescueShipSalvageId, AsteroidRareId }
+            },
+            [AsteroidBreacherBombId] = new InventoryItemDefinition
+            {
+                Id = AsteroidBreacherBombId,
+                DisplayName = "Asteroid Breacher Bomb",
+                ShortLabel = "ABB",
+                Description = "A focused demolition charge that targets the nearest asteroid obstacle, destroys it if possible, and deals blast damage around the detonation.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1900,
+                ShopBuyValueAstronsOverride = 7200,
+                IconResourcePath = "Items/asteroid_breacher_bomb",
+                ProjectFileName = "Resources/Items/asteroid_breacher_bomb.png",
+                SalvageOutputs = new[] { SpaceMineWreckId, SpaceJunkStandardId, AsteroidRareId }
+            },
+            [MetalDriftWallId] = new InventoryItemDefinition
+            {
+                Id = MetalDriftWallId,
+                DisplayName = "Metal Drift Wall",
+                ShortLabel = "MDW",
+                Description = "A heavy semicircular hull wall that deploys ahead of the ship, drifts through space, blocks fire, and can be shoved into position before it breaks.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 2100,
+                ShopBuyValueAstronsOverride = 7900,
+                IconResourcePath = "Items/metal_drift_wall",
+                ProjectFileName = "Resources/Items/metal_drift_wall.png",
+                SalvageOutputs = new[] { StrongPlatingId, SpaceJunkStandardId, AsteroidRareId }
             },
             [LureBeaconId] = new InventoryItemDefinition
             {
@@ -1766,6 +1963,21 @@ public static class InventoryItemCatalog
                 ProjectFileName = "Resources/Items/cloak_device.png",
                 SalvageOutputs = new[] { RadarShipSalvageId, DroidScrapId, AsteroidGoldId }
             },
+            [HackingDeviceId] = new InventoryItemDefinition
+            {
+                Id = HackingDeviceId,
+                DisplayName = "Hacking Device",
+                ShortLabel = "HCK",
+                Description = "A covert intrusion module. It can lock the nearest enemy ship only while the target cannot see you; after a 3 second uninterrupted hack, the target suffers random movement and weapon misfires.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Gadget,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 3200,
+                ShopBuyValueAstronsOverride = 12800,
+                IconResourcePath = "Items/hacking_device",
+                ProjectFileName = "Resources/Items/hacking_device.png",
+                SalvageOutputs = new[] { RadarShipSalvageId, DroidScrapId, AsteroidRareId }
+            },
             [LootingFriendId] = new InventoryItemDefinition
             {
                 Id = LootingFriendId,
@@ -1867,6 +2079,21 @@ public static class InventoryItemCatalog
                 IconResourcePath = "Items/salvage_magnet_array",
                 ProjectFileName = "Resources/Items/salvage_magnet_array.png",
                 SalvageOutputs = new[] { TractorBeamId, AsteroidRareId }
+            },
+            [OverclockedMagazineId] = new InventoryItemDefinition
+            {
+                Id = OverclockedMagazineId,
+                DisplayName = "Overclocked Magazine",
+                ShortLabel = "OCM",
+                Description = "An illegal support-slot ammo bypass. It increases ammo capacity by 60%, but disables the ship shield generator and makes reloads take longer.",
+                ItemType = InventoryItemType.Equipment,
+                Category = InventoryItemCategory.Support,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 1500,
+                ShopBuyValueAstronsOverride = 5900,
+                IconResourcePath = "Items/overclocked_magazine",
+                ProjectFileName = "Resources/Items/overclocked_magazine.png",
+                SalvageOutputs = new[] { DroidScrapId, SpaceJunkStandardId, AsteroidGoldId }
             },
             [ShieldReactorId] = new InventoryItemDefinition
             {
@@ -2047,6 +2274,22 @@ public static class InventoryItemCatalog
                 ShopBuyValueAstronsOverride = 0,
                 IconResourcePath = "Items/pirate_symbol",
                 ProjectFileName = "Resources/Items/pirate_symbol.png",
+                RequiresSafePocket = true,
+                SalvageOutputs = Array.Empty<string>()
+            },
+            [ShipPrototypeDocumentationId] = new InventoryItemDefinition
+            {
+                Id = ShipPrototypeDocumentationId,
+                DisplayName = "Ship Prototype Documentation",
+                ShortLabel = "DOC",
+                Description = "A sealed Pathfinder prototype package copied from hacked ship systems. It can be carried on a ship only in a SAFE cargo slot and must be delivered to a Research Station.",
+                ItemType = InventoryItemType.Quest,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 0,
+                ShopBuyValueAstronsOverride = 0,
+                IconResourcePath = "Items/ship_prototype_documentation",
+                ProjectFileName = "Resources/Items/ship_prototype_documentation.png",
                 RequiresSafePocket = true,
                 SalvageOutputs = Array.Empty<string>()
             },

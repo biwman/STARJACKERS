@@ -40,7 +40,7 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
     bool layoutApplied = false;
     string hiddenTreasureCarrierId = string.Empty;
     bool hiddenTreasureRevealed;
-    int ResolvedObstacleCount => Mathf.Max(0, Mathf.RoundToInt(obstacleCount * GetDensityMultiplier() * RoomSettings.GetMapAreaMultiplier()));
+    int ResolvedObstacleCount => Mathf.Max(0, Mathf.RoundToInt(obstacleCount * GetDensityMultiplier() * RoomSettings.GetGameplayMapAreaMultiplier()));
 
     void Awake()
     {
@@ -49,7 +49,7 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
     void Start()
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         mapSizeX = mapSize.x;
         mapSizeY = mapSize.y;
 
@@ -155,7 +155,7 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
     string BuildObstacleLayout(int seed)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         mapSizeX = mapSize.x;
         mapSizeY = mapSize.y;
 
@@ -560,7 +560,7 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
     Vector2 ClampToMapBounds(Vector2 position, float padding)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         float halfX = mapSize.x * 0.5f;
         float halfY = mapSize.y * 0.5f;
         return new Vector2(
@@ -737,7 +737,7 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
     bool IsSpawnPositionClear(Vector2 candidate, float radius, ObstacleChunk source)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         float halfX = mapSize.x * 0.5f;
         float halfY = mapSize.y * 0.5f;
         if (candidate.x > halfX - radius || candidate.x < -halfX + radius || candidate.y > halfY - radius || candidate.y < -halfY + radius)

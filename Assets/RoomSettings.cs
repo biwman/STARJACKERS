@@ -9,6 +9,9 @@ public static class RoomSettings
     public const string SessionHostNameKey = "sessionHostName";
     public const string SessionCreatedAtKey = "sessionCreatedAt";
     public const string StartTimeKey = "startTime";
+    public const string RoundStarterActorNumberKey = "roundStarter.actorNumber";
+    public const string RoundStarterUserIdKey = "roundStarter.userId";
+    public const string RoundStarterNicknameKey = "roundStarter.nickname";
     public const string RoundEndUtcMsKey = "roundEndUtcMs";
     public const string RoundDurationKey = "roundDuration";
     public const string ObstacleDensityKey = "obstacleDensity";
@@ -83,10 +86,12 @@ public static class RoomSettings
     public const string InventoryLossEnabledKey = "inventoryLossEnabled";
     public const string EquipmentLossEnabledKey = "equipmentLossEnabled";
     public const string MapSizeKey = "mapSize";
+    public const string ToxicBordersEnabledKey = "toxicBordersEnabled";
     public const string MapBackgroundKey = "mapBackground";
     public const string SelectedMapKey = "selectedMap";
     public const string VisualEffectsEnabledKey = "visualEffectsEnabled";
     public const string AdvancedSpawnVfxEnabledKey = "advancedSpawnVfxEnabled";
+    public const string LowHpHullSparksEnabledKey = "lowHpHullSparksEnabled";
     public const string BoomVfxEnabledKey = "boomVfxEnabled";
     public const string DynamicCameraZoomEnabledKey = "dynamicCameraZoomEnabled";
     public const string ParallaxBackgroundKey = "parallaxBackground";
@@ -175,11 +180,16 @@ public static class RoomSettings
     public const bool DefaultInventoryLossEnabled = true;
     public const bool DefaultEquipmentLossEnabled = false;
     public const string DefaultMapSize = "medium";
+    public const bool DefaultToxicBordersEnabled = false;
+    public const float ToxicBordersMapScale = 1.2f;
+    public const float ToxicBordersEnemyAvoidanceBuffer = 3.25f;
+    public const float ToxicBordersEnemyHardAvoidanceBuffer = 0.85f;
     public const int DefaultMapBackground = 5;
     public const int MaxMapBackground = 21;
     public const string DefaultLobbyMapId = "just_space";
     public const bool DefaultVisualEffectsEnabled = true;
     public const bool DefaultAdvancedSpawnVfxEnabled = false;
+    public const bool DefaultLowHpHullSparksEnabled = true;
     public const bool DefaultBoomVfxEnabled = true;
     public const bool DefaultDynamicCameraZoomEnabled = true;
     public const string ParallaxBackgroundKosmos3 = "kosmos3";
@@ -324,6 +334,17 @@ public static class RoomSettings
         }
 
         return SessionStateInLobby;
+    }
+
+    public static int GetRoundStarterActorNumber()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(RoundStarterActorNumberKey, out object value))
+        {
+            return Mathf.Max(0, ConvertToInt(value, 0));
+        }
+
+        return 0;
     }
 
     public static bool AreObstaclesDestructible()
@@ -577,6 +598,18 @@ public static class RoomSettings
         return DefaultMapSize;
     }
 
+    public static bool AreToxicBordersEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ToxicBordersEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultToxicBordersEnabled;
+    }
+
     public static int GetMapBackgroundIndex()
     {
         return GetInt(MapBackgroundKey, DefaultMapBackground, 1, MaxMapBackground);
@@ -617,6 +650,18 @@ public static class RoomSettings
         }
 
         return DefaultAdvancedSpawnVfxEnabled;
+    }
+
+    public static bool AreLowHpHullSparksEnabled()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(LowHpHullSparksEnabledKey, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
+        }
+
+        return DefaultLowHpHullSparksEnabled;
     }
 
     public static bool AreBoomVfxEnabled()
@@ -1919,6 +1964,9 @@ public static class RoomSettings
         if (IsPirateBaseActive())
             return true;
 
+        if (GetSessionState() == SessionStateInPlay)
+            return false;
+
         if (GetSessionState() != SessionStateInLobby)
             return false;
 
@@ -1994,7 +2042,7 @@ public static class RoomSettings
         return "MEDIUM";
     }
 
-    public static Vector2 GetMapDimensions()
+    public static Vector2 GetBaseMapDimensions()
     {
         switch (GetMapSizeMode())
         {
@@ -2011,9 +2059,126 @@ public static class RoomSettings
         }
     }
 
+    public static Vector2 GetMapDimensions()
+    {
+        Vector2 size = GetBaseMapDimensions();
+        return AreToxicBordersEnabled() ? size * ToxicBordersMapScale : size;
+    }
+
+    public static Vector2 GetGameplayMapDimensions()
+    {
+        return AreToxicBordersEnabled() ? GetBaseMapDimensions() : GetMapDimensions();
+    }
+
+    public static Vector2 GetEnemyNavigableMapDimensions()
+    {
+        return GetGameplayMapDimensions();
+    }
+
+    public static Vector2 ClampToGameplayMapBounds(Vector2 position, float margin = 0f)
+    {
+        Vector2 size = GetGameplayMapDimensions();
+        if (size.x <= 0f || size.y <= 0f)
+            return position;
+
+        float safeMargin = Mathf.Max(0f, margin);
+        float halfX = Mathf.Max(0.5f, size.x * 0.5f - safeMargin);
+        float halfY = Mathf.Max(0.5f, size.y * 0.5f - safeMargin);
+        return new Vector2(
+            Mathf.Clamp(position.x, -halfX, halfX),
+            Mathf.Clamp(position.y, -halfY, halfY));
+    }
+
+    public static Vector2 ClampToEnemyNavigableBounds(Vector2 position, float margin = 0f)
+    {
+        return ClampToGameplayMapBounds(position, margin);
+    }
+
+    public static Vector2 ApplyEnemyToxicBorderSteering(Vector2 position, Vector2 desiredDirection, float lookAheadDistance, float bodyRadius, float blendScale = 1f)
+    {
+        if (!TryGetEnemyToxicBorderAvoidance(position, desiredDirection, lookAheadDistance, bodyRadius, out Vector2 steering, out float strength))
+            return desiredDirection;
+
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : steering;
+        float outwardAmount = Mathf.Clamp01(-Vector2.Dot(desired, steering.normalized));
+        float blend = Mathf.Clamp01((0.25f + strength * 0.75f + outwardAmount * 0.22f) * strength * Mathf.Max(0.05f, blendScale));
+        Vector2 result = desired * (1f - blend) + steering * blend;
+        return result.sqrMagnitude > 0.001f ? result.normalized : steering;
+    }
+
+    public static bool TryGetEnemyToxicBorderAvoidance(Vector2 position, Vector2 desiredDirection, float lookAheadDistance, float bodyRadius, out Vector2 steering, out float strength)
+    {
+        steering = Vector2.zero;
+        strength = 0f;
+
+        if (!AreToxicBordersEnabled())
+            return false;
+
+        Vector2 innerSize = GetBaseMapDimensions();
+        Vector2 outerSize = GetMapDimensions();
+        if (innerSize.x <= 0f || innerSize.y <= 0f || outerSize.x <= innerSize.x || outerSize.y <= innerSize.y)
+            return false;
+
+        float radius = Mathf.Max(0f, bodyRadius);
+        float halfX = Mathf.Max(0.5f, innerSize.x * 0.5f - radius);
+        float halfY = Mathf.Max(0.5f, innerSize.y * 0.5f - radius);
+        Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.zero;
+        Vector2 predicted = position + desired * Mathf.Max(0f, lookAheadDistance);
+        Vector2 push = Vector2.zero;
+        float maxStrength = 0f;
+
+        AccumulateToxicBorderAvoidance(position, halfX, halfY, 1f, ref push, ref maxStrength);
+        if (desired.sqrMagnitude > 0.001f)
+            AccumulateToxicBorderAvoidance(predicted, halfX, halfY, 0.78f, ref push, ref maxStrength);
+
+        if (push.sqrMagnitude <= 0.001f)
+            return false;
+
+        Vector2 inward = push.normalized;
+        Vector2 tangent = desired.sqrMagnitude > 0.001f ? new Vector2(-inward.y, inward.x) : Vector2.zero;
+        if (tangent.sqrMagnitude > 0.001f && Vector2.Dot(tangent, desired) < 0f)
+            tangent = -tangent;
+
+        float tangentWeight = Mathf.Lerp(0.3f, 0.04f, Mathf.Clamp01(maxStrength));
+        Vector2 blended = inward + tangent * tangentWeight;
+        steering = blended.sqrMagnitude > 0.001f ? blended.normalized : inward;
+        strength = Mathf.Clamp01(maxStrength);
+        return true;
+    }
+
+    static void AccumulateToxicBorderAvoidance(Vector2 point, float halfX, float halfY, float weight, ref Vector2 push, ref float maxStrength)
+    {
+        AccumulateToxicBorderAxis(halfX - point.x, Vector2.left, weight, ref push, ref maxStrength);
+        AccumulateToxicBorderAxis(point.x + halfX, Vector2.right, weight, ref push, ref maxStrength);
+        AccumulateToxicBorderAxis(halfY - point.y, Vector2.down, weight, ref push, ref maxStrength);
+        AccumulateToxicBorderAxis(point.y + halfY, Vector2.up, weight, ref push, ref maxStrength);
+    }
+
+    static void AccumulateToxicBorderAxis(float distanceToSafeEdge, Vector2 inward, float weight, ref Vector2 push, ref float maxStrength)
+    {
+        if (distanceToSafeEdge >= ToxicBordersEnemyAvoidanceBuffer)
+            return;
+
+        float t = Mathf.InverseLerp(ToxicBordersEnemyAvoidanceBuffer, -ToxicBordersEnemyHardAvoidanceBuffer, distanceToSafeEdge);
+        float axisStrength = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t)) * Mathf.Clamp01(weight);
+        if (axisStrength <= 0.001f)
+            return;
+
+        push += inward * axisStrength;
+        maxStrength = Mathf.Max(maxStrength, axisStrength);
+    }
+
     public static float GetMapAreaMultiplier()
     {
         Vector2 size = GetMapDimensions();
+        const float baseArea = 25f * 25f;
+        float area = size.x * size.y;
+        return Mathf.Max(0.5f, area / baseArea);
+    }
+
+    public static float GetGameplayMapAreaMultiplier()
+    {
+        Vector2 size = GetGameplayMapDimensions();
         const float baseArea = 25f * 25f;
         float area = size.x * size.y;
         return Mathf.Max(0.5f, area / baseArea);
@@ -2768,7 +2933,7 @@ public static class ShipCatalog
             return "Visuals/Ships/pathfinder_wreck";
 
         if (GetShipTypeFromSkinIndex(skinIndex) == ShipType.CargoTruck)
-            return GetShipSkinResourcePath(skinIndex);
+            return "Visuals/Ships/bison_wreck";
 
         return GetShipTypeFromSkinIndex(skinIndex) switch
         {
@@ -2786,7 +2951,7 @@ public static class ShipCatalog
             return "Assets/Resources/Visuals/Ships/pathfinder_wreck.png";
 
         if (GetShipTypeFromSkinIndex(skinIndex) == ShipType.CargoTruck)
-            return GetShipSkinEditorResourcePath(skinIndex);
+            return "Assets/Resources/Visuals/Ships/bison_wreck.png";
 
         return GetShipTypeFromSkinIndex(skinIndex) switch
         {
@@ -2804,7 +2969,7 @@ public static class ShipCatalog
             return "Assets/Resources/Visuals/Ships/pathfinder_wreck.png";
 
         if (GetShipTypeFromSkinIndex(skinIndex) == ShipType.CargoTruck)
-            return GetShipSkinEditorFallbackPath(skinIndex);
+            return "Assets/Resources/Visuals/Ships/bison_wreck.png";
 
         return GetShipTypeFromSkinIndex(skinIndex) switch
         {

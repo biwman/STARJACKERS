@@ -75,6 +75,9 @@ public class GameManager : MonoBehaviourPunCallbacks
         props["gameStarted"] = false;
         props[RoomSettings.RoundWarmupTokenKey] = string.Empty;
         props[RoomSettings.RoundWarmupStartedAtKey] = -1d;
+        props[RoomSettings.RoundStarterActorNumberKey] = 0;
+        props[RoomSettings.RoundStarterUserIdKey] = string.Empty;
+        props[RoomSettings.RoundStarterNicknameKey] = string.Empty;
         props[ObstacleLayoutKey] = string.Empty;
         props[ExtractionLayoutKey] = string.Empty;
         props[NebulaLayoutKey] = string.Empty;
@@ -95,6 +98,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.PirateBaseActiveKey] = false;
         props[RoomSettings.AsteroidShowerActiveKey] = false;
         props[RoomSettings.CosmicWormActiveKey] = false;
+        props[RoomSettings.ShipUnlockPlotStartTimeKey] = -1d;
+        props[RoomSettings.ShipUnlockPlotActiveKey] = ShipUnlockPlotCoordinator.GetPlotId(ShipUnlockPlotType.None);
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;
@@ -166,6 +171,9 @@ public class GameManager : MonoBehaviourPunCallbacks
         props["gameStarted"] = false;
         props[RoomSettings.RoundWarmupTokenKey] = string.Empty;
         props[RoomSettings.RoundWarmupStartedAtKey] = -1d;
+        props[RoomSettings.RoundStarterActorNumberKey] = 0;
+        props[RoomSettings.RoundStarterUserIdKey] = string.Empty;
+        props[RoomSettings.RoundStarterNicknameKey] = string.Empty;
         props[ObstacleLayoutKey] = string.Empty;
         props[ExtractionLayoutKey] = string.Empty;
         props[NebulaLayoutKey] = string.Empty;
@@ -187,6 +195,8 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.PirateBaseActiveKey] = false;
         props[RoomSettings.AsteroidShowerActiveKey] = false;
         props[RoomSettings.CosmicWormActiveKey] = false;
+        props[RoomSettings.ShipUnlockPlotStartTimeKey] = -1d;
+        props[RoomSettings.ShipUnlockPlotActiveKey] = ShipUnlockPlotCoordinator.GetPlotId(ShipUnlockPlotType.None);
         props[LoneShipModeStartTimeKey] = -1d;
         props[GameTimer.EvacuationPauseUntilKey] = -1d;
         props[GameTimer.EvacuationPauseRemainingKey] = -1f;

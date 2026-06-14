@@ -524,7 +524,7 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
     Vector2 ApplyMapEdgeSteering(Vector2 desiredDirection)
     {
         Vector2 desired = desiredDirection.sqrMagnitude > 0.001f ? desiredDirection.normalized : Vector2.right;
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         float halfX = Mathf.Max(3f, mapSize.x * 0.5f - MapEdgeMargin);
         float halfY = Mathf.Max(3f, mapSize.y * 0.5f - MapEdgeMargin);
         Vector2 predicted = rb.position + desired * Mathf.Max(1.5f, bot.EffectiveMoveSpeed * 2.0f);

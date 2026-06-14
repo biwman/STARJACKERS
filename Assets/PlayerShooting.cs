@@ -22,11 +22,14 @@ public class PlayerShooting : MonoBehaviourPun
     const float DefaultBulletRangeMultiplier = 15f;
     const float ComplexTapMaxDuration = 0.44f;
     const float ComplexTapMaxDragMagnitude = 0.24f;
-    const float AdvancedShootMarkerRawThreshold = 0.05f;
+    const float AdvancedShootMarkerRawThreshold = ComplexTapMaxDragMagnitude;
     const float SuperChargeTimeSeconds = 24f;
     const float SuperChargeOnComplexHit = 0.08f;
     const float GadgetMinePlacementCooldown = 0.9f;
     const float DropbotLaunchRequestTimeout = 5f;
+    const float LootHookRequestTimeout = 5f;
+    const float LootHookRange = 5.8f;
+    const int LootHookNeutralCargoSlotIndex = -1001;
     const int GadgetMineDefaultCharges = 4;
     const int SpaceBombDefaultCharges = 1;
     const int DropbotDefaultCharges = 1;
@@ -39,9 +42,19 @@ public class PlayerShooting : MonoBehaviourPun
     const int GuidanceSystemDefaultCharges = 2;
     const int ShortScannerDefaultCharges = 3;
     const int CloakDeviceDefaultCharges = 2;
+    const int HackingDeviceDefaultCharges = 2;
     const int SpaceDrillDefaultCharges = 2;
     const int SpaceTrapDefaultCharges = 1;
     const int SuperBoosterDefaultCharges = 2;
+    const int LootHookDefaultCharges = 2;
+    const int StasisBuoyDefaultCharges = 2;
+    const int TetherHarpoonDefaultCharges = 2;
+    const int SpaceTorpedoDefaultCharges = 2;
+    const int BioTrapDefaultCharges = 1;
+    const int AsteroidBreacherBombDefaultCharges = 2;
+    const int MetalDriftWallDefaultCharges = 2;
+    const float OverclockedMagazineAmmoMultiplier = 1.6f;
+    const float OverclockedMagazineReloadMultiplier = 1.25f;
     const float MagneticBeamRadius = 8f;
     const float MagneticBeamDuration = 3f;
     const float MagneticBeamPullStrength = 24f;
@@ -55,6 +68,14 @@ public class PlayerShooting : MonoBehaviourPun
     const float GuidanceSystemDuration = 9f;
     const float ShortScannerRevealDuration = 15f;
     const float CloakDeviceDuration = 7f;
+    const float HackingDeviceRange = 7.2f;
+    const float HackingDeviceKeepAliveRange = 8.4f;
+    const float HackingDeviceWindupDuration = 3f;
+    const float HackingDevicePlayerDuration = 8f;
+    const float HackingDeviceComputerMinDuration = 5f;
+    const float HackingDeviceComputerMaxDuration = 20f;
+    const float HackingDeviceBehindDotThreshold = -0.52f;
+    const float HackingDeviceValidationInterval = 0.05f;
     const float SuperBoosterDuration = 2f;
     const float AstroCutterTickInterval = 0.2f;
     const float AstroCutterBeamRadius = 0.14f;
@@ -153,12 +174,22 @@ public class PlayerShooting : MonoBehaviourPun
     Coroutine authoritativeTractorBeamRoutine;
     int activeTractorBeamTargetViewId;
     string activeTractorBeamItemId;
+    Coroutine authoritativeHackingDeviceRoutine;
+    int activeHackingDeviceTargetViewId;
+    string activeHackingDeviceItemId;
     bool pendingDropbotLaunchActive;
     int pendingDropbotLaunchRequestId;
     int pendingDropbotCargoSlotIndex = -1;
     int pendingDropbotOwnerActorNumber;
     string pendingDropbotCargoItemId;
     float pendingDropbotLaunchExpiresAt;
+    bool pendingLootHookActive;
+    int pendingLootHookRequestId;
+    int pendingLootHookVictimViewId;
+    int pendingLootHookVictimActorNumber;
+    int pendingLootHookCargoSlotIndex = -1;
+    string pendingLootHookCargoItemId;
+    float pendingLootHookExpiresAt;
     WeaponAttackProfile activeSimpleWeaponProfile;
     WeaponAttackProfile activeComplexWeaponProfile;
     readonly List<ComplexWeaponRuntimeState> complexWeaponStates = new List<ComplexWeaponRuntimeState>();
@@ -353,6 +384,17 @@ public class PlayerShooting : MonoBehaviourPun
         if (!IsGameStarted())
             return;
 
+        if (photonView.IsMine &&
+            GetComponent<EnemyBot>() == null &&
+            !IsNeutralRiderShip() &&
+            HackingStatus.IsActiveOn(gameObject))
+        {
+            if (HackingStatus.TryConsumeRandomShot(gameObject, out Vector2 hackedShotDirection))
+                TryFireHackedRandom(hackedShotDirection);
+
+            return;
+        }
+
         if (GetComponent<EnemyBot>() != null)
         {
             UpdateReload();
@@ -409,14 +451,7 @@ public class PlayerShooting : MonoBehaviourPun
         if (RoundChatCommandUI.IsLocalChatMenuOpen)
             return;
 
-        if (shootJoystick == null)
-        {
-            GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
-            if (shootJoystickObject != null)
-            {
-                shootJoystick = shootJoystickObject.GetComponent<Joystick>();
-            }
-        }
+        EnsureShootJoystick();
 
         if (shootJoystick == null)
             return;
@@ -460,12 +495,22 @@ public class PlayerShooting : MonoBehaviourPun
 
     void EnsureShootJoystick()
     {
-        if (shootJoystick != null)
+        if (shootJoystick == null)
+        {
+            GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
+            if (shootJoystickObject != null)
+                shootJoystick = shootJoystickObject.GetComponent<Joystick>();
+        }
+
+        ConfigureShootJoystickForAutoAim();
+    }
+
+    void ConfigureShootJoystickForAutoAim()
+    {
+        if (shootJoystick == null)
             return;
 
-        GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
-        if (shootJoystickObject != null)
-            shootJoystick = shootJoystickObject.GetComponent<Joystick>();
+        shootJoystick.centerInputOnPointerDownInsideHandle = true;
     }
 
     void EnsureSuperJoystick()
@@ -2135,10 +2180,19 @@ public class PlayerShooting : MonoBehaviourPun
             return;
 
         CancelCloakDeviceForLocalOwner();
+        CancelHackingDeviceForLocalOwner();
 
         TreasureCollector collector = GetComponent<TreasureCollector>();
         if (collector != null)
             collector.CancelCollectionForShot();
+    }
+
+    void CancelHackingDeviceForLocalOwner()
+    {
+        if (photonView == null || !photonView.IsMine)
+            return;
+
+        photonView.RPC(nameof(RequestCancelHackingDevice), RpcTarget.MasterClient);
     }
 
     void CancelCloakDeviceForLocalOwner()
@@ -2205,7 +2259,7 @@ public class PlayerShooting : MonoBehaviourPun
         return Mathf.Max(1.2f, range * 0.22f);
     }
 
-    public bool TryFireBot(Vector2 direction)
+    public bool TryFireBot(Vector2 direction, int homingTargetViewId = 0)
     {
         if (GetComponent<EnemyBot>() == null && !IsNeutralRiderShip())
             return false;
@@ -2221,11 +2275,77 @@ public class PlayerShooting : MonoBehaviourPun
         if (!infiniteAmmo && (isReloading || currentAmmo <= 0))
             return false;
 
-        if (!Shoot(direction.normalized))
+        if (!Shoot(direction.normalized, homingTargetViewId))
             return false;
 
         if (!infiniteAmmo)
             ConsumeAmmo();
+        nextFireTime = Time.time + fireRate * GetFireIntervalMultiplier();
+        return true;
+    }
+
+    public bool TryFireBotAtPoint(Vector2 direction, Vector2 targetPoint, int homingTargetViewId = 0)
+    {
+        if (GetComponent<EnemyBot>() == null && !IsNeutralRiderShip())
+            return false;
+
+        if (!photonView.IsMine || !IsGameStarted())
+            return false;
+
+        UpdateReload();
+
+        if (Time.time < nextFireTime || direction.sqrMagnitude < 0.04f)
+            return false;
+
+        if (!infiniteAmmo && (isReloading || currentAmmo <= 0))
+            return false;
+
+        if (!Shoot(direction.normalized, homingTargetViewId, true, targetPoint))
+            return false;
+
+        if (!infiniteAmmo)
+            ConsumeAmmo();
+        nextFireTime = Time.time + fireRate * GetFireIntervalMultiplier();
+        return true;
+    }
+
+    public bool TryFireHackedRandom(Vector2 direction)
+    {
+        if (!photonView.IsMine || !IsGameStarted() || direction.sqrMagnitude < 0.04f)
+            return false;
+
+        if (GetComponent<EnemyBot>() != null || IsNeutralRiderShip())
+            return TryFireBot(direction);
+
+        if (AreShipControlsBlocked())
+            return false;
+
+        ResetComplexPressState();
+        HideAimMarker();
+        Vector2 safeDirection = ResolveSafeAimDirection(direction);
+
+        if (IsComplexShootingActive && HasMainGunSlotsForCurrentShip())
+        {
+            WeaponAttackProfile profile = activeComplexWeaponProfile ?? SyncComplexWeaponProfile();
+            if (profile == null)
+                return false;
+
+            UpdateComplexAmmoReload();
+            Vector2 targetPoint = (Vector2)transform.position + (safeDirection * GetComplexRangeWorld(profile));
+            return TryFireComplexAttack(profile, safeDirection, targetPoint, true, false, 0);
+        }
+
+        SyncEquippedWeaponProfile();
+        SyncAmmoSetting();
+        UpdateReload();
+
+        if (Time.time < nextFireTime || isReloading || currentAmmo <= 0)
+            return false;
+
+        if (!Shoot(safeDirection))
+            return false;
+
+        ConsumeAmmo();
         nextFireTime = Time.time + fireRate * GetFireIntervalMultiplier();
         return true;
     }
@@ -2483,6 +2603,70 @@ public class PlayerShooting : MonoBehaviourPun
         bulletSpeed = baseBulletSpeed;
         shotSoundId = baseShotSoundId;
         multiShotCount = 1;
+    }
+
+    public void ConfigureBotWeaponAttackProfile(WeaponAttackProfile profile, float configuredMuzzleOffsetDistance, int muzzleStreamCount = 1, bool configuredInfiniteAmmo = false)
+    {
+        WeaponAttackProfile safeProfile = profile != null
+            ? profile.Clone()
+            : WeaponAttackCatalog.GetNormalAttackByWeaponId(WeaponAttackCatalog.SimpleGunId);
+
+        activeSimpleWeaponProfile = safeProfile;
+        customAmmoProfileActive = true;
+        fireRate = Mathf.Max(0.05f, safeProfile.AttackCooldown);
+        maxAmmo = Mathf.Max(1, safeProfile.MaxAmmo);
+        reloadDuration = Mathf.Max(0f, safeProfile.AmmoReloadTime);
+        bulletDamage = Mathf.Max(1, Mathf.Max(safeProfile.HpDamage, safeProfile.ShieldDamage));
+        bulletScaleMultiplier = Mathf.Max(0.2f, safeProfile.ProjectileSize);
+        bulletColor = safeProfile.ProjectileColor;
+        muzzleOffsetDistance = Mathf.Max(0f, configuredMuzzleOffsetDistance);
+        infiniteAmmo = configuredInfiniteAmmo;
+        bulletSpeed = Mathf.Max(0.1f, safeProfile.ProjectileSpeed);
+        bulletRangeMultiplier = Mathf.Max(0.25f, safeProfile.RangeMultiplier);
+        shotSoundId = safeProfile.ShotSoundId ?? string.Empty;
+        multiShotCount = Mathf.Clamp(muzzleStreamCount, 1, 2);
+
+        simpleUsesDamageProfile = true;
+        simpleShieldDamage = Mathf.Max(0, safeProfile.ShieldDamage);
+        simpleHpDamage = Mathf.Max(0, safeProfile.HpDamage);
+        simplePierces = safeProfile.Pierces;
+        simpleAreaDamageRadius = Mathf.Max(0f, safeProfile.AreaDamageRadius);
+        simpleHitEffectId = safeProfile.HitEffectId ?? string.Empty;
+        simpleFlightTime = Mathf.Clamp(safeProfile.FlightTime, 0.2f, 30f);
+        simpleDamageType = safeProfile.DamageType;
+        simpleDeliveryMethod = safeProfile.DeliveryMethod;
+        simpleDeliveryFlags = safeProfile.DeliveryFlags;
+
+        isReloading = false;
+        reloadFinishTime = 0f;
+        currentAmmo = maxAmmo;
+        nextFireTime = 0f;
+    }
+
+    public bool TryExecuteNeutralRiderBotItem(string itemId)
+    {
+        if (!IsNeutralRiderShip() || !photonView.IsMine || !IsGameStarted() || !PhotonNetwork.IsMasterClient || string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        if (string.Equals(itemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal))
+            return TryDeployGadgetMine();
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceBombId, StringComparison.Ordinal))
+            return NewItemsRuntime.TryDeploySpaceBomb(this);
+
+        if (string.Equals(itemId, InventoryItemCatalog.StasisBuoyId, StringComparison.Ordinal))
+            return NewItemsRuntime.TryDeployStasisBuoy(this);
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceTorpedoId, StringComparison.Ordinal))
+            return NewItemsRuntime.TryLaunchSpaceTorpedo(this);
+
+        if (string.Equals(itemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal))
+            return NewItemsRuntime.TryDeployAutoTurret(this);
+
+        if (string.Equals(itemId, InventoryItemCatalog.RocketAutoTurretId, StringComparison.Ordinal))
+            return NewItemsRuntime.TryDeployRocketAutoTurret(this);
+
+        return false;
     }
 
     bool ShouldUseDualMuzzles(WeaponAttackProfile profile, int matchingWeaponCount)
@@ -2843,6 +3027,7 @@ public class PlayerShooting : MonoBehaviourPun
         if (ShouldApplyNovaNoEquipmentAmmoBonus())
             configuredAmmo *= 2;
 
+        configuredAmmo = ApplyOverclockedMagazineAmmoBonus(configuredAmmo);
         return GetDamageAdjustedMaxAmmo(configuredAmmo);
     }
 
@@ -2896,6 +3081,7 @@ public class PlayerShooting : MonoBehaviourPun
         if (ShouldApplyCovaxRocketAmmoBonus(profile))
             configuredAmmo += 1;
 
+        configuredAmmo = ApplyOverclockedMagazineAmmoBonus(configuredAmmo);
         return GetDamageAdjustedMaxAmmo(configuredAmmo);
     }
 
@@ -2927,7 +3113,7 @@ public class PlayerShooting : MonoBehaviourPun
 
     float GetAdjustedSimpleReloadDuration()
     {
-        return Mathf.Max(0.05f, reloadDuration * AtlasSuppressionStatus.GetReloadMultiplier(gameObject) * AshSuperchargeStatus.GetAmmoReloadMultiplier(gameObject));
+        return Mathf.Max(0.05f, reloadDuration * AtlasSuppressionStatus.GetReloadMultiplier(gameObject) * AshSuperchargeStatus.GetAmmoReloadMultiplier(gameObject) * GetOverclockedMagazineReloadMultiplier());
     }
 
     float GetAdjustedAmmoReloadTime(WeaponAttackProfile profile, bool ashEmergencyReload)
@@ -2942,8 +3128,31 @@ public class PlayerShooting : MonoBehaviourPun
         if (ashEmergencyReload && ShouldApplyAshEmergencyCapacitor(profile))
             reloadTime *= AshEmergencyAmmoReloadMultiplier;
 
-        reloadTime *= AtlasSuppressionStatus.GetReloadMultiplier(gameObject) * AshSuperchargeStatus.GetAmmoReloadMultiplier(gameObject);
+        reloadTime *= AtlasSuppressionStatus.GetReloadMultiplier(gameObject) * AshSuperchargeStatus.GetAmmoReloadMultiplier(gameObject) * GetOverclockedMagazineReloadMultiplier();
         return Mathf.Max(0.001f, reloadTime);
+    }
+
+    int ApplyOverclockedMagazineAmmoBonus(int baseAmmo)
+    {
+        int count = GetEquippedOverclockedMagazineCount();
+        if (count <= 0)
+            return Mathf.Max(1, baseAmmo);
+
+        return Mathf.Max(1, Mathf.CeilToInt(baseAmmo * Mathf.Pow(OverclockedMagazineAmmoMultiplier, count)));
+    }
+
+    float GetOverclockedMagazineReloadMultiplier()
+    {
+        int count = GetEquippedOverclockedMagazineCount();
+        return count > 0 ? Mathf.Pow(OverclockedMagazineReloadMultiplier, count) : 1f;
+    }
+
+    int GetEquippedOverclockedMagazineCount()
+    {
+        Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
+        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
+        return InventoryItemCatalog.CountEquippedItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.OverclockedMagazineId);
     }
 
     float GetProjectileSpeedMultiplier()
@@ -3043,10 +3252,12 @@ public class PlayerShooting : MonoBehaviourPun
         if (PhotonNetwork.IsMasterClient)
         {
             StopAuthoritativeTractorBeam(true);
+            StopAuthoritativeHackingDevice(true);
         }
         else if (photonView != null && photonView.IsMine)
         {
             photonView.RPC(nameof(RequestStopTractorBeam), RpcTarget.MasterClient, InventoryItemCatalog.TractorBeamId);
+            photonView.RPC(nameof(RequestCancelHackingDevice), RpcTarget.MasterClient);
         }
     }
 
@@ -3311,6 +3522,9 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.DropbotId, StringComparison.Ordinal))
             return HasUsableDropbotCargoLocally();
 
+        if (string.Equals(itemId, InventoryItemCatalog.LootHookId, StringComparison.Ordinal))
+            return PlayerProfileService.HasInstance && PlayerProfileService.Instance.HasFreeShipInventorySlot();
+
         if (string.Equals(itemId, InventoryItemCatalog.ShortScannerId, StringComparison.Ordinal) &&
             ShortScannerRevealStatus.IsActive)
         {
@@ -3322,6 +3536,9 @@ public class PlayerShooting : MonoBehaviourPun
             HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>();
             return nebulaTarget == null || !nebulaTarget.IsCloaked;
         }
+
+        if (string.Equals(itemId, InventoryItemCatalog.HackingDeviceId, StringComparison.Ordinal))
+            return HasHackingDeviceCandidate();
 
         if (string.Equals(itemId, InventoryItemCatalog.SuperBoosterId, StringComparison.Ordinal) &&
             IsShipDamageActive(ShipDamageType.Booster))
@@ -3421,6 +3638,27 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal))
             return new Color(0.72f, 0.5f, 0.08f, 0.96f);
 
+        if (string.Equals(itemId, InventoryItemCatalog.LootHookId, StringComparison.Ordinal))
+            return new Color(0.76f, 0.42f, 0.08f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.StasisBuoyId, StringComparison.Ordinal))
+            return new Color(0.2f, 0.62f, 0.88f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.TetherHarpoonId, StringComparison.Ordinal))
+            return new Color(0.86f, 0.68f, 0.12f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceTorpedoId, StringComparison.Ordinal))
+            return new Color(0.84f, 0.28f, 0.14f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.BioTrapId, StringComparison.Ordinal))
+            return new Color(0.34f, 0.74f, 0.32f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.AsteroidBreacherBombId, StringComparison.Ordinal))
+            return new Color(0.82f, 0.44f, 0.12f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.MetalDriftWallId, StringComparison.Ordinal))
+            return new Color(0.34f, 0.42f, 0.48f, 0.96f);
+
         if (string.Equals(itemId, InventoryItemCatalog.LureBeaconId, StringComparison.Ordinal))
             return new Color(0.68f, 0.2f, 0.72f, 0.96f);
 
@@ -3438,6 +3676,9 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (string.Equals(itemId, InventoryItemCatalog.CloakDeviceId, StringComparison.Ordinal))
             return new Color(0.22f, 0.34f, 0.5f, 0.96f);
+
+        if (string.Equals(itemId, InventoryItemCatalog.HackingDeviceId, StringComparison.Ordinal))
+            return new Color(0.1f, 0.58f, 0.72f, 0.96f);
 
         if (string.Equals(itemId, InventoryItemCatalog.LootingFriendId, StringComparison.Ordinal))
             return new Color(0.74f, 0.58f, 0.12f, 0.96f);
@@ -3461,6 +3702,9 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.ShortScannerId, StringComparison.Ordinal))
             return GetAdjustedShortScannerRevealDuration();
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.HackingDeviceId, StringComparison.Ordinal))
+            return HackingDeviceWindupDuration;
 
         return 0f;
     }
@@ -3495,6 +3739,27 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(gadgetItemId, InventoryItemCatalog.TractorBeamId, StringComparison.Ordinal))
             return TractorBeamDefaultCharges * equippedCount;
 
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.LootHookId, StringComparison.Ordinal))
+            return LootHookDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.StasisBuoyId, StringComparison.Ordinal))
+            return StasisBuoyDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.TetherHarpoonId, StringComparison.Ordinal))
+            return TetherHarpoonDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.SpaceTorpedoId, StringComparison.Ordinal))
+            return SpaceTorpedoDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.BioTrapId, StringComparison.Ordinal))
+            return BioTrapDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.AsteroidBreacherBombId, StringComparison.Ordinal))
+            return AsteroidBreacherBombDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.MetalDriftWallId, StringComparison.Ordinal))
+            return MetalDriftWallDefaultCharges * equippedCount;
+
         if (string.Equals(gadgetItemId, InventoryItemCatalog.LureBeaconId, StringComparison.Ordinal))
         {
             int charges = LureBeaconDefaultCharges * equippedCount;
@@ -3518,6 +3783,9 @@ public class PlayerShooting : MonoBehaviourPun
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.CloakDeviceId, StringComparison.Ordinal))
             return CloakDeviceDefaultCharges * equippedCount;
+
+        if (string.Equals(gadgetItemId, InventoryItemCatalog.HackingDeviceId, StringComparison.Ordinal))
+            return HackingDeviceDefaultCharges * equippedCount;
 
         if (string.Equals(gadgetItemId, InventoryItemCatalog.SpaceDrillId, StringComparison.Ordinal))
             return SpaceDrillDefaultCharges * equippedCount;
@@ -3625,6 +3893,12 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.DropbotId, StringComparison.Ordinal))
         {
             TryBeginDropbotLaunchRequest(owner, itemId);
+            return;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.LootHookId, StringComparison.Ordinal))
+        {
+            TryBeginLootHookRequest(owner, itemId);
             return;
         }
 
@@ -3779,6 +4053,789 @@ public class PlayerShooting : MonoBehaviourPun
         pendingDropbotLaunchExpiresAt = 0f;
     }
 
+    bool TryBeginLootHookRequest(Photon.Realtime.Player owner, string itemId)
+    {
+        if (!PhotonNetwork.IsMasterClient ||
+            photonView == null ||
+            owner == null ||
+            !string.Equals(itemId, InventoryItemCatalog.LootHookId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (pendingLootHookActive)
+        {
+            if (Time.time <= pendingLootHookExpiresAt)
+                return false;
+
+            RestorePendingNeutralLootHookCargo();
+            ClearPendingLootHook();
+        }
+
+        if (!TryFindLootHookTarget(owner, out PlayerShooting victim, out int slotIndex, out string stolenItemId))
+        {
+            if (TryBeginNeutralRiderLootHookRequest(owner))
+                return true;
+
+            return false;
+        }
+
+        pendingLootHookRequestId++;
+        if (pendingLootHookRequestId <= 0)
+            pendingLootHookRequestId = 1;
+
+        pendingLootHookActive = true;
+        pendingLootHookVictimViewId = victim.photonView.ViewID;
+        pendingLootHookVictimActorNumber = victim.photonView.Owner != null ? victim.photonView.Owner.ActorNumber : 0;
+        pendingLootHookCargoSlotIndex = slotIndex;
+        pendingLootHookCargoItemId = stolenItemId;
+        pendingLootHookExpiresAt = Time.time + LootHookRequestTimeout;
+        victim.photonView.RPC(nameof(PrepareLootHookVictimCargoRpc), victim.photonView.Owner, pendingLootHookRequestId, slotIndex, stolenItemId, photonView.ViewID);
+        return true;
+    }
+
+    bool TryBeginNeutralRiderLootHookRequest(Photon.Realtime.Player owner)
+    {
+        if (!TryFindNeutralRiderLootHookTarget(owner, out NeutralRiderController neutralVictim, out string stolenItemId) ||
+            neutralVictim == null ||
+            neutralVictim.photonView == null)
+        {
+            return false;
+        }
+
+        if (!neutralVictim.TryRemoveLootHookCargo(stolenItemId, out string removedItemId) ||
+            string.IsNullOrWhiteSpace(removedItemId))
+        {
+            return false;
+        }
+
+        if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(owner, removedItemId))
+        {
+            neutralVictim.RestoreLootHookCargo(removedItemId);
+            return false;
+        }
+
+        pendingLootHookRequestId++;
+        if (pendingLootHookRequestId <= 0)
+            pendingLootHookRequestId = 1;
+
+        pendingLootHookActive = true;
+        pendingLootHookVictimViewId = neutralVictim.photonView.ViewID;
+        pendingLootHookVictimActorNumber = 0;
+        pendingLootHookCargoSlotIndex = LootHookNeutralCargoSlotIndex;
+        pendingLootHookCargoItemId = removedItemId;
+        pendingLootHookExpiresAt = Time.time + LootHookRequestTimeout;
+        photonView.RPC(nameof(ReceiveLootHookStolenItemRpc), photonView.Owner, pendingLootHookRequestId, removedItemId, neutralVictim.photonView.ViewID, LootHookNeutralCargoSlotIndex);
+        return true;
+    }
+
+    bool TryFindLootHookTarget(Photon.Realtime.Player owner, out PlayerShooting victim, out int slotIndex, out string itemId)
+    {
+        victim = null;
+        slotIndex = -1;
+        itemId = string.Empty;
+
+        if (owner == null)
+            return false;
+
+        int ownerActorNumber = owner.ActorNumber;
+        Vector2 sourcePosition = transform.position;
+        float bestDistance = float.MaxValue;
+        PlayerHealth[] healths = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < healths.Length; i++)
+        {
+            PlayerHealth candidateHealth = healths[i];
+            if (candidateHealth == null ||
+                candidateHealth == GetComponent<PlayerHealth>() ||
+                candidateHealth.IsWreck ||
+                candidateHealth.IsBotControlled ||
+                candidateHealth.IsNeutralRiderControlled ||
+                candidateHealth.IsAstronautControlled ||
+                candidateHealth.IsEvacuationAnimating ||
+                candidateHealth.photonView == null ||
+                candidateHealth.photonView.Owner == null ||
+                candidateHealth.photonView.Owner.ActorNumber == ownerActorNumber)
+            {
+                continue;
+            }
+
+            float distance = Vector2.Distance(sourcePosition, candidateHealth.transform.position);
+            if (distance > LootHookRange)
+                continue;
+
+            if (!TrySelectLootHookCargo(owner, candidateHealth.photonView.Owner, out int candidateSlot, out string candidateItemId))
+                continue;
+
+            bool better =
+                victim == null ||
+                distance < bestDistance - 0.35f;
+            if (!better)
+                continue;
+
+            PlayerShooting candidateShooting = candidateHealth.GetComponent<PlayerShooting>();
+            if (candidateShooting == null || candidateShooting.photonView == null)
+                continue;
+
+            victim = candidateShooting;
+            slotIndex = candidateSlot;
+            itemId = candidateItemId;
+            bestDistance = distance;
+        }
+
+        return victim != null && slotIndex >= 0 && !string.IsNullOrWhiteSpace(itemId);
+    }
+
+    bool TryFindNeutralRiderLootHookTarget(Photon.Realtime.Player owner, out NeutralRiderController rider, out string itemId)
+    {
+        rider = null;
+        itemId = string.Empty;
+
+        if (owner == null)
+            return false;
+
+        Vector2 sourcePosition = transform.position;
+        float bestDistance = float.MaxValue;
+        NeutralRiderController[] riders = FindObjectsByType<NeutralRiderController>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < riders.Length; i++)
+        {
+            NeutralRiderController candidate = riders[i];
+            if (candidate == null ||
+                candidate.gameObject == gameObject ||
+                candidate.photonView == null)
+            {
+                continue;
+            }
+
+            PlayerHealth candidateHealth = candidate.GetComponent<PlayerHealth>();
+            if (candidateHealth == null ||
+                candidateHealth.IsWreck ||
+                candidateHealth.IsEvacuationAnimating)
+            {
+                continue;
+            }
+
+            float distance = Vector2.Distance(sourcePosition, candidate.transform.position);
+            if (distance > LootHookRange)
+                continue;
+
+            if (!candidate.TrySelectLootHookCargo(out string candidateItemId) ||
+                !PlayerProfileService.PlayerHasFreeShipInventorySlot(owner, candidateItemId))
+            {
+                continue;
+            }
+
+            bool better =
+                rider == null ||
+                distance < bestDistance - 0.35f;
+            if (!better)
+                continue;
+
+            rider = candidate;
+            itemId = candidateItemId;
+            bestDistance = distance;
+        }
+
+        return rider != null && !string.IsNullOrWhiteSpace(itemId);
+    }
+
+    static bool TrySelectLootHookCargo(Photon.Realtime.Player thief, Photon.Realtime.Player victim, out int slotIndex, out string itemId)
+    {
+        slotIndex = -1;
+        itemId = string.Empty;
+
+        if (thief == null || victim == null)
+            return false;
+
+        string[] slots = PlayerProfileService.GetPlayerShipInventorySlots(victim);
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(victim, 0);
+        int capacity = PlayerProfileService.GetPlayerShipInventoryCapacity(victim);
+        List<int> candidateSlots = new List<int>();
+        for (int i = 0; i < slots.Length && i < capacity; i++)
+        {
+            if (PlayerProfileService.IsSafePocketIndex(shipSkinIndex, i) ||
+                PlayerProfileService.IsAstronautCargoIndex(shipSkinIndex, capacity, i))
+            {
+                continue;
+            }
+
+            string candidateItemId = slots[i];
+            if (string.IsNullOrWhiteSpace(candidateItemId))
+                continue;
+
+            if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(thief, candidateItemId))
+                continue;
+
+            candidateSlots.Add(i);
+        }
+
+        if (candidateSlots.Count <= 0)
+            return false;
+
+        slotIndex = candidateSlots[UnityEngine.Random.Range(0, candidateSlots.Count)];
+        itemId = slots[slotIndex];
+        return slotIndex >= 0;
+    }
+
+    [PunRPC]
+    async void PrepareLootHookVictimCargoRpc(int requestId, int slotIndex, string expectedItemId, int attackerViewId)
+    {
+        if (photonView == null || !photonView.IsMine)
+            return;
+
+        string removedItemId = null;
+        bool removed = false;
+        try
+        {
+            removedItemId = await PlayerProfileService.Instance.RemoveLootHookCargoItemDeferredSaveAsync(slotIndex, expectedItemId);
+            removed = string.Equals(removedItemId, expectedItemId, StringComparison.Ordinal);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Loot Hook victim cargo removal failed: " + ex);
+        }
+
+        if (photonView != null)
+            photonView.RPC(nameof(ConfirmLootHookVictimCargoRpc), RpcTarget.MasterClient, requestId, slotIndex, removedItemId ?? expectedItemId ?? string.Empty, removed, attackerViewId);
+    }
+
+    [PunRPC]
+    void ConfirmLootHookVictimCargoRpc(int requestId, int slotIndex, string itemId, bool removed, int attackerViewId, PhotonMessageInfo messageInfo)
+    {
+        if (!PhotonNetwork.IsMasterClient)
+            return;
+
+        PhotonView attackerView = PhotonView.Find(attackerViewId);
+        PlayerShooting attacker = attackerView != null ? attackerView.GetComponent<PlayerShooting>() : null;
+        if (attacker == null)
+        {
+            if (removed)
+                photonView.RPC(nameof(RestoreLootHookCargoItemRpc), messageInfo.Sender, slotIndex, itemId);
+            return;
+        }
+
+        attacker.ResolveLootHookVictimConfirmation(this, requestId, slotIndex, itemId, removed, messageInfo.Sender);
+    }
+
+    void ResolveLootHookVictimConfirmation(PlayerShooting victim, int requestId, int slotIndex, string itemId, bool removed, Photon.Realtime.Player sender)
+    {
+        if (!PhotonNetwork.IsMasterClient || victim == null || victim.photonView == null)
+            return;
+
+        bool valid =
+            pendingLootHookActive &&
+            requestId == pendingLootHookRequestId &&
+            victim.photonView.ViewID == pendingLootHookVictimViewId &&
+            slotIndex == pendingLootHookCargoSlotIndex &&
+            sender != null &&
+            sender.ActorNumber == pendingLootHookVictimActorNumber &&
+            string.Equals(itemId, pendingLootHookCargoItemId, StringComparison.Ordinal);
+
+        if (!valid)
+        {
+            if (removed && sender != null)
+                victim.photonView.RPC(nameof(RestoreLootHookCargoItemRpc), sender, slotIndex, itemId);
+            return;
+        }
+
+        if (!removed)
+        {
+            ClearPendingLootHook();
+            return;
+        }
+
+        if (photonView.Owner == null || !PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, itemId))
+        {
+            victim.photonView.RPC(nameof(RestoreLootHookCargoItemRpc), sender, slotIndex, itemId);
+            ClearPendingLootHook();
+            return;
+        }
+
+        photonView.RPC(nameof(ReceiveLootHookStolenItemRpc), photonView.Owner, requestId, itemId, victim.photonView.ViewID, slotIndex);
+    }
+
+    [PunRPC]
+    async void ReceiveLootHookStolenItemRpc(int requestId, string itemId, int victimViewId, int victimSlotIndex)
+    {
+        if (photonView == null || !photonView.IsMine)
+            return;
+
+        bool stored = false;
+        try
+        {
+            stored = await PlayerProfileService.Instance.AddItemToShipDeferredSaveAsync(itemId);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Loot Hook stolen cargo store failed: " + ex);
+        }
+
+        if (photonView != null)
+            photonView.RPC(nameof(ConfirmLootHookStoredItemRpc), RpcTarget.MasterClient, requestId, itemId, victimViewId, victimSlotIndex, stored);
+    }
+
+    [PunRPC]
+    void ConfirmLootHookStoredItemRpc(int requestId, string itemId, int victimViewId, int victimSlotIndex, bool stored, PhotonMessageInfo messageInfo)
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView == null)
+            return;
+
+        bool valid =
+            pendingLootHookActive &&
+            requestId == pendingLootHookRequestId &&
+            victimViewId == pendingLootHookVictimViewId &&
+            victimSlotIndex == pendingLootHookCargoSlotIndex &&
+            string.Equals(itemId, pendingLootHookCargoItemId, StringComparison.Ordinal) &&
+            photonView.Owner != null &&
+            messageInfo.Sender != null &&
+            messageInfo.Sender.ActorNumber == photonView.Owner.ActorNumber;
+
+        if (!valid)
+            return;
+
+        PhotonView victimView = PhotonView.Find(victimViewId);
+        if (!stored)
+        {
+            RestoreLootHookSourceCargo(victimView, victimSlotIndex, itemId);
+            ClearPendingLootHook();
+            return;
+        }
+
+        Photon.Realtime.Player owner = photonView.Owner;
+        int maxCharges = ResolveEquippedGadgetMaxCharges(owner, InventoryItemCatalog.LootHookId);
+        int remainingCharges = owner != null ? GetAuthoritativeRemainingChargesOnMaster(owner.ActorNumber, InventoryItemCatalog.LootHookId, maxCharges) : 0;
+        if (maxCharges > 0 && remainingCharges > 0)
+            SetAuthoritativeRemainingChargesOnMaster(owner.ActorNumber, InventoryItemCatalog.LootHookId, remainingCharges - 1, maxCharges);
+
+        RoundXpTracker.RecordGadgetSuccess(owner, InventoryItemCatalog.LootHookId);
+        photonView.RPC(nameof(PlayLootHookFxRpc), RpcTarget.All, victimViewId, itemId);
+        ClearPendingLootHook();
+    }
+
+    void RestorePendingNeutralLootHookCargo()
+    {
+        if (!PhotonNetwork.IsMasterClient || pendingLootHookCargoSlotIndex != LootHookNeutralCargoSlotIndex)
+            return;
+
+        PhotonView victimView = PhotonView.Find(pendingLootHookVictimViewId);
+        RestoreLootHookSourceCargo(victimView, pendingLootHookCargoSlotIndex, pendingLootHookCargoItemId);
+    }
+
+    void RestoreLootHookSourceCargo(PhotonView victimView, int victimSlotIndex, string itemId)
+    {
+        if (victimView == null || string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        if (victimSlotIndex == LootHookNeutralCargoSlotIndex)
+        {
+            NeutralRiderController neutralVictim = victimView.GetComponent<NeutralRiderController>();
+            if (neutralVictim != null)
+                neutralVictim.RestoreLootHookCargo(itemId);
+            return;
+        }
+
+        PlayerShooting victim = victimView.GetComponent<PlayerShooting>();
+        if (victim != null && victim.photonView != null && victim.photonView.Owner != null)
+            victim.photonView.RPC(nameof(RestoreLootHookCargoItemRpc), victim.photonView.Owner, victimSlotIndex, itemId);
+    }
+
+    [PunRPC]
+    async void RestoreLootHookCargoItemRpc(int slotIndex, string itemId)
+    {
+        if (photonView == null || !photonView.IsMine || string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        try
+        {
+            await PlayerProfileService.Instance.RestoreShipItemAtAsync(slotIndex, itemId);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Loot Hook cargo restore failed: " + ex);
+        }
+    }
+
+    [PunRPC]
+    void PlayLootHookFxRpc(int victimViewId, string itemId)
+    {
+        PhotonView victimView = PhotonView.Find(victimViewId);
+        if (victimView != null)
+            LootHookSnatchVfx.Spawn(transform, victimView.transform);
+
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayLootHookAt(transform.position);
+    }
+
+    [PunRPC]
+    void PlayBioTrapFxRpc(int targetViewId)
+    {
+        PhotonView targetView = PhotonView.Find(targetViewId);
+        if (targetView != null)
+            BioTrapCaptureVfx.Spawn(transform.position, targetView.transform.position);
+
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayBioTrapCaptureAt(targetView != null ? targetView.transform.position : transform.position);
+    }
+
+    [PunRPC]
+    void PlayTetherHarpoonFxRpc(int targetViewId)
+    {
+        PhotonView targetView = PhotonView.Find(targetViewId);
+        if (targetView != null)
+            LootHookSnatchVfx.Spawn(transform, targetView.transform);
+
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayTetherHarpoonAt(transform.position);
+    }
+
+    [PunRPC]
+    void PlayAsteroidBreacherFxRpc(float x, float y)
+    {
+        Vector3 position = new Vector3(x, y, transform.position.z);
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayAsteroidBreacherAt(position);
+    }
+
+    void ClearPendingLootHook()
+    {
+        pendingLootHookActive = false;
+        pendingLootHookVictimViewId = 0;
+        pendingLootHookVictimActorNumber = 0;
+        pendingLootHookCargoSlotIndex = -1;
+        pendingLootHookCargoItemId = null;
+        pendingLootHookExpiresAt = 0f;
+    }
+
+    bool HasHackingDeviceCandidate()
+    {
+        return FindClosestHackingDeviceTarget(HackingDeviceRange) != null;
+    }
+
+    bool TryStartHackingDevice(string itemId)
+    {
+        if (!PhotonNetwork.IsMasterClient ||
+            !IsGameStarted() ||
+            !string.Equals(itemId, InventoryItemCatalog.HackingDeviceId, StringComparison.Ordinal) ||
+            photonView == null ||
+            authoritativeHackingDeviceRoutine != null)
+        {
+            return false;
+        }
+
+        PhotonView targetView = FindClosestHackingDeviceTarget(HackingDeviceRange);
+        if (targetView == null)
+            return false;
+
+        activeHackingDeviceTargetViewId = targetView.ViewID;
+        activeHackingDeviceItemId = itemId;
+        photonView.RPC(nameof(StartHackingDeviceEffects), RpcTarget.All, photonView.ViewID, targetView.ViewID, HackingDeviceWindupDuration);
+        authoritativeHackingDeviceRoutine = StartCoroutine(HackingDeviceRoutine(targetView.ViewID));
+        return true;
+    }
+
+    IEnumerator HackingDeviceRoutine(int targetViewId)
+    {
+        float startedAt = Time.time;
+        WaitForSeconds wait = new WaitForSeconds(HackingDeviceValidationInterval);
+        while (Time.time - startedAt < HackingDeviceWindupDuration)
+        {
+            PhotonView targetView = PhotonView.Find(targetViewId);
+            PlayerHealth targetHealth = targetView != null ? targetView.GetComponent<PlayerHealth>() : null;
+            if (!IsValidHackingDeviceTarget(targetHealth, HackingDeviceKeepAliveRange, true))
+                break;
+
+            yield return wait;
+        }
+
+        bool completed = Time.time - startedAt >= HackingDeviceWindupDuration;
+        authoritativeHackingDeviceRoutine = null;
+
+        PhotonView completedTargetView = PhotonView.Find(targetViewId);
+        PlayerHealth completedTargetHealth = completedTargetView != null ? completedTargetView.GetComponent<PlayerHealth>() : null;
+        if (completed && IsValidHackingDeviceTarget(completedTargetHealth, HackingDeviceKeepAliveRange, true))
+        {
+            ApplyCompletedHackingDeviceEffect(completedTargetView);
+            RoundXpTracker.RecordGadgetSuccess(photonView.Owner, InventoryItemCatalog.HackingDeviceId);
+            NotifyPathfinderHackCompleted(completedTargetView);
+        }
+
+        StopAuthoritativeHackingDevice(true);
+    }
+
+    void ApplyCompletedHackingDeviceEffect(PhotonView targetView)
+    {
+        if (!PhotonNetwork.IsMasterClient || targetView == null)
+            return;
+
+        PlayerHealth targetHealth = targetView.GetComponent<PlayerHealth>();
+        if (targetHealth == null || targetHealth.IsWreck)
+            return;
+
+        float duration = ResolveHackingDeviceEffectDuration(targetHealth);
+        int sourceViewId = photonView != null ? photonView.ViewID : 0;
+
+        PlayerShooting targetShooting = targetView.GetComponent<PlayerShooting>();
+        if (targetShooting != null)
+            targetView.RPC(nameof(ApplyHackedStatusRpc), RpcTarget.All, duration, sourceViewId);
+
+        EnemyBot targetBot = targetView.GetComponent<EnemyBot>();
+        if (targetBot != null)
+            targetView.RPC(nameof(EnemyBot.ApplyConfusionRpc), RpcTarget.All, duration);
+    }
+
+    void NotifyPathfinderHackCompleted(PhotonView targetView)
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView == null || photonView.Owner == null || targetView == null)
+            return;
+
+        string hackedTypeId = ResolvePathfinderHackedShipTypeId(targetView);
+        if (string.IsNullOrWhiteSpace(hackedTypeId))
+            return;
+
+        photonView.RPC(nameof(RecordPathfinderHackProgressRpc), photonView.Owner, hackedTypeId);
+    }
+
+    string ResolvePathfinderHackedShipTypeId(PhotonView targetView)
+    {
+        if (targetView == null)
+            return string.Empty;
+
+        EnemyBot targetBot = targetView.GetComponent<EnemyBot>();
+        if (targetBot != null)
+            return PlayerProfileService.BuildPathfinderEnemyHackTypeId(targetBot.Kind);
+
+        NeutralRiderController neutralRider = targetView.GetComponent<NeutralRiderController>();
+        if (neutralRider != null)
+            return PlayerProfileService.BuildPathfinderPlayerHackTypeId(ShipCatalog.GetShipTypeFromSkinIndex(neutralRider.ShipSkinIndex));
+
+        if (targetView.Owner != null)
+        {
+            int shipSkinIndex = RoomSettings.GetPlayerShipSkin(targetView.Owner, ShipCatalog.ExplorerBasicSkinIndex);
+            return PlayerProfileService.BuildPathfinderPlayerHackTypeId(ShipCatalog.GetShipTypeFromSkinIndex(shipSkinIndex));
+        }
+
+        return string.Empty;
+    }
+
+    [PunRPC]
+    async void RecordPathfinderHackProgressRpc(string hackedTypeId)
+    {
+        if (!photonView.IsMine || string.IsNullOrWhiteSpace(hackedTypeId) || !PlayerProfileService.HasInstance)
+            return;
+
+        try
+        {
+            PathfinderHackRecordResult result = await PlayerProfileService.Instance.RecordPathfinderHackedShipTypeAsync(hackedTypeId);
+            if (result == null || (!result.Started && !result.Added && !result.DocumentationReady && !result.InventoryFull))
+                return;
+
+            if (result.InventoryFull)
+            {
+                RoundAnnouncementUI.Show("Ship Prototype Documentation ready - make room in inventory.", 3.2f);
+                return;
+            }
+
+            if (result.DocumentationReady && result.DocumentationCreated)
+            {
+                RoundAnnouncementUI.Show("Ship Prototype Documentation acquired.", 3.2f);
+                return;
+            }
+
+            if (result.Started)
+            {
+                RoundAnnouncementUI.Show("Documentation copied - Pathfinder project initiated. Hack more data from different ship types", 4f);
+                return;
+            }
+
+            if (result.Added)
+                RoundAnnouncementUI.Show("Pathfinder ship data copied: " + result.Count + "/" + PlayerProfileService.PathfinderHackedShipTypesRequired, 2.8f);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Pathfinder hack progress failed: " + ex);
+        }
+    }
+
+    float ResolveHackingDeviceEffectDuration(PlayerHealth targetHealth)
+    {
+        EnemyBot targetBot = targetHealth != null ? targetHealth.GetComponent<EnemyBot>() : null;
+        if (targetBot == null)
+            return HackingDevicePlayerDuration;
+
+        float size = Mathf.Max(0.6f, targetBot.VisualTargetSize);
+        float sizeT = Mathf.InverseLerp(0.82f, 5.6f, size);
+        return Mathf.Lerp(HackingDeviceComputerMaxDuration, HackingDeviceComputerMinDuration, sizeT);
+    }
+
+    void StopAuthoritativeHackingDevice(bool notifyClients)
+    {
+        if (authoritativeHackingDeviceRoutine != null)
+        {
+            StopCoroutine(authoritativeHackingDeviceRoutine);
+            authoritativeHackingDeviceRoutine = null;
+        }
+
+        if (notifyClients && photonView != null)
+            photonView.RPC(nameof(StopHackingDeviceEffects), RpcTarget.All, photonView.ViewID);
+
+        activeHackingDeviceTargetViewId = 0;
+        activeHackingDeviceItemId = null;
+    }
+
+    [PunRPC]
+    void RequestCancelHackingDevice(PhotonMessageInfo messageInfo)
+    {
+        if (!PhotonNetwork.IsMasterClient || photonView == null || photonView.Owner == null || messageInfo.Sender == null)
+            return;
+
+        if (messageInfo.Sender.ActorNumber != photonView.Owner.ActorNumber)
+            return;
+
+        StopAuthoritativeHackingDevice(true);
+    }
+
+    [PunRPC]
+    void StartHackingDeviceEffects(int sourceViewId, int targetViewId, float windupDuration)
+    {
+        AudioManager.Instance.PlayHackingDeviceAt(transform.position);
+        HackingBeamVfx.StartBeam(sourceViewId, targetViewId, windupDuration);
+    }
+
+    [PunRPC]
+    void StopHackingDeviceEffects(int sourceViewId)
+    {
+        HackingBeamVfx.StopBeam(sourceViewId);
+    }
+
+    [PunRPC]
+    void ApplyHackedStatusRpc(float duration, int sourceViewId)
+    {
+        AudioManager.Instance.PlayHackingDeviceAt(transform.position);
+        HackingStatus.Attach(gameObject, duration, sourceViewId);
+    }
+
+    PhotonView FindClosestHackingDeviceTarget(float maxRange)
+    {
+        Vector2 sourcePosition = transform.position;
+        PhotonView bestView = null;
+        float bestDistance = float.MaxValue;
+
+        PlayerHealth[] players = RuntimeSceneQueryCache.GetPlayers();
+        for (int i = 0; i < players.Length; i++)
+        {
+            PlayerHealth candidate = players[i];
+            if (!IsValidHackingDeviceTarget(candidate, maxRange, true))
+                continue;
+
+            float distance = GetHackingDeviceDistance(candidate, sourcePosition);
+            if (distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            bestView = candidate.photonView;
+        }
+
+        return bestView;
+    }
+
+    bool IsValidHackingDeviceTarget(PlayerHealth candidate, float maxRange, bool requireTargetBlind)
+    {
+        if (candidate == null || !candidate.gameObject.activeInHierarchy || candidate == GetComponent<PlayerHealth>())
+            return false;
+
+        if (candidate.IsWreck || candidate.IsEvacuationAnimating || candidate.CurrentHP <= 0)
+            return false;
+
+        PhotonView candidateView = candidate.photonView;
+        if (candidateView == null || candidateView == photonView)
+            return false;
+
+        if (candidate.GetComponent<PlayerDeployableBase>() != null || candidate.GetComponent<LureBeaconDecoy>() != null)
+            return false;
+
+        ActorIdentity identity = ActorIdentity.Ensure(candidate.gameObject);
+        if (identity == null || !identity.IsShip)
+            return false;
+
+        if (!candidate.IsBotControlled && !candidate.IsNeutralRiderControlled && !candidate.IsHumanShipControlled)
+            return false;
+
+        if (candidate.IsHumanShipControlled &&
+            photonView != null &&
+            photonView.Owner != null &&
+            candidateView.Owner != null &&
+            candidateView.Owner.ActorNumber == photonView.Owner.ActorNumber)
+        {
+            return false;
+        }
+
+        EnemyBot targetBot = candidate.GetComponent<EnemyBot>();
+        if (targetBot != null && !targetBot.CanReceivePilotHostileEffect())
+            return false;
+
+        if (HackingStatus.IsActiveOn(candidate.gameObject))
+            return false;
+
+        if (GetHackingDeviceDistance(candidate, transform.position) > maxRange)
+            return false;
+
+        return !requireTargetBlind || IsHackingTargetUnableToSeeSource(candidate);
+    }
+
+    float GetHackingDeviceDistance(PlayerHealth candidate, Vector2 sourcePosition)
+    {
+        if (candidate == null)
+            return float.MaxValue;
+
+        Collider2D collider = candidate.GetComponent<Collider2D>();
+        if (collider == null)
+            collider = candidate.GetComponentInChildren<Collider2D>();
+
+        Vector2 targetPoint = collider != null ? collider.ClosestPoint(sourcePosition) : (Vector2)candidate.transform.position;
+        return Vector2.Distance(sourcePosition, targetPoint);
+    }
+
+    bool IsHackingTargetUnableToSeeSource(PlayerHealth target)
+    {
+        return IsSourceHiddenFromHackingTarget(target) || IsSourceBehindHackingTarget(target);
+    }
+
+    bool IsSourceHiddenFromHackingTarget(PlayerHealth target)
+    {
+        HideInNebulaTarget sourceNebulaState = GetComponent<HideInNebulaTarget>();
+        if (sourceNebulaState == null)
+            return false;
+
+        HideInNebulaTarget targetNebulaState = target != null ? target.GetComponent<HideInNebulaTarget>() : null;
+        return sourceNebulaState.IsHiddenFromObserver(targetNebulaState);
+    }
+
+    bool IsSourceBehindHackingTarget(PlayerHealth target)
+    {
+        if (target == null)
+            return false;
+
+        Vector2 toSource = (Vector2)transform.position - (Vector2)target.transform.position;
+        if (toSource.sqrMagnitude <= 0.001f)
+            return false;
+
+        Vector2 targetForward = ResolveHackingTargetForward(target);
+        if (targetForward.sqrMagnitude <= 0.001f)
+            return false;
+
+        return Vector2.Dot(targetForward.normalized, toSource.normalized) <= HackingDeviceBehindDotThreshold;
+    }
+
+    Vector2 ResolveHackingTargetForward(PlayerHealth target)
+    {
+        if (target == null)
+            return Vector2.up;
+
+        if (target.GetComponent<EnemyBot>() != null)
+            return -target.transform.up;
+
+        return target.transform.up;
+    }
+
     [PunRPC]
     void RequestStartTractorBeam(string itemId, PhotonMessageInfo messageInfo)
     {
@@ -3870,6 +4927,60 @@ public class PlayerShooting : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.MagneticBeamId, StringComparison.Ordinal))
             return TryActivateMagneticBeam();
 
+        if (string.Equals(itemId, InventoryItemCatalog.StasisBuoyId, StringComparison.Ordinal))
+        {
+            bool deployed = NewItemsRuntime.TryDeployStasisBuoy(this);
+            if (deployed)
+                RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+
+            return deployed;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.TetherHarpoonId, StringComparison.Ordinal))
+        {
+            bool tethered = NewItemsRuntime.TryStartTetherHarpoon(this);
+            if (tethered)
+                RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+
+            return tethered;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceTorpedoId, StringComparison.Ordinal))
+        {
+            bool launched = NewItemsRuntime.TryLaunchSpaceTorpedo(this);
+            if (launched)
+                RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+
+            return launched;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.BioTrapId, StringComparison.Ordinal))
+        {
+            bool captured = NewItemsRuntime.TryFireBioTrap(this);
+            if (captured)
+                RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+
+            return captured;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.AsteroidBreacherBombId, StringComparison.Ordinal))
+        {
+            bool breached = NewItemsRuntime.TryDetonateAsteroidBreacherBomb(this);
+            if (breached)
+                RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+
+            return breached;
+        }
+
+        if (string.Equals(itemId, InventoryItemCatalog.MetalDriftWallId, StringComparison.Ordinal))
+        {
+            bool deployed = NewItemsRuntime.TryDeployMetalDriftWall(this);
+            if (deployed)
+                RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
+
+            return deployed;
+        }
+
         if (string.Equals(itemId, InventoryItemCatalog.LureBeaconId, StringComparison.Ordinal))
             return TryDeployLureBeacon();
 
@@ -3915,6 +5026,9 @@ public class PlayerShooting : MonoBehaviourPun
             RoundXpTracker.RecordGadgetSuccess(photonView.Owner, itemId);
             return true;
         }
+
+        if (string.Equals(itemId, InventoryItemCatalog.HackingDeviceId, StringComparison.Ordinal))
+            return TryStartHackingDevice(itemId);
 
         if (string.Equals(itemId, InventoryItemCatalog.SpaceDrillId, StringComparison.Ordinal))
         {
@@ -5112,10 +6226,17 @@ public class GadgetButtonUI : MonoBehaviourPun
     }
 
     const string GadgetButtonRootName = "GadgetButtonsRoot";
+    const float GadgetButtonSize = 112f;
+    const float GadgetButtonBaseOffsetY = 392f;
+    const float GadgetButtonPitch = 126f;
+    const float GadgetButtonTopPadding = 24f;
     static Sprite circularButtonSprite;
 
     PlayerShooting shooting;
     GameObject rootObject;
+    RectTransform rootRect;
+    RectTransform canvasRect;
+    RectTransform shootJoystickRect;
     readonly List<GadgetButtonWidget> widgets = new List<GadgetButtonWidget>();
     string lastWidgetSignature = string.Empty;
 
@@ -5136,6 +6257,7 @@ public class GadgetButtonUI : MonoBehaviourPun
     void Update()
     {
         RebuildButtonsIfNeeded();
+        RefreshRuntimeLayout();
         RefreshState();
     }
 
@@ -5166,8 +6288,9 @@ public class GadgetButtonUI : MonoBehaviourPun
         if (canvas == null || shootJoystickObject == null)
             return;
 
-        RectTransform joystickRect = shootJoystickObject.GetComponent<RectTransform>();
-        if (joystickRect == null)
+        canvasRect = canvas.GetComponent<RectTransform>();
+        shootJoystickRect = shootJoystickObject.GetComponent<RectTransform>();
+        if (canvasRect == null || shootJoystickRect == null)
             return;
 
         GameObject existingRoot = GameObject.Find(GadgetButtonRootName);
@@ -5177,22 +6300,22 @@ public class GadgetButtonUI : MonoBehaviourPun
         rootObject = new GameObject(GadgetButtonRootName, typeof(RectTransform));
         rootObject.transform.SetParent(canvas.transform, false);
 
-        RectTransform rootRect = rootObject.GetComponent<RectTransform>();
-        rootRect.anchorMin = joystickRect.anchorMin;
-        rootRect.anchorMax = joystickRect.anchorMax;
+        rootRect = rootObject.GetComponent<RectTransform>();
         rootRect.pivot = new Vector2(0.5f, 0.5f);
-        rootRect.anchoredPosition = joystickRect.anchoredPosition;
         rootRect.sizeDelta = Vector2.zero;
+        ApplyRootLayoutFromJoystick();
+
+        int rowsPerColumn = CalculateRowsPerColumn(itemIds.Count);
 
         for (int i = 0; i < itemIds.Count; i++)
         {
-            GadgetButtonWidget widget = CreateWidget(itemIds[i], i);
+            GadgetButtonWidget widget = CreateWidget(itemIds[i], i, rowsPerColumn);
             if (widget != null)
                 widgets.Add(widget);
         }
     }
 
-    GadgetButtonWidget CreateWidget(string itemId, int index)
+    GadgetButtonWidget CreateWidget(string itemId, int index, int rowsPerColumn)
     {
         if (rootObject == null || string.IsNullOrWhiteSpace(itemId))
             return null;
@@ -5206,8 +6329,8 @@ public class GadgetButtonUI : MonoBehaviourPun
         rect.anchorMin = new Vector2(0.5f, 0.5f);
         rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = new Vector2(0f, 392f + (index * 126f));
-        rect.sizeDelta = new Vector2(112f, 112f);
+        rect.anchoredPosition = GetWidgetAnchoredPosition(index, rowsPerColumn);
+        rect.sizeDelta = new Vector2(GadgetButtonSize, GadgetButtonSize);
 
         widget.Background = widget.Root.GetComponent<Image>();
         widget.Background.sprite = GetCircularButtonSprite();
@@ -5274,6 +6397,75 @@ public class GadgetButtonUI : MonoBehaviourPun
         }
 
         return widget;
+    }
+
+    void RefreshRuntimeLayout()
+    {
+        if (rootObject == null || rootRect == null || widgets.Count == 0)
+            return;
+
+        if (shootJoystickRect == null)
+        {
+            GameObject shootJoystickObject = GameObject.Find("ShootJoystickBG");
+            shootJoystickRect = shootJoystickObject != null ? shootJoystickObject.GetComponent<RectTransform>() : null;
+        }
+
+        if (canvasRect == null)
+        {
+            Transform parent = rootObject.transform.parent;
+            canvasRect = parent != null ? parent.GetComponent<RectTransform>() : null;
+        }
+
+        ApplyRootLayoutFromJoystick();
+        int rowsPerColumn = CalculateRowsPerColumn(widgets.Count);
+        for (int i = 0; i < widgets.Count; i++)
+        {
+            GadgetButtonWidget widget = widgets[i];
+            RectTransform widgetRect = widget?.Root != null ? widget.Root.GetComponent<RectTransform>() : null;
+            if (widgetRect != null)
+                widgetRect.anchoredPosition = GetWidgetAnchoredPosition(i, rowsPerColumn);
+        }
+    }
+
+    void ApplyRootLayoutFromJoystick()
+    {
+        if (rootRect == null || shootJoystickRect == null)
+            return;
+
+        rootRect.anchorMin = shootJoystickRect.anchorMin;
+        rootRect.anchorMax = shootJoystickRect.anchorMax;
+        rootRect.anchoredPosition = shootJoystickRect.anchoredPosition;
+    }
+
+    int CalculateRowsPerColumn(int buttonCount)
+    {
+        if (buttonCount <= 0)
+            return 1;
+
+        if (rootRect == null || canvasRect == null)
+            return buttonCount;
+
+        float maxChildCenterY = canvasRect.rect.yMax - GadgetButtonTopPadding - (GadgetButtonSize * 0.5f) - GetRootCenterY();
+        int fittingRows = Mathf.FloorToInt((maxChildCenterY - GadgetButtonBaseOffsetY) / GadgetButtonPitch) + 1;
+        return Mathf.Clamp(fittingRows, 1, buttonCount);
+    }
+
+    float GetRootCenterY()
+    {
+        if (rootRect == null || canvasRect == null)
+            return 0f;
+
+        Vector2 anchorCenter = (rootRect.anchorMin + rootRect.anchorMax) * 0.5f;
+        float anchorY = Mathf.Lerp(canvasRect.rect.yMin, canvasRect.rect.yMax, anchorCenter.y);
+        return anchorY + rootRect.anchoredPosition.y;
+    }
+
+    static Vector2 GetWidgetAnchoredPosition(int index, int rowsPerColumn)
+    {
+        rowsPerColumn = Mathf.Max(1, rowsPerColumn);
+        int column = Mathf.Max(0, index) / rowsPerColumn;
+        int row = Mathf.Max(0, index) % rowsPerColumn;
+        return new Vector2(-column * GadgetButtonPitch, GadgetButtonBaseOffsetY + (row * GadgetButtonPitch));
     }
 
     void ConfigureHoldGadgetInput(Button button, string itemId)
@@ -5368,6 +6560,10 @@ public class GadgetButtonUI : MonoBehaviourPun
             Destroy(rootObject);
             rootObject = null;
         }
+
+        rootRect = null;
+        canvasRect = null;
+        shootJoystickRect = null;
     }
 
     static string BuildWidgetSignature(IReadOnlyList<string> itemIds)

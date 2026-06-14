@@ -124,6 +124,12 @@ public sealed class ArrowRacePlotController : MonoBehaviour
             return;
         }
 
+        if (!ShipUnlockPlotCoordinator.IsRoundStarter(PhotonNetwork.LocalPlayer))
+        {
+            ResetLocalState();
+            return;
+        }
+
         if (Mathf.Abs((float)(currentStartTime - handledStartTime)) > PlotStartMatchTolerance)
         {
             handledStartTime = currentStartTime;
@@ -492,7 +498,7 @@ public sealed class ArrowRacePlotController : MonoBehaviour
             return;
         }
 
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         float halfX = Mathf.Max(10f, mapSize.x * 0.5f - 5f);
         float halfY = Mathf.Max(10f, mapSize.y * 0.5f - 5f);
         float baseRadius = Mathf.Min(halfX, halfY) * 0.42f;
@@ -514,7 +520,7 @@ public sealed class ArrowRacePlotController : MonoBehaviour
 
     void BuildLongMapRoute(Vector2 origin, int count, ChallengeMode mode, List<Vector2> output)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         float halfX = Mathf.Max(14f, mapSize.x * 0.5f - 7f);
         float halfY = Mathf.Max(14f, mapSize.y * 0.5f - 7f);
         float edge = mode == ChallengeMode.FinalRun ? 0.9f : 0.84f;
@@ -595,7 +601,7 @@ public sealed class ArrowRacePlotController : MonoBehaviour
 
     Vector2 ResolveBeaconPosition(ArrowLicenseStage stage, Vector2 playerPosition)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         float halfX = Mathf.Max(8f, mapSize.x * 0.5f - 6f);
         float halfY = Mathf.Max(8f, mapSize.y * 0.5f - 6f);
         float angle = 0.85f + (int)stage * 0.72f;
@@ -605,7 +611,7 @@ public sealed class ArrowRacePlotController : MonoBehaviour
 
     Vector2 ResolveSafeLaunchPosition(Vector2 playerPosition)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         float halfX = Mathf.Max(8f, mapSize.x * 0.5f - 6f);
         float halfY = Mathf.Max(8f, mapSize.y * 0.5f - 6f);
         return new Vector2(Mathf.Clamp(playerPosition.x, -halfX, halfX), Mathf.Clamp(playerPosition.y, -halfY, halfY));

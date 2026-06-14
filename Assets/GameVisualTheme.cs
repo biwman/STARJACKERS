@@ -71,6 +71,7 @@ public class GameVisualTheme : MonoBehaviour
     bool runtimeReloadAssetsDirty;
     int lastRuntimeBackgroundIndex = int.MinValue;
     int lastRuntimeObstacleSizePercent = int.MinValue;
+    bool lastRuntimeToxicBordersEnabled;
     string lastRuntimeMapSizeMode = string.Empty;
     string lastRuntimeSelectedMapId = string.Empty;
     string lastRuntimeExtractionType = string.Empty;
@@ -271,6 +272,7 @@ public class GameVisualTheme : MonoBehaviour
         lastRuntimeBackgroundIndex = RoomSettings.GetMapBackgroundIndex();
         lastRuntimeMapSizeMode = RoomSettings.GetMapSizeMode();
         lastRuntimeObstacleSizePercent = RoomSettings.GetObstacleSizePercent();
+        lastRuntimeToxicBordersEnabled = RoomSettings.AreToxicBordersEnabled();
         lastRuntimeSelectedMapId = RoomSettings.GetSelectedLobbyMapId();
         lastRuntimeExtractionType = RoomSettings.GetExtractionType();
         lastRuntimeParallaxBackgroundId = RoomSettings.GetParallaxBackgroundId();
@@ -282,6 +284,7 @@ public class GameVisualTheme : MonoBehaviour
         int backgroundIndex = RoomSettings.GetMapBackgroundIndex();
         string mapSizeMode = RoomSettings.GetMapSizeMode();
         int obstacleSizePercent = RoomSettings.GetObstacleSizePercent();
+        bool toxicBordersEnabled = RoomSettings.AreToxicBordersEnabled();
         string selectedMapId = RoomSettings.GetSelectedLobbyMapId();
         string extractionType = RoomSettings.GetExtractionType();
         string parallaxBackgroundId = RoomSettings.GetParallaxBackgroundId();
@@ -297,6 +300,7 @@ public class GameVisualTheme : MonoBehaviour
             !parallaxBackgroundChanged &&
             !backgroundObjectChanged &&
             string.Equals(mapSizeMode, lastRuntimeMapSizeMode, System.StringComparison.Ordinal) &&
+            toxicBordersEnabled == lastRuntimeToxicBordersEnabled &&
             obstacleSizePercent == lastRuntimeObstacleSizePercent)
         {
             return;
@@ -305,6 +309,7 @@ public class GameVisualTheme : MonoBehaviour
         lastRuntimeBackgroundIndex = backgroundIndex;
         lastRuntimeMapSizeMode = mapSizeMode;
         lastRuntimeObstacleSizePercent = obstacleSizePercent;
+        lastRuntimeToxicBordersEnabled = toxicBordersEnabled;
         lastRuntimeSelectedMapId = selectedMapId;
         lastRuntimeExtractionType = extractionType;
         lastRuntimeParallaxBackgroundId = parallaxBackgroundId;

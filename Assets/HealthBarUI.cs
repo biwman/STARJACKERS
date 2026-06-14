@@ -10,8 +10,8 @@ public class HealthBarUI : MonoBehaviourPun
     const string LabelName = "HealthLabel";
     const string ValueName = "HealthValue";
     const float BarWidth = 440f;
-    const float BarHeight = 36f;
-    const float TopOffset = -20f;
+    const float BarHeight = 42f;
+    const float TopOffset = -24f;
 
     Slider hpBar;
     RectTransform hpRect;
@@ -64,12 +64,14 @@ public class HealthBarUI : MonoBehaviourPun
 
         if (backgroundImage != null)
         {
-            backgroundImage.color = new Color(0.09f, 0.11f, 0.14f, 0.95f);
+            backgroundImage.color = new Color(0.025f, 0.035f, 0.045f, 0.96f);
+            ConfigurePanelDepth(backgroundImage.gameObject, new Color(0f, 0f, 0f, 0.72f), new Color(0.76f, 1f, 0.82f, 0.42f));
         }
 
         if (fillImage != null)
         {
-            fillImage.color = new Color(0.24f, 0.86f, 0.38f, 1f);
+            fillImage.color = new Color(0.32f, 1f, 0.46f, 1f);
+            ConfigureFillAccent(fillImage.gameObject, new Color(0.9f, 1f, 0.88f, 0.24f));
         }
 
         hpBar.transition = Selectable.Transition.None;
@@ -174,6 +176,9 @@ public class HealthBarUI : MonoBehaviourPun
         text.color = Color.white;
         text.alignment = alignment;
         text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.fontStyle = FontStyles.Bold;
+        text.raycastTarget = false;
+        ConfigureTextShadow(text.gameObject);
 
         TMP_Text referenceText = FindAnyObjectByType<TMP_Text>();
         if (referenceText != null)
@@ -205,5 +210,51 @@ public class HealthBarUI : MonoBehaviourPun
 
         handleImage.enabled = false;
         handleImage.raycastTarget = false;
+    }
+
+    void ConfigurePanelDepth(GameObject target, Color shadowColor, Color outlineColor)
+    {
+        if (target == null)
+            return;
+
+        Shadow shadow = target.GetComponent<Shadow>();
+        if (shadow == null)
+            shadow = target.AddComponent<Shadow>();
+        shadow.effectColor = shadowColor;
+        shadow.effectDistance = new Vector2(0f, -3f);
+        shadow.useGraphicAlpha = false;
+
+        Outline outline = target.GetComponent<Outline>();
+        if (outline == null)
+            outline = target.AddComponent<Outline>();
+        outline.effectColor = outlineColor;
+        outline.effectDistance = new Vector2(2f, 2f);
+        outline.useGraphicAlpha = false;
+    }
+
+    void ConfigureFillAccent(GameObject target, Color color)
+    {
+        if (target == null)
+            return;
+
+        Outline outline = target.GetComponent<Outline>();
+        if (outline == null)
+            outline = target.AddComponent<Outline>();
+        outline.effectColor = color;
+        outline.effectDistance = new Vector2(1f, 1f);
+        outline.useGraphicAlpha = true;
+    }
+
+    void ConfigureTextShadow(GameObject target)
+    {
+        if (target == null)
+            return;
+
+        Shadow shadow = target.GetComponent<Shadow>();
+        if (shadow == null)
+            shadow = target.AddComponent<Shadow>();
+        shadow.effectColor = new Color(0f, 0f, 0f, 0.78f);
+        shadow.effectDistance = new Vector2(1.6f, -1.6f);
+        shadow.useGraphicAlpha = false;
     }
 }

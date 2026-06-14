@@ -95,7 +95,7 @@ public sealed class TreasureScannerPingController : MonoBehaviourPun
 
     float ResolveProximity(float distance)
     {
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
+        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         float farDistance = Mathf.Max(12f, mapSize.magnitude * 0.45f);
         return Mathf.Clamp01(Mathf.InverseLerp(farDistance, NearDistance, distance));
     }
