@@ -1039,6 +1039,7 @@ public sealed class ViperWreckTowTarget : MonoBehaviourPun
         DisableComponent<PlayerHealth>();
         DisableComponent<HealthBarUI>();
         DisableComponent<ShieldBarUI>();
+        DisableComponent<RoundVitalsIconHudUI>();
         DisableComponent<PlayerNicknameUI>();
         DisableComponent<BoosterBarUI>();
         DisableComponent<ShipInventoryHudUI>();

@@ -35,6 +35,7 @@ public class GameVisualTheme : MonoBehaviour
     const float ExtractionTargetSize = 4.3f;
     const float CarrierExtractionTargetSize = 5.4f;
     const float SpaceCityExtractionTargetSize = 5.4f;
+    const float AncientPortalExtractionTargetSize = 5.6f;
     const float BackgroundTileWorldSize = 8f;
     const float DesktopRefreshInterval = 0.75f;
     const float RuntimeRefreshDelay = 0.08f;
@@ -65,6 +66,7 @@ public class GameVisualTheme : MonoBehaviour
     Sprite portalExtractionSprite;
     Sprite carrierExtractionSprite;
     Sprite spaceCityExtractionSprite;
+    Sprite ancientPortalExtractionSprite;
     Sprite backgroundSprite;
     float nextRefreshTime;
     bool runtimeThemeDirty;
@@ -390,6 +392,7 @@ public class GameVisualTheme : MonoBehaviour
         portalExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/portal_nieaktywny_resource", "Assets/Resources/Visuals/Bases/portal_nieaktywny_resource.png", "Assets/portal_nieaktywny.png");
         carrierExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/lotniskowiec_strefa_resource", "Assets/Resources/Visuals/Bases/lotniskowiec_strefa_resource.png", "Assets/lotniskowiec_strefa.png");
         spaceCityExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/baza_strefa_resource", "Assets/Resources/Visuals/Bases/baza_strefa_resource.png", "Assets/baza_strefa.png");
+        ancientPortalExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/ancient_portal_resource", "Assets/Resources/Visuals/Bases/ancient_portal_resource.png");
         backgroundSprite = LoadBackgroundSprite(RoomSettings.GetMapBackgroundIndex());
     }
 
@@ -604,6 +607,8 @@ public class GameVisualTheme : MonoBehaviour
             {
                 int wreckSkinIndex = wreck != null ? wreck.SourceShipSkinIndex : RoomSettings.GetPlayerShipSkin(view.Owner, 0);
                 sprite = GetMappedWreckSprite(wreckSkinIndex, renderer.sprite);
+                if (wreckSkinIndex >= 0 && ShipCatalog.GetShipTypeFromSkinIndex(wreckSkinIndex) == ShipType.CargoTruck)
+                    targetSize *= CargoTruckPlayerSizeMultiplier;
             }
         }
         else if (isAstronaut)
@@ -950,6 +955,8 @@ public class GameVisualTheme : MonoBehaviour
                 return carrierExtractionSprite != null ? carrierExtractionSprite : portalExtractionSprite;
             case RoomSettings.ExtractionTypeSpaceCity:
                 return spaceCityExtractionSprite != null ? spaceCityExtractionSprite : portalExtractionSprite;
+            case RoomSettings.ExtractionTypeAncientPortal:
+                return ancientPortalExtractionSprite != null ? ancientPortalExtractionSprite : portalExtractionSprite;
         }
 
         return portalExtractionSprite;
@@ -963,6 +970,8 @@ public class GameVisualTheme : MonoBehaviour
                 return CarrierExtractionTargetSize;
             case RoomSettings.ExtractionTypeSpaceCity:
                 return SpaceCityExtractionTargetSize;
+            case RoomSettings.ExtractionTypeAncientPortal:
+                return AncientPortalExtractionTargetSize;
             default:
                 return ExtractionTargetSize;
         }

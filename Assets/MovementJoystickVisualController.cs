@@ -6,23 +6,27 @@ public sealed class MovementJoystickVisualController : MonoBehaviour
     Joystick joystick;
     Image backgroundImage;
     Image handleImage;
+    Image handleVisualImage;
     Image glowImage;
     Image ringImage;
     Image innerImage;
     Graphic boosterRingGraphic;
     JoystickBoosterRingGraphic boosterRingArcGraphic;
     RectTransform handleRect;
+    RectTransform handleVisualRect;
     RectTransform joystickRect;
     RectTransform boosterRingRect;
     Vector3 handleBaseScale = Vector3.one;
+    Vector3 handleVisualBaseScale = Vector3.one;
     float intensity;
     float boosterRingIntensity;
 
-    public void Configure(Joystick targetJoystick, Image background, Image handle, Image glow, Image ring, Image inner, Graphic boosterRing)
+    public void Configure(Joystick targetJoystick, Image background, Image handle, Image handleVisual, Image glow, Image ring, Image inner, Graphic boosterRing)
     {
         joystick = targetJoystick;
         backgroundImage = background;
         handleImage = handle;
+        handleVisualImage = handleVisual;
         glowImage = glow;
         ringImage = ring;
         innerImage = inner;
@@ -33,10 +37,19 @@ public sealed class MovementJoystickVisualController : MonoBehaviour
             : backgroundImage != null ? backgroundImage.rectTransform : null;
         boosterRingRect = boosterRingGraphic != null ? boosterRingGraphic.rectTransform : null;
         handleRect = handleImage != null ? handleImage.rectTransform : null;
+        handleVisualRect = handleVisualImage != null ? handleVisualImage.rectTransform : null;
         if (handleRect != null)
+        {
+            if (joystick == null || !joystick.IsPressed)
+                handleRect.anchoredPosition = Vector2.zero;
             handleBaseScale = handleRect.localScale;
+        }
+        if (handleVisualRect != null)
+            handleVisualBaseScale = handleVisualRect.localScale;
 
         ApplyVisualState(0f);
+        SyncHandleVisualTransform();
+        KeepHandleOnTop();
     }
 
     void OnDisable()
@@ -49,6 +62,9 @@ public sealed class MovementJoystickVisualController : MonoBehaviour
     void LateUpdate()
     {
         SyncBoosterRingTransform();
+        CenterIdleHandle();
+        SyncHandleVisualTransform();
+        KeepHandleOnTop();
 
         float targetIntensity = 0f;
         if (joystick != null && joystick.IsPressed)
@@ -80,16 +96,15 @@ public sealed class MovementJoystickVisualController : MonoBehaviour
 
     void ApplyVisualState(float value)
     {
-        Color inactiveFrame = new Color(0.035f, 0.07f, 0.1f, 0.42f);
-        Color activeFrame = new Color(0.07f, 0.18f, 0.15f, 0.54f);
-        Color inactiveGlow = new Color(0.35f, 0.82f, 1f, 0.05f);
-        Color activeGlow = new Color(0.42f, 0.9f, 0.58f, 0.2f);
-        Color inactiveRing = new Color(0.32f, 0.62f, 0.78f, 0.22f);
-        Color activeRing = new Color(0.42f, 0.9f, 0.58f, 0.55f);
-        Color inactiveInner = new Color(0.02f, 0.04f, 0.065f, 0.3f);
-        Color activeInner = new Color(0.025f, 0.075f, 0.045f, 0.38f);
-        Color inactiveHandle = new Color(0.11f, 0.38f, 0.21f, 0.9f);
-        Color activeHandle = new Color(0.42f, 0.9f, 0.58f, 0.98f);
+        Color inactiveFrame = new Color(0.01f, 0.045f, 0.06f, 0.96f);
+        Color activeFrame = new Color(0.024f, 0.13f, 0.095f, 0.98f);
+        Color inactiveGlow = new Color(0.4f, 0.9f, 1f, 0.32f);
+        Color activeGlow = new Color(0.48f, 1f, 0.68f, 0.44f);
+        Color inactiveRing = new Color(0.42f, 0.94f, 1f, 0.86f);
+        Color activeRing = new Color(0.58f, 1f, 0.72f, 0.94f);
+        Color inactiveInner = new Color(0.012f, 0.065f, 0.09f, 0.84f);
+        Color activeInner = new Color(0.02f, 0.14f, 0.085f, 0.86f);
+        Color handleColor = new Color32(82, 176, 112, 255);
 
         if (backgroundImage != null)
             backgroundImage.color = Color.Lerp(inactiveFrame, activeFrame, value);
@@ -104,7 +119,20 @@ public sealed class MovementJoystickVisualController : MonoBehaviour
             innerImage.color = Color.Lerp(inactiveInner, activeInner, value);
 
         if (handleImage != null)
-            handleImage.color = Color.Lerp(inactiveHandle, activeHandle, value);
+        {
+            handleImage.enabled = true;
+            handleImage.color = handleColor;
+            handleImage.canvasRenderer.SetAlpha(1f);
+            handleImage.canvasRenderer.SetColor(handleColor);
+        }
+
+        if (handleVisualImage != null)
+        {
+            handleVisualImage.enabled = true;
+            handleVisualImage.color = handleColor;
+            handleVisualImage.canvasRenderer.SetAlpha(1f);
+            handleVisualImage.canvasRenderer.SetColor(handleColor);
+        }
 
         if (handleRect != null)
         {
@@ -112,7 +140,41 @@ public sealed class MovementJoystickVisualController : MonoBehaviour
             handleRect.localScale = new Vector3(handleBaseScale.x * scale, handleBaseScale.y * scale, handleBaseScale.z);
         }
 
+        if (handleVisualRect != null)
+        {
+            float scale = Mathf.Lerp(1f, 1.08f, value);
+            handleVisualRect.localScale = new Vector3(handleVisualBaseScale.x * scale, handleVisualBaseScale.y * scale, handleVisualBaseScale.z);
+        }
+
         ApplyBoosterRingState();
+    }
+
+    void CenterIdleHandle()
+    {
+        if (handleRect == null || joystick == null || joystick.IsPressed)
+            return;
+
+        handleRect.anchoredPosition = Vector2.zero;
+    }
+
+    void SyncHandleVisualTransform()
+    {
+        if (handleVisualRect == null)
+            return;
+
+        handleVisualRect.anchorMin = new Vector2(0.5f, 0.5f);
+        handleVisualRect.anchorMax = new Vector2(0.5f, 0.5f);
+        handleVisualRect.pivot = new Vector2(0.5f, 0.5f);
+        handleVisualRect.anchoredPosition = handleRect != null ? handleRect.anchoredPosition : Vector2.zero;
+        handleVisualRect.sizeDelta = new Vector2(116f, 116f);
+        handleVisualRect.localRotation = Quaternion.identity;
+
+        if (!handleVisualRect.gameObject.activeSelf)
+            handleVisualRect.gameObject.SetActive(true);
+    }
+
+    void KeepHandleOnTop()
+    {
     }
 
     void SyncBoosterRingTransform()

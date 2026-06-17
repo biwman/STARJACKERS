@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using Photon.Pun;
-using TMPro;
 using UnityEngine;
 
 public class ExtractionZone : MonoBehaviourPun
@@ -16,6 +15,10 @@ public class ExtractionZone : MonoBehaviourPun
     const float PortalInteractionRadiusFactor = 0.82f;
     const float ExtractionMessageSearchRetryInterval = 1f;
     const string ExtractionMessageName = "ExtractionMessage";
+    const string ExtractionObjectiveOwnerKey = "ExtractionZone";
+    const string ExtractionObjectiveText = "Reach the Extraction Zone";
+
+    static readonly Color ExtractionMessageAccent = new Color(0.2f, 1f, 0.78f, 1f);
 
     static readonly Vector2[] CarrierInteractionShape =
     {
@@ -70,6 +73,7 @@ public class ExtractionZone : MonoBehaviourPun
     ExtractionPortalVisual portalVisual;
     ExtractionCarrierVisual carrierVisual;
     ExtractionSpaceCityVisual spaceCityVisual;
+    ExtractionAncientPortalVisual ancientPortalVisual;
     Coroutine blinkRoutine;
     Coroutine hideMessageRoutine;
     GameObject cachedMessageObject;
@@ -87,8 +91,7 @@ public class ExtractionZone : MonoBehaviourPun
         RefreshExtractionVisual();
         RefreshInteractionCollider();
         cachedMessageObject = FindExtractionMessage();
-        if (cachedMessageObject != null)
-            cachedMessageObject.SetActive(false);
+        HideLegacyExtractionMessage();
 
         GameVisualTheme.RequestRuntimeRefresh();
     }
@@ -101,8 +104,8 @@ public class ExtractionZone : MonoBehaviourPun
             cachedMessageObject = FindExtractionMessage();
         }
 
-        if (cachedMessageObject != null && cachedMessageObject.activeSelf != messageShowing)
-            cachedMessageObject.SetActive(messageShowing);
+        if (cachedMessageObject != null && cachedMessageObject.activeSelf)
+            cachedMessageObject.SetActive(false);
     }
 
     void SetColor(Color color)
@@ -153,6 +156,20 @@ public class ExtractionZone : MonoBehaviourPun
         spaceCityVisual.Initialize(sr);
     }
 
+    void EnsureAncientPortalVisual()
+    {
+        if (ancientPortalVisual == null)
+            ancientPortalVisual = GetComponent<ExtractionAncientPortalVisual>();
+
+        if (ancientPortalVisual == null)
+            ancientPortalVisual = gameObject.AddComponent<ExtractionAncientPortalVisual>();
+
+        if (sr == null)
+            sr = GetComponent<SpriteRenderer>();
+
+        ancientPortalVisual.Initialize(sr);
+    }
+
     void EnsureExtractionVisual()
     {
         if (sr == null)
@@ -162,6 +179,8 @@ public class ExtractionZone : MonoBehaviourPun
         {
             if (portalVisual != null)
                 portalVisual.SetVisible(false);
+            if (ancientPortalVisual != null)
+                ancientPortalVisual.SetVisible(false);
             if (spaceCityVisual != null)
                 spaceCityVisual.SetVisible(false);
 
@@ -174,6 +193,8 @@ public class ExtractionZone : MonoBehaviourPun
         {
             if (portalVisual != null)
                 portalVisual.SetVisible(false);
+            if (ancientPortalVisual != null)
+                ancientPortalVisual.SetVisible(false);
             if (carrierVisual != null)
                 carrierVisual.SetVisible(false);
 
@@ -182,10 +203,26 @@ public class ExtractionZone : MonoBehaviourPun
             return;
         }
 
+        if (IsAncientPortalExtraction())
+        {
+            if (portalVisual != null)
+                portalVisual.SetVisible(false);
+            if (carrierVisual != null)
+                carrierVisual.SetVisible(false);
+            if (spaceCityVisual != null)
+                spaceCityVisual.SetVisible(false);
+
+            EnsureAncientPortalVisual();
+            ancientPortalVisual.SetVisible(true);
+            return;
+        }
+
         if (carrierVisual != null)
             carrierVisual.SetVisible(false);
         if (spaceCityVisual != null)
             spaceCityVisual.SetVisible(false);
+        if (ancientPortalVisual != null)
+            ancientPortalVisual.SetVisible(false);
 
         EnsurePortalVisual();
         portalVisual.SetVisible(true);
@@ -220,6 +257,18 @@ public class ExtractionZone : MonoBehaviourPun
                 spaceCityVisual.SetTransitioning();
             else
                 spaceCityVisual.SetInactive();
+
+            return;
+        }
+
+        if (IsAncientPortalExtraction())
+        {
+            if (isActive)
+                ancientPortalVisual.SetActive();
+            else if (isTransitioning)
+                ancientPortalVisual.SetTransitioning();
+            else
+                ancientPortalVisual.SetInactive();
 
             return;
         }
@@ -389,6 +438,7 @@ public class ExtractionZone : MonoBehaviourPun
 
         RefreshExtractionVisual();
         StartCoroutine(ActiveTimer());
+        RoundMessageLayer.SetPersistentObjectiveIfEmpty(ExtractionObjectiveOwnerKey, ExtractionObjectiveText);
     }
 
     IEnumerator ActiveTimer()
@@ -589,6 +639,12 @@ public class ExtractionZone : MonoBehaviourPun
             return spaceCityVisual != null ? spaceCityVisual.GetEvacuationTargetWorldPosition() : transform.position;
         }
 
+        if (IsAncientPortalExtraction())
+        {
+            EnsureAncientPortalVisual();
+            return ancientPortalVisual != null ? ancientPortalVisual.GetEvacuationTargetWorldPosition() : transform.position;
+        }
+
         EnsurePortalVisual();
         return portalVisual != null ? portalVisual.GetEvacuationTargetWorldPosition() : transform.position;
     }
@@ -601,6 +657,11 @@ public class ExtractionZone : MonoBehaviourPun
     bool IsSpaceCityExtraction()
     {
         return string.Equals(RoomSettings.GetExtractionType(), RoomSettings.ExtractionTypeSpaceCity, System.StringComparison.Ordinal);
+    }
+
+    bool IsAncientPortalExtraction()
+    {
+        return string.Equals(RoomSettings.GetExtractionType(), RoomSettings.ExtractionTypeAncientPortal, System.StringComparison.Ordinal);
     }
 
     bool ShouldAwardCharlieLastSecondExtractionBonus(PlayerHealth playerHealth, string outcome)
@@ -787,6 +848,7 @@ public class ExtractionZone : MonoBehaviourPun
         isTransitioning = false;
         isEvacuating = false;
         messageShowing = false;
+        RoundMessageLayer.ClearPersistentObjective(ExtractionObjectiveOwnerKey);
         StopAlarmLoop();
         StopEvacBuzzerLoop();
 
@@ -801,6 +863,7 @@ public class ExtractionZone : MonoBehaviourPun
             hideMessageRoutine = null;
         }
 
+        HideLegacyExtractionMessage();
         SetColor(Color.white);
         RefreshExtractionVisual();
     }
@@ -811,40 +874,33 @@ public class ExtractionZone : MonoBehaviourPun
         if (messageShowing)
             return;
 
+        messageShowing = true;
+        HideLegacyExtractionMessage();
+        RoundMessageLayer.ShowTopCenter("EXTRACTION ZONE ACTIVATED", 3.4f, ExtractionMessageAccent);
+
+        if (hideMessageRoutine != null)
+            StopCoroutine(hideMessageRoutine);
+        hideMessageRoutine = StartCoroutine(HideMessage());
+    }
+
+    IEnumerator HideMessage()
+    {
+        yield return new WaitForSeconds(3.6f);
+
+        HideLegacyExtractionMessage();
+        messageShowing = false;
+        hideMessageRoutine = null;
+    }
+
+    void HideLegacyExtractionMessage()
+    {
         GameObject obj = cachedMessageObject != null ? cachedMessageObject : FindExtractionMessage();
         if (obj == null)
             return;
 
         cachedMessageObject = obj;
-
-        RectTransform rect = obj.GetComponent<RectTransform>();
-        if (rect != null)
-            rect.SetAsLastSibling();
-
-        TMP_Text text = obj.GetComponent<TMP_Text>();
-        if (text == null)
-            text = obj.GetComponentInChildren<TMP_Text>(true);
-
-        if (text != null)
-        {
-            text.text = "Extraction Zone Activated";
-            text.fontStyle = FontStyles.Bold;
-        }
-
-        messageShowing = true;
-        obj.SetActive(true);
-        if (hideMessageRoutine != null)
-            StopCoroutine(hideMessageRoutine);
-        hideMessageRoutine = StartCoroutine(HideMessage(obj));
-    }
-
-    IEnumerator HideMessage(GameObject obj)
-    {
-        yield return new WaitForSeconds(5f);
-
-        obj.SetActive(false);
-        messageShowing = false;
-        hideMessageRoutine = null;
+        if (obj.activeSelf)
+            obj.SetActive(false);
     }
 
     GameObject FindExtractionMessage()

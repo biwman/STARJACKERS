@@ -874,6 +874,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         DisableComponent<RoundChatCommandUI>();
         DisableComponent<HealthBarUI>();
         DisableComponent<ShieldBarUI>();
+        DisableComponent<RoundVitalsIconHudUI>();
         DisableComponent<BoosterBarUI>();
         DisableComponent<ComplexAmmoBarUI>();
         DisableComponent<SuperAttackUI>();

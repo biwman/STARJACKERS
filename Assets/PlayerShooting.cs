@@ -29,6 +29,8 @@ public class PlayerShooting : MonoBehaviourPun
     const float DropbotLaunchRequestTimeout = 5f;
     const float LootHookRequestTimeout = 5f;
     const float LootHookRange = 5.8f;
+    const float LootHookWindupDuration = 3f;
+    const float LootHookValidationInterval = 0.05f;
     const int LootHookNeutralCargoSlotIndex = -1001;
     const int GadgetMineDefaultCharges = 4;
     const int SpaceBombDefaultCharges = 1;
@@ -190,6 +192,10 @@ public class PlayerShooting : MonoBehaviourPun
     int pendingLootHookCargoSlotIndex = -1;
     string pendingLootHookCargoItemId;
     float pendingLootHookExpiresAt;
+    Coroutine authoritativeLootHookRoutine;
+    int activeLootHookTargetViewId;
+    int activeLootHookCargoSlotIndex = -1;
+    string activeLootHookCargoItemId;
     WeaponAttackProfile activeSimpleWeaponProfile;
     WeaponAttackProfile activeComplexWeaponProfile;
     readonly List<ComplexWeaponRuntimeState> complexWeaponStates = new List<ComplexWeaponRuntimeState>();
@@ -3253,6 +3259,7 @@ public class PlayerShooting : MonoBehaviourPun
         {
             StopAuthoritativeTractorBeam(true);
             StopAuthoritativeHackingDevice(true);
+            StopAuthoritativeLootHookWindup();
         }
         else if (photonView != null && photonView.IsMine)
         {
@@ -4063,6 +4070,9 @@ public class PlayerShooting : MonoBehaviourPun
             return false;
         }
 
+        if (authoritativeLootHookRoutine != null)
+            return false;
+
         if (pendingLootHookActive)
         {
             if (Time.time <= pendingLootHookExpiresAt)
@@ -4080,18 +4090,7 @@ public class PlayerShooting : MonoBehaviourPun
             return false;
         }
 
-        pendingLootHookRequestId++;
-        if (pendingLootHookRequestId <= 0)
-            pendingLootHookRequestId = 1;
-
-        pendingLootHookActive = true;
-        pendingLootHookVictimViewId = victim.photonView.ViewID;
-        pendingLootHookVictimActorNumber = victim.photonView.Owner != null ? victim.photonView.Owner.ActorNumber : 0;
-        pendingLootHookCargoSlotIndex = slotIndex;
-        pendingLootHookCargoItemId = stolenItemId;
-        pendingLootHookExpiresAt = Time.time + LootHookRequestTimeout;
-        victim.photonView.RPC(nameof(PrepareLootHookVictimCargoRpc), victim.photonView.Owner, pendingLootHookRequestId, slotIndex, stolenItemId, photonView.ViewID);
-        return true;
+        return TryStartLootHookWindup(owner, victim.photonView, slotIndex, stolenItemId);
     }
 
     bool TryBeginNeutralRiderLootHookRequest(Photon.Realtime.Player owner)
@@ -4099,6 +4098,115 @@ public class PlayerShooting : MonoBehaviourPun
         if (!TryFindNeutralRiderLootHookTarget(owner, out NeutralRiderController neutralVictim, out string stolenItemId) ||
             neutralVictim == null ||
             neutralVictim.photonView == null)
+        {
+            return false;
+        }
+
+        return TryStartLootHookWindup(owner, neutralVictim.photonView, LootHookNeutralCargoSlotIndex, stolenItemId);
+    }
+
+    bool TryStartLootHookWindup(Photon.Realtime.Player owner, PhotonView targetView, int slotIndex, string stolenItemId)
+    {
+        if (!PhotonNetwork.IsMasterClient ||
+            owner == null ||
+            targetView == null ||
+            string.IsNullOrWhiteSpace(stolenItemId) ||
+            authoritativeLootHookRoutine != null ||
+            !IsLootHookTargetStillValid(owner, targetView, slotIndex, stolenItemId, LootHookRange))
+        {
+            return false;
+        }
+
+        activeLootHookTargetViewId = targetView.ViewID;
+        activeLootHookCargoSlotIndex = slotIndex;
+        activeLootHookCargoItemId = stolenItemId;
+        authoritativeLootHookRoutine = StartCoroutine(LootHookWindupRoutine(targetView.ViewID, slotIndex, stolenItemId));
+        return true;
+    }
+
+    IEnumerator LootHookWindupRoutine(int targetViewId, int slotIndex, string stolenItemId)
+    {
+        float startedAt = Time.time;
+        WaitForSeconds wait = new WaitForSeconds(LootHookValidationInterval);
+
+        while (Time.time - startedAt < LootHookWindupDuration)
+        {
+            PhotonView targetView = PhotonView.Find(targetViewId);
+            if (!IsActiveLootHookWindup(targetViewId, slotIndex, stolenItemId) ||
+                !IsLootHookTargetStillValid(photonView != null ? photonView.Owner : null, targetView, slotIndex, stolenItemId, LootHookRange))
+            {
+                authoritativeLootHookRoutine = null;
+                ClearActiveLootHookWindup();
+                yield break;
+            }
+
+            yield return wait;
+        }
+
+        authoritativeLootHookRoutine = null;
+
+        PhotonView completedTargetView = PhotonView.Find(targetViewId);
+        if (IsActiveLootHookWindup(targetViewId, slotIndex, stolenItemId) &&
+            IsLootHookTargetStillValid(photonView != null ? photonView.Owner : null, completedTargetView, slotIndex, stolenItemId, LootHookRange))
+        {
+            TryCompleteLootHookWindup(completedTargetView, slotIndex, stolenItemId);
+        }
+
+        ClearActiveLootHookWindup();
+    }
+
+    bool TryCompleteLootHookWindup(PhotonView targetView, int slotIndex, string stolenItemId)
+    {
+        if (!PhotonNetwork.IsMasterClient || targetView == null || photonView == null)
+            return false;
+
+        Photon.Realtime.Player owner = photonView.Owner;
+        if (!IsLootHookTargetStillValid(owner, targetView, slotIndex, stolenItemId, LootHookRange))
+            return false;
+
+        if (slotIndex == LootHookNeutralCargoSlotIndex)
+        {
+            NeutralRiderController neutralVictim = targetView.GetComponent<NeutralRiderController>();
+            return TryCompleteNeutralRiderLootHookRequest(owner, neutralVictim, stolenItemId);
+        }
+
+        PlayerShooting victim = targetView.GetComponent<PlayerShooting>();
+        return BeginLootHookVictimCargoRequest(victim, slotIndex, stolenItemId);
+    }
+
+    bool BeginLootHookVictimCargoRequest(PlayerShooting victim, int slotIndex, string stolenItemId)
+    {
+        if (!PhotonNetwork.IsMasterClient ||
+            victim == null ||
+            victim.photonView == null ||
+            victim.photonView.Owner == null ||
+            string.IsNullOrWhiteSpace(stolenItemId))
+        {
+            return false;
+        }
+
+        pendingLootHookRequestId++;
+        if (pendingLootHookRequestId <= 0)
+            pendingLootHookRequestId = 1;
+
+        pendingLootHookActive = true;
+        pendingLootHookVictimViewId = victim.photonView.ViewID;
+        pendingLootHookVictimActorNumber = victim.photonView.Owner.ActorNumber;
+        pendingLootHookCargoSlotIndex = slotIndex;
+        pendingLootHookCargoItemId = stolenItemId;
+        pendingLootHookExpiresAt = Time.time + LootHookRequestTimeout;
+        victim.photonView.RPC(nameof(PrepareLootHookVictimCargoRpc), victim.photonView.Owner, pendingLootHookRequestId, slotIndex, stolenItemId, photonView.ViewID);
+        return true;
+    }
+
+    bool TryCompleteNeutralRiderLootHookRequest(Photon.Realtime.Player owner, NeutralRiderController neutralVictim, string stolenItemId)
+    {
+        if (!PhotonNetwork.IsMasterClient ||
+            owner == null ||
+            neutralVictim == null ||
+            neutralVictim.photonView == null ||
+            string.IsNullOrWhiteSpace(stolenItemId) ||
+            !IsLootHookTargetStillValid(owner, neutralVictim.photonView, LootHookNeutralCargoSlotIndex, stolenItemId, LootHookRange))
         {
             return false;
         }
@@ -4236,6 +4344,93 @@ public class PlayerShooting : MonoBehaviourPun
         }
 
         return rider != null && !string.IsNullOrWhiteSpace(itemId);
+    }
+
+    bool IsActiveLootHookWindup(int targetViewId, int slotIndex, string itemId)
+    {
+        return activeLootHookTargetViewId == targetViewId &&
+               activeLootHookCargoSlotIndex == slotIndex &&
+               string.Equals(activeLootHookCargoItemId, itemId, StringComparison.Ordinal);
+    }
+
+    bool IsLootHookTargetStillValid(Photon.Realtime.Player owner, PhotonView targetView, int slotIndex, string itemId, float maxRange)
+    {
+        if (!IsLootHookSourceReady(owner) ||
+            targetView == null ||
+            string.IsNullOrWhiteSpace(itemId) ||
+            GetLootHookDistance(targetView) > maxRange)
+        {
+            return false;
+        }
+
+        PlayerHealth targetHealth = targetView.GetComponent<PlayerHealth>();
+        if (targetHealth == null ||
+            targetHealth.IsWreck ||
+            targetHealth.IsEvacuationAnimating ||
+            targetHealth.CurrentHP <= 0)
+        {
+            return false;
+        }
+
+        if (slotIndex == LootHookNeutralCargoSlotIndex)
+        {
+            NeutralRiderController neutralRider = targetView.GetComponent<NeutralRiderController>();
+            return neutralRider != null &&
+                   !neutralRider.IsEvacuated &&
+                   PlayerProfileService.PlayerHasFreeShipInventorySlot(owner, itemId);
+        }
+
+        if (targetHealth == GetComponent<PlayerHealth>() ||
+            targetHealth.IsBotControlled ||
+            targetHealth.IsNeutralRiderControlled ||
+            targetHealth.IsAstronautControlled ||
+            targetView.Owner == null ||
+            targetView.Owner.ActorNumber == owner.ActorNumber)
+        {
+            return false;
+        }
+
+        return IsLootHookCargoStillAvailable(owner, targetView.Owner, slotIndex, itemId);
+    }
+
+    bool IsLootHookSourceReady(Photon.Realtime.Player owner)
+    {
+        return PhotonNetwork.IsMasterClient &&
+               IsGameStarted() &&
+               photonView != null &&
+               photonView.Owner != null &&
+               owner != null &&
+               photonView.Owner.ActorNumber == owner.ActorNumber &&
+               !AreShipControlsBlocked();
+    }
+
+    float GetLootHookDistance(PhotonView targetView)
+    {
+        if (targetView == null)
+            return float.MaxValue;
+
+        return Vector2.Distance(transform.position, targetView.transform.position);
+    }
+
+    static bool IsLootHookCargoStillAvailable(Photon.Realtime.Player thief, Photon.Realtime.Player victim, int slotIndex, string itemId)
+    {
+        if (thief == null || victim == null || slotIndex < 0 || string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        string[] slots = PlayerProfileService.GetPlayerShipInventorySlots(victim);
+        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(victim, 0);
+        int capacity = PlayerProfileService.GetPlayerShipInventoryCapacity(victim);
+        if (slots == null ||
+            slotIndex >= slots.Length ||
+            slotIndex >= capacity ||
+            PlayerProfileService.IsSafePocketIndex(shipSkinIndex, slotIndex) ||
+            PlayerProfileService.IsAstronautCargoIndex(shipSkinIndex, capacity, slotIndex))
+        {
+            return false;
+        }
+
+        return string.Equals(slots[slotIndex], itemId, StringComparison.Ordinal) &&
+               PlayerProfileService.PlayerHasFreeShipInventorySlot(thief, itemId);
     }
 
     static bool TrySelectLootHookCargo(Photon.Realtime.Player thief, Photon.Realtime.Player victim, out int slotIndex, out string itemId)
@@ -4503,6 +4698,24 @@ public class PlayerShooting : MonoBehaviourPun
         pendingLootHookCargoSlotIndex = -1;
         pendingLootHookCargoItemId = null;
         pendingLootHookExpiresAt = 0f;
+    }
+
+    void StopAuthoritativeLootHookWindup()
+    {
+        if (authoritativeLootHookRoutine != null)
+        {
+            StopCoroutine(authoritativeLootHookRoutine);
+            authoritativeLootHookRoutine = null;
+        }
+
+        ClearActiveLootHookWindup();
+    }
+
+    void ClearActiveLootHookWindup()
+    {
+        activeLootHookTargetViewId = 0;
+        activeLootHookCargoSlotIndex = -1;
+        activeLootHookCargoItemId = null;
     }
 
     bool HasHackingDeviceCandidate()

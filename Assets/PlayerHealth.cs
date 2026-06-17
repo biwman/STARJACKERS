@@ -7,11 +7,6 @@ using UnityEngine.UI;
 
 public class PlayerHealth : MonoBehaviourPun
 {
-    const float DeathMessageDuration = 10f;
-    const string BoosterBarObjectName = "Booster_Bar";
-    const float DeathMessageBoosterGap = 8f;
-    const float DeathMessageHeight = 44f;
-    const float DeathMessageExtraWidth = 180f;
     const int DefaultPlayerHp = 50;
     const int DefaultPlayerShield = 50;
     const int BatteryShieldPerTick = 5;
@@ -187,14 +182,9 @@ public class PlayerHealth : MonoBehaviourPun
         {
             PhotonNetwork.LocalPlayer.TagObject = gameObject;
 
-            if (GetComponent<HealthBarUI>() == null)
+            if (GetComponent<RoundVitalsIconHudUI>() == null)
             {
-                gameObject.AddComponent<HealthBarUI>();
-            }
-
-            if (GetComponent<ShieldBarUI>() == null)
-            {
-                gameObject.AddComponent<ShieldBarUI>();
+                gameObject.AddComponent<RoundVitalsIconHudUI>();
             }
 
             if (GetComponent<RoundPilotHudUI>() == null)
@@ -217,6 +207,8 @@ public class PlayerHealth : MonoBehaviourPun
                     hpBar.value = currentHP;
                 }
             }
+
+            RoundVitalsIconHudUI.HideLegacyVitalBars();
         }
 
         GameVisualTheme.ApplyPlayerVisual(this);
@@ -2504,6 +2496,10 @@ public class PlayerHealth : MonoBehaviourPun
         if (shieldBarUi != null)
             Destroy(shieldBarUi);
 
+        RoundVitalsIconHudUI vitalsHudUi = GetComponent<RoundVitalsIconHudUI>();
+        if (vitalsHudUi != null)
+            Destroy(vitalsHudUi);
+
         BoosterBarUI boosterBarUi = GetComponent<BoosterBarUI>();
         if (boosterBarUi != null)
             Destroy(boosterBarUi);
@@ -2818,74 +2814,20 @@ public class PlayerHealth : MonoBehaviourPun
     [PunRPC]
     void ShowDeathMessage()
     {
+        HideLegacyDeathMessage();
+        RoundMessageLayer.ShowStatusFeed(
+            "PILOT DOWN",
+            "Someone is dead",
+            RoundMessagePriority.Warning,
+            4.6f,
+            new Color(1f, 0.32f, 0.16f, 1f));
+    }
+
+    void HideLegacyDeathMessage()
+    {
         GameObject obj = FindObjectEvenIfDisabled("DeathMessage");
         if (obj != null)
-        {
-            SetDeathMessageText(obj);
-            PositionDeathMessageBelowBooster(obj);
-            obj.SetActive(true);
-            DeathMessageAutoHide hider = obj.GetComponent<DeathMessageAutoHide>();
-            if (hider == null)
-                hider = obj.AddComponent<DeathMessageAutoHide>();
-
-            hider.ShowFor(DeathMessageDuration);
-        }
-    }
-
-    void SetDeathMessageText(GameObject obj)
-    {
-        TMP_Text text = obj.GetComponent<TMP_Text>();
-        if (text == null)
-            text = obj.GetComponentInChildren<TMP_Text>(true);
-
-        if (text != null)
-        {
-            text.text = "Someone is dead...";
-            text.alignment = TextAlignmentOptions.Center;
-        }
-    }
-
-    void PositionDeathMessageBelowBooster(GameObject obj)
-    {
-        if (obj == null)
-            return;
-
-        RectTransform messageRect = obj.GetComponent<RectTransform>();
-        TMP_Text text = obj.GetComponent<TMP_Text>() ?? obj.GetComponentInChildren<TMP_Text>(true);
-        if (messageRect == null && text != null)
-            messageRect = text.rectTransform;
-
-        GameObject boosterObject = GameObject.Find(BoosterBarObjectName);
-        RectTransform boosterRect = boosterObject != null ? boosterObject.GetComponent<RectTransform>() : null;
-        if (messageRect == null || boosterRect == null)
-            return;
-
-        if (boosterRect.parent != null && messageRect.parent != boosterRect.parent)
-            messageRect.SetParent(boosterRect.parent, false);
-
-        float boosterWidth = boosterRect.rect.width > 0f ? boosterRect.rect.width : Mathf.Abs(boosterRect.sizeDelta.x);
-        float boosterHeight = boosterRect.rect.height > 0f ? boosterRect.rect.height : Mathf.Abs(boosterRect.sizeDelta.y);
-        float boosterBottomY = boosterRect.anchoredPosition.y - (boosterHeight * boosterRect.pivot.y);
-
-        messageRect.anchorMin = boosterRect.anchorMin;
-        messageRect.anchorMax = boosterRect.anchorMax;
-        messageRect.pivot = new Vector2(0.5f, 1f);
-        messageRect.anchoredPosition = new Vector2(boosterRect.anchoredPosition.x, boosterBottomY - DeathMessageBoosterGap);
-        messageRect.sizeDelta = new Vector2(Mathf.Max(560f, boosterWidth + DeathMessageExtraWidth), DeathMessageHeight);
-        messageRect.SetAsLastSibling();
-
-        if (text != null)
-        {
-            if (text.rectTransform != messageRect)
-            {
-                text.rectTransform.anchorMin = Vector2.zero;
-                text.rectTransform.anchorMax = Vector2.one;
-                text.rectTransform.offsetMin = Vector2.zero;
-                text.rectTransform.offsetMax = Vector2.zero;
-            }
-
-            text.alignment = TextAlignmentOptions.Center;
-        }
+            obj.SetActive(false);
     }
 
     [PunRPC]
@@ -3555,6 +3497,7 @@ public sealed class LureBeaconDecoy : MonoBehaviourPun
         DisableComponent<PlayerRepairDocking>();
         DisableComponent<HealthBarUI>();
         DisableComponent<ShieldBarUI>();
+        DisableComponent<RoundVitalsIconHudUI>();
         DisableComponent<PlayerNicknameUI>();
         DisableComponent<BoosterBarUI>();
         DisableComponent<ShipInventoryHudUI>();
@@ -3660,27 +3603,6 @@ public sealed class LureBeaconDecoy : MonoBehaviourPun
 
         float.TryParse(value != null ? value.ToString() : string.Empty, out float parsed);
         return parsed;
-    }
-}
-
-public sealed class DeathMessageAutoHide : MonoBehaviour
-{
-    Coroutine hideRoutine;
-
-    public void ShowFor(float seconds)
-    {
-        if (hideRoutine != null)
-            StopCoroutine(hideRoutine);
-
-        gameObject.SetActive(true);
-        hideRoutine = StartCoroutine(HideAfterDelay(Mathf.Max(0.1f, seconds)));
-    }
-
-    IEnumerator HideAfterDelay(float seconds)
-    {
-        yield return new WaitForSeconds(seconds);
-        gameObject.SetActive(false);
-        hideRoutine = null;
     }
 }
 

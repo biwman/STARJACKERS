@@ -19,6 +19,8 @@ public class UIRuntimeStyler : MonoBehaviour
     static Sprite cachedTraderIconSprite;
     static Sprite cachedInventoryIconSprite;
     static Sprite cachedJoystickBoosterRingSprite;
+    static Sprite cachedMovementJoystickDiscSprite;
+    static Sprite cachedMovementJoystickGlowSprite;
     static bool styleRefreshQueued;
 
     readonly List<GameObject> sceneObjects = new List<GameObject>(256);
@@ -699,50 +701,18 @@ public class UIRuntimeStyler : MonoBehaviour
         if (messageObject == null)
             return;
 
-        TMP_Text text = messageObject.GetComponent<TMP_Text>();
-        if (text == null)
-            text = messageObject.GetComponentInChildren<TMP_Text>(true);
+        messageObject.SetActive(false);
 
-        RectTransform rect = messageObject.GetComponent<RectTransform>();
-        Image badge = GetOrCreateBackground(messageObject.transform, "ExtractionMessageBadge");
-
-        if (rect != null)
-        {
-            rect.anchorMin = new Vector2(0.5f, 1f);
-            rect.anchorMax = new Vector2(0.5f, 1f);
-            rect.pivot = new Vector2(0.5f, 1f);
-            rect.anchoredPosition = new Vector2(0f, -222f);
-            rect.sizeDelta = new Vector2(560f, 78f);
-            rect.SetAsLastSibling();
-        }
-
-        if (messageObject.activeSelf && !Application.isPlaying)
-            messageObject.SetActive(false);
-
+        Transform badge = messageObject.transform.Find("ExtractionMessageBadge");
         if (badge != null)
-        {
-            badge.color = new Color(0.06f, 0.12f, 0.18f, 0.82f);
-            badge.type = Image.Type.Sliced;
-        }
-
-        if (text != null)
-        {
-            text.text = "Extraction Zone Activated";
-            text.fontSize = 28f;
-            text.fontStyle = FontStyles.Bold;
-            text.color = new Color(0.9f, 1f, 0.97f, 1f);
-            text.alignment = TextAlignmentOptions.Center;
-            text.textWrappingMode = TextWrappingModes.NoWrap;
-            text.characterSpacing = 1.1f;
-            text.margin = new Vector4(18f, 8f, 18f, 8f);
-        }
-
-        ApplyOutline(messageObject, new Color(0f, 0f, 0f, 0.4f), new Vector2(3f, -3f));
+            badge.gameObject.SetActive(false);
     }
 
     void StyleMovementJoystick(string objectName)
     {
-        GameObject root = FindSceneObjectByName(objectName);
+        GameObject root = GameObject.Find(objectName);
+        if (root == null)
+            root = FindSceneObjectByName(objectName);
         if (root == null)
             return;
 
@@ -751,12 +721,17 @@ public class UIRuntimeStyler : MonoBehaviour
             rootRect.sizeDelta = new Vector2(430f, 430f);
 
         Image rootImage = root.GetComponent<Image>();
-        Sprite joystickSprite = rootImage != null ? rootImage.sprite : null;
+        Sprite joystickSprite = GetMovementJoystickDiscSprite();
+        Sprite joystickGlowSprite = GetMovementJoystickGlowSprite();
         if (rootImage != null)
         {
-            rootImage.color = new Color(0.035f, 0.07f, 0.1f, 0.42f);
+            rootImage.enabled = true;
+            rootImage.sprite = joystickSprite;
+            rootImage.type = Image.Type.Simple;
+            rootImage.preserveAspect = false;
+            rootImage.color = new Color(0.01f, 0.045f, 0.06f, 0.96f);
             rootImage.raycastTarget = true;
-            ApplyOutline(rootImage.gameObject, new Color(0f, 0f, 0f, 0.28f), new Vector2(2f, -2f));
+            ApplyOutline(rootImage.gameObject, new Color(0f, 0f, 0f, 0.72f), new Vector2(3f, -3f));
         }
 
         Joystick joystick = root.GetComponent<Joystick>();
@@ -769,44 +744,55 @@ public class UIRuntimeStyler : MonoBehaviour
 
         Graphic boosterRing = GetOrCreateMovementJoystickBoosterRing(root.transform);
 
+        Image backplate = GetOrCreateChildImage(root.transform, "MovementJoystickBackplate");
+        ConfigureJoystickDisc(backplate, joystickSprite, 516f, new Color(0.002f, 0.012f, 0.018f, 0.84f));
+        backplate.transform.SetSiblingIndex(Mathf.Min(1, backplate.transform.parent.childCount - 1));
+
         Image glow = GetOrCreateChildImage(root.transform, "MovementJoystickGlow");
-        ConfigureJoystickDisc(glow, joystickSprite, 392f, new Color(0.35f, 0.82f, 1f, 0.05f));
-        glow.transform.SetSiblingIndex(Mathf.Min(1, glow.transform.parent.childCount - 1));
+        ConfigureJoystickDisc(glow, joystickGlowSprite, 516f, new Color(0.4f, 0.9f, 1f, 0.32f));
+        glow.transform.SetSiblingIndex(Mathf.Min(2, glow.transform.parent.childCount - 1));
 
         Image ring = GetOrCreateChildImage(root.transform, "MovementJoystickRing");
-        ConfigureJoystickDisc(ring, joystickSprite, 344f, new Color(0.32f, 0.62f, 0.78f, 0.22f));
-        ring.transform.SetSiblingIndex(Mathf.Min(2, ring.transform.parent.childCount - 1));
+        ConfigureJoystickDisc(ring, joystickSprite, 485f, new Color(0.42f, 0.94f, 1f, 0.86f));
+        ring.transform.SetSiblingIndex(Mathf.Min(3, ring.transform.parent.childCount - 1));
 
         Image inner = GetOrCreateChildImage(root.transform, "MovementJoystickInner");
-        ConfigureJoystickDisc(inner, joystickSprite, 276f, new Color(0.02f, 0.04f, 0.065f, 0.3f));
-        inner.transform.SetSiblingIndex(Mathf.Min(3, inner.transform.parent.childCount - 1));
+        ConfigureJoystickDisc(inner, joystickSprite, 401f, new Color(0.012f, 0.065f, 0.09f, 0.84f));
+        inner.transform.SetSiblingIndex(Mathf.Min(4, inner.transform.parent.childCount - 1));
 
         RemoveMovementJoystickBoosterDebug(root.transform);
+        RemoveMovementJoystickVisibleHandleOverlays(root.transform);
 
-        Image handleImage = joystick != null && joystick.handle != null ? joystick.handle.GetComponent<Image>() : null;
-        if (handleImage == null)
-        {
-            Transform handleTransform = root.transform.Find("Handle");
-            handleImage = handleTransform != null ? handleTransform.GetComponent<Image>() : null;
-        }
+        Image handleImage = EnsureMovementJoystickHandleImage(root, joystick, joystickSprite);
+        Image handleVisual = GetOrCreateChildImage(root.transform, "MovementJoystickHandleVisual");
 
         if (handleImage != null)
         {
             RectTransform handleRect = handleImage.rectTransform;
-            handleRect.sizeDelta = new Vector2(128f, 128f);
+            handleRect.sizeDelta = new Vector2(124f, 124f);
+            if (joystick == null || !joystick.IsPressed)
+                handleRect.anchoredPosition = Vector2.zero;
             handleRect.localScale = Vector3.one;
-            if (joystickSprite != null && handleImage.sprite == null)
-                handleImage.sprite = joystickSprite;
-            handleImage.color = new Color(0.11f, 0.38f, 0.21f, 0.9f);
+            handleImage.enabled = true;
+            handleImage.sprite = joystickSprite;
+            handleImage.type = Image.Type.Simple;
+            handleImage.preserveAspect = false;
+            handleImage.color = new Color32(82, 176, 112, 255);
             handleImage.raycastTarget = false;
-            handleImage.transform.SetAsLastSibling();
-            ApplyOutline(handleImage.gameObject, new Color(0f, 0f, 0f, 0.34f), new Vector2(2f, -2f));
+            ApplyOutline(handleImage.gameObject, new Color(0f, 0f, 0f, 0.72f), new Vector2(3f, 3f));
+            RemoveMovementJoystickHandleInterior(handleImage.transform);
         }
+
+        ConfigureJoystickDisc(handleVisual, joystickSprite, 116f, new Color32(82, 176, 112, 255));
+        if (handleImage != null)
+            handleVisual.rectTransform.anchoredPosition = handleImage.rectTransform.anchoredPosition;
+        handleVisual.gameObject.SetActive(true);
+        ApplyOutline(handleVisual.gameObject, new Color(0f, 0f, 0f, 0.72f), new Vector2(3f, 3f));
 
         MovementJoystickVisualController controller = root.GetComponent<MovementJoystickVisualController>();
         if (controller == null)
             controller = root.AddComponent<MovementJoystickVisualController>();
-        controller.Configure(joystick, rootImage, handleImage, glow, ring, inner, boosterRing);
+        controller.Configure(joystick, rootImage, handleImage, handleVisual, glow, ring, inner, boosterRing);
     }
 
     Graphic GetOrCreateMovementJoystickBoosterRing(Transform joystickRoot)
@@ -867,6 +853,69 @@ public class UIRuntimeStyler : MonoBehaviour
             Destroy(existing.gameObject);
     }
 
+    void RemoveMovementJoystickVisibleHandleOverlays(Transform parent)
+    {
+        DestroyChildIfExists(parent, "MovementJoystickHandleVisibleRim");
+        DestroyChildIfExists(parent, "MovementJoystickHandleVisibleCore");
+    }
+
+    void RemoveMovementJoystickHandleInterior(Transform parent)
+    {
+        DestroyChildIfExists(parent, "MovementJoystickHandleCore");
+        DestroyChildIfExists(parent, "MovementJoystickHandleHighlight");
+    }
+
+    void DestroyChildIfExists(Transform parent, string childName)
+    {
+        if (parent == null)
+            return;
+
+        Transform existing = parent.Find(childName);
+        if (existing != null)
+            Destroy(existing.gameObject);
+    }
+
+    Image EnsureMovementJoystickHandleImage(GameObject root, Joystick joystick, Sprite sprite)
+    {
+        if (joystick != null && joystick.handle != null)
+        {
+            Image existingImage = joystick.handle.GetComponent<Image>();
+            if (existingImage == null)
+                existingImage = joystick.handle.gameObject.AddComponent<Image>();
+            joystick.handle.gameObject.SetActive(true);
+            return existingImage;
+        }
+
+        if (root == null)
+            return null;
+
+        Transform handleTransform = root.transform.Find("JoystickHandle");
+        if (handleTransform == null)
+            handleTransform = root.transform.Find("Handle");
+
+        if (handleTransform == null)
+        {
+            GameObject handleObject = new GameObject("JoystickHandle", typeof(RectTransform), typeof(Image));
+            handleObject.transform.SetParent(root.transform, false);
+            handleTransform = handleObject.transform;
+        }
+
+        handleTransform.gameObject.SetActive(true);
+
+        RectTransform handleRect = handleTransform.GetComponent<RectTransform>();
+        if (handleRect != null && joystick != null)
+            joystick.handle = handleRect;
+
+        Image image = handleTransform.GetComponent<Image>();
+        if (image == null)
+            image = handleTransform.gameObject.AddComponent<Image>();
+
+        if (sprite != null)
+            image.sprite = sprite;
+
+        return image;
+    }
+
     void ConfigureJoystickDisc(Image image, Sprite sprite, float size, Color color)
     {
         if (image == null)
@@ -884,7 +933,9 @@ public class UIRuntimeStyler : MonoBehaviour
         image.type = Image.Type.Simple;
         image.preserveAspect = false;
         image.raycastTarget = false;
+        image.enabled = true;
         image.color = color;
+        image.canvasRenderer.SetAlpha(1f);
     }
 
     void StyleJoystick(string objectName, Color backgroundColor, Color handleColor)
@@ -1557,6 +1608,66 @@ public class UIRuntimeStyler : MonoBehaviour
         cachedJoystickBoosterRingSprite.name = "RuntimeJoystickBoosterRingSprite";
         cachedJoystickBoosterRingSprite.hideFlags = HideFlags.HideAndDontSave;
         return cachedJoystickBoosterRingSprite;
+    }
+
+    static Sprite GetMovementJoystickDiscSprite()
+    {
+        if (cachedMovementJoystickDiscSprite != null)
+            return cachedMovementJoystickDiscSprite;
+
+        cachedMovementJoystickDiscSprite = CreateMovementJoystickSprite(
+            "RuntimeMovementJoystickDiscSprite",
+            "RuntimeMovementJoystickDiscTexture",
+            1024,
+            false);
+        return cachedMovementJoystickDiscSprite;
+    }
+
+    static Sprite GetMovementJoystickGlowSprite()
+    {
+        if (cachedMovementJoystickGlowSprite != null)
+            return cachedMovementJoystickGlowSprite;
+
+        cachedMovementJoystickGlowSprite = CreateMovementJoystickSprite(
+            "RuntimeMovementJoystickGlowSprite",
+            "RuntimeMovementJoystickGlowTexture",
+            1024,
+            true);
+        return cachedMovementJoystickGlowSprite;
+    }
+
+    static Sprite CreateMovementJoystickSprite(string spriteName, string textureName, int size, bool softGlow)
+    {
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        texture.name = textureName;
+        texture.hideFlags = HideFlags.HideAndDontSave;
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        Color[] pixels = new Color[size * size];
+        float center = (size - 1) * 0.5f;
+        float radius = center;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - center;
+                float dy = y - center;
+                float normalizedDistance = Mathf.Sqrt(dx * dx + dy * dy) / radius;
+                float alpha = softGlow
+                    ? 1f - Mathf.SmoothStep(0.16f, 1f, normalizedDistance)
+                    : 1f - Mathf.SmoothStep(0.994f, 1f, normalizedDistance);
+                pixels[y * size + x] = alpha > 0.001f ? new Color(1f, 1f, 1f, Mathf.Clamp01(alpha)) : Color.clear;
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply(false, true);
+
+        Sprite sprite = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f);
+        sprite.name = spriteName;
+        sprite.hideFlags = HideFlags.HideAndDontSave;
+        return sprite;
     }
 
     static Sprite GetPlayButtonShapeSprite()

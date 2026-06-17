@@ -1,7 +1,5 @@
 using Photon.Pun;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 public sealed class EndDisasterMeteorVfx : MonoBehaviour
 {
@@ -37,9 +35,6 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
     bool meteorVisible;
     AudioClip meteorAlarmClip;
     AudioSource meteorAlarmSource;
-    GameObject warningMessageObject;
-    CanvasGroup warningCanvasGroup;
-    TextMeshProUGUI warningMessageText;
     int dynamicZoomToken;
 
     public static void EnsureExists()
@@ -262,91 +257,13 @@ public sealed class EndDisasterMeteorVfx : MonoBehaviour
 
     void UpdateWarningMessage(float progress)
     {
-        EnsureWarningMessage();
-        if (warningMessageObject == null)
-            return;
-
-        warningMessageObject.SetActive(true);
-        warningMessageObject.transform.SetAsLastSibling();
-
-        if (warningCanvasGroup != null)
-        {
-            float pulse = Mathf.PingPong(Time.unscaledTime * 2.7f, 1f);
-            warningCanvasGroup.alpha = Mathf.Lerp(0.78f, 1f, Mathf.Max(progress, pulse));
-        }
-
-        if (warningMessageText != null)
-        {
-            warningMessageText.color = Color.Lerp(
-                new Color(1f, 0.72f, 0.34f, 1f),
-                new Color(1f, 0.25f, 0.14f, 1f),
-                Mathf.Clamp01(progress * 1.18f));
-        }
-    }
-
-    void EnsureWarningMessage()
-    {
-        if (warningMessageObject != null && warningMessageObject.scene.IsValid())
-            return;
-
-        GameObject canvasObject = GameObject.Find("Canvas");
-        if (canvasObject == null)
-            return;
-
-        warningMessageObject = new GameObject("EndDisasterWarningMessage", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
-        warningMessageObject.transform.SetParent(canvasObject.transform, false);
-
-        RectTransform rect = warningMessageObject.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0f, 1f);
-        rect.anchorMax = new Vector2(0f, 1f);
-        rect.pivot = new Vector2(0f, 1f);
-        rect.anchoredPosition = new Vector2(24f, -86f);
-        rect.sizeDelta = new Vector2(360f, 54f);
-
-        Image background = warningMessageObject.GetComponent<Image>();
-        background.color = new Color(0.12f, 0.03f, 0.02f, 0.74f);
-        background.raycastTarget = false;
-
-        warningCanvasGroup = warningMessageObject.GetComponent<CanvasGroup>();
-        warningCanvasGroup.interactable = false;
-        warningCanvasGroup.blocksRaycasts = false;
-
-        GameObject textObject = new GameObject("EndDisasterWarningText", typeof(RectTransform), typeof(TextMeshProUGUI), typeof(Shadow));
-        textObject.transform.SetParent(warningMessageObject.transform, false);
-
-        RectTransform textRect = textObject.GetComponent<RectTransform>();
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = new Vector2(16f, 4f);
-        textRect.offsetMax = new Vector2(-16f, -4f);
-
-        warningMessageText = textObject.GetComponent<TextMeshProUGUI>();
-        warningMessageText.text = "Disaster incoming!";
-        warningMessageText.fontSize = 24f;
-        warningMessageText.fontStyle = FontStyles.Bold;
-        warningMessageText.characterSpacing = 1.2f;
-        warningMessageText.alignment = TextAlignmentOptions.Left;
-        warningMessageText.textWrappingMode = TextWrappingModes.NoWrap;
-        warningMessageText.raycastTarget = false;
-
-        Shadow shadow = textObject.GetComponent<Shadow>();
-        shadow.effectColor = new Color(0f, 0f, 0f, 0.72f);
-        shadow.effectDistance = new Vector2(2.5f, -2.5f);
-
-        TMP_Text reference = FindAnyObjectByType<TMP_Text>();
-        if (reference != null)
-        {
-            warningMessageText.font = reference.font;
-            warningMessageText.fontSharedMaterial = reference.fontSharedMaterial;
-        }
-
-        warningMessageObject.SetActive(false);
+        string message = progress >= 0.72f ? "DISASTER IMPACT IMMINENT" : "DISASTER INCOMING";
+        RoundMessageLayer.ShowWarning(message, RoundMessagePriority.Warning, 0.34f);
     }
 
     void HideWarningMessage()
     {
-        if (warningMessageObject != null)
-            warningMessageObject.SetActive(false);
+        RoundMessageLayer.ClearWarning(RoundMessagePriority.Warning);
     }
 
     void ConfigureSorting()

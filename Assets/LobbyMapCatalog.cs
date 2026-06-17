@@ -234,6 +234,7 @@ public static class LobbyMapCatalog
     public const string MinefieldMapId = "minefield";
     public const string SnowFieldMapId = "snow_field";
     public const string DeepSpaceMapId = "deep_space";
+    public const string HiddenDimensionMapId = "hidden_dimension";
     public const string PirateBayMapId = "pirate_bay";
     public const string AncientSpaceMapId = "ancient_space";
     public const string TheThreatMapId = "mothership";
@@ -731,6 +732,57 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.PirateBase, false, 1, false, 500, 1000, 1f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, true, 2, true, 90, 120, 1.05f, 20, 120, 38),
             new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
+        new LobbyMapDefinition(
+            HiddenDimensionMapId,
+            "HIDDEN DIMENSION",
+            "A hidden dimension beyond charted deep space, rich with rare materials and isolated from special events.\n" +
+            "Ancient Portal is the only escape point here.\n" +
+            "You lose your inventory and equipment here if you die.",
+            330f,
+            "super_large",
+            1f,
+            "low",
+            true,
+            500,
+            90,
+            false,
+            "medium",
+            RoomSettings.ResourceRichnessVeryHigh,
+            "low",
+            RoomSettings.SpaceJunkDensityNone,
+            RoomSettings.DefaultNebulaSize,
+            RoomSettings.DefaultFireNebulaSize,
+            RoomSettings.SpaceJunkDensityNone,
+            RoomSettings.NebulaSizeNormal,
+            1,
+            true,
+            12,
+            6,
+            16,
+            true,
+            true,
+            true,
+            RoomSettings.SpaceJunkDensityMedium,
+            RoomSettings.ContainersDensityNone,
+            2,
+            0,
+            0,
+            new LobbyEnemyMapPreset(EnemyBotKind.Drone, false, 1, false, 50, 20, 1f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.Corsair, false, 1, false, 200, 20, 1f, 0, 60),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceMine, false, 8, false, 60, 20, 1f, 0, 120, 50),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceTruck, false, 1, false, 100, 50, 1.5f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.ContainerShip, false, 1, false, 140, 90, 1f, 0, 150, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.NeutralFighter, false, 3, false, 20, 20, 1.5f, 0, 90, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighter, false, 2, false, 50, 50, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterElite, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateFighterAce, false, 2, false, 66, 66, 1.5f, 0, 60, 10),
+            new LobbyEnemyMapPreset(EnemyBotKind.SpaceManta, false, 1, false, 100, 0, 1f, 0, 90, 40),
+            new LobbyEnemyMapPreset(EnemyBotKind.GravitySquid, false, 1, false, 80, 70, 1f, 0, 120, 8),
+            new LobbyEnemyMapPreset(EnemyBotKind.HunterLance, false, 3, false, 85, 115, 1.05f, 0, 60, 36),
+            new LobbyEnemyMapPreset(EnemyBotKind.PirateBase, false, 1, false, 500, 1000, 1f, 0, 90, 0),
+            new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
+            new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90))
     };
 
@@ -769,6 +821,8 @@ public static class LobbyMapCatalog
                 return RoomSettings.ParallaxBackgroundKosmos12;
             case DeepSpaceMapId:
                 return RoomSettings.ParallaxBackgroundKosmos3;
+            case HiddenDimensionMapId:
+                return RoomSettings.ParallaxBackgroundKosmos16;
             case TheThreatMapId:
                 return RoomSettings.ParallaxBackgroundKosmos13;
             case GravityWellMapId:
@@ -798,6 +852,8 @@ public static class LobbyMapCatalog
                 return RoomSettings.BackgroundObject12;
             case DeepSpaceMapId:
                 return RoomSettings.BackgroundObject6;
+            case HiddenDimensionMapId:
+                return RoomSettings.BackgroundObject14;
             case TheThreatMapId:
                 return RoomSettings.BackgroundObject8;
             case GravityWellMapId:
@@ -815,6 +871,8 @@ public static class LobbyMapCatalog
             case JustSpaceMapId:
             case NoobHavenMapId:
                 return RoomSettings.ExtractionTypeSpaceCity;
+            case HiddenDimensionMapId:
+                return RoomSettings.ExtractionTypeAncientPortal;
             case AncientSpaceMapId:
             case DeepSpaceMapId:
             case TheThreatMapId:
@@ -827,6 +885,9 @@ public static class LobbyMapCatalog
 
     public static int GetDefaultScienceStationCount(string mapId)
     {
+        if (string.Equals(mapId, HiddenDimensionMapId, System.StringComparison.Ordinal))
+            return 0;
+
         return string.Equals(mapId, DeepSpaceMapId, System.StringComparison.Ordinal) ||
                string.Equals(mapId, ToxicAreaMapId, System.StringComparison.Ordinal)
             ? 1
@@ -839,6 +900,7 @@ public static class LobbyMapCatalog
             return System.Array.Empty<LobbyMapLandingSiteSummary>();
 
         return BuildLandingSites(
+            GetExtractionLandingSiteLabel(GetDefaultExtractionType(map.Id)),
             map.ExtractionZoneCount,
             map.RepairBayCount,
             GetDefaultScienceStationCount(map.Id),
@@ -847,12 +909,24 @@ public static class LobbyMapCatalog
 
     public static IReadOnlyList<LobbyMapLandingSiteSummary> BuildLandingSites(int extractionZoneCount, int repairStationCount, int scienceStationCount, int spaceFactoryCount)
     {
+        return BuildLandingSites("Extraction Zone", extractionZoneCount, repairStationCount, scienceStationCount, spaceFactoryCount);
+    }
+
+    public static IReadOnlyList<LobbyMapLandingSiteSummary> BuildLandingSites(string extractionSiteLabel, int extractionZoneCount, int repairStationCount, int scienceStationCount, int spaceFactoryCount)
+    {
         List<LobbyMapLandingSiteSummary> landingSites = new List<LobbyMapLandingSiteSummary>(4);
-        AddLandingSite(landingSites, "Extraction Zone", extractionZoneCount);
+        AddLandingSite(landingSites, string.IsNullOrWhiteSpace(extractionSiteLabel) ? "Extraction Zone" : extractionSiteLabel, extractionZoneCount);
         AddLandingSite(landingSites, "Repair Station", repairStationCount);
         AddLandingSite(landingSites, "Science Station", scienceStationCount);
         AddLandingSite(landingSites, "Space Factory", spaceFactoryCount);
         return landingSites;
+    }
+
+    public static string GetExtractionLandingSiteLabel(string extractionType)
+    {
+        return string.Equals(RoomSettings.NormalizeExtractionType(extractionType), RoomSettings.ExtractionTypeAncientPortal, System.StringComparison.Ordinal)
+            ? "Ancient Portal"
+            : "Extraction Zone";
     }
 
     static void AddLandingSite(List<LobbyMapLandingSiteSummary> landingSites, string label, int count)
@@ -868,6 +942,7 @@ public static class LobbyMapCatalog
         switch (mapId)
         {
             case DeepSpaceMapId:
+            case HiddenDimensionMapId:
             case PirateBayMapId:
             case AncientSpaceMapId:
             case TheThreatMapId:
@@ -888,6 +963,9 @@ public static class LobbyMapCatalog
 
     public static string GetDefaultArtifactAsteroidsDensity(string mapId)
     {
+        if (string.Equals(mapId, HiddenDimensionMapId, System.StringComparison.Ordinal))
+            return RoomSettings.ArtifactAsteroidsDensityOff;
+
         return string.Equals(mapId, DeepSpaceMapId, System.StringComparison.Ordinal)
             ? RoomSettings.ArtifactAsteroidsDensityLow
             : RoomSettings.DefaultArtifactAsteroidsDensity;
@@ -895,7 +973,8 @@ public static class LobbyMapCatalog
 
     public static bool AreNeutralRidersEnabledByDefault(string mapId)
     {
-        return !string.Equals(mapId, JustSpaceMapId, System.StringComparison.Ordinal);
+        return !string.Equals(mapId, JustSpaceMapId, System.StringComparison.Ordinal) &&
+               !string.Equals(mapId, HiddenDimensionMapId, System.StringComparison.Ordinal);
     }
 
     public static int GetDefaultNeutralRiderCount(string mapId)
@@ -930,7 +1009,8 @@ public static class LobbyMapCatalog
 
     public static int GetDefaultViperPlotChancePercent(string mapId)
     {
-        return string.Equals(mapId, JustSpaceMapId, System.StringComparison.Ordinal)
+        return string.Equals(mapId, JustSpaceMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, HiddenDimensionMapId, System.StringComparison.Ordinal)
             ? 0
             : RoomSettings.DefaultViperPlotChancePercent;
     }
@@ -947,7 +1027,8 @@ public static class LobbyMapCatalog
 
     public static int GetDefaultBisonPlotChancePercent(string mapId)
     {
-        return string.Equals(mapId, JustSpaceMapId, System.StringComparison.Ordinal)
+        return string.Equals(mapId, JustSpaceMapId, System.StringComparison.Ordinal) ||
+               string.Equals(mapId, HiddenDimensionMapId, System.StringComparison.Ordinal)
             ? 0
             : RoomSettings.DefaultBisonPlotChancePercent;
     }
@@ -1226,6 +1307,14 @@ public static class LobbyMapUnlockCatalog
                     level,
                     GravityWellRequiredLevel,
                     "Unlock: return safely 20 times from high-threat maps and reach level 20.");
+
+            case LobbyMapCatalog.HiddenDimensionMapId:
+                return new LobbyMapUnlockStatus(
+                    map.Id,
+                    false,
+                    "Find secrets to unlock",
+                    0,
+                    1);
 
             default:
                 return new LobbyMapUnlockStatus(map.Id, true, string.Empty, 1, 1);

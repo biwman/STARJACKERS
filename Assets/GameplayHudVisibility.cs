@@ -9,6 +9,7 @@ public sealed class GameplayHudVisibility : MonoBehaviour
     static readonly string[] SuppressedObjectNames =
     {
         "JoystickBG",
+        "MovementJoystickBoosterFuelRing",
         "MovementJoystickBoosterRing",
         "ShootJoystickBG",
         "SuperAttackJoystickBG",
@@ -26,6 +27,7 @@ public sealed class GameplayHudVisibility : MonoBehaviour
         "ComplexAmmoBar",
         "HP_Bar",
         "Shield_Bar",
+        "VitalsIconHud",
         "Booster_Bar",
         "RoundPilotHud",
         "RoundPilotHudTimerBadge",

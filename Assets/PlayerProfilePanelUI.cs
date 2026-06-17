@@ -187,6 +187,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         "TimerText",
         "HP_Bar",
         "Shield_Bar",
+        "VitalsIconHud",
         "Booster_Bar",
         "ScoreText"
     };
@@ -215,7 +216,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
     const float InventoryExtendButtonOffsetX = 0f;
     const float PlayerInventoryUtilityButtonFontSize = 18f;
     const float InventoryDropTargetPadding = 28f;
-    const string PlayerInventoryTitleText = "PLAYER\nINVENTORY";
+    const string PlayerInventoryTitleText = "INVENTORY";
     static readonly Vector2[] EquipmentSlotLayoutPositions =
     {
         new Vector2(-520f, -28f),
@@ -464,6 +465,13 @@ public class PlayerProfilePanelUI : MonoBehaviour
     TMP_Text shipSelectionTitleText;
     TMP_Text shipSelectionSubtitleText;
     TMP_Text shipSelectionStatusText;
+    Button shipSelectionDetailsButton;
+    GameObject shipMissionDetailsPanelObject;
+    TMP_Text shipMissionDetailsTitleText;
+    TMP_Text shipMissionDetailsBodyText;
+    RectTransform shipMissionDetailsContentRect;
+    LayoutElement shipMissionDetailsTextLayoutElement;
+    Button shipMissionDetailsCloseButton;
     Button shipSelectionBackButton;
     Button shipSelectionPrevButton;
     Button shipSelectionNextButton;
@@ -916,9 +924,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
         float initialPlayerInventoryExtendButtonX = -278f + InventoryExtendButtonOffsetX;
         float initialPlayerInventorySortButtonX = initialPlayerInventoryExtendButtonX - ((PlayerInventoryExtendButtonSize.x + PlayerInventorySortButtonSize.x) * 0.5f) - InventoryUtilityButtonGap;
 
-        playerInventoryLabelText = CreateText(panelObject.transform, "PlayerInventoryLabel", PlayerInventoryTitleText, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-574f, -546f), new Vector2(150f, 56f), 12f, TextAlignmentOptions.Left);
+        playerInventoryLabelText = CreateText(panelObject.transform, "PlayerInventoryLabel", PlayerInventoryTitleText, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-574f, -546f), new Vector2(150f, 56f), 18f, TextAlignmentOptions.MidlineLeft);
         ConfigurePlayerInventoryLabelText();
-        playerInventoryCountText = CreateText(panelObject.transform, "PlayerInventoryCount", "0/" + GetPlayerInventorySlotCount(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-444f, -546f), new Vector2(66f, 56f), 15f, TextAlignmentOptions.MidlineRight);
+        playerInventoryCountText = CreateText(panelObject.transform, "PlayerInventoryCount", "0/" + GetPlayerInventorySlotCount(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-444f, -546f), new Vector2(96f, 56f), 20f, TextAlignmentOptions.MidlineRight);
         ConfigurePlayerInventoryCountText();
         playerInventoryFilterButton = CreateButton(panelObject.transform, "PlayerInventoryFilterButton", "ALL", new Vector2(-902f, -542f + InventoryUtilityButtonLift), PlayerInventoryFilterButtonSize, OnPlayerInventoryFilterClicked);
         ConfigureNoBlinkInventoryActionButton(playerInventoryFilterButton);
@@ -1643,6 +1651,18 @@ public class PlayerProfilePanelUI : MonoBehaviour
         shipSelectionStatusText.fontStyle = FontStyles.Normal;
         shipSelectionStatusText.color = new Color(0.86f, 0.92f, 0.98f, 0.98f);
 
+        shipSelectionDetailsButton = CreateButton(shipSelectionViewObject.transform, "ShipSelectionMissionDetailsButton", "MISSION DETAILS", new Vector2(0f, -984f), new Vector2(330f, 58f), ShowShipSelectionMissionDetails);
+        StyleButton(shipSelectionDetailsButton, new Color(0.13f, 0.2f, 0.3f, 0.98f), new Color(0.22f, 0.34f, 0.48f, 1f));
+        TMP_Text detailsButtonText = shipSelectionDetailsButton.GetComponentInChildren<TMP_Text>(true);
+        if (detailsButtonText != null)
+        {
+            detailsButtonText.fontSize = 20f;
+            detailsButtonText.characterSpacing = 1.2f;
+            detailsButtonText.margin = new Vector4(12f, 4f, 12f, 4f);
+        }
+
+        CreateShipMissionDetailsPanel(shipSelectionViewObject.transform);
+
         if (shipSelectionSubtitleText != null)
             shipSelectionSubtitleText.gameObject.SetActive(false);
         if (shipSelectionSkinLabelText != null)
@@ -1653,6 +1673,183 @@ public class PlayerProfilePanelUI : MonoBehaviour
             shipSelectionNextButton.gameObject.SetActive(false);
 
         shipSelectionViewObject.SetActive(false);
+    }
+
+    void CreateShipMissionDetailsPanel(Transform parent)
+    {
+        shipMissionDetailsPanelObject = new GameObject("ShipMissionDetailsPanel", typeof(RectTransform), typeof(Image), typeof(Shadow));
+        shipMissionDetailsPanelObject.transform.SetParent(parent, false);
+
+        RectTransform panelRect = shipMissionDetailsPanelObject.GetComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.anchoredPosition = new Vector2(0f, -12f);
+        panelRect.sizeDelta = new Vector2(900f, 620f);
+
+        Image panelImage = shipMissionDetailsPanelObject.GetComponent<Image>();
+        panelImage.color = new Color(0.035f, 0.06f, 0.09f, 0.98f);
+        panelImage.raycastTarget = true;
+
+        Shadow shadow = shipMissionDetailsPanelObject.GetComponent<Shadow>();
+        shadow.effectColor = new Color(0f, 0f, 0f, 0.62f);
+        shadow.effectDistance = new Vector2(8f, -8f);
+        shadow.useGraphicAlpha = true;
+
+        shipMissionDetailsTitleText = CreateText(shipMissionDetailsPanelObject.transform, "ShipMissionDetailsTitle", "MISSION DETAILS", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -36f), new Vector2(720f, 46f), 34f, TextAlignmentOptions.Center);
+        shipMissionDetailsTitleText.characterSpacing = 1.5f;
+        shipMissionDetailsTitleText.raycastTarget = false;
+
+        GameObject viewportObject = new GameObject("ShipMissionDetailsViewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
+        viewportObject.transform.SetParent(shipMissionDetailsPanelObject.transform, false);
+
+        RectTransform viewportRect = viewportObject.GetComponent<RectTransform>();
+        viewportRect.anchorMin = Vector2.zero;
+        viewportRect.anchorMax = Vector2.one;
+        viewportRect.pivot = new Vector2(0.5f, 0.5f);
+        viewportRect.offsetMin = new Vector2(42f, 94f);
+        viewportRect.offsetMax = new Vector2(-42f, -100f);
+
+        Image viewportImage = viewportObject.GetComponent<Image>();
+        viewportImage.color = new Color(0f, 0f, 0f, 0f);
+        viewportImage.raycastTarget = true;
+
+        GameObject contentObject = new GameObject("ShipMissionDetailsContent", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+        contentObject.transform.SetParent(viewportObject.transform, false);
+        shipMissionDetailsContentRect = contentObject.GetComponent<RectTransform>();
+        shipMissionDetailsContentRect.anchorMin = new Vector2(0f, 1f);
+        shipMissionDetailsContentRect.anchorMax = new Vector2(1f, 1f);
+        shipMissionDetailsContentRect.pivot = new Vector2(0.5f, 1f);
+        shipMissionDetailsContentRect.anchoredPosition = Vector2.zero;
+        shipMissionDetailsContentRect.sizeDelta = Vector2.zero;
+
+        VerticalLayoutGroup layout = contentObject.GetComponent<VerticalLayoutGroup>();
+        layout.padding = new RectOffset(4, 4, 4, 4);
+        layout.childAlignment = TextAnchor.UpperLeft;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+
+        ContentSizeFitter fitter = contentObject.GetComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        ScrollRect scrollRect = viewportObject.GetComponent<ScrollRect>();
+        scrollRect.horizontal = false;
+        scrollRect.vertical = true;
+        scrollRect.movementType = ScrollRect.MovementType.Clamped;
+        scrollRect.scrollSensitivity = 32f;
+        scrollRect.viewport = viewportRect;
+        scrollRect.content = shipMissionDetailsContentRect;
+
+        shipMissionDetailsBodyText = CreateText(contentObject.transform, "ShipMissionDetailsBody", string.Empty, new Vector2(0f, 1f), new Vector2(1f, 1f), Vector2.zero, Vector2.zero, 30f, TextAlignmentOptions.TopLeft);
+        shipMissionDetailsBodyText.fontStyle = FontStyles.Normal;
+        shipMissionDetailsBodyText.textWrappingMode = TextWrappingModes.Normal;
+        shipMissionDetailsBodyText.overflowMode = TextOverflowModes.Overflow;
+        shipMissionDetailsBodyText.lineSpacing = 8f;
+        shipMissionDetailsBodyText.margin = Vector4.zero;
+        shipMissionDetailsBodyText.raycastTarget = false;
+
+        shipMissionDetailsTextLayoutElement = shipMissionDetailsBodyText.gameObject.AddComponent<LayoutElement>();
+        shipMissionDetailsTextLayoutElement.flexibleWidth = 1f;
+        shipMissionDetailsTextLayoutElement.minHeight = 1f;
+        shipMissionDetailsTextLayoutElement.preferredHeight = 430f;
+
+        shipMissionDetailsCloseButton = CreateButton(shipMissionDetailsPanelObject.transform, "ShipMissionDetailsCloseButton", "CLOSE", new Vector2(0f, -548f), new Vector2(220f, 54f), HideShipSelectionMissionDetails);
+        StyleButton(shipMissionDetailsCloseButton, new Color(0.14f, 0.19f, 0.28f, 0.98f), new Color(0.22f, 0.3f, 0.42f, 1f));
+
+        shipMissionDetailsPanelObject.SetActive(false);
+    }
+
+    void ShowShipSelectionMissionDetails()
+    {
+        if (!TryBuildShipSelectionMissionDetails(shipSelectionCenterType, out string title, out string body))
+            return;
+
+        UpdateShipSelectionMissionDetailsContent(title, body);
+
+        if (shipMissionDetailsPanelObject != null)
+        {
+            shipMissionDetailsPanelObject.SetActive(true);
+            shipMissionDetailsPanelObject.transform.SetAsLastSibling();
+        }
+    }
+
+    void HideShipSelectionMissionDetails()
+    {
+        if (shipMissionDetailsPanelObject != null)
+            shipMissionDetailsPanelObject.SetActive(false);
+    }
+
+    void RefreshShipSelectionMissionDetailsControls()
+    {
+        bool hasDetails = TryBuildShipSelectionMissionDetails(shipSelectionCenterType, out string title, out string body);
+
+        if (shipSelectionDetailsButton != null)
+        {
+            shipSelectionDetailsButton.gameObject.SetActive(hasDetails);
+            shipSelectionDetailsButton.interactable = hasDetails && inventoryControlsInteractable && !inventoryActionInProgress;
+        }
+
+        if (!hasDetails)
+        {
+            HideShipSelectionMissionDetails();
+            return;
+        }
+
+        if (shipMissionDetailsPanelObject != null && shipMissionDetailsPanelObject.activeSelf)
+            UpdateShipSelectionMissionDetailsContent(title, body);
+    }
+
+    bool TryBuildShipSelectionMissionDetails(ShipType shipType, out string title, out string body)
+    {
+        title = string.Empty;
+        body = string.Empty;
+
+        bool shipUnlocked = IsShipTypeUnlockedForUi(shipType);
+        ViperRecoveryStage viperStage = shipType == ShipType.Viper && PlayerProfileService.HasInstance
+            ? PlayerProfileService.Instance.GetViperRecoveryStage()
+            : ViperRecoveryStage.Complete;
+        bool hasActiveMission = !shipUnlocked || (shipType == ShipType.Viper && viperStage == ViperRecoveryStage.Testing);
+        if (!hasActiveMission)
+            return false;
+
+        string details = BuildShipSelectionProgressText(shipType, shipUnlocked, viperStage);
+        if (string.IsNullOrWhiteSpace(details))
+            return false;
+
+        title = ShipCatalog.GetShipTypeDisplayName(shipType).ToUpperInvariant() + " MISSION";
+        body = details;
+        return true;
+    }
+
+    void UpdateShipSelectionMissionDetailsContent(string title, string body)
+    {
+        if (shipMissionDetailsTitleText != null)
+            shipMissionDetailsTitleText.text = title;
+
+        if (shipMissionDetailsBodyText != null)
+        {
+            shipMissionDetailsBodyText.text = body;
+            UpdateShipSelectionMissionDetailsBodyHeight(body);
+        }
+    }
+
+    void UpdateShipSelectionMissionDetailsBodyHeight(string body)
+    {
+        if (shipMissionDetailsBodyText == null || shipMissionDetailsTextLayoutElement == null)
+            return;
+
+        float textWidth = 780f;
+        if (shipMissionDetailsContentRect != null && shipMissionDetailsContentRect.rect.width > 1f)
+            textWidth = Mathf.Max(1f, shipMissionDetailsContentRect.rect.width - 8f);
+
+        float preferredHeight = shipMissionDetailsBodyText.GetPreferredValues(body ?? string.Empty, textWidth, Mathf.Infinity).y;
+        shipMissionDetailsTextLayoutElement.preferredHeight = Mathf.Max(430f, preferredHeight + 8f);
+
+        if (shipMissionDetailsContentRect != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(shipMissionDetailsContentRect);
     }
 
     void CreatePilotSelectionView(Transform parent)
@@ -5844,13 +6041,13 @@ public class PlayerProfilePanelUI : MonoBehaviour
             return;
 
         playerInventoryLabelText.text = PlayerInventoryTitleText;
-        playerInventoryLabelText.fontSize = 12f;
+        playerInventoryLabelText.fontSize = 18f;
         playerInventoryLabelText.enableAutoSizing = true;
-        playerInventoryLabelText.fontSizeMin = 8f;
-        playerInventoryLabelText.fontSizeMax = 12f;
+        playerInventoryLabelText.fontSizeMin = 12f;
+        playerInventoryLabelText.fontSizeMax = 18f;
         playerInventoryLabelText.fontStyle = FontStyles.Bold;
-        playerInventoryLabelText.alignment = TextAlignmentOptions.Left;
-        playerInventoryLabelText.textWrappingMode = TextWrappingModes.Normal;
+        playerInventoryLabelText.alignment = TextAlignmentOptions.MidlineLeft;
+        playerInventoryLabelText.textWrappingMode = TextWrappingModes.NoWrap;
         playerInventoryLabelText.overflowMode = TextOverflowModes.Truncate;
         playerInventoryLabelText.margin = new Vector4(0f, 2f, 4f, 2f);
     }
@@ -5860,10 +6057,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (playerInventoryCountText == null)
             return;
 
-        playerInventoryCountText.fontSize = 15f;
+        playerInventoryCountText.fontSize = 20f;
         playerInventoryCountText.enableAutoSizing = true;
-        playerInventoryCountText.fontSizeMin = 10f;
-        playerInventoryCountText.fontSizeMax = 15f;
+        playerInventoryCountText.fontSizeMin = 14f;
+        playerInventoryCountText.fontSizeMax = 20f;
         playerInventoryCountText.fontStyle = FontStyles.Bold;
         playerInventoryCountText.alignment = TextAlignmentOptions.MidlineRight;
         playerInventoryCountText.textWrappingMode = TextWrappingModes.NoWrap;
@@ -6853,6 +7050,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
             shipSelectionViewObject.SetActive(showShipSelection);
         if (pilotSelectionViewObject != null)
             pilotSelectionViewObject.SetActive(showPilotSelection);
+        if (!showShipSelection)
+            HideShipSelectionMissionDetails();
 
         if (topBarRootObject != null)
             topBarRootObject.SetActive(!showFullscreenSelection);
@@ -8066,7 +8265,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         float leftEdge = filterButtonCenterX + PlayerInventoryFilterButtonSize.x * 0.5f + InventoryUtilityLabelGap;
         float rightEdge = sortButtonCenterX - PlayerInventorySortButtonSize.x * 0.5f - InventoryUtilityLabelGap;
         float totalWidth = Mathf.Max(96f, rightEdge - leftEdge);
-        float countWidth = Mathf.Min(72f, Mathf.Max(52f, totalWidth * 0.34f));
+        float countWidth = Mathf.Min(102f, Mathf.Max(84f, totalWidth * 0.42f));
         float labelWidth = Mathf.Max(44f, totalWidth - countWidth - 6f);
         float y = -544f + InventoryUtilityButtonLift;
 
@@ -9367,6 +9566,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (inventoryActionInProgress || shipSelectionDragActive || shipSelectionSnapActive)
             return;
 
+        HideShipSelectionMissionDetails();
         ResetShipSelectionCarouselMotion();
         shipSelectionCenterIndex = Mathf.Max(0, shipSelectionCenterIndex - 1);
         shipSelectionCenterType = SelectableShipTypes[shipSelectionCenterIndex];
@@ -9378,6 +9578,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (inventoryActionInProgress || shipSelectionDragActive || shipSelectionSnapActive)
             return;
 
+        HideShipSelectionMissionDetails();
         ResetShipSelectionCarouselMotion();
         shipSelectionCenterIndex = Mathf.Min(SelectableShipTypes.Length - 1, shipSelectionCenterIndex + 1);
         shipSelectionCenterType = SelectableShipTypes[shipSelectionCenterIndex];
@@ -9413,6 +9614,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
 
         int direction = cardIndex == 0 ? -1 : 1;
+        HideShipSelectionMissionDetails();
         shipSelectionCenterIndex = Mathf.Clamp(shipSelectionCenterIndex + direction, 0, SelectableShipTypes.Length - 1);
         shipSelectionCenterType = SelectableShipTypes[shipSelectionCenterIndex];
         RefreshShipSelectionView();
@@ -9422,9 +9624,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
     {
         if (!IsShipTypeUnlockedForUi(shipType))
         {
-            if (shipSelectionStatusText != null)
-                shipSelectionStatusText.text = ShipCatalog.GetShipTypeDisplayName(shipType).ToUpperInvariant() + " locked.";
             RefreshShipSelectionView();
+            ShowShipSelectionMissionDetails();
             return;
         }
 
@@ -9586,6 +9787,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
                     !centerShipUnlocked ? new Color(0.16f, 0.17f, 0.2f, 0.9f) : selected ? new Color(0.28f, 0.5f, 0.74f, 1f) : new Color(0.22f, 0.3f, 0.42f, 1f));
             }
 
+            RefreshShipSelectionMissionDetailsControls();
             ApplyShipSelectionCarouselVisuals();
             shipSelectionDirty = false;
         }
@@ -9616,8 +9818,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
                     shipSelectionCardDonateButtons[i].transform.SetAsLastSibling();
             }
         }
+        if (shipSelectionDetailsButton != null && shipSelectionDetailsButton.gameObject.activeSelf)
+            shipSelectionDetailsButton.transform.SetAsLastSibling();
         if (shipSelectionStatusText != null)
             shipSelectionStatusText.transform.SetAsLastSibling();
+        if (shipMissionDetailsPanelObject != null && shipMissionDetailsPanelObject.activeSelf)
+            shipMissionDetailsPanelObject.transform.SetAsLastSibling();
     }
 
     void UpdateShipSelectionCard(int cardIndex, ShipType shipType, bool centerCard)
@@ -9631,15 +9837,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
         ViperRecoveryStage viperStage = shipType == ShipType.Viper && PlayerProfileService.HasInstance
             ? PlayerProfileService.Instance.GetViperRecoveryStage()
             : ViperRecoveryStage.Complete;
-        ArrowLicenseStage arrowStage = shipType == ShipType.Arrow && PlayerProfileService.HasInstance
-            ? PlayerProfileService.Instance.GetArrowLicenseStage()
-            : ArrowLicenseStage.Complete;
         bool viperNeedsParts = shipType == ShipType.Viper && viperStage == ViperRecoveryStage.WreckRecovered;
         bool viperTesting = shipType == ShipType.Viper && viperStage == ViperRecoveryStage.Testing;
-        bool arrowLocked = shipType == ShipType.Arrow && !shipUnlocked && arrowStage != ArrowLicenseStage.Complete;
-        bool bisonLocked = shipType == ShipType.CargoTruck && !shipUnlocked;
-        bool invaderLocked = shipType == ShipType.Invader && !shipUnlocked;
-        bool pathfinderLocked = shipType == ShipType.Pathfinder && !shipUnlocked;
         RectTransform cardRect = shipSelectionCardObjects[cardIndex] != null ? shipSelectionCardObjects[cardIndex].GetComponent<RectTransform>() : null;
         if (cardRect != null)
         {
@@ -9680,58 +9879,21 @@ public class PlayerProfilePanelUI : MonoBehaviour
         {
             bool showProgressText = !shipUnlocked || viperTesting;
             lockText.gameObject.SetActive(showProgressText);
-            lockText.text = BuildShipSelectionProgressText(shipType, shipUnlocked, viperStage);
-            lockText.fontSize = viperNeedsParts
-                ? centerCard ? 20f : 15f
-                : viperTesting
-                    ? centerCard ? 23f : 16f
-                    : arrowLocked
-                        ? centerCard ? 20f : 15f
-                        : pathfinderLocked
-                            ? centerCard ? 20f : 15f
-                        : bisonLocked
-                            ? centerCard ? 24f : 17f
-                            : invaderLocked
-                                ? centerCard ? 24f : 17f
-                    : centerCard ? 28f : 20f;
+            lockText.text = BuildShipSelectionCardStatusText(shipType, shipUnlocked, viperStage);
+            lockText.enableAutoSizing = false;
+            lockText.fontSize = centerCard ? 24f : 18f;
+            lockText.fontSizeMin = lockText.fontSize;
+            lockText.fontSizeMax = lockText.fontSize;
+            lockText.lineSpacing = centerCard ? 4f : 2f;
+            lockText.textWrappingMode = TextWrappingModes.Normal;
+            lockText.overflowMode = TextOverflowModes.Truncate;
+            lockText.margin = centerCard
+                ? new Vector4(18f, 8f, 18f, 8f)
+                : new Vector4(12f, 6f, 12f, 6f);
             RectTransform lockRect = lockText.rectTransform;
-            lockRect.anchoredPosition = viperNeedsParts
-                ? centerCard ? new Vector2(18f, -92f) : new Vector2(10f, -72f)
-                : viperTesting
-                    ? centerCard ? new Vector2(18f, -208f) : new Vector2(10f, -150f)
-                    : arrowLocked
-                        ? centerCard ? new Vector2(18f, -92f) : new Vector2(10f, -72f)
-                        : pathfinderLocked
-                            ? centerCard ? new Vector2(18f, -92f) : new Vector2(10f, -72f)
-                        : bisonLocked
-                            ? centerCard ? new Vector2(18f, -92f) : new Vector2(10f, -72f)
-                            : invaderLocked
-                                ? centerCard ? new Vector2(18f, -92f) : new Vector2(10f, -72f)
-                    : centerCard ? new Vector2(18f, 18f) : new Vector2(10f, 12f);
-            lockRect.sizeDelta = viperNeedsParts
-                ? centerCard ? new Vector2(640f, 190f) : new Vector2(430f, 150f)
-                : viperTesting
-                    ? centerCard ? new Vector2(560f, 104f) : new Vector2(420f, 82f)
-                    : arrowLocked
-                        ? centerCard ? new Vector2(640f, 190f) : new Vector2(430f, 150f)
-                        : pathfinderLocked
-                            ? centerCard ? new Vector2(680f, 210f) : new Vector2(450f, 164f)
-                        : bisonLocked
-                            ? centerCard ? new Vector2(600f, 142f) : new Vector2(430f, 104f)
-                            : invaderLocked
-                                ? centerCard ? new Vector2(600f, 142f) : new Vector2(430f, 104f)
-                    : centerCard ? new Vector2(560f, 126f) : new Vector2(400f, 100f);
-            lockText.color = viperTesting
-                ? new Color(1f, 0.82f, 0.48f, 0.98f)
-                : arrowLocked
-                    ? new Color(0.66f, 0.9f, 1f, 0.98f)
-                    : pathfinderLocked
-                        ? new Color(0.7f, 0.92f, 1f, 0.98f)
-                    : bisonLocked
-                        ? new Color(0.92f, 0.86f, 0.56f, 0.98f)
-                        : invaderLocked
-                            ? new Color(0.76f, 0.94f, 0.88f, 0.98f)
-                : new Color(1f, 0.92f, 0.72f, 0.98f);
+            lockRect.anchoredPosition = centerCard ? new Vector2(18f, -92f) : new Vector2(10f, -72f);
+            lockRect.sizeDelta = centerCard ? new Vector2(660f, 154f) : new Vector2(430f, 118f);
+            lockText.color = new Color(1f, 0.82f, 0.48f, 0.98f);
             lockText.transform.SetAsLastSibling();
         }
 
@@ -9846,6 +10008,68 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
     }
 
+    string BuildShipSelectionCardStatusText(ShipType shipType, bool shipUnlocked, ViperRecoveryStage viperStage)
+    {
+        if (shipType == ShipType.Viper)
+        {
+            if (viperStage == ViperRecoveryStage.WreckRecovered)
+                return "VIPER REPAIR\nParts checklist in details";
+
+            if (viperStage == ViperRecoveryStage.Testing)
+                return "VIPER TEST FLIGHTS\nStabilize locked systems";
+
+            if (!shipUnlocked)
+                return "LOCKED\nRecover Viper wreck";
+        }
+
+        if (shipType == ShipType.Avenger && !shipUnlocked)
+            return "LOCKED\nRecover Avenger";
+
+        if (shipType == ShipType.CargoTruck && !shipUnlocked && PlayerProfileService.HasInstance)
+        {
+            int delivered = PlayerProfileService.Instance.GetBisonIndustrialPartsDeliveredCount();
+            return "BISON HAUL\nIndustrial parts " + delivered + "/" + PlayerProfileService.BisonIndustrialPartsRequired;
+        }
+
+        if (shipType == ShipType.Invader && !shipUnlocked && PlayerProfileService.HasInstance)
+        {
+            int imprints = PlayerProfileService.Instance.GetInvaderImprintsRecoveredCount();
+            return "INVADER DATA\nAlien imprints " + imprints + "/" + PlayerProfileService.InvaderImprintsRequired;
+        }
+
+        if (shipType == ShipType.Pathfinder && !shipUnlocked && PlayerProfileService.HasInstance)
+        {
+            PathfinderResearchProgressData progress = PlayerProfileService.Instance.GetPathfinderResearchProgress();
+            PathfinderResearchStage pathfinderStage = (PathfinderResearchStage)Mathf.Clamp(progress.Stage, (int)PathfinderResearchStage.Locked, (int)PathfinderResearchStage.Complete);
+            int hackedCount = progress.HackedShipTypeIds != null
+                ? Mathf.Clamp(progress.HackedShipTypeIds.Length, 0, PlayerProfileService.PathfinderHackedShipTypesRequired)
+                : 0;
+            int deliveredValuables = Mathf.Clamp(progress.DeliveredValuableItems, 0, PlayerProfileService.PathfinderValuableItemsRequired);
+
+            if (pathfinderStage == PathfinderResearchStage.DocumentationReady)
+                return "PATHFINDER RESEARCH\nDeliver documentation";
+
+            if (pathfinderStage == PathfinderResearchStage.ResourcesRequired)
+                return "PATHFINDER RESEARCH\nValuables: " + deliveredValuables + "/" + PlayerProfileService.PathfinderValuableItemsRequired;
+
+            if (pathfinderStage == PathfinderResearchStage.FinalVisitRequired)
+                return "PATHFINDER RESEARCH\nVisit Research Station";
+
+            return "PATHFINDER RESEARCH\nShip data: " + hackedCount + "/" + PlayerProfileService.PathfinderHackedShipTypesRequired;
+        }
+
+        if (shipType == ShipType.Arrow && !shipUnlocked && PlayerProfileService.HasInstance)
+        {
+            ArrowLicenseProgressData progress = PlayerProfileService.Instance.GetArrowLicenseProgress();
+            int qualificationCount = Mathf.Clamp(progress.QualifierChips, 0, PlayerProfileService.ArrowQualifierChipsRequired);
+            int completedMapCount = PlayerProfileService.CountCompletedArrowRaceMaps(progress);
+            return "ARROW LICENSE\nQualifiers " + qualificationCount + "/" + PlayerProfileService.ArrowQualifierChipsRequired +
+                   ", maps " + completedMapCount + "/" + PlayerProfileService.ArrowMapRacesRequired;
+        }
+
+        return shipUnlocked ? string.Empty : "LOCKED";
+    }
+
     string BuildShipSelectionProgressText(ShipType shipType, bool shipUnlocked, ViperRecoveryStage viperStage)
     {
         if (shipType == ShipType.Viper)
@@ -9855,32 +10079,52 @@ public class PlayerProfilePanelUI : MonoBehaviour
                 int neutral = PlayerProfileService.Instance.CountViperRepairPartItem(InventoryItemCatalog.NeutralFighterSalvageId);
                 int drones = PlayerProfileService.Instance.CountViperRepairPartItem(InventoryItemCatalog.DroidScrapId);
                 int trucks = PlayerProfileService.Instance.CountViperRepairPartItem(InventoryItemCatalog.SpaceTruckWreckId);
-                return "Spare parts required to repair this starship.\n" +
+                return "Repair the recovered Viper wreck before it can fly safely.\n\n" +
+                       "Collect the required spare parts during missions. Keep them in your inventory or ship cargo, then return here and use the repair button when the checklist is complete.\n\n" +
+                       "Parts checklist:\n" +
                        neutral + "/" + PlayerProfileService.ViperNeutralFighterWrecksRequired + " Neutral Fighter wrecks\n" +
                        drones + "/" + PlayerProfileService.ViperDroneWrecksRequired + " Drone wrecks\n" +
                        trucks + "/" + PlayerProfileService.ViperSpaceTruckWrecksRequired + " Space Truck wrecks";
             }
 
             if (viperStage == ViperRecoveryStage.Testing)
-                return "You need to make a few fligths to test and stablize all systems";
+            {
+                ViperRecoveryProgressData progress = PlayerProfileService.Instance.GetViperRecoveryProgress();
+                int subsystemTotal = PlayerProfileService.GetAllViperTestSubsystemIds().Length;
+                int unlockedSubsystems = progress.UnlockedSubsystemIds != null
+                    ? Mathf.Clamp(progress.UnlockedSubsystemIds.Length, 0, subsystemTotal)
+                    : 0;
+                int remainingSubsystems = Mathf.Max(0, subsystemTotal - unlockedSubsystems);
+                int estimatedFlights = Mathf.CeilToInt(remainingSubsystems / (float)PlayerProfileService.ViperTestFlightSubsystemUnlocksPerReturn);
+                return "The Viper is repaired, but its systems still need flight testing.\n\n" +
+                       "Start rounds with Viper and survive at least " + Mathf.RoundToInt(PlayerProfileService.ViperMinimumTestFlightSeconds) + " seconds before returning. Each valid return stabilizes up to " + PlayerProfileService.ViperTestFlightSubsystemUnlocksPerReturn + " locked systems.\n\n" +
+                       "Systems stabilized: " + unlockedSubsystems + "/" + subsystemTotal + "\n" +
+                       "Estimated successful test flights left: " + estimatedFlights;
+            }
 
             if (!shipUnlocked)
-                return "LOCKED\nRECOVER VIPER WRECK";
+                return "Recover the Viper wreck during a mission.\n\n" +
+                       "After the wreck is recovered, this screen will show the repair checklist and the parts needed to rebuild it.";
         }
 
         if (shipType == ShipType.Avenger)
-            return "LOCKED\nRECOVER AVENGER";
+            return "Recover Avenger during its unlock mission.\n\n" +
+                   "Bring it back safely to add it to your ship roster.";
 
         if (shipType == ShipType.CargoTruck && PlayerProfileService.HasInstance)
         {
             int delivered = PlayerProfileService.Instance.GetBisonIndustrialPartsDeliveredCount();
-            return "Bring industrial parts: " + delivered + "/" + PlayerProfileService.BisonIndustrialPartsRequired;
+            return "Earn Bison by completing industrial haul missions.\n\n" +
+                   "When the Industrial Zone event appears, pick up industrial parts and escape through the Extraction Zone while carrying them.\n\n" +
+                   "Industrial parts delivered: " + delivered + "/" + PlayerProfileService.BisonIndustrialPartsRequired;
         }
 
         if (shipType == ShipType.Invader && PlayerProfileService.HasInstance)
         {
             int imprints = PlayerProfileService.Instance.GetInvaderImprintsRecoveredCount();
-            return "Alien imprints recovered: " + imprints + "/" + PlayerProfileService.InvaderImprintsRequired;
+            return "Unlock Invader by recovering alien imprints from Invader events.\n\n" +
+                   "Follow the active alien objective in the round, such as contact, stabilize, or sync. Escape after the objective is complete to preserve the imprint.\n\n" +
+                   "Alien imprints recovered: " + imprints + "/" + PlayerProfileService.InvaderImprintsRequired;
         }
 
         if (shipType == ShipType.Pathfinder && PlayerProfileService.HasInstance)
@@ -9896,19 +10140,23 @@ public class PlayerProfilePanelUI : MonoBehaviour
             int deliveredValuables = Mathf.Clamp(progress.DeliveredValuableItems, 0, PlayerProfileService.PathfinderValuableItemsRequired);
 
             if (pathfinderStage == PathfinderResearchStage.DocumentationReady)
-                return "Deliver Ship Prototype Documentation to Research Station";
+                return "You have enough ship data to prepare prototype documentation.\n\n" +
+                       "Deliver Ship Prototype Documentation to a Research Station. Keep the package safe until the station accepts it.";
 
             if (pathfinderStage == PathfinderResearchStage.ResourcesRequired)
             {
-                return "Deliver valuable items to Research Station to progress\n" +
-                       "(Legendary Asteroid, Cash Suitcase, Pirate Case) " + deliveredValuables + "/" + PlayerProfileService.PathfinderValuableItemsRequired;
+                return "The Research Station needs valuable items to continue Pathfinder work.\n\n" +
+                       "Deliver valuable cargo to a Research Station. Accepted examples include Legendary Asteroid, Cash Suitcase, and Pirate Case.\n\n" +
+                       "Valuable items delivered: " + deliveredValuables + "/" + PlayerProfileService.PathfinderValuableItemsRequired;
             }
 
             if (pathfinderStage == PathfinderResearchStage.FinalVisitRequired)
-                return "Visit another Research Station";
+                return "Pathfinder research is almost complete.\n\n" +
+                       "Visit another Research Station to finalize the project and unlock the ship.";
 
-            return "Collect more data by hacking different ship types " +
-                   hackedCount + "/" + PlayerProfileService.PathfinderHackedShipTypesRequired + ".";
+            return "Collect research data by hacking different ship types during missions.\n\n" +
+                   "Each unique ship type counts once, so look for variety instead of repeating the same target.\n\n" +
+                   "Ship data collected: " + hackedCount + "/" + PlayerProfileService.PathfinderHackedShipTypesRequired;
         }
 
         if (shipType == ShipType.Arrow && PlayerProfileService.HasInstance)
@@ -9920,17 +10168,19 @@ public class PlayerProfilePanelUI : MonoBehaviour
 
             int qualificationCount = Mathf.Clamp(progress.QualifierChips, 0, PlayerProfileService.ArrowQualifierChipsRequired);
             int completedMapCount = PlayerProfileService.CountCompletedArrowRaceMaps(progress);
-            if (qualificationCount <= 0)
-            {
-                return "Arrow Racing License\n" +
-                       "Complete qualification races " + qualificationCount + "/" + PlayerProfileService.ArrowQualifierChipsRequired;
-            }
+            string partsProgress = "Ion Nozzle: " + FormatDelivered(progress.IonNozzleDelivered) + ", " +
+                                   "Gyro Stabilizer: " + FormatDelivered(progress.GyroStabilizerDelivered) + ", " +
+                                   "Race Transponder: " + FormatDelivered(progress.RaceTransponderDelivered);
+            string bestRank = FormatArrowRank(progress.BestTimeTrialRank);
 
             return "Arrow Racing License\n" +
-                   "1. Complete qualification races " + qualificationCount + "/" + PlayerProfileService.ArrowQualifierChipsRequired + "\n" +
-                   "2. Collect Arrow Race Tokens from AI Players on 3 different maps.\n" +
-                   "3. Start round with Arrow Race Token and complete the race. " + completedMapCount + "/" + PlayerProfileService.ArrowMapRacesRequired + "\n" +
-                   "4. Finish the Final Race with Arrow and escape.";
+                   "Complete the racing license chain to unlock Arrow.\n\n" +
+                   "1. Complete qualification races: " + qualificationCount + "/" + PlayerProfileService.ArrowQualifierChipsRequired + "\n" +
+                   "2. Collect Arrow Race Tokens from AI players and race on different maps: " + completedMapCount + "/" + PlayerProfileService.ArrowMapRacesRequired + "\n" +
+                   "3. Deliver racing parts: " + partsProgress + "\n" +
+                   "4. Finish the time trial with rank " + ((ArrowTimeTrialRank)PlayerProfileService.ArrowTimeTrialMinimumRank).ToString() + " or better. Best rank: " + bestRank + "\n" +
+                   "5. Win the ghost race: " + FormatDelivered(progress.GhostRaceWon) + "\n" +
+                   "6. Finish the Final Race with Arrow and escape.";
         }
 
         return "LOCKED";
@@ -10713,6 +10963,8 @@ public class PlayerProfilePanelUI : MonoBehaviour
             shipSelectionPrevButton.interactable = interactable;
         if (shipSelectionNextButton != null)
             shipSelectionNextButton.interactable = interactable;
+        if (shipSelectionDetailsButton != null)
+            shipSelectionDetailsButton.interactable = interactable && shipSelectionDetailsButton.gameObject.activeSelf;
         if (shipSelectionSkinButtons != null)
         {
             for (int i = 0; i < shipSelectionSkinButtons.Length; i++)

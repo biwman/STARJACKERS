@@ -596,6 +596,9 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
 
         bool isGravityWellCenterObject = IsGravityWellBackgroundObject13(objectId);
         float targetSize = Mathf.Clamp(Mathf.Min(mapSize.x, mapSize.y) * 0.2f, 8f, 20f);
+        if (IsHiddenDimensionBackgroundObject14(objectId))
+            targetSize *= 0.5f;
+
         float scale = targetSize / maxDimension;
         Vector3 baseLocalScale = new Vector3(scale, scale, 1f);
         layerObject.transform.localScale = baseLocalScale;
@@ -643,6 +646,12 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
     {
         return string.Equals(RoomSettings.GetSelectedLobbyMapId(), LobbyMapCatalog.GravityWellMapId, StringComparison.Ordinal) &&
                string.Equals(RoomSettings.NormalizeBackgroundObjectId(objectId), RoomSettings.BackgroundObject13, StringComparison.Ordinal);
+    }
+
+    static bool IsHiddenDimensionBackgroundObject14(string objectId)
+    {
+        return string.Equals(RoomSettings.GetSelectedLobbyMapId(), LobbyMapCatalog.HiddenDimensionMapId, StringComparison.Ordinal) &&
+               string.Equals(RoomSettings.NormalizeBackgroundObjectId(objectId), RoomSettings.BackgroundObject14, StringComparison.Ordinal);
     }
 
     void CreateGravityWellObjectEdgeEffect(

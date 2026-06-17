@@ -155,6 +155,7 @@ public class AdvancedNebulaVisual : MonoBehaviour
                 secondary = new Color(0.28f, 0.44f, 0.58f, 1f);
                 break;
             case LobbyMapCatalog.DeepSpaceMapId:
+            case LobbyMapCatalog.HiddenDimensionMapId:
                 primary = new Color(0.5f, 0.68f, 1f, 1f);
                 secondary = new Color(0.22f, 0.22f, 0.58f, 1f);
                 break;

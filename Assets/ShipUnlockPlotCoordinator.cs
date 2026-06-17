@@ -221,6 +221,9 @@ public sealed class ShipUnlockPlotCoordinator : MonoBehaviour
         if (roundStarter == null)
             return ShipUnlockPlotType.None;
 
+        if (AreShipUnlockPlotsBlockedOnSelectedMap())
+            return ShipUnlockPlotType.None;
+
         List<Candidate> candidates = new List<Candidate>(4);
         if (IsAvengerCandidate(roundStarter))
             candidates.Add(new Candidate(ShipUnlockPlotType.Avenger, 35));
@@ -259,6 +262,11 @@ public sealed class ShipUnlockPlotCoordinator : MonoBehaviour
         }
 
         return candidates[candidates.Count - 1].Type;
+    }
+
+    static bool AreShipUnlockPlotsBlockedOnSelectedMap()
+    {
+        return string.Equals(RoomSettings.GetSelectedLobbyMapId(), LobbyMapCatalog.HiddenDimensionMapId, StringComparison.Ordinal);
     }
 
     static bool IsAvengerCandidate(Photon.Realtime.Player player)

@@ -14,11 +14,6 @@ public class TreasureCollector : MonoBehaviourPun
     static readonly System.Collections.Generic.Dictionary<int, int> ReservedDroppedCargoLoot = new System.Collections.Generic.Dictionary<int, int>();
     static readonly System.Collections.Generic.Dictionary<int, int> ReservedRandomLootWrecks = new System.Collections.Generic.Dictionary<int, int>();
     static TreasureCollector collectButtonBindingOwner;
-    static GameObject valuableCargoAnnouncementObject;
-    static Image valuableCargoAnnouncementBackground;
-    static CanvasGroup valuableCargoAnnouncementCanvasGroup;
-    static TMP_Text valuableCargoAnnouncementText;
-    static int valuableCargoAnnouncementVersion;
 
     const float TreasureScanInterval = 0.08f;
     const float BeamWidth = 0.18f;
@@ -86,10 +81,6 @@ public class TreasureCollector : MonoBehaviourPun
     float nextTreasureScanTime;
     bool beamActive;
     bool artifactBeamActive;
-    GameObject pickupToastObject;
-    Image pickupToastIcon;
-    TMP_Text pickupToastLabel;
-    Coroutine pickupToastRoutine;
     Coroutine collectibleUseRoutine;
     Coroutine extractionActivationRoutine;
     Coroutine artifactExamineRoutine;
@@ -228,8 +219,6 @@ public class TreasureCollector : MonoBehaviourPun
 
         UpdateUseButtonAvailability();
         SyncScoreProperty();
-
-        SetupPickupToast();
     }
 
     void Update()
@@ -2086,9 +2075,6 @@ public class TreasureCollector : MonoBehaviourPun
         SetArtifactBeamEnabled(false);
         ClearCurrentHighlight();
         StopLocalDrillingLoop();
-
-        if (pickupToastObject != null)
-            Destroy(pickupToastObject);
     }
 
     void OnDisable()
@@ -3303,30 +3289,18 @@ public class TreasureCollector : MonoBehaviourPun
         if (!InventoryItemCatalog.IsTrackedValuableCargo(itemId))
             return;
 
-        SetupValuableCargoAnnouncement();
-        if (valuableCargoAnnouncementObject == null || valuableCargoAnnouncementText == null)
-            return;
-
         string playerName = ResolveAnnouncementPlayerName(actorNumber);
         string itemName = InventoryItemCatalog.GetDisplayName(itemId);
         bool pirateCase = string.Equals(itemId, InventoryItemCatalog.PirateCaseId, System.StringComparison.Ordinal);
-        valuableCargoAnnouncementText.text = pirateCase
-            ? playerName + " got rich with " + itemName + ". Pirates are hunting!"
-            : playerName + " got rich with " + itemName + ".";
+        string message = pirateCase
+            ? playerName + " secured " + itemName + " - pirates hunting!"
+            : playerName + " secured " + itemName + ".";
 
         Color markerColor;
         if (!ValuableCargoCarrierUtility.TryGetTrackedCargoMarkerColor(itemId, out markerColor))
             markerColor = new Color(1f, 0.75f, 0.18f, 0.95f);
 
-        if (valuableCargoAnnouncementBackground != null)
-            valuableCargoAnnouncementBackground.color = new Color(markerColor.r * 0.32f, markerColor.g * 0.32f, markerColor.b * 0.32f, 0.92f);
-
-        if (valuableCargoAnnouncementCanvasGroup != null)
-            valuableCargoAnnouncementCanvasGroup.alpha = 1f;
-
-        valuableCargoAnnouncementObject.SetActive(true);
-        valuableCargoAnnouncementVersion++;
-        StartCoroutine(HideValuableCargoAnnouncementRoutine(valuableCargoAnnouncementVersion));
+        RoundMessageLayer.ShowTopCenter(message, ValuableCargoAnnouncementDuration, markerColor);
     }
 
     static string ResolveAnnouncementPlayerName(int actorNumber)
@@ -3339,66 +3313,6 @@ public class TreasureCollector : MonoBehaviourPun
             return player.NickName;
 
         return "Someone";
-    }
-
-    void SetupValuableCargoAnnouncement()
-    {
-        if (valuableCargoAnnouncementObject != null)
-            return;
-
-        GameObject canvas = GameObject.Find("Canvas");
-        if (canvas == null)
-            return;
-
-        valuableCargoAnnouncementObject = new GameObject("ValuableCargoAnnouncement", typeof(RectTransform), typeof(CanvasGroup), typeof(Image));
-        valuableCargoAnnouncementObject.transform.SetParent(canvas.transform, false);
-
-        RectTransform rect = valuableCargoAnnouncementObject.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0.5f, 1f);
-        rect.anchorMax = new Vector2(0.5f, 1f);
-        rect.pivot = new Vector2(0.5f, 1f);
-        rect.anchoredPosition = new Vector2(0f, -72f);
-        rect.sizeDelta = new Vector2(620f, 56f);
-
-        valuableCargoAnnouncementCanvasGroup = valuableCargoAnnouncementObject.GetComponent<CanvasGroup>();
-        valuableCargoAnnouncementCanvasGroup.blocksRaycasts = false;
-        valuableCargoAnnouncementCanvasGroup.interactable = false;
-
-        valuableCargoAnnouncementBackground = valuableCargoAnnouncementObject.GetComponent<Image>();
-        valuableCargoAnnouncementBackground.color = new Color(0.12f, 0.08f, 0.02f, 0.92f);
-        valuableCargoAnnouncementBackground.raycastTarget = false;
-
-        GameObject textObject = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
-        textObject.transform.SetParent(valuableCargoAnnouncementObject.transform, false);
-        RectTransform textRect = textObject.GetComponent<RectTransform>();
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = new Vector2(22f, 8f);
-        textRect.offsetMax = new Vector2(-22f, -8f);
-
-        valuableCargoAnnouncementText = textObject.GetComponent<TextMeshProUGUI>();
-        valuableCargoAnnouncementText.alignment = TextAlignmentOptions.Center;
-        valuableCargoAnnouncementText.fontSize = 18f;
-        valuableCargoAnnouncementText.fontStyle = FontStyles.Bold;
-        valuableCargoAnnouncementText.textWrappingMode = TextWrappingModes.NoWrap;
-        valuableCargoAnnouncementText.color = new Color(1f, 0.96f, 0.82f, 0.98f);
-        valuableCargoAnnouncementText.raycastTarget = false;
-
-        TMP_Text reference = FindAnyObjectByType<TMP_Text>();
-        if (reference != null)
-        {
-            valuableCargoAnnouncementText.font = reference.font;
-            valuableCargoAnnouncementText.fontSharedMaterial = reference.fontSharedMaterial;
-        }
-
-        valuableCargoAnnouncementObject.SetActive(false);
-    }
-
-    IEnumerator HideValuableCargoAnnouncementRoutine(int version)
-    {
-        yield return new WaitForSeconds(ValuableCargoAnnouncementDuration);
-        if (version == valuableCargoAnnouncementVersion && valuableCargoAnnouncementObject != null)
-            valuableCargoAnnouncementObject.SetActive(false);
     }
 
     string ResolveCovaxAsteroidCargoItem(string itemId)
@@ -3451,127 +3365,16 @@ public class TreasureCollector : MonoBehaviourPun
         return builder.ToString();
     }
 
-    void SetupPickupToast()
-    {
-        if (!photonView.IsMine || pickupToastObject != null)
-            return;
-
-        GameObject canvas = GameObject.Find("Canvas");
-        if (canvas == null)
-            return;
-
-        pickupToastObject = new GameObject("PickupToast", typeof(RectTransform), typeof(Image));
-        pickupToastObject.transform.SetParent(canvas.transform, false);
-
-        RectTransform rect = pickupToastObject.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0f, 1f);
-        rect.anchorMax = new Vector2(0f, 1f);
-        rect.pivot = new Vector2(0f, 1f);
-        rect.anchoredPosition = new Vector2(22f, -24f);
-        rect.sizeDelta = new Vector2(128f, 122f);
-
-        Image bg = pickupToastObject.GetComponent<Image>();
-        bg.color = new Color(0.05f, 0.09f, 0.15f, 0.92f);
-        bg.raycastTarget = false;
-
-        GameObject titleObject = new GameObject("Title", typeof(RectTransform), typeof(TextMeshProUGUI));
-        titleObject.transform.SetParent(pickupToastObject.transform, false);
-
-        RectTransform titleRect = titleObject.GetComponent<RectTransform>();
-        titleRect.anchorMin = new Vector2(0f, 1f);
-        titleRect.anchorMax = new Vector2(1f, 1f);
-        titleRect.pivot = new Vector2(0.5f, 1f);
-        titleRect.anchoredPosition = new Vector2(0f, -6f);
-        titleRect.sizeDelta = new Vector2(-12f, 20f);
-
-        TextMeshProUGUI titleText = titleObject.GetComponent<TextMeshProUGUI>();
-        titleText.alignment = TextAlignmentOptions.Center;
-        titleText.fontSize = 13f;
-        titleText.fontStyle = FontStyles.Bold;
-        titleText.textWrappingMode = TextWrappingModes.NoWrap;
-        titleText.color = new Color(0.84f, 0.93f, 1f, 0.95f);
-        titleText.text = "LOOT";
-
-        GameObject iconObject = new GameObject("Icon", typeof(RectTransform), typeof(Image));
-        iconObject.transform.SetParent(pickupToastObject.transform, false);
-
-        RectTransform iconRect = iconObject.GetComponent<RectTransform>();
-        iconRect.anchorMin = new Vector2(0.5f, 0.5f);
-        iconRect.anchorMax = new Vector2(0.5f, 0.5f);
-        iconRect.pivot = new Vector2(0.5f, 0.5f);
-        iconRect.anchoredPosition = new Vector2(0f, -8f);
-        iconRect.sizeDelta = new Vector2(72f, 72f);
-
-        pickupToastIcon = iconObject.GetComponent<Image>();
-        pickupToastIcon.preserveAspect = true;
-        pickupToastIcon.raycastTarget = false;
-
-        GameObject labelObject = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
-        labelObject.transform.SetParent(pickupToastObject.transform, false);
-
-        RectTransform labelRect = labelObject.GetComponent<RectTransform>();
-        labelRect.anchorMin = new Vector2(0f, 0f);
-        labelRect.anchorMax = new Vector2(1f, 0f);
-        labelRect.pivot = new Vector2(0.5f, 0f);
-        labelRect.anchoredPosition = new Vector2(0f, 7f);
-        labelRect.sizeDelta = new Vector2(-14f, 24f);
-
-        pickupToastLabel = labelObject.GetComponent<TextMeshProUGUI>();
-        pickupToastLabel.alignment = TextAlignmentOptions.Center;
-        pickupToastLabel.fontSize = 14f;
-        pickupToastLabel.fontStyle = FontStyles.Bold;
-        pickupToastLabel.textWrappingMode = TextWrappingModes.NoWrap;
-        pickupToastLabel.color = new Color(0.95f, 0.98f, 1f, 0.96f);
-        pickupToastLabel.text = string.Empty;
-
-        TMP_Text reference = FindAnyObjectByType<TMP_Text>();
-        if (reference != null)
-        {
-            titleText.font = reference.font;
-            titleText.fontSharedMaterial = reference.fontSharedMaterial;
-            pickupToastLabel.font = reference.font;
-            pickupToastLabel.fontSharedMaterial = reference.fontSharedMaterial;
-        }
-
-        pickupToastObject.SetActive(false);
-    }
-
     void ShowPickupToast(string itemId)
     {
         if (!photonView.IsMine || string.IsNullOrWhiteSpace(itemId))
             return;
 
-        SetupPickupToast();
-        if (pickupToastObject == null)
-            return;
-
         Sprite icon = InventoryItemCatalog.GetIcon(itemId);
-        if (pickupToastIcon != null)
-        {
-            pickupToastIcon.sprite = icon;
-            pickupToastIcon.enabled = icon != null;
-        }
+        string label = InventoryItemCatalog.GetDisplayName(itemId);
+        if (string.IsNullOrWhiteSpace(label))
+            label = InventoryItemCatalog.GetShortLabel(itemId);
 
-        if (pickupToastLabel != null)
-        {
-            string label = InventoryItemCatalog.GetDisplayName(itemId);
-            if (string.IsNullOrWhiteSpace(label))
-                label = InventoryItemCatalog.GetShortLabel(itemId);
-
-            pickupToastLabel.text = label;
-        }
-
-        if (pickupToastRoutine != null)
-            StopCoroutine(pickupToastRoutine);
-
-        pickupToastRoutine = StartCoroutine(PickupToastRoutine());
-    }
-
-    IEnumerator PickupToastRoutine()
-    {
-        pickupToastObject.SetActive(true);
-        yield return new WaitForSeconds(2f);
-        pickupToastObject.SetActive(false);
-        pickupToastRoutine = null;
+        RoundMessageLayer.ShowLeftFeed("LOOT", label, icon, 2f);
     }
 }

@@ -156,6 +156,7 @@ public static class RoomSettings
     public const string ExtractionTypePortal = "portal";
     public const string ExtractionTypeCarrier = "carrier";
     public const string ExtractionTypeSpaceCity = "space_city";
+    public const string ExtractionTypeAncientPortal = "ancient_portal";
     public const string DefaultExtractionType = ExtractionTypePortal;
     public const int DefaultRepairBayCount = 1;
     public const int DefaultSpaceFactoryCount = 0;
@@ -180,7 +181,8 @@ public static class RoomSettings
     public const bool DefaultInventoryLossEnabled = true;
     public const bool DefaultEquipmentLossEnabled = false;
     public const string DefaultMapSize = "medium";
-    public const bool DefaultToxicBordersEnabled = false;
+    public const bool DefaultToxicBordersEnabled = true;
+    public const float MapDimensionsScale = 1.2f;
     public const float ToxicBordersMapScale = 1.2f;
     public const float ToxicBordersEnemyAvoidanceBuffer = 3.25f;
     public const float ToxicBordersEnemyHardAvoidanceBuffer = 0.85f;
@@ -202,6 +204,7 @@ public static class RoomSettings
     public const string ParallaxBackgroundKosmos13 = "kosmos13";
     public const string ParallaxBackgroundKosmos14 = "kosmos14";
     public const string ParallaxBackgroundKosmos15 = "kosmos15";
+    public const string ParallaxBackgroundKosmos16 = "kosmos16";
     public const string DefaultParallaxBackground = ParallaxBackgroundKosmos9;
     public const string BackgroundObjectOff = "off";
     public const string BackgroundObject1 = "background_object1";
@@ -217,6 +220,7 @@ public static class RoomSettings
     public const string BackgroundObject11 = "background_object11";
     public const string BackgroundObject12 = "background_object12";
     public const string BackgroundObject13 = "background_object13";
+    public const string BackgroundObject14 = "background_object14";
     public const string DefaultBackgroundObject = BackgroundObjectOff;
     public const bool DefaultGravityWellPhysicsEnabled = false;
     public const int DefaultCollectKeepAliveRangeBonusPercent = 50;
@@ -427,6 +431,8 @@ public static class RoomSettings
                 return ExtractionTypeCarrier;
             case ExtractionTypeSpaceCity:
                 return ExtractionTypeSpaceCity;
+            case ExtractionTypeAncientPortal:
+                return ExtractionTypeAncientPortal;
             default:
                 return ExtractionTypePortal;
         }
@@ -714,6 +720,7 @@ public static class RoomSettings
             case ParallaxBackgroundKosmos13:
             case ParallaxBackgroundKosmos14:
             case ParallaxBackgroundKosmos15:
+            case ParallaxBackgroundKosmos16:
                 return backgroundId;
             default:
                 return DefaultParallaxBackground;
@@ -749,6 +756,7 @@ public static class RoomSettings
             case BackgroundObject11:
             case BackgroundObject12:
             case BackgroundObject13:
+            case BackgroundObject14:
                 return objectId;
             default:
                 return DefaultBackgroundObject;
@@ -1837,6 +1845,8 @@ public static class RoomSettings
                 return GetDefaultMapEffectChanceForRule(normalizedRuleId, 5, 1, 1, 5, 10);
             case "deep_space":
                 return GetDefaultMapEffectChanceForRule(normalizedRuleId, 5, 20, 5, 10, 10);
+            case "hidden_dimension":
+                return 0;
             case "pirate_bay":
                 return GetDefaultMapEffectChanceForRule(normalizedRuleId, 5, 5, 35, 5, 5);
             case "ancient_space":
@@ -2044,19 +2054,27 @@ public static class RoomSettings
 
     public static Vector2 GetBaseMapDimensions()
     {
+        Vector2 size;
         switch (GetMapSizeMode())
         {
             case "small":
-                return new Vector2(24f, 24f);
+                size = new Vector2(24f, 24f);
+                break;
             case "large":
-                return new Vector2(38.4f, 38.4f);
+                size = new Vector2(38.4f, 38.4f);
+                break;
             case "very_large":
-                return new Vector2(48f, 48f);
+                size = new Vector2(48f, 48f);
+                break;
             case "super_large":
-                return new Vector2(60f, 60f);
+                size = new Vector2(60f, 60f);
+                break;
             default:
-                return new Vector2(30f, 30f);
+                size = new Vector2(30f, 30f);
+                break;
         }
+
+        return size * MapDimensionsScale;
     }
 
     public static Vector2 GetMapDimensions()

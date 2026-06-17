@@ -80,6 +80,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         "TimerText",
         "HP_Bar",
         "Shield_Bar",
+        "VitalsIconHud",
         "Booster_Bar",
         "ScoreText"
     };
@@ -185,7 +186,13 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100
     };
     static readonly int[] ExtractionCountOptions = { 1, 2, 3, 4 };
-    static readonly string[] ExtractionTypeOptions = { RoomSettings.ExtractionTypePortal, RoomSettings.ExtractionTypeCarrier, RoomSettings.ExtractionTypeSpaceCity };
+    static readonly string[] ExtractionTypeOptions =
+    {
+        RoomSettings.ExtractionTypePortal,
+        RoomSettings.ExtractionTypeCarrier,
+        RoomSettings.ExtractionTypeSpaceCity,
+        RoomSettings.ExtractionTypeAncientPortal
+    };
     static readonly int[] RepairBayCountOptions = { 0, 1, 2 };
     static readonly int[] SpaceFactoryCountOptions = { 0, 1, 2 };
     static readonly int[] ScienceStationCountOptions = { 0, 1 };
@@ -232,7 +239,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RoomSettings.ParallaxBackgroundKosmos12,
         RoomSettings.ParallaxBackgroundKosmos13,
         RoomSettings.ParallaxBackgroundKosmos14,
-        RoomSettings.ParallaxBackgroundKosmos15
+        RoomSettings.ParallaxBackgroundKosmos15,
+        RoomSettings.ParallaxBackgroundKosmos16
     };
     static readonly string[] BackgroundObjectOptions =
     {
@@ -249,7 +257,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RoomSettings.BackgroundObject10,
         RoomSettings.BackgroundObject11,
         RoomSettings.BackgroundObject12,
-        RoomSettings.BackgroundObject13
+        RoomSettings.BackgroundObject13,
+        RoomSettings.BackgroundObject14
     };
     static readonly int[] CollectKeepAliveRangeBonusPercentOptions = Enumerable.Range(0, 21).Select(i => i * 10).ToArray();
     static readonly int[] EnemyBalancePercentOptions = Enumerable.Range(10, 21).Select(i => i * 5).ToArray();
@@ -2220,6 +2229,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             return LobbyMapCatalog.GetDefaultLandingSites(selectedMap);
 
         return LobbyMapCatalog.BuildLandingSites(
+            LobbyMapCatalog.GetExtractionLandingSiteLabel(RoomSettings.GetExtractionType()),
             RoomSettings.GetExtractionCount(),
             RoomSettings.GetRepairBayCount(),
             RoomSettings.GetScienceStationCount(),
@@ -7596,6 +7606,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                 return "CARRIER";
             case RoomSettings.ExtractionTypeSpaceCity:
                 return "SPACE CITY";
+            case RoomSettings.ExtractionTypeAncientPortal:
+                return "ANCIENT PORTAL";
             default:
                 return "PORTAL";
         }
@@ -7643,6 +7655,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                 return "KOSMOS 14";
             case RoomSettings.ParallaxBackgroundKosmos15:
                 return "KOSMOS 15";
+            case RoomSettings.ParallaxBackgroundKosmos16:
+                return "KOSMOS 16";
             default:
                 return FormatParallaxBackground(RoomSettings.DefaultParallaxBackground);
         }
@@ -7678,6 +7692,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                 return "BACKGROUND OBJECT 12";
             case RoomSettings.BackgroundObject13:
                 return "BACKGROUND OBJECT 13";
+            case RoomSettings.BackgroundObject14:
+                return "BACKGROUND OBJECT 14";
             default:
                 return "OFF";
         }
