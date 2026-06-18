@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using ExitGames.Client.Photon;
 using Photon.Pun;
+using Photon.Realtime;
 using UnityEngine;
 using PhotonHashtable = ExitGames.Client.Photon.Hashtable;
 
@@ -21,7 +22,10 @@ public sealed class ArtifactAsteroidSpawner : MonoBehaviourPunCallbacks
     const string NebulaLayoutKey = "nebulaLayout";
     const string FireNebulaLayoutKey = NebulaSpawner.FireNebulaLayoutKey;
     const string ToxicNebulaLayoutKey = NebulaSpawner.ToxicNebulaLayoutKey;
-    const float MapMargin = 4.2f;
+    const float PreferredMapMargin = 8.5f;
+    const float RelaxedMapMargin = 6.6f;
+    const float MinimumMapMargin = 4.8f;
+    const float MinimumSpawnHalfSpan = 3.8f;
     const float MinDistanceBetweenArtifacts = 8.8f;
     const float MinDistanceFromExtractionZones = 8.5f;
     const float MinDistanceFromRepairBays = 7.2f;
@@ -29,8 +33,9 @@ public sealed class ArtifactAsteroidSpawner : MonoBehaviourPunCallbacks
     const float MinDistanceFromScienceStations = 7.4f;
     const float MinDistanceFromObstacles = 5.8f;
     const float MinDistanceFromNebulas = 4.6f;
-    const float StrictOverlapRadius = 3.2f;
-    const float RelaxedOverlapRadius = 1.25f;
+    const float StrictClearanceRadius = ArtifactAsteroid.ExamineRange + 2.35f;
+    const float RelaxedClearanceRadius = ArtifactAsteroid.ExamineRange + 1.55f;
+    const float MinimumClearanceRadius = ArtifactAsteroid.ExamineRange + 0.75f;
 
     static ArtifactAsteroidSpawner instance;
 
@@ -71,6 +76,11 @@ public sealed class ArtifactAsteroidSpawner : MonoBehaviourPunCallbacks
     public static bool TryActivateAuthority(string artifactId)
     {
         return instance != null && instance.TryActivateAuthorityInternal(artifactId);
+    }
+
+    public static bool TryActivateAuthority(string artifactId, Player activatingPlayer)
+    {
+        return instance != null && instance.TryActivateAuthorityInternal(artifactId, activatingPlayer);
     }
 
     void Awake()
@@ -219,8 +229,11 @@ public sealed class ArtifactAsteroidSpawner : MonoBehaviourPunCallbacks
             obstaclePositions,
             nebulaPositions,
             MinDistanceBetweenArtifacts,
-            StrictOverlapRadius,
-            1200);
+            PreferredMapMargin,
+            StrictClearanceRadius,
+            GetObstacleClearanceDistance(),
+            MinDistanceFromNebulas,
+            1600);
 
         if (positions.Count < count)
         {
@@ -235,8 +248,31 @@ public sealed class ArtifactAsteroidSpawner : MonoBehaviourPunCallbacks
                 obstaclePositions,
                 nebulaPositions,
                 MinDistanceBetweenArtifacts * 0.7f,
-                RelaxedOverlapRadius,
-                1800);
+                RelaxedMapMargin,
+                RelaxedClearanceRadius,
+                GetObstacleClearanceDistance() * 0.88f,
+                MinDistanceFromNebulas,
+                2200);
+        }
+
+        if (positions.Count < count)
+        {
+            FillPositions(
+                positions,
+                count,
+                mapSize,
+                extractionPositions,
+                repairBayPositions,
+                factoryPositions,
+                scienceStationPositions,
+                obstaclePositions,
+                nebulaPositions,
+                MinDistanceBetweenArtifacts * 0.52f,
+                MinimumMapMargin,
+                MinimumClearanceRadius,
+                GetObstacleClearanceDistance() * 0.72f,
+                MinDistanceFromNebulas * 0.82f,
+                2600);
         }
 
         Random.state = previousState;
@@ -269,15 +305,14 @@ public sealed class ArtifactAsteroidSpawner : MonoBehaviourPunCallbacks
         return builder.ToString();
     }
 
-    void FillPositions(List<Vector2> positions, int count, Vector2 mapSize, List<Vector2> extractionPositions, List<Vector2> repairBayPositions, List<Vector2> factoryPositions, List<Vector2> scienceStationPositions, List<Vector2> obstaclePositions, List<Vector2> nebulaPositions, float minDistanceBetweenArtifacts, float overlapRadius, int attempts)
+    void FillPositions(List<Vector2> positions, int count, Vector2 mapSize, List<Vector2> extractionPositions, List<Vector2> repairBayPositions, List<Vector2> factoryPositions, List<Vector2> scienceStationPositions, List<Vector2> obstaclePositions, List<Vector2> nebulaPositions, float minDistanceBetweenArtifacts, float mapMargin, float clearanceRadius, float obstacleDistance, float nebulaDistance, int attempts)
     {
+        float resolvedMargin = ResolveSpawnMargin(mapSize, mapMargin);
         int tries = 0;
         while (positions.Count < count && tries < attempts)
         {
             tries++;
-            float x = Random.Range(-mapSize.x * 0.5f + MapMargin, mapSize.x * 0.5f - MapMargin);
-            float y = Random.Range(-mapSize.y * 0.5f + MapMargin, mapSize.y * 0.5f - MapMargin);
-            Vector2 candidate = new Vector2(x, y);
+            Vector2 candidate = RandomPointInsideMap(mapSize, resolvedMargin);
 
             if (!IsFarEnough(candidate, positions, minDistanceBetweenArtifacts))
                 continue;
@@ -294,17 +329,55 @@ public sealed class ArtifactAsteroidSpawner : MonoBehaviourPunCallbacks
             if (!IsFarEnough(candidate, scienceStationPositions, MinDistanceFromScienceStations))
                 continue;
 
-            if (!IsFarEnough(candidate, obstaclePositions, MinDistanceFromObstacles))
+            if (!IsFarEnough(candidate, obstaclePositions, obstacleDistance))
                 continue;
 
-            if (!IsFarEnough(candidate, nebulaPositions, MinDistanceFromNebulas))
+            if (!IsFarEnough(candidate, nebulaPositions, nebulaDistance))
                 continue;
 
-            if (Physics2D.OverlapCircle(candidate, overlapRadius) != null)
+            if (HasBlockingOverlap(candidate, clearanceRadius))
                 continue;
 
             positions.Add(candidate);
         }
+    }
+
+    static Vector2 RandomPointInsideMap(Vector2 mapSize, float margin)
+    {
+        float safeMargin = ResolveSpawnMargin(mapSize, margin);
+        float halfX = mapSize.x * 0.5f;
+        float halfY = mapSize.y * 0.5f;
+        return new Vector2(
+            Random.Range(-halfX + safeMargin, halfX - safeMargin),
+            Random.Range(-halfY + safeMargin, halfY - safeMargin));
+    }
+
+    static float ResolveSpawnMargin(Vector2 mapSize, float requestedMargin)
+    {
+        float smallestHalf = Mathf.Min(mapSize.x, mapSize.y) * 0.5f;
+        float maxMargin = Mathf.Max(0.5f, smallestHalf - MinimumSpawnHalfSpan);
+        return Mathf.Clamp(requestedMargin, 0.5f, maxMargin);
+    }
+
+    static float GetObstacleClearanceDistance()
+    {
+        float obstacleScale = Mathf.Clamp(RoomSettings.GetObstacleSizeMultiplier(), 1f, 4f);
+        return MinDistanceFromObstacles + (obstacleScale - 1f) * 1.65f;
+    }
+
+    static bool HasBlockingOverlap(Vector2 candidate, float radius)
+    {
+        int hitCount = Physics2DNonAllocQuery.OverlapCircle(candidate, radius, out Collider2D[] hits);
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D hit = hits[i];
+            if (hit == null || !hit.enabled)
+                continue;
+
+            return true;
+        }
+
+        return false;
     }
 
     void ApplyLayout(string layout)
@@ -402,6 +475,11 @@ public sealed class ArtifactAsteroidSpawner : MonoBehaviourPunCallbacks
 
     bool TryActivateAuthorityInternal(string artifactId)
     {
+        return TryActivateAuthorityInternal(artifactId, null);
+    }
+
+    bool TryActivateAuthorityInternal(string artifactId, Player activatingPlayer)
+    {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null || string.IsNullOrWhiteSpace(artifactId))
             return false;
 
@@ -418,6 +496,13 @@ public sealed class ArtifactAsteroidSpawner : MonoBehaviourPunCallbacks
             [RoomSettings.ArtifactAsteroidsStateKey] = SerializeState(activeIds)
         };
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+
+        if (activeIds.Count >= ArtifactAsteroid.TotalCount &&
+            !string.Equals(RoomSettings.GetSelectedLobbyMapId(), LobbyMapCatalog.HiddenDimensionMapId, System.StringComparison.Ordinal))
+        {
+            MapTravelService.TryOpenHiddenDimensionRift(artifact.transform.position, activatingPlayer);
+        }
+
         return true;
     }
 

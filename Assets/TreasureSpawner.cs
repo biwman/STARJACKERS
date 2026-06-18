@@ -13,11 +13,13 @@ public class TreasureSpawner : MonoBehaviourPun
     const string FireNebulaLayoutKey = NebulaSpawner.FireNebulaLayoutKey;
     const string ToxicNebulaLayoutKey = NebulaSpawner.ToxicNebulaLayoutKey;
     const float MinDistanceFromExtraction = 3f;
+    const float MinDistanceFromTreasure = 2.4f;
     const float MinDistanceFromObstacle = 2.6f;
     const float MinDistanceFromNebula = 2.8f;
     const int RadioactiveTreasureLowCount = 3;
     const int RadioactiveTreasureMediumCount = 6;
     const int RadioactiveTreasureHighCount = 10;
+    const int BaseAlienSecretCount = 3;
     static readonly float[] ExtremelyLowRichnessWeights = { 85f, 12f, 2.5f, 0.4f, 0.09f, 0.01f };
     static readonly float[] VeryLowRichnessWeights = { 70f, 21f, 7f, 1f, 0.8f, 0.2f };
     static readonly float[] LowRichnessWeights = { 60f, 25f, 10f, 3f, 1.5f, 0.5f };
@@ -67,6 +69,7 @@ public class TreasureSpawner : MonoBehaviourPun
         List<Vector2> nebulaPositions = ParseLayout(NebulaLayoutKey);
         nebulaPositions.AddRange(ParseLayout(FireNebulaLayoutKey));
         nebulaPositions.AddRange(ParseLayout(ToxicNebulaLayoutKey));
+        List<Vector2> treasurePositions = new List<Vector2>();
         int spawned = 0;
         int attempts = 0;
         int targetCount = Mathf.Max(0, Mathf.RoundToInt(treasureCount * GetDensityMultiplier() * RoomSettings.GetGameplayMapAreaMultiplier()));
@@ -93,14 +96,62 @@ public class TreasureSpawner : MonoBehaviourPun
             if (hit == null)
             {
                 PhotonNetwork.Instantiate("TreasureNetwork", new Vector3(x, y, 0f), Quaternion.identity, 0, new object[] { RollTreasureItemId() });
+                treasurePositions.Add(pos2D);
                 spawned++;
             }
         }
 
         int radioactiveSpawned = SpawnRadioactiveTreasures(obstaclePositions, extractionPositions, nebulaPositions);
+        int alienSecretsSpawned = SpawnAlienSecrets(obstaclePositions, extractionPositions, nebulaPositions, treasurePositions);
 
-        if (spawned + radioactiveSpawned > 0)
+        if (spawned + radioactiveSpawned + alienSecretsSpawned > 0)
             GameVisualTheme.RequestRuntimeRefresh();
+    }
+
+    int SpawnAlienSecrets(List<Vector2> obstaclePositions, List<Vector2> extractionPositions, List<Vector2> nebulaPositions, List<Vector2> treasurePositions)
+    {
+        int targetCount = Mathf.Max(0, Mathf.RoundToInt(BaseAlienSecretCount * GetAlienSecretsDensityMultiplier(RoomSettings.GetAlienSecretsDensity()) * RoomSettings.GetGameplayMapAreaMultiplier()));
+        int spawned = 0;
+        int attempts = 0;
+
+        while (spawned < targetCount && attempts < targetCount * 90 + 180)
+        {
+            attempts++;
+
+            float margin = 2.4f;
+            float x = Random.Range(-mapSizeX / 2 + margin, mapSizeX / 2 - margin);
+            float y = Random.Range(-mapSizeY / 2 + margin, mapSizeY / 2 - margin);
+            Vector2 pos2D = new Vector2(x, y);
+
+            if (!IsFarEnough(pos2D, extractionPositions, MinDistanceFromExtraction))
+                continue;
+
+            if (!IsFarEnough(pos2D, obstaclePositions, GetMinDistanceFromObstacle()))
+                continue;
+
+            if (!IsFarEnough(pos2D, nebulaPositions, MinDistanceFromNebula))
+                continue;
+
+            if (!IsFarEnough(pos2D, treasurePositions, MinDistanceFromTreasure))
+                continue;
+
+            Collider2D hit = Physics2D.OverlapCircle(pos2D, 1f);
+            if (hit != null)
+                continue;
+
+            int variantIndex = Random.Range(0, InventoryItemCatalog.AlienSecretVariantCount);
+            string alienSecretItemId = InventoryItemCatalog.GetAlienSecretItemId(variantIndex);
+            PhotonNetwork.Instantiate(
+                "TreasureNetwork",
+                new Vector3(x, y, 0f),
+                Quaternion.identity,
+                0,
+                new object[] { alienSecretItemId, variantIndex });
+            treasurePositions.Add(pos2D);
+            spawned++;
+        }
+
+        return spawned;
     }
 
     int SpawnRadioactiveTreasures(List<Vector2> obstaclePositions, List<Vector2> extractionPositions, List<Vector2> nebulaPositions)
@@ -207,6 +258,19 @@ public class TreasureSpawner : MonoBehaviourPun
             case RoomSettings.TreasureDensityVeryLow: return 0.25f;
             case RoomSettings.TreasureDensityLow: return 0.5f;
             case RoomSettings.TreasureDensityHigh: return 2f;
+            default: return 1f;
+        }
+    }
+
+    float GetAlienSecretsDensityMultiplier(string density)
+    {
+        switch (RoomSettings.NormalizeAlienSecretsDensity(density))
+        {
+            case RoomSettings.AlienSecretsDensityNone: return 0f;
+            case RoomSettings.AlienSecretsDensityVeryLow: return 0.25f;
+            case RoomSettings.AlienSecretsDensityLow: return 0.5f;
+            case RoomSettings.AlienSecretsDensityHigh: return 2f;
+            case RoomSettings.AlienSecretsDensityVeryHigh: return 3f;
             default: return 1f;
         }
     }

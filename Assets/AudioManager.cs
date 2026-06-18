@@ -29,6 +29,12 @@ public class AudioManager : MonoBehaviour
     AudioClip cashClip;
     AudioClip engineClip;
     AudioClip fusionEngineClip;
+    AudioClip powerEngineClip;
+    AudioClip ionEngineClip;
+    AudioClip hybridEngineClip;
+    AudioClip doubleEngineClip;
+    AudioClip superBoosterEngineClip;
+    AudioClip blackMarketThrusterEngineClip;
     AudioClip superBoosterClip;
     AudioClip alarmClip;
     AudioClip explosionClip;
@@ -119,6 +125,12 @@ public class AudioManager : MonoBehaviour
 
     public AudioClip EngineClip => engineClip;
     public AudioClip FusionEngineClip => fusionEngineClip != null ? fusionEngineClip : engineClip;
+    public AudioClip PowerEngineClip => powerEngineClip != null ? powerEngineClip : engineClip;
+    public AudioClip IonEngineClip => ionEngineClip != null ? ionEngineClip : engineClip;
+    public AudioClip HybridEngineClip => hybridEngineClip != null ? hybridEngineClip : engineClip;
+    public AudioClip DoubleEngineClip => doubleEngineClip != null ? doubleEngineClip : engineClip;
+    public AudioClip SuperBoosterEngineClip => superBoosterEngineClip != null ? superBoosterEngineClip : engineClip;
+    public AudioClip BlackMarketThrusterEngineClip => blackMarketThrusterEngineClip != null ? blackMarketThrusterEngineClip : engineClip;
     public AudioClip MothershipEngineClip => mothershipEngineClip != null ? mothershipEngineClip : engineClip;
     public AudioClip RadarShipEngineClip => radarShipEngineClip != null ? radarShipEngineClip : mothershipEngineClip != null ? mothershipEngineClip : engineClip;
     public AudioClip RescueShipEngineClip => rescueShipEngineClip != null ? rescueShipEngineClip : radarShipEngineClip != null ? radarShipEngineClip : mothershipEngineClip != null ? mothershipEngineClip : engineClip;
@@ -211,6 +223,12 @@ public class AudioManager : MonoBehaviour
         cashClip = Resources.Load<AudioClip>("Audio/cash_sound");
         engineClip = Resources.Load<AudioClip>("Audio/silnik");
         fusionEngineClip = Resources.Load<AudioClip>("Audio/fusion_engine_sound");
+        powerEngineClip = Resources.Load<AudioClip>("Audio/engine1_sound");
+        ionEngineClip = Resources.Load<AudioClip>("Audio/engine2_sound");
+        hybridEngineClip = Resources.Load<AudioClip>("Audio/engine3_sound");
+        doubleEngineClip = Resources.Load<AudioClip>("Audio/engine4_sound");
+        superBoosterEngineClip = Resources.Load<AudioClip>("Audio/engine5_sound");
+        blackMarketThrusterEngineClip = Resources.Load<AudioClip>("Audio/engine6_sound");
         superBoosterClip = Resources.Load<AudioClip>("Audio/super_booster");
         alarmClip = Resources.Load<AudioClip>("Audio/alarm");
         explosionClip = Resources.Load<AudioClip>("Audio/explosion");

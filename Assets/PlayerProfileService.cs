@@ -3277,7 +3277,7 @@ public class PlayerProfileService : MonoBehaviour
         for (int i = 0; i < CurrentProfile.Inventory.ShipSlots.Length && i < capacity; i++)
         {
             string itemId = CurrentProfile.Inventory.ShipSlots[i];
-            if (!string.Equals(itemId, matchItemId, StringComparison.Ordinal))
+            if (!InventoryItemCatalog.MatchesItemRequirement(itemId, matchItemId))
                 continue;
 
             CurrentProfile.Inventory.ShipSlots[i] = null;
@@ -4118,6 +4118,14 @@ public class PlayerProfileService : MonoBehaviour
 
             counts.TryGetValue(itemId, out int currentCount);
             counts[itemId] = currentCount + 1;
+
+            string requirementKey = InventoryItemCatalog.GetRequirementCountKey(itemId);
+            if (!string.IsNullOrWhiteSpace(requirementKey) &&
+                !string.Equals(requirementKey, itemId, StringComparison.Ordinal))
+            {
+                counts.TryGetValue(requirementKey, out int currentRequirementCount);
+                counts[requirementKey] = currentRequirementCount + 1;
+            }
         }
     }
 
@@ -4130,7 +4138,7 @@ public class PlayerProfileService : MonoBehaviour
         int count = 0;
         for (int i = 0; i < safeLimit; i++)
         {
-            if (string.Equals(slots[i], matchItemId, StringComparison.Ordinal))
+            if (InventoryItemCatalog.MatchesItemRequirement(slots[i], matchItemId))
                 count++;
         }
 
@@ -4145,7 +4153,7 @@ public class PlayerProfileService : MonoBehaviour
         int safeLimit = Mathf.Clamp(limit, 0, slots.Length);
         for (int i = 0; i < safeLimit; i++)
         {
-            if (string.Equals(slots[i], matchItemId, StringComparison.Ordinal))
+            if (InventoryItemCatalog.MatchesItemRequirement(slots[i], matchItemId))
                 return i;
         }
 
@@ -4216,7 +4224,7 @@ public class PlayerProfileService : MonoBehaviour
         int safeLimit = Mathf.Clamp(limit, 0, slots.Length);
         for (int i = 0; i < safeLimit; i++)
         {
-            if (!string.Equals(slots[i], itemId, StringComparison.Ordinal))
+            if (!InventoryItemCatalog.MatchesItemRequirement(slots[i], itemId))
                 continue;
 
             slots[i] = null;
@@ -6970,6 +6978,10 @@ public class PlayerInventoryData
             CraftingSlots = new string[CraftingSlotCount];
             CopyInto(old, CraftingSlots);
         }
+
+        NormalizeLegacyAlienSecretSlots(PlayerSlots);
+        NormalizeLegacyAlienSecretSlots(ShipSlots);
+        NormalizeLegacyAlienSecretSlots(CraftingSlots);
     }
 
     public int GetFirstEmptyPlayerSlot()
@@ -7182,6 +7194,18 @@ public class PlayerInventoryData
         for (int i = 0; i < count; i++)
         {
             destination[i] = source[i];
+        }
+    }
+
+    static void NormalizeLegacyAlienSecretSlots(string[] slots)
+    {
+        if (slots == null)
+            return;
+
+        for (int i = 0; i < slots.Length; i++)
+        {
+            if (string.Equals(slots[i], InventoryItemCatalog.AlienSecretId, StringComparison.Ordinal))
+                slots[i] = InventoryItemCatalog.GetAlienSecretItemId(i);
         }
     }
 }

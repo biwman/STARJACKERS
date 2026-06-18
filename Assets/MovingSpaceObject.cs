@@ -748,37 +748,39 @@ public class MovingSpaceObject : MonoBehaviour
             return;
         }
 
-        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
+        Vector2 position = rb.position;
+        MapInstanceService.TryGetBoundsForWorldPosition(position, out MapInstanceService.BoundsInfo bounds);
+        Vector2 mapSize = bounds.Size;
+        Vector2 center = bounds.Center;
         float halfX = mapSize.x * 0.5f;
         float halfY = mapSize.y * 0.5f;
         float boundsRadius = GetBoundsRadius();
 
-        Vector2 position = rb.position;
         Vector2 velocity = rb.linearVelocity;
         bool reflected = false;
 
-        if (position.x > halfX - boundsRadius)
+        if (position.x > center.x + halfX - boundsRadius)
         {
-            position.x = halfX - boundsRadius;
+            position.x = center.x + halfX - boundsRadius;
             velocity.x = -Mathf.Abs(velocity.x);
             reflected = true;
         }
-        else if (position.x < -halfX + boundsRadius)
+        else if (position.x < center.x - halfX + boundsRadius)
         {
-            position.x = -halfX + boundsRadius;
+            position.x = center.x - halfX + boundsRadius;
             velocity.x = Mathf.Abs(velocity.x);
             reflected = true;
         }
 
-        if (position.y > halfY - boundsRadius)
+        if (position.y > center.y + halfY - boundsRadius)
         {
-            position.y = halfY - boundsRadius;
+            position.y = center.y + halfY - boundsRadius;
             velocity.y = -Mathf.Abs(velocity.y);
             reflected = true;
         }
-        else if (position.y < -halfY + boundsRadius)
+        else if (position.y < center.y - halfY + boundsRadius)
         {
-            position.y = -halfY + boundsRadius;
+            position.y = center.y - halfY + boundsRadius;
             velocity.y = Mathf.Abs(velocity.y);
             reflected = true;
         }
@@ -803,33 +805,34 @@ public class MovingSpaceObject : MonoBehaviour
 
     void WrapAcrossMapBounds()
     {
-        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
+        Vector2 position = rb.position;
+        MapInstanceService.TryGetBoundsForWorldPosition(position, out MapInstanceService.BoundsInfo bounds);
+        Vector2 mapSize = bounds.Size;
+        Vector2 center = bounds.Center;
         float halfX = mapSize.x * 0.5f;
         float halfY = mapSize.y * 0.5f;
         float boundsRadius = GetBoundsRadius();
-
-        Vector2 position = rb.position;
         bool wrapped = false;
 
-        if (position.x > halfX + boundsRadius)
+        if (position.x > center.x + halfX + boundsRadius)
         {
-            position.x = -halfX - boundsRadius;
+            position.x = center.x - halfX - boundsRadius;
             wrapped = true;
         }
-        else if (position.x < -halfX - boundsRadius)
+        else if (position.x < center.x - halfX - boundsRadius)
         {
-            position.x = halfX + boundsRadius;
+            position.x = center.x + halfX + boundsRadius;
             wrapped = true;
         }
 
-        if (position.y > halfY + boundsRadius)
+        if (position.y > center.y + halfY + boundsRadius)
         {
-            position.y = -halfY - boundsRadius;
+            position.y = center.y - halfY - boundsRadius;
             wrapped = true;
         }
-        else if (position.y < -halfY - boundsRadius)
+        else if (position.y < center.y - halfY - boundsRadius)
         {
-            position.y = halfY + boundsRadius;
+            position.y = center.y + halfY + boundsRadius;
             wrapped = true;
         }
 

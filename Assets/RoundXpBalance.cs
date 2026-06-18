@@ -27,6 +27,7 @@ public static class RoundXpBalance
     public const int KillRadarShipXp = 220;
     public const int KillMothershipXp = 400;
     public const int KillCosmicWormXp = 650;
+    public const int KillRiftWardenXp = 260;
     public const int KillPlayerShipXp = 150;
     public const int FirstBloodXp = 75;
 
@@ -81,6 +82,7 @@ public static class RoundXpBalance
             case EnemyBotKind.RadarShip: return KillRadarShipXp;
             case EnemyBotKind.Mothership: return KillMothershipXp;
             case EnemyBotKind.CosmicWorm: return KillCosmicWormXp;
+            case EnemyBotKind.RiftWarden: return KillRiftWardenXp;
             default: return KillDroneXp;
         }
     }

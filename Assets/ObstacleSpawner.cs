@@ -363,6 +363,28 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         return new ObstacleChunk.RuntimeState(stableId, position, Vector2.zero, 0f, 0f, sizeFactor, hp, hp, 0, spriteVariantIndex);
     }
 
+    public static void CreateLocalRuntimeObstacle(string stableId, Vector2 position, int hp, bool authorityState)
+    {
+        if (instance == null || string.IsNullOrWhiteSpace(stableId))
+            return;
+
+        int safeHp = Mathf.Max(1, hp);
+        float sizeFactor = ObstacleChunk.ComputeStableSizeFactor(stableId);
+        int spriteVariantIndex = ObstacleChunk.ComputeStableSpriteVariantIndex(stableId, GameVisualTheme.GetObstacleSpriteVariantCount());
+        ObstacleChunk.RuntimeState state = new ObstacleChunk.RuntimeState(
+            stableId,
+            position,
+            Vector2.zero,
+            0f,
+            0f,
+            sizeFactor,
+            safeHp,
+            safeHp,
+            0,
+            spriteVariantIndex);
+        instance.CreateOrUpdateObstacleFromState(state, authorityState);
+    }
+
     void CreateOrUpdateObstacleFromState(ObstacleChunk.RuntimeState state, bool authorityState)
     {
         if (string.IsNullOrWhiteSpace(state.StableId))
@@ -389,7 +411,32 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         }
 
         chunk.ApplyRuntimeState(state, authorityState);
+        MapInstanceService.ConfigureMember(
+            chunk.gameObject,
+            MapInstanceService.GetInstanceIdForWorldPosition(state.Position));
         GameVisualTheme.ApplyObstacleVisual(chunk.gameObject);
+    }
+
+    public static void DestroyRuntimeObstaclesInInstance(string instanceId)
+    {
+        if (instance == null || string.IsNullOrWhiteSpace(instanceId))
+            return;
+
+        instance.DestroyRuntimeObstaclesInInstanceInternal(instanceId);
+    }
+
+    void DestroyRuntimeObstaclesInInstanceInternal(string instanceId)
+    {
+        ObstacleChunk[] chunks = FindObjectsByType<ObstacleChunk>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < chunks.Length; i++)
+        {
+            ObstacleChunk chunk = chunks[i];
+            if (chunk == null)
+                continue;
+
+            if (string.Equals(MapInstanceService.GetInstanceIdForTransform(chunk.transform), instanceId, System.StringComparison.Ordinal))
+                DestroyObstacleImmediately(chunk.gameObject);
+        }
     }
 
     public static void ApplyObstacleDamage(string stableId, int damage)
@@ -534,7 +581,7 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         if (Hash01(sourceState.StableId, 5) < 0.5f)
             offsetDirection = -offsetDirection;
 
-        float sourceRadius = Mathf.Max(0.35f, ObstacleChunk.DefaultTargetWorldSize * RoomSettings.GetObstacleSizeMultiplier() * sourceState.SizeFactor * 0.22f);
+        float sourceRadius = Mathf.Max(0.35f, ObstacleChunk.DefaultTargetWorldSize * MapInstanceService.GetObstacleSizeMultiplierForPosition(sourceState.Position) * sourceState.SizeFactor * 0.22f);
         return ClampToMapBounds(center + offsetDirection * (sourceRadius + PlatinumChunkSpawnOffset), 0.45f);
     }
 
@@ -560,12 +607,7 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
     Vector2 ClampToMapBounds(Vector2 position, float padding)
     {
-        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
-        float halfX = mapSize.x * 0.5f;
-        float halfY = mapSize.y * 0.5f;
-        return new Vector2(
-            Mathf.Clamp(position.x, -halfX + padding, halfX - padding),
-            Mathf.Clamp(position.y, -halfY + padding, halfY - padding));
+        return MapInstanceService.ClampToInstanceBounds(position, padding);
     }
 
     void ApplyInitialTreasureDrift(GameObject treasureObject, Vector2 velocity, float angularVelocity)
@@ -737,11 +779,17 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
 
     bool IsSpawnPositionClear(Vector2 candidate, float radius, ObstacleChunk source)
     {
-        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
-        float halfX = mapSize.x * 0.5f;
-        float halfY = mapSize.y * 0.5f;
-        if (candidate.x > halfX - radius || candidate.x < -halfX + radius || candidate.y > halfY - radius || candidate.y < -halfY + radius)
+        Vector2 sourcePosition = source != null ? (Vector2)source.transform.position : candidate;
+        MapInstanceService.TryGetBoundsForWorldPosition(sourcePosition, out MapInstanceService.BoundsInfo bounds);
+        float halfX = bounds.Size.x * 0.5f;
+        float halfY = bounds.Size.y * 0.5f;
+        if (candidate.x > bounds.Center.x + halfX - radius ||
+            candidate.x < bounds.Center.x - halfX + radius ||
+            candidate.y > bounds.Center.y + halfY - radius ||
+            candidate.y < bounds.Center.y - halfY + radius)
+        {
             return false;
+        }
 
         int hitCount = Physics2DNonAllocQuery.OverlapCircle(candidate, radius, out Collider2D[] hits);
         for (int i = 0; i < hitCount; i++)

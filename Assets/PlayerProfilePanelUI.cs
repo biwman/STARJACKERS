@@ -209,12 +209,18 @@ public class PlayerProfilePanelUI : MonoBehaviour
     static readonly Vector2 PlayerInventoryFilterButtonSize = new Vector2(206f, 56f);
     static readonly Vector2 PlayerInventorySortButtonSize = new Vector2(190f, 56f);
     static readonly Vector2 PlayerInventoryExtendButtonSize = new Vector2(172f, 56f);
+    static readonly Vector2 ShipInventoryHeaderButtonSize = new Vector2(164f, 50f);
+    static readonly Vector2 ItemPreviewInfoButtonSize = new Vector2(158f, 54f);
     const int PlayerInventoryGridColumns = 6;
     const float InventoryUtilityButtonLift = 24f;
     const float InventoryUtilityButtonGap = 16f;
     const float InventoryUtilityLabelGap = 8f;
+    const float ShipInventoryHeaderGap = 18f;
     const float InventoryExtendButtonOffsetX = 0f;
     const float PlayerInventoryUtilityButtonFontSize = 18f;
+    const float ShipInventoryHeaderFontSize = 22f;
+    const float ShipInventoryHeaderButtonFontSize = 20f;
+    const float BlueprintTabFontSize = 24f;
     const float InventoryDropTargetPadding = 28f;
     const string PlayerInventoryTitleText = "INVENTORY";
     static readonly Vector2[] EquipmentSlotLayoutPositions =
@@ -915,10 +921,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
         inventoryHintText = CreateText(panelObject.transform, "InventoryHintText", "Tap to preview. Drag between inventories, loadout slots and crafting.", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -146f), new Vector2(820f, 24f), 16f, TextAlignmentOptions.Center);
         inventoryHintText.fontStyle = FontStyles.Normal;
 
-        shipInventoryLabelText = CreateText(panelObject.transform, "ShipInventoryLabel", "SHIP INVENTORY", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-614f, -222f), new Vector2(420f, 24f), 18f, TextAlignmentOptions.Center);
-        shipInventoryUnloadButton = CreateButton(panelObject.transform, "ShipInventoryUnloadButton", "UNLOAD", new Vector2(-278f, -222f + InventoryUtilityButtonLift), new Vector2(128f, 36f), OnShipInventoryUnloadClicked);
+        shipInventoryLabelText = CreateText(panelObject.transform, "ShipInventoryLabel", "SHIP INVENTORY 0/0", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-646f, -222f + InventoryUtilityButtonLift), new Vector2(460f, ShipInventoryHeaderButtonSize.y), ShipInventoryHeaderFontSize, TextAlignmentOptions.MidlineLeft);
+        ConfigureShipInventoryLabelText();
+        shipInventoryUnloadButton = CreateButton(panelObject.transform, "ShipInventoryUnloadButton", "UNLOAD", new Vector2(-312f, -222f + InventoryUtilityButtonLift), ShipInventoryHeaderButtonSize, OnShipInventoryUnloadClicked);
         ConfigureNoBlinkInventoryActionButton(shipInventoryUnloadButton);
-        StyleCompactBackLikeButton(shipInventoryUnloadButton);
+        StyleReadableBackLikeButton(shipInventoryUnloadButton, ShipInventoryHeaderButtonFontSize);
+        LayoutShipInventoryHeader(-878f, (120f * 5f) + (12f * 4f), -222f + InventoryUtilityButtonLift);
         CreateInventoryGrid(panelObject.transform, false, new Vector2(-878f, -254f), PlayerInventoryData.ShipSlotCount, 5, out shipInventoryButtons, out shipInventoryTexts, out shipInventoryIcons);
 
         float initialPlayerInventoryExtendButtonX = -278f + InventoryExtendButtonOffsetX;
@@ -2626,9 +2634,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
         itemPreviewTypeText.color = new Color(0.72f, 0.86f, 1f, 1f);
         itemPreviewPriceText = CreateText(itemPreviewPanelObject.transform, "ItemPreviewPriceText", "0 Astrons", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -218f), new Vector2(228f, 26f), 20f, TextAlignmentOptions.Center);
         itemPreviewPriceText.fontStyle = FontStyles.Normal;
-        itemPreviewInfoButton = CreateButton(itemPreviewPanelObject.transform, "ItemPreviewInfoButton", "INFO", new Vector2(0f, 48f), new Vector2(126f, 44f), OnItemPreviewInfoClicked);
+        itemPreviewInfoButton = CreateButton(itemPreviewPanelObject.transform, "ItemPreviewInfoButton", "INFO", new Vector2(0f, 54f), ItemPreviewInfoButtonSize, OnItemPreviewInfoClicked);
         ConfigureNoBlinkInventoryActionButton(itemPreviewInfoButton);
-        StyleCompactBackLikeButton(itemPreviewInfoButton);
+        StyleReadableBackLikeButton(itemPreviewInfoButton, ShipInventoryHeaderButtonFontSize);
         itemPreviewSellButton = CreateButton(itemPreviewPanelObject.transform, "ItemPreviewSellButton", "SELL", new Vector2(-76f, -270f), new Vector2(136f, 50f), OnItemPreviewSellClicked);
         itemPreviewSalvageButton = CreateButton(itemPreviewPanelObject.transform, "ItemPreviewSalvageButton", "SALVAGE", new Vector2(76f, -270f), new Vector2(136f, 50f), OnItemPreviewSalvageClicked);
         ConfigureNoBlinkInventoryActionButton(itemPreviewSellButton);
@@ -2740,19 +2748,21 @@ public class PlayerProfilePanelUI : MonoBehaviour
         panelRect.anchorMax = new Vector2(0.5f, 0.5f);
         panelRect.pivot = new Vector2(0.5f, 0.5f);
         panelRect.anchoredPosition = Vector2.zero;
-        panelRect.sizeDelta = new Vector2(560f, 240f);
+        panelRect.sizeDelta = new Vector2(1120f, 480f);
 
         Image panelImage = panel.GetComponent<Image>();
         panelImage.color = new Color(0.07f, 0.1f, 0.14f, 0.98f);
 
-        CreateText(panel.transform, "PlayerInventoryExtendTitle", "EXTEND INVENTORY", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(500f, 34f), 24f, TextAlignmentOptions.Center);
-        playerInventoryExtendConfirmText = CreateText(panel.transform, "PlayerInventoryExtendText", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -86f), new Vector2(500f, 70f), 19f, TextAlignmentOptions.Center);
+        CreateText(panel.transform, "PlayerInventoryExtendTitle", "EXTEND INVENTORY", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -60f), new Vector2(1000f, 68f), 48f, TextAlignmentOptions.Center);
+        playerInventoryExtendConfirmText = CreateText(panel.transform, "PlayerInventoryExtendText", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -172f), new Vector2(1000f, 140f), 38f, TextAlignmentOptions.Center);
         playerInventoryExtendConfirmText.fontStyle = FontStyles.Normal;
         playerInventoryExtendConfirmText.textWrappingMode = TextWrappingModes.Normal;
 
-        playerInventoryExtendConfirmButton = CreateButton(panel.transform, "PlayerInventoryExtendConfirmButton", "EXTEND", new Vector2(-116f, -166f), new Vector2(180f, 52f), OnPlayerInventoryExtendConfirmClicked);
+        playerInventoryExtendConfirmButton = CreateButton(panel.transform, "PlayerInventoryExtendConfirmButton", "EXTEND", new Vector2(-232f, -332f), new Vector2(360f, 104f), OnPlayerInventoryExtendConfirmClicked);
+        StyleReadableBackLikeButton(playerInventoryExtendConfirmButton, 36f);
         StyleButton(playerInventoryExtendConfirmButton, new Color(0.1f, 0.46f, 0.34f, 1f), new Color(0.16f, 0.62f, 0.44f, 1f));
-        playerInventoryExtendCancelButton = CreateButton(panel.transform, "PlayerInventoryExtendCancelButton", "CANCEL", new Vector2(116f, -166f), new Vector2(180f, 52f), HidePlayerInventoryExtendConfirm);
+        playerInventoryExtendCancelButton = CreateButton(panel.transform, "PlayerInventoryExtendCancelButton", "CANCEL", new Vector2(232f, -332f), new Vector2(360f, 104f), HidePlayerInventoryExtendConfirm);
+        StyleReadableBackLikeButton(playerInventoryExtendCancelButton, 36f);
         StyleButton(playerInventoryExtendCancelButton, new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f));
 
         playerInventoryExtendConfirmObject.SetActive(false);
@@ -2878,16 +2888,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
         ConfigureNoBlinkInventoryActionButton(craftingRecipeAvailabilityButton);
         RefreshCraftingRecipeAvailabilityButton();
 
-        craftingRecipeBlueprintsButton = CreateButton(panel.transform, "CraftingRecipeBlueprintsButton", "Blueprints", new Vector2(0f, -28f), new Vector2(190f, 44f), OnCraftingBlueprintsClicked);
+        craftingRecipeBlueprintsButton = CreateButton(panel.transform, "CraftingRecipeBlueprintsButton", "BLUEPRINTS", new Vector2(0f, -28f), new Vector2(220f, 52f), OnCraftingBlueprintsClicked);
         StyleCompactInventoryUtilityButton(craftingRecipeBlueprintsButton);
         ConfigureNoBlinkInventoryActionButton(craftingRecipeBlueprintsButton);
-        TMP_Text blueprintsButtonText = craftingRecipeBlueprintsButton.GetComponentInChildren<TMP_Text>(true);
-        if (blueprintsButtonText != null)
-        {
-            blueprintsButtonText.enableAutoSizing = true;
-            blueprintsButtonText.fontSizeMin = 14f;
-            blueprintsButtonText.fontSizeMax = 19f;
-        }
+        ConfigureBlueprintsTabButtonText();
 
         TMP_Text hint = CreateText(panel.transform, "CraftingRecipeBrowserHint", "Select a green recipe to auto-fill the crafting slots.", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -72f), new Vector2(620f, 24f), 16f, TextAlignmentOptions.Center);
         hint.fontStyle = FontStyles.Normal;
@@ -6026,6 +6030,23 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
     }
 
+    void StyleReadableBackLikeButton(Button button, float fontSize)
+    {
+        StyleCompactBackLikeButton(button);
+
+        TMP_Text text = button != null ? button.GetComponentInChildren<TMP_Text>(true) : null;
+        if (text == null)
+            return;
+
+        text.fontSize = fontSize;
+        text.enableAutoSizing = true;
+        text.fontSizeMin = Mathf.Max(16f, fontSize - 3f);
+        text.fontSizeMax = fontSize;
+        text.characterSpacing = 1.2f;
+        text.margin = new Vector4(10f, 5f, 10f, 5f);
+        text.overflowMode = TextOverflowModes.Truncate;
+    }
+
     void StylePlayerInventoryUtilityButton(Button button)
     {
         StyleCompactBackLikeButton(button);
@@ -6033,6 +6054,43 @@ public class PlayerProfilePanelUI : MonoBehaviour
         TMP_Text text = button != null ? button.GetComponentInChildren<TMP_Text>(true) : null;
         if (text != null)
             text.fontSize = PlayerInventoryUtilityButtonFontSize;
+    }
+
+    void ConfigureShipInventoryLabelText()
+    {
+        if (shipInventoryLabelText == null)
+            return;
+
+        shipInventoryLabelText.fontSize = ShipInventoryHeaderFontSize;
+        shipInventoryLabelText.enableAutoSizing = true;
+        shipInventoryLabelText.fontSizeMin = 18f;
+        shipInventoryLabelText.fontSizeMax = ShipInventoryHeaderFontSize;
+        shipInventoryLabelText.fontStyle = FontStyles.Bold;
+        shipInventoryLabelText.alignment = TextAlignmentOptions.MidlineLeft;
+        shipInventoryLabelText.textWrappingMode = TextWrappingModes.NoWrap;
+        shipInventoryLabelText.overflowMode = TextOverflowModes.Truncate;
+        shipInventoryLabelText.characterSpacing = 0.6f;
+        shipInventoryLabelText.margin = new Vector4(0f, 2f, 4f, 2f);
+    }
+
+    void ConfigureBlueprintsTabButtonText()
+    {
+        TMP_Text text = craftingRecipeBlueprintsButton != null
+            ? craftingRecipeBlueprintsButton.GetComponentInChildren<TMP_Text>(true)
+            : null;
+        if (text == null)
+            return;
+
+        text.text = "BLUEPRINTS";
+        text.fontSize = BlueprintTabFontSize;
+        text.enableAutoSizing = true;
+        text.fontSizeMin = 20f;
+        text.fontSizeMax = BlueprintTabFontSize;
+        text.fontStyle = FontStyles.Bold;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.overflowMode = TextOverflowModes.Truncate;
+        text.characterSpacing = 1.2f;
+        text.margin = new Vector4(12f, 5f, 12f, 5f);
     }
 
     void ConfigurePlayerInventoryLabelText()
@@ -8218,15 +8276,14 @@ public class PlayerProfilePanelUI : MonoBehaviour
     {
         ConfigureStorageBackdrop(false, 0f, 0f, 0f, 0f);
 
-        if (shipInventoryLabelText != null)
-            SetAnchoredRect(shipInventoryLabelText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX, -180f), new Vector2(420f, 24f));
-        if (shipInventoryUnloadButton != null)
-            SetAnchoredRect(shipInventoryUnloadButton.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX + 334f, -180f + InventoryUtilityButtonLift), new Vector2(128f, 36f));
+        const float slotSize = 96f;
+        const float slotSpacing = 8f;
+        float shipWidth = (slotSize * 5f) + (slotSpacing * 4f);
+        float shipLeftEdge = centerX - (shipWidth * 0.5f);
+        LayoutShipInventoryHeader(shipLeftEdge, shipWidth, -180f + InventoryUtilityButtonLift);
 
         if (shipInventoryButtons != null)
         {
-            const float slotSize = 96f;
-            const float slotSpacing = 8f;
             float firstSlotX = centerX - (((slotSize * 5f) + (slotSpacing * 4f)) * 0.5f) + (slotSize * 0.5f);
             for (int i = 0; i < shipInventoryButtons.Length; i++)
             {
@@ -8292,6 +8349,36 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
     }
 
+    void LayoutShipInventoryHeader(float shipLeftEdge, float shipWidth, float y)
+    {
+        float safeShipWidth = Mathf.Max(ShipInventoryHeaderButtonSize.x + 220f, shipWidth);
+        float labelWidth = Mathf.Max(260f, safeShipWidth - ShipInventoryHeaderButtonSize.x - ShipInventoryHeaderGap);
+        float labelCenterX = shipLeftEdge + (labelWidth * 0.5f);
+        float buttonCenterX = shipLeftEdge + safeShipWidth - (ShipInventoryHeaderButtonSize.x * 0.5f);
+
+        if (shipInventoryLabelText != null)
+        {
+            SetAnchoredRect(
+                shipInventoryLabelText.rectTransform,
+                new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(labelCenterX, y),
+                new Vector2(labelWidth, ShipInventoryHeaderButtonSize.y));
+            ConfigureShipInventoryLabelText();
+        }
+
+        if (shipInventoryUnloadButton != null)
+        {
+            SetAnchoredRect(
+                shipInventoryUnloadButton.GetComponent<RectTransform>(),
+                new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(buttonCenterX, y),
+                ShipInventoryHeaderButtonSize);
+            StyleReadableBackLikeButton(shipInventoryUnloadButton, ShipInventoryHeaderButtonFontSize);
+        }
+    }
+
     void LayoutCraftingStoragePanel()
     {
         const float leftEdge = -1018f;
@@ -8299,18 +8386,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
         const float shipSlotSize = 96f;
         const float shipSlotSpacing = 8f;
         float shipWidth = (shipSlotSize * 5f) + (shipSlotSpacing * 4f);
-        float shipCenterX = leftEdge + (shipWidth * 0.5f);
         float playerCenterX = leftEdge + (playerScrollWidth * 0.5f);
         float playerRightEdge = leftEdge + playerScrollWidth;
-        float shipRightEdge = leftEdge + shipWidth;
 
         ConfigureStorageBackdrop(false, 0f, 0f, 0f, 0f);
 
-        if (shipInventoryLabelText != null)
-            SetAnchoredRect(shipInventoryLabelText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(shipCenterX, -180f), new Vector2(420f, 24f));
-
-        if (shipInventoryUnloadButton != null)
-            SetAnchoredRect(shipInventoryUnloadButton.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(shipRightEdge - 64f, -180f + InventoryUtilityButtonLift), new Vector2(128f, 36f));
+        LayoutShipInventoryHeader(leftEdge, shipWidth, -180f + InventoryUtilityButtonLift);
 
         if (shipInventoryButtons != null)
         {
@@ -8467,8 +8548,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
             if (rect != null)
             {
                 rect.anchoredPosition = new Vector2(0f, 42f);
-                rect.sizeDelta = new Vector2(255f, 63f);
+                rect.sizeDelta = new Vector2(285f, 68f);
             }
+
+            ConfigureBlueprintsTabButtonText();
         }
 
         if (craftingRecipeCloseButton != null)
@@ -12692,6 +12775,23 @@ public class PlayerProfilePanelUI : MonoBehaviour
         return count;
     }
 
+    int CountOccupiedShipInventorySlots(PlayerInventoryData inventory, int shipCapacity)
+    {
+        if (inventory == null || inventory.ShipSlots == null)
+            return 0;
+
+        inventory.Normalize();
+        int count = 0;
+        int capacity = Mathf.Clamp(shipCapacity, 0, inventory.ShipSlots.Length);
+        for (int i = 0; i < capacity; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(inventory.ShipSlots[i]))
+                count++;
+        }
+
+        return count;
+    }
+
     void RefreshInventoryView(PlayerInventoryData inventory)
     {
         PlayerInventoryData normalized = inventory != null ? inventory.Clone() : PlayerInventoryData.Default();
@@ -12699,7 +12799,12 @@ public class PlayerProfilePanelUI : MonoBehaviour
         visiblePlayerInventorySlotMap = BuildVisiblePlayerInventorySlotMap(normalized);
 
         if (shipInventoryLabelText != null)
-            shipInventoryLabelText.text = "SHIP INVENTORY (" + GetActiveShipInventoryCapacity() + ")";
+        {
+            int shipCapacity = GetActiveShipInventoryCapacity();
+            int occupiedShipSlots = CountOccupiedShipInventorySlots(normalized, shipCapacity);
+            shipInventoryLabelText.text = "SHIP INVENTORY " + occupiedShipSlots + "/" + shipCapacity;
+            ConfigureShipInventoryLabelText();
+        }
 
         RebuildPlayerInventoryGrid(GetDisplayedPlayerInventorySlotCount(normalized));
 
@@ -13280,6 +13385,7 @@ public class SessionBrowserPanelUI : MonoBehaviour
     public static void ShowBrowser()
     {
         visibleRequested = true;
+        RoundMessageLayer.ClearAll();
         if (instance == null)
             return;
 

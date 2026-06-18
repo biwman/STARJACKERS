@@ -160,9 +160,19 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RoomSettings.RadioactiveTreasureDensityMedium,
         RoomSettings.RadioactiveTreasureDensityHigh
     };
+    static readonly string[] AlienSecretsDensityOptions =
+    {
+        RoomSettings.AlienSecretsDensityNone,
+        RoomSettings.AlienSecretsDensityVeryLow,
+        RoomSettings.AlienSecretsDensityLow,
+        RoomSettings.AlienSecretsDensityMedium,
+        RoomSettings.AlienSecretsDensityHigh,
+        RoomSettings.AlienSecretsDensityVeryHigh
+    };
     static readonly string[] ArtifactAsteroidsDensityOptions =
     {
         RoomSettings.ArtifactAsteroidsDensityOff,
+        RoomSettings.ArtifactAsteroidsDensityVeryLow,
         RoomSettings.ArtifactAsteroidsDensityLow,
         RoomSettings.ArtifactAsteroidsDensityMedium,
         RoomSettings.ArtifactAsteroidsDensityHigh
@@ -289,6 +299,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text obstacleNoBordersSettingText;
     public TMP_Text treasureSettingText;
     public TMP_Text radioactiveTreasureSettingText;
+    public TMP_Text alienSecretsSettingText;
     public TMP_Text resourceRichnessSettingText;
     public TMP_Text spaceJunkSettingText;
     public TMP_Text containersSettingText;
@@ -374,6 +385,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public Button obstacleNoBordersSettingButton;
     public Button treasureSettingButton;
     public Button radioactiveTreasureSettingButton;
+    public Button alienSecretsSettingButton;
     public Button resourceRichnessSettingButton;
     public Button spaceJunkSettingButton;
     public Button containersSettingButton;
@@ -3028,6 +3040,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         obstacleNoBordersSettingButton = EnsureSettingButton(ref obstacleNoBordersSettingText, obstacleNoBordersSettingButton, "ObstacleNoBordersSettingButton", "ObstacleNoBordersSettingText", Vector2.zero, CycleObstacleNoBorders);
         treasureSettingButton = EnsureSettingButton(ref treasureSettingText, treasureSettingButton, "TreasureSettingButton", "TreasureSettingText", Vector2.zero, CycleTreasureDensity);
         radioactiveTreasureSettingButton = EnsureSettingButton(ref radioactiveTreasureSettingText, radioactiveTreasureSettingButton, "RadioactiveTreasureSettingButton", "RadioactiveTreasureSettingText", Vector2.zero, CycleRadioactiveTreasureDensity);
+        alienSecretsSettingButton = EnsureSettingButton(ref alienSecretsSettingText, alienSecretsSettingButton, "AlienSecretsSettingButton", "AlienSecretsSettingText", Vector2.zero, CycleAlienSecretsDensity);
         resourceRichnessSettingButton = EnsureSettingButton(ref resourceRichnessSettingText, resourceRichnessSettingButton, "ResourceRichnessSettingButton", "ResourceRichnessSettingText", Vector2.zero, CycleResourceRichness);
         spaceJunkSettingButton = EnsureSettingButton(ref spaceJunkSettingText, spaceJunkSettingButton, "SpaceJunkSettingButton", "SpaceJunkSettingText", Vector2.zero, CycleSpaceJunkDensity);
         containersSettingButton = EnsureSettingButton(ref containersSettingText, containersSettingButton, "ContainersSettingButton", "ContainersSettingText", Vector2.zero, CycleContainersDensity);
@@ -4603,6 +4616,12 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.AlienSecretsDensityKey))
+        {
+            props[RoomSettings.AlienSecretsDensityKey] = LobbyMapCatalog.GetDefaultAlienSecretsDensity(RoomSettings.GetSelectedLobbyMapId());
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.ResourceRichnessKey))
         {
             props[RoomSettings.ResourceRichnessKey] = RoomSettings.DefaultResourceRichness;
@@ -5466,6 +5485,15 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             RoomSettings.DefaultRadioactiveTreasureDensity);
     }
 
+    void CycleAlienSecretsDensity()
+    {
+        CycleStringSetting(
+            RoomSettings.AlienSecretsDensityKey,
+            AlienSecretsDensityOptions,
+            GetAlienSecretsDensity(),
+            RoomSettings.DefaultAlienSecretsDensity);
+    }
+
     void CycleResourceRichness()
     {
         CycleStringSetting(RoomSettings.ResourceRichnessKey, ResourceRichnessOptions, RoomSettings.GetBaseResourceRichness(), RoomSettings.DefaultResourceRichness);
@@ -6325,6 +6353,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
         if (radioactiveTreasureSettingText != null)
             radioactiveTreasureSettingText.text = "RADIOACTIVE TREASURE: " + FormatRadioactiveTreasureDensity(GetRadioactiveTreasureDensity());
+
+        if (alienSecretsSettingText != null)
+            alienSecretsSettingText.text = "ALIEN SECRETS: " + FormatAlienSecretsDensity(GetAlienSecretsDensity());
 
         if (resourceRichnessSettingText != null)
             resourceRichnessSettingText.text = "RESOURCES RICHNESS: " + FormatResourceRichness(GetResourceRichness());
@@ -7189,6 +7220,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.ObstacleNoBordersKey) ||
                changedProps.ContainsKey(RoomSettings.TreasureDensityKey) ||
                changedProps.ContainsKey(RoomSettings.RadioactiveTreasureDensityKey) ||
+               changedProps.ContainsKey(RoomSettings.AlienSecretsDensityKey) ||
                changedProps.ContainsKey(RoomSettings.ResourceRichnessKey) ||
                changedProps.ContainsKey(RoomSettings.CrazyEnemiesModeKey) ||
                changedProps.ContainsKey(RoomSettings.CrazyEnemiesStartUtcMsKey) ||
@@ -7347,6 +7379,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     string GetRadioactiveTreasureDensity()
     {
         return RoomSettings.GetRadioactiveTreasureDensity();
+    }
+
+    string GetAlienSecretsDensity()
+    {
+        return RoomSettings.GetAlienSecretsDensity();
     }
 
     string GetResourceRichness()
@@ -7548,6 +7585,11 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         return RoomSettings.NormalizeRadioactiveTreasureDensity(density).ToUpperInvariant();
     }
 
+    string FormatAlienSecretsDensity(string density)
+    {
+        return RoomSettings.NormalizeAlienSecretsDensity(density).Replace("_", " ").ToUpperInvariant();
+    }
+
     string FormatMapEffectSetting(string modeKey, string startKey, string activeKey)
     {
         if (IsMapEffectActive(activeKey))
@@ -7590,7 +7632,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     string FormatArtifactAsteroidsDensity(string density)
     {
-        return RoomSettings.NormalizeArtifactAsteroidsDensity(density).ToUpperInvariant();
+        return RoomSettings.NormalizeArtifactAsteroidsDensity(density).Replace("_", " ").ToUpperInvariant();
     }
 
     string FormatRandomLootWreckCount(int count)

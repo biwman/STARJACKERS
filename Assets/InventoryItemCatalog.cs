@@ -210,6 +210,10 @@ public static class InventoryItemCatalog
     public const string PirateCaseId = "pirate_case";
     public const string PlatinumChunkId = "platinum_chunk";
     public const string RadioactiveTreasureId = "radioactive_treasure";
+    public const string AlienSecretId = "alien_secret";
+    public const string AlienSecretVariantIdPrefix = AlienSecretId + "_";
+    public const string AlienSecretIconResourcePath = "Visuals/Treasures/AlienSecrets/alien_secret_01";
+    public const int AlienSecretVariantCount = 9;
     public const string DroidScrapId = "droid_scrap";
     public const string CorsairSalvageId = "corsair_salvage";
     public const string SpaceMineWreckId = "space_mine_wreck";
@@ -224,6 +228,7 @@ public static class InventoryItemCatalog
     public const string PirateFighterSalvageId = "pirate_fighter_salvage";
     public const string PirateBaseCoreId = "pirate_base_core";
     public const string SpaceAnimalRemainsId = "space_animal_remains";
+    public const string SpaceAnimalBonesId = "space_animal_bones";
     public const string PlasmaGunId = "plasma_gun";
     public const string TripleGunId = "triple_gun";
     public const string GatlingGunId = "gatling_gun";
@@ -284,6 +289,8 @@ public static class InventoryItemCatalog
     public const string OverclockedMagazineId = "overclocked_magazine";
     public const string CaptiveAstronautPodId = "captive_astronaut_pod";
     public const string AlienTransmitterId = "alien_transmitter";
+    public const string AncientGateKeyId = "ancient_gate_key";
+    public const string PreservedAlphaSpecimenId = "preserved_alpha_specimen";
     public const string PirateSymbolId = "pirate_symbol";
     public const string ShipPrototypeDocumentationId = "ship_prototype_documentation";
     public const string AvengerStartingCodesId = "avenger_starting_codes";
@@ -446,6 +453,84 @@ public static class InventoryItemCatalog
     public static bool IsRadioactiveTreasure(string itemId)
     {
         return string.Equals(itemId, RadioactiveTreasureId, StringComparison.Ordinal);
+    }
+
+    public static bool IsAlienSecretItem(string itemId)
+    {
+        return string.Equals(itemId, AlienSecretId, StringComparison.Ordinal) ||
+               GetAlienSecretVariantIndex(itemId) >= 0;
+    }
+
+    public static int NormalizeAlienSecretVariantIndex(int variantIndex)
+    {
+        return Mathf.Clamp(variantIndex, 0, AlienSecretVariantCount - 1);
+    }
+
+    public static string GetAlienSecretItemId(int variantIndex)
+    {
+        int clampedIndex = NormalizeAlienSecretVariantIndex(variantIndex);
+        return AlienSecretVariantIdPrefix + (clampedIndex + 1).ToString("00");
+    }
+
+    public static int GetAlienSecretVariantIndex(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId) ||
+            !itemId.StartsWith(AlienSecretVariantIdPrefix, StringComparison.Ordinal) ||
+            itemId.Length <= AlienSecretVariantIdPrefix.Length)
+        {
+            return -1;
+        }
+
+        string suffix = itemId.Substring(AlienSecretVariantIdPrefix.Length);
+        if (!int.TryParse(suffix, out int oneBasedIndex))
+            return -1;
+
+        int zeroBasedIndex = oneBasedIndex - 1;
+        return zeroBasedIndex >= 0 && zeroBasedIndex < AlienSecretVariantCount ? zeroBasedIndex : -1;
+    }
+
+    public static string[] GetAlienSecretItemIds()
+    {
+        string[] itemIds = new string[AlienSecretVariantCount];
+        for (int i = 0; i < itemIds.Length; i++)
+            itemIds[i] = GetAlienSecretItemId(i);
+
+        return itemIds;
+    }
+
+    public static string ResolveAlienSecretItemId(string itemId, int variantIndex)
+    {
+        int existingVariantIndex = GetAlienSecretVariantIndex(itemId);
+        if (existingVariantIndex >= 0)
+            return GetAlienSecretItemId(existingVariantIndex);
+
+        if (string.Equals(itemId, AlienSecretId, StringComparison.Ordinal))
+            return GetAlienSecretItemId(variantIndex);
+
+        return itemId;
+    }
+
+    public static bool MatchesItemRequirement(string actualItemId, string requiredItemId)
+    {
+        if (string.IsNullOrWhiteSpace(actualItemId) || string.IsNullOrWhiteSpace(requiredItemId))
+            return false;
+
+        if (string.Equals(actualItemId, requiredItemId, StringComparison.Ordinal))
+            return true;
+
+        return string.Equals(requiredItemId, AlienSecretId, StringComparison.Ordinal) &&
+               IsAlienSecretItem(actualItemId);
+    }
+
+    public static string GetRequirementCountKey(string itemId)
+    {
+        return IsAlienSecretItem(itemId) ? AlienSecretId : itemId;
+    }
+
+    public static string GetAlienSecretSpriteResourcePath(int variantIndex)
+    {
+        int clampedIndex = NormalizeAlienSecretVariantIndex(variantIndex);
+        return "Visuals/Treasures/AlienSecrets/alien_secret_" + (clampedIndex + 1).ToString("00");
     }
 
     public static string GetContainerItemId(int variantIndex)
@@ -1158,6 +1243,21 @@ public static class InventoryItemCatalog
                 CanEnterSafePocket = false,
                 SalvageOutputs = new[] { RichAsteroidId, AsteroidEpicId, AsteroidLegendaryId }
             },
+            [AlienSecretId] = new InventoryItemDefinition
+            {
+                Id = AlienSecretId,
+                DisplayName = "Alien Secret",
+                ShortLabel = "SEC",
+                Description = "A cryptic alien relic fragment. Its direct market value is low, but it may unlock future research projects.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Uncommon,
+                SellValueAstrons = 50,
+                IconResourcePath = AlienSecretIconResourcePath,
+                IconSpriteName = "alien_secret_01_0",
+                ProjectFileName = "Resources/Visuals/Treasures/AlienSecrets/alien_secret_01.png",
+                SalvageOutputs = new[] { AsteroidResourceId }
+            },
             [BlueprintScrapId] = new InventoryItemDefinition
             {
                 Id = BlueprintScrapId,
@@ -1369,6 +1469,20 @@ public static class InventoryItemCatalog
                 IconResourcePath = "space_animal_remains_resource",
                 ProjectFileName = "Resources/space_animal_remains_resource.png",
                 SalvageOutputs = new[] { AsteroidRareId, AsteroidGoldId }
+            },
+            [SpaceAnimalBonesId] = new InventoryItemDefinition
+            {
+                Id = SpaceAnimalBonesId,
+                DisplayName = "Cosmic Animal Bones",
+                ShortLabel = "BONE",
+                Description = "Valuable skeletal remains recovered from a defeated cosmic creature.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
+                Rarity = InventoryItemRarity.VeryRare,
+                SellValueAstrons = 1500,
+                IconResourcePath = "Items/animal_bones",
+                ProjectFileName = "Resources/Items/animal_bones.png",
+                SalvageOutputs = new[] { SpaceAnimalRemainsId, AsteroidRareId, AsteroidGoldId }
             },
             [CaptiveAstronautPodId] = new InventoryItemDefinition
             {
@@ -2261,6 +2375,38 @@ public static class InventoryItemCatalog
                 RequiresSafePocket = true,
                 SalvageOutputs = Array.Empty<string>()
             },
+            [AncientGateKeyId] = new InventoryItemDefinition
+            {
+                Id = AncientGateKeyId,
+                DisplayName = "Ancient Gate Key",
+                ShortLabel = "AGK",
+                Description = "A resonant alien key assembled from decoded Alien Secrets. It hums near old gate signals and must be carried in a SAFE cargo slot.",
+                ItemType = InventoryItemType.Quest,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 0,
+                ShopBuyValueAstronsOverride = 0,
+                IconResourcePath = "Items/ancient_gate_key",
+                ProjectFileName = "Resources/Items/ancient_gate_key.png",
+                RequiresSafePocket = true,
+                SalvageOutputs = Array.Empty<string>()
+            },
+            [PreservedAlphaSpecimenId] = new InventoryItemDefinition
+            {
+                Id = PreservedAlphaSpecimenId,
+                DisplayName = "Preserved Alpha Specimen",
+                ShortLabel = "PAS",
+                Description = "A juvenile alpha-class space creature preserved inside a frost-covered cryo-vault. Its folded wings twitch faintly whenever the life monitor catches an impossible pulse.",
+                ItemType = InventoryItemType.Quest,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Legendary,
+                SellValueAstrons = 0,
+                ShopBuyValueAstronsOverride = 0,
+                IconResourcePath = "Items/preserved_alpha_specimen",
+                ProjectFileName = "Resources/Items/preserved_alpha_specimen.png",
+                RequiresSafePocket = true,
+                SalvageOutputs = Array.Empty<string>()
+            },
             [PirateSymbolId] = new InventoryItemDefinition
             {
                 Id = PirateSymbolId,
@@ -2377,6 +2523,7 @@ public static class InventoryItemCatalog
         AddBlueprintDefinitions(definitions);
         AddContainerDefinitions(definitions);
         AddBlueprintScrapContainerDefinitions(definitions);
+        AddAlienSecretDefinitions(definitions);
         return definitions;
     }
 
@@ -2466,6 +2613,34 @@ public static class InventoryItemCatalog
                 IconSpriteName = "containers_set2_" + i,
                 ProjectFileName = "Resources/Enemies/ContainerShip/containers_set2.png",
                 SalvageOutputs = new[] { BlueprintScrapId }
+            };
+        }
+    }
+
+    static void AddAlienSecretDefinitions(Dictionary<string, InventoryItemDefinition> definitions)
+    {
+        if (definitions == null)
+            return;
+
+        for (int i = 0; i < AlienSecretVariantCount; i++)
+        {
+            string itemId = GetAlienSecretItemId(i);
+            string resourcePath = GetAlienSecretSpriteResourcePath(i);
+            string fileName = "alien_secret_" + (i + 1).ToString("00");
+            definitions[itemId] = new InventoryItemDefinition
+            {
+                Id = itemId,
+                DisplayName = "Alien Secret",
+                ShortLabel = "SEC",
+                Description = "A cryptic alien relic fragment. Its direct market value is low, but it may unlock future research projects.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.QuestItem,
+                Rarity = InventoryItemRarity.Uncommon,
+                SellValueAstrons = 50,
+                IconResourcePath = resourcePath,
+                IconSpriteName = fileName + "_0",
+                ProjectFileName = "Resources/Visuals/Treasures/AlienSecrets/" + fileName + ".png",
+                SalvageOutputs = new[] { AsteroidResourceId }
             };
         }
     }

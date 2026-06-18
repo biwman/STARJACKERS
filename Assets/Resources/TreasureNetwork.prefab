@@ -154,6 +154,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Treasure
   value: 0
   itemId: asteroid_resource
+  visualVariantIndex: -1
   isBeingCollected: 0
 --- !u!114 &1458136153522684126
 MonoBehaviour:

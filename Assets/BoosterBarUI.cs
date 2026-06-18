@@ -340,12 +340,12 @@ public class BoosterBarUI : MonoBehaviourPun
 
     static Sprite GetHandleVisualSprite()
     {
-        if (cachedHandleVisualSprite != null && cachedHandleVisualSprite.name == "RuntimeMovementJoystickHandleSpriteOpaque")
+        if (cachedHandleVisualSprite != null && cachedHandleVisualSprite.name == "RuntimeMovementJoystickHandleSpriteShaded")
             return cachedHandleVisualSprite;
 
         const int size = 512;
         Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        texture.name = "RuntimeMovementJoystickHandleTextureOpaque";
+        texture.name = "RuntimeMovementJoystickHandleTextureShaded";
         texture.hideFlags = HideFlags.HideAndDontSave;
         texture.filterMode = FilterMode.Bilinear;
         texture.wrapMode = TextureWrapMode.Clamp;
@@ -360,9 +360,20 @@ public class BoosterBarUI : MonoBehaviourPun
                 float dx = x - center;
                 float dy = y - center;
                 float normalizedDistance = Mathf.Sqrt(dx * dx + dy * dy) / radius;
-                pixels[(y * size) + x] = normalizedDistance <= 1f
-                    ? Color.white
-                    : Color.clear;
+                if (normalizedDistance > 1f)
+                {
+                    pixels[(y * size) + x] = Color.clear;
+                    continue;
+                }
+
+                float nx = dx / radius;
+                float ny = dy / radius;
+                float edgeShade = Mathf.SmoothStep(0.56f, 1f, normalizedDistance);
+                float topLeftHighlight = Mathf.Clamp01(1f - Vector2.Distance(new Vector2(nx, ny), new Vector2(-0.32f, 0.34f)) / 0.64f);
+                float lowerShadow = Mathf.Clamp01((ny + 0.2f) * -0.72f + normalizedDistance * 0.22f);
+                float shade = 0.92f + topLeftHighlight * 0.22f - edgeShade * 0.28f - lowerShadow * 0.14f;
+                shade = Mathf.Clamp(shade, 0.58f, 1.08f);
+                pixels[(y * size) + x] = new Color(shade, shade, shade, 1f);
             }
         }
 
@@ -370,7 +381,7 @@ public class BoosterBarUI : MonoBehaviourPun
         texture.Apply(false, true);
 
         cachedHandleVisualSprite = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f);
-        cachedHandleVisualSprite.name = "RuntimeMovementJoystickHandleSpriteOpaque";
+        cachedHandleVisualSprite.name = "RuntimeMovementJoystickHandleSpriteShaded";
         cachedHandleVisualSprite.hideFlags = HideFlags.HideAndDontSave;
         return cachedHandleVisualSprite;
     }

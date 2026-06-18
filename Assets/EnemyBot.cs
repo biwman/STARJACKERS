@@ -24,7 +24,8 @@ public enum EnemyBotKind
     GravitySquid,
     HunterLance,
     ContainerShip,
-    CosmicWorm
+    CosmicWorm,
+    RiftWarden
 }
 
 public sealed class RescueShipBeamVfx : MonoBehaviour
@@ -1480,6 +1481,9 @@ public static class EnemyTargetingUtility
         if (candidate.GetComponent<LureBeaconDecoy>() != null)
             return false;
 
+        if (!MapInstanceService.IsSameInstance(origin, candidate.transform.position))
+            return false;
+
         if (Vector2.Distance(origin, candidate.transform.position) > maxDistance)
             return false;
 
@@ -1499,12 +1503,18 @@ public static class EnemyTargetingUtility
         if (beacon == null || !beacon.CanBeTargeted)
             return false;
 
+        if (!MapInstanceService.IsSameInstance(origin, beacon.transform.position))
+            return false;
+
         return Vector2.Distance(origin, beacon.transform.position) <= maxDistance;
     }
 
     static bool IsValidDeployableTarget(PlayerDeployableBase deployable, Vector2 origin, float maxDistance)
     {
         if (deployable == null || !deployable.CanBeTargetedByEnemyBots)
+            return false;
+
+        if (!MapInstanceService.IsSameInstance(origin, deployable.transform.position))
             return false;
 
         return Vector2.Distance(origin, deployable.transform.position) <= maxDistance;
@@ -1549,7 +1559,8 @@ public enum EnemyMovementModel
     GravitySquid,
     HunterLance,
     ContainerShip,
-    CosmicWorm
+    CosmicWorm,
+    RiftWarden
 }
 
 public enum EnemySpawnPattern
@@ -1834,6 +1845,8 @@ public class EnemyWreckProfile
 [System.Serializable]
 public class EnemyBotDefinition
 {
+    static Sprite riftWardenFallbackSprite;
+
     Sprite cachedSprite;
 
     public EnemyBotKind Kind;
@@ -1877,7 +1890,12 @@ public class EnemyBotDefinition
     public Sprite GetVisualSprite()
     {
         if (cachedSprite != null)
-            return cachedSprite;
+        {
+            if (Kind == EnemyBotKind.RiftWarden && cachedSprite.name.Contains("fallback"))
+                cachedSprite = null;
+            else
+                return cachedSprite;
+        }
 
         if (!string.IsNullOrWhiteSpace(VisualResourcePath))
         {
@@ -1922,7 +1940,98 @@ public class EnemyBotDefinition
         }
 #endif
 
+        if (Kind == EnemyBotKind.RiftWarden)
+        {
+            cachedSprite = CreateRiftWardenFallbackSprite();
+            return cachedSprite;
+        }
+
         return null;
+    }
+
+    static Sprite CreateRiftWardenFallbackSprite()
+    {
+        if (riftWardenFallbackSprite != null)
+            return riftWardenFallbackSprite;
+
+        const int size = 192;
+        const float center = (size - 1) * 0.5f;
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            name = "rift_warden_runtime_fallback"
+        };
+
+        Color32[] pixels = new Color32[size * size];
+        Color32 clear = new Color32(0, 0, 0, 0);
+        Color32 armor = new Color32(32, 48, 43, 238);
+        Color32 armorEdge = new Color32(185, 214, 202, 230);
+        Color32 glow = new Color32(22, 255, 220, 180);
+        Color32 core = new Color32(82, 255, 228, 245);
+        Color32 whiteCore = new Color32(225, 255, 250, 255);
+
+        for (int i = 0; i < pixels.Length; i++)
+            pixels[i] = clear;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - center;
+                float dy = y - center;
+                float radius = Mathf.Sqrt(dx * dx + dy * dy);
+                float angle = Mathf.Atan2(dy, dx);
+                int index = y * size + x;
+
+                if (radius < 84f)
+                {
+                    float alpha = Mathf.Clamp01(1f - radius / 84f) * 0.42f;
+                    pixels[index] = Blend(pixels[index], new Color32(24, 240, 216, (byte)(alpha * 255f)));
+                }
+
+                if (radius > 56f && radius < 64f)
+                    pixels[index] = Blend(pixels[index], glow);
+
+                if (radius > 36f && radius < 42f)
+                    pixels[index] = Blend(pixels[index], armorEdge);
+
+                float sector = Mathf.Abs(Mathf.Sin(angle * 4f));
+                if (sector < 0.18f && radius > 34f && radius < 82f)
+                    pixels[index] = Blend(pixels[index], armor);
+
+                if ((Mathf.Abs(dx) < 2.2f || Mathf.Abs(dy) < 2.2f) && radius > 24f && radius < 76f)
+                    pixels[index] = Blend(pixels[index], glow);
+
+                if (radius < 31f)
+                    pixels[index] = Blend(pixels[index], core);
+
+                if (radius < 15f)
+                    pixels[index] = Blend(pixels[index], whiteCore);
+            }
+        }
+
+        texture.SetPixels32(pixels);
+        texture.Apply(false, true);
+        riftWardenFallbackSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, size, size),
+            new Vector2(0.5f, 0.5f),
+            size);
+        riftWardenFallbackSprite.name = "rift_warden_runtime_fallback_sprite";
+        return riftWardenFallbackSprite;
+    }
+
+    static Color32 Blend(Color32 bottom, Color32 top)
+    {
+        float topAlpha = top.a / 255f;
+        float bottomAlpha = bottom.a / 255f;
+        float outAlpha = topAlpha + bottomAlpha * (1f - topAlpha);
+        if (outAlpha <= 0.0001f)
+            return new Color32(0, 0, 0, 0);
+
+        byte r = (byte)Mathf.Clamp(Mathf.RoundToInt(((top.r * topAlpha) + (bottom.r * bottomAlpha * (1f - topAlpha))) / outAlpha), 0, 255);
+        byte g = (byte)Mathf.Clamp(Mathf.RoundToInt(((top.g * topAlpha) + (bottom.g * bottomAlpha * (1f - topAlpha))) / outAlpha), 0, 255);
+        byte b = (byte)Mathf.Clamp(Mathf.RoundToInt(((top.b * topAlpha) + (bottom.b * bottomAlpha * (1f - topAlpha))) / outAlpha), 0, 255);
+        return new Color32(r, g, b, (byte)Mathf.Clamp(Mathf.RoundToInt(outAlpha * 255f), 0, 255));
     }
 
     static Sprite GetLargestSprite(Sprite[] sprites)
@@ -3335,6 +3444,90 @@ public static class EnemyBotCatalog
                 EmissionThreshold = 0f,
                 VisualStyle = EnemyTrailVisualStyle.PurpleLarge
             }
+        },
+        new EnemyBotDefinition
+        {
+            Kind = EnemyBotKind.RiftWarden,
+            Id = "rift_warden",
+            DisplayName = "Rift Warden",
+            InstantiationMarker = "enemy_bot_rift_warden",
+            VisualResourcePath = "Enemies/RiftWarden/rift_warden_resource",
+            EditorAssetPath = "Assets/Resources/Enemies/RiftWarden/rift_warden_resource.png",
+            TargetSize = 3.35f,
+            PhysicsMass = 34f,
+            LinearDamping = 0.48f,
+            AngularDamping = 1.25f,
+            DefaultHp = 260,
+            DefaultShield = 220,
+            MaxHp = 900,
+            MaxShield = 700,
+            DefaultSpeedMultiplier = 1f,
+            DefaultEnabled = false,
+            ShowInEnemySettings = true,
+            DefaultCount = 1,
+            DefaultSpawnSecond = 0,
+            Movement = new EnemyMovementProfile
+            {
+                Model = EnemyMovementModel.RiftWarden,
+                SpawnPattern = EnemySpawnPattern.WideCorners,
+                MoveSpeed = 1.28f,
+                TurnResponsiveness = 150f,
+                DetectionRadius = 18f,
+                DisengageRadius = 28f,
+                OrbitDistance = 5.4f,
+                PreferredDistance = 7.1f,
+                ShootDistance = 14f,
+                RepathInterval = 0.38f,
+                TargetRefreshInterval = 0.32f,
+                OrbitRadiusFactor = 0.34f,
+                OrbitAngularSpeed = 0.42f
+            },
+            Weapon = new EnemyWeaponProfile
+            {
+                AmmoCount = 9999,
+                ReloadDuration = 0f,
+                FireRate = 1.1f,
+                Damage = 18,
+                DamageType = WeaponDamageType.Ion,
+                DeliveryMethod = WeaponDeliveryMethod.Beam,
+                DeliveryFlags = WeaponDeliveryFlags.Delayed | WeaponDeliveryFlags.ShieldFocused,
+                BulletScaleMultiplier = 1f,
+                BulletColor = new Color(0.26f, 1f, 0.92f, 1f),
+                BulletSpeed = 0f,
+                MuzzleOffsetDistance = 0.62f,
+                InfiniteAmmo = true,
+                RotateTowardAim = true,
+                Range = 14f,
+                ShotSoundId = string.Empty
+            },
+            Wreck = new EnemyWreckProfile
+            {
+                Mass = 28f,
+                LinearDamping = 0.92f,
+                AngularDamping = 1.2f,
+                DriftSpeed = 0.08f,
+                AngularVelocityRange = 2.2f,
+                RewardItemId = InventoryItemCatalog.AlienSecretId,
+                DestroyWhenEmpty = false,
+                BaseColor = new Color(0.22f, 0.38f, 0.36f, 0.96f)
+            },
+            Trails = new EnemyTrailProfile
+            {
+                RootOffsetFactors = new Vector2(0f, -0.42f),
+                RootRotationZ = 0f,
+                TrailOffsetFactors = new[]
+                {
+                    new Vector2(-0.32f, -0.16f),
+                    new Vector2(0.32f, -0.16f),
+                    new Vector2(0f, -0.42f)
+                },
+                MinTrailTime = 0.84f,
+                MaxTrailTime = 1.8f,
+                MinTrailWidth = 0.08f,
+                MaxTrailWidth = 0.28f,
+                EmissionThreshold = 0.02f,
+                VisualStyle = EnemyTrailVisualStyle.BlueTwin
+            }
         }
     };
 
@@ -3643,6 +3836,7 @@ public class EnemyBot : MonoBehaviourPun
     public bool IsMothership => kind == EnemyBotKind.Mothership;
     public bool IsPirateBase => kind == EnemyBotKind.PirateBase;
     public bool IsCosmicWorm => kind == EnemyBotKind.CosmicWorm;
+    public bool IsRiftWarden => kind == EnemyBotKind.RiftWarden;
     public bool IsPlayerPlacedMine => isPlayerPlacedMine;
     public bool IsOwnedMine => isOwnedMine;
     public bool IsSummonedDrone => isSummonedDrone;
@@ -3951,7 +4145,7 @@ public class EnemyBot : MonoBehaviourPun
 
     void ConfigureColliderToVisual()
     {
-        if (kind != EnemyBotKind.Mothership && kind != EnemyBotKind.PirateBase && kind != EnemyBotKind.SpaceManta && kind != EnemyBotKind.GravitySquid && kind != EnemyBotKind.HunterLance && kind != EnemyBotKind.ContainerShip && kind != EnemyBotKind.CosmicWorm)
+        if (kind != EnemyBotKind.Mothership && kind != EnemyBotKind.PirateBase && kind != EnemyBotKind.SpaceManta && kind != EnemyBotKind.GravitySquid && kind != EnemyBotKind.HunterLance && kind != EnemyBotKind.ContainerShip && kind != EnemyBotKind.CosmicWorm && kind != EnemyBotKind.RiftWarden)
             return;
 
         if (cachedRenderer == null)
@@ -3978,6 +4172,8 @@ public class EnemyBot : MonoBehaviourPun
                     ? new Vector2(baseVisualSize.x * 0.78f, baseVisualSize.y * 0.58f)
                 : kind == EnemyBotKind.CosmicWorm
                     ? new Vector2(baseVisualSize.x * 0.74f, baseVisualSize.y * 0.5f)
+                : kind == EnemyBotKind.RiftWarden
+                    ? new Vector2(baseVisualSize.x * 0.58f, baseVisualSize.y * 0.58f)
                     : new Vector2(baseVisualSize.x * 0.82f, baseVisualSize.y * 0.72f);
             SetWorldBoxSize(boxCollider, boxScale);
         }
@@ -4052,6 +4248,9 @@ public class EnemyBot : MonoBehaviourPun
                     case EnemyMovementModel.CosmicWorm:
                         behavior = gameObject.AddComponent<EnemyCosmicWormBehavior>();
                         break;
+                    case EnemyMovementModel.RiftWarden:
+                        behavior = gameObject.AddComponent<EnemyRiftWardenBehavior>();
+                        break;
                     case EnemyMovementModel.Mothership:
                         behavior = gameObject.AddComponent<EnemyMothershipBehavior>();
                         break;
@@ -4091,6 +4290,7 @@ public class EnemyBot : MonoBehaviourPun
             EnemyMovementModel.HunterLance => existingBehavior is EnemyHunterLanceBehavior,
             EnemyMovementModel.ContainerShip => existingBehavior is EnemyContainerShipBehavior,
             EnemyMovementModel.CosmicWorm => existingBehavior is EnemyCosmicWormBehavior,
+            EnemyMovementModel.RiftWarden => existingBehavior is EnemyRiftWardenBehavior,
             EnemyMovementModel.Mothership => existingBehavior is EnemyMothershipBehavior,
             EnemyMovementModel.NeutralFighter => existingBehavior is EnemyNeutralFighterBehavior,
             _ => existingBehavior is EnemyDroneBehavior
@@ -4116,17 +4316,18 @@ public class EnemyBot : MonoBehaviourPun
     {
         SpriteRenderer renderer = GetComponent<SpriteRenderer>();
         if (renderer == null)
-            return;
+            renderer = gameObject.AddComponent<SpriteRenderer>();
 
         cachedRenderer = renderer;
         Sprite sprite = GetVisualSprite();
         if (sprite == null)
             return;
 
+        renderer.enabled = true;
         renderer.sprite = sprite;
         renderer.color = Color.white;
         renderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
-        renderer.sortingOrder = GameVisualTheme.EnemySortingOrder;
+        renderer.sortingOrder = GetEnemySpriteSortingOrder();
         FitRendererToTargetSize(renderer, VisualTargetSize);
     }
 
@@ -4165,7 +4366,7 @@ public class EnemyBot : MonoBehaviourPun
             cachedRenderer = GetComponent<SpriteRenderer>();
 
         if (cachedRenderer == null)
-            return;
+            cachedRenderer = gameObject.AddComponent<SpriteRenderer>();
 
         if (!UsesAnimatedVisual())
         {
@@ -4178,10 +4379,18 @@ public class EnemyBot : MonoBehaviourPun
             cachedRenderer.sprite = GetVisualSprite();
         }
 
+        cachedRenderer.enabled = true;
         cachedRenderer.color = Color.white;
         cachedRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
-        cachedRenderer.sortingOrder = pirateBaseLaunchProtected ? ResolvePirateBaseLaunchSortingOrder() : GameVisualTheme.EnemySortingOrder;
+        cachedRenderer.sortingOrder = pirateBaseLaunchProtected ? ResolvePirateBaseLaunchSortingOrder() : GetEnemySpriteSortingOrder();
         FitRendererToTargetSize(cachedRenderer, VisualTargetSize);
+    }
+
+    int GetEnemySpriteSortingOrder()
+    {
+        return kind == EnemyBotKind.RiftWarden
+            ? GameVisualTheme.EnemySortingOrder + 6
+            : GameVisualTheme.EnemySortingOrder;
     }
 
     public Sprite GetVisualSprite()
@@ -4834,6 +5043,61 @@ public class EnemyBot : MonoBehaviourPun
         CosmicWormSwallowVfx.StopEffect(sourceViewId);
         DynamicCameraZoomController.Cancel(cosmicWormSwallowZoomToken);
         cosmicWormSwallowZoomToken = 0;
+    }
+
+    [PunRPC]
+    public void PlayRiftWardenAwakenRpc(float x, float y, float z)
+    {
+        Vector3 position = new Vector3(x, y, z);
+        RiftWardenVfx.PlayAwaken(position);
+        if (IsLocalPlayerInSameMapInstance(position))
+        {
+            RoundMessageLayer.ShowStatusFeed(
+                "RIFT WARDEN",
+                "ALIEN SECURITY SYSTEM ONLINE",
+                RoundMessagePriority.Warning,
+                3.4f,
+                new Color(0.24f, 1f, 0.86f, 1f));
+        }
+    }
+
+    [PunRPC]
+    public void PlayRiftWardenBeamRpc(float startX, float startY, float endX, float endY, float duration, bool blast)
+    {
+        RiftWardenVfx.PlayBeam(new Vector2(startX, startY), new Vector2(endX, endY), duration, blast);
+    }
+
+    [PunRPC]
+    public void PlayRiftWardenRippleRpc(float x, float y, float radius, float warningDuration, float activeDuration)
+    {
+        RiftWardenVfx.PlayRipple(new Vector2(x, y), radius, warningDuration, activeDuration);
+    }
+
+    [PunRPC]
+    public void PlayRiftWardenBlinkRpc(float fromX, float fromY, float toX, float toY)
+    {
+        RiftWardenVfx.PlayBlink(new Vector2(fromX, fromY), new Vector2(toX, toY));
+    }
+
+    [PunRPC]
+    public void PlayRiftWardenLockdownRpc(int treasureViewId, float x, float y, float radius, float duration)
+    {
+        RiftWardenVfx.PlayLockdown(treasureViewId, new Vector2(x, y), radius, duration);
+    }
+
+    static bool IsLocalPlayerInSameMapInstance(Vector2 position)
+    {
+        PlayerHealth[] players = RuntimeSceneQueryCache.GetPlayers();
+        for (int i = 0; i < players.Length; i++)
+        {
+            PlayerHealth player = players[i];
+            if (player == null || player.photonView == null || !player.photonView.IsMine)
+                continue;
+
+            return MapInstanceService.IsSameInstance(player.transform.position, position);
+        }
+
+        return true;
     }
 
     [PunRPC]
@@ -9940,7 +10204,8 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
                 continue;
 
             PhotonView targetView = treasure.GetComponent<PhotonView>();
-            ConsiderCollectible(treasure.transform, targetView, treasure.itemId, ref bestTarget, ref targetViewId, ref bestValue, ref bestDistance);
+            string itemId = InventoryItemCatalog.ResolveAlienSecretItemId(treasure.itemId, treasure.visualVariantIndex);
+            ConsiderCollectible(treasure.transform, targetView, itemId, ref bestTarget, ref targetViewId, ref bestValue, ref bestDistance);
         }
 
         DroppedCargoCrate[] crates = RuntimeSceneQueryCache.GetDroppedCargoCrates();
@@ -10179,7 +10444,7 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
         Treasure treasure = targetView.GetComponent<Treasure>();
         if (treasure != null)
         {
-            itemId = treasure.itemId;
+            itemId = InventoryItemCatalog.ResolveAlienSecretItemId(treasure.itemId, treasure.visualVariantIndex);
             lootIndex = 0;
             return !string.IsNullOrWhiteSpace(itemId);
         }
@@ -10261,7 +10526,8 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
         Treasure treasure = targetView.GetComponent<Treasure>();
         if (treasure != null)
         {
-            if (!string.Equals(treasure.itemId, itemId, System.StringComparison.Ordinal))
+            string resolvedTreasureItemId = InventoryItemCatalog.ResolveAlienSecretItemId(treasure.itemId, treasure.visualVariantIndex);
+            if (!string.Equals(resolvedTreasureItemId, itemId, System.StringComparison.Ordinal))
                 return;
 
             SpaceTrapTarget.DetonateIfArmed(targetViewId, collectorViewId);
@@ -10597,7 +10863,8 @@ public class EnemyRadarShipBehavior : EnemyBotBehaviorBase
             if (treasure == null || !treasure.gameObject.activeInHierarchy || treasure.isBeingCollected)
                 continue;
 
-            float score = ScoreCollectible(treasure.transform.position, treasure.itemId, 1f);
+            string itemId = InventoryItemCatalog.ResolveAlienSecretItemId(treasure.itemId, treasure.visualVariantIndex);
+            float score = ScoreCollectible(treasure.transform.position, itemId, 1f);
             if (score > bestScore)
             {
                 bestScore = score;

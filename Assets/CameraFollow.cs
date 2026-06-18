@@ -153,13 +153,21 @@ public class CameraFollow : MonoBehaviour
 
     Vector3 GetTargetCameraPosition()
     {
-        float minX = -mapSizeX / 2f + camHalfWidth;
-        float maxX = mapSizeX / 2f - camHalfWidth;
-        float minY = -mapSizeY / 2f + camHalfHeight;
-        float maxY = mapSizeY / 2f - camHalfHeight;
+        Vector2 center = Vector2.zero;
+        Vector2 size = new Vector2(mapSizeX, mapSizeY);
+        if (target != null && MapInstanceService.TryGetBoundsForWorldPosition(target.position, out MapInstanceService.BoundsInfo bounds))
+        {
+            center = bounds.Center;
+            size = bounds.Size;
+        }
 
-        float clampedX = minX <= maxX ? Mathf.Clamp(target.position.x, minX, maxX) : 0f;
-        float clampedY = minY <= maxY ? Mathf.Clamp(target.position.y, minY, maxY) : 0f;
+        float minX = center.x - size.x / 2f + camHalfWidth;
+        float maxX = center.x + size.x / 2f - camHalfWidth;
+        float minY = center.y - size.y / 2f + camHalfHeight;
+        float maxY = center.y + size.y / 2f - camHalfHeight;
+
+        float clampedX = minX <= maxX ? Mathf.Clamp(target.position.x, minX, maxX) : center.x;
+        float clampedY = minY <= maxY ? Mathf.Clamp(target.position.y, minY, maxY) : center.y;
 
         return new Vector3(clampedX, clampedY, -10f);
     }

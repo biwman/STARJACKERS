@@ -130,6 +130,11 @@ MonoBehaviour:
   - PlayRadarShipShootRpc
   - PlayReloadSfx
   - PlayRescueShipIncomingRpc
+  - PlayRiftWardenAwakenRpc
+  - PlayRiftWardenBeamRpc
+  - PlayRiftWardenBlinkRpc
+  - PlayRiftWardenLockdownRpc
+  - PlayRiftWardenRippleRpc
   - PlayRocketShotRpc
   - PlayShieldFullPowerAudio
   - PlayShieldHitAudio
@@ -277,6 +282,7 @@ MonoBehaviour:
   - StartHackingDeviceEffects
   - StopHackingDeviceEffects
   - RecordPathfinderHackProgressRpc
+  - TeleportToMapInstanceRpc
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

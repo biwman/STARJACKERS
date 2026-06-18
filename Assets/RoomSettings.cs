@@ -21,6 +21,7 @@ public static class RoomSettings
     public const string ObstacleNoBordersKey = "obstacleNoBorders";
     public const string TreasureDensityKey = "treasureDensity";
     public const string RadioactiveTreasureDensityKey = "radioactiveTreasureDensity";
+    public const string AlienSecretsDensityKey = "alienSecretsDensity";
     public const string ResourceRichnessKey = "resourceRichness";
     public const string RandomLootWreckCountKey = "randomLootWreckCount";
     public const string HiddenTreasureEnabledKey = "hiddenTreasureEnabled";
@@ -148,6 +149,13 @@ public static class RoomSettings
     public const string RadioactiveTreasureDensityMedium = "medium";
     public const string RadioactiveTreasureDensityHigh = "high";
     public const string DefaultRadioactiveTreasureDensity = RadioactiveTreasureDensityOff;
+    public const string AlienSecretsDensityNone = "none";
+    public const string AlienSecretsDensityVeryLow = "very_low";
+    public const string AlienSecretsDensityLow = "low";
+    public const string AlienSecretsDensityMedium = "medium";
+    public const string AlienSecretsDensityHigh = "high";
+    public const string AlienSecretsDensityVeryHigh = "very_high";
+    public const string DefaultAlienSecretsDensity = AlienSecretsDensityNone;
     public const bool DefaultObstacleDestroyEnabled = true;
     public const int DefaultObstacleHp = 400;
     public const int DefaultObstacleSizePercent = 100;
@@ -293,6 +301,7 @@ public static class RoomSettings
     public const string ContainersDensityVeryHigh = "very_high";
     public const string DefaultContainersDensity = ContainersDensityNone;
     public const string ArtifactAsteroidsDensityOff = "off";
+    public const string ArtifactAsteroidsDensityVeryLow = "very_low";
     public const string ArtifactAsteroidsDensityLow = "low";
     public const string ArtifactAsteroidsDensityMedium = "medium";
     public const string ArtifactAsteroidsDensityHigh = "high";
@@ -985,6 +994,18 @@ public static class RoomSettings
         return DefaultRadioactiveTreasureDensity;
     }
 
+    public static string GetAlienSecretsDensity()
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(AlienSecretsDensityKey, out object value) &&
+            value is string density)
+        {
+            return NormalizeAlienSecretsDensity(density);
+        }
+
+        return DefaultAlienSecretsDensity;
+    }
+
     public static string NormalizeTreasureDensity(string density)
     {
         string normalized = string.IsNullOrWhiteSpace(density)
@@ -1021,6 +1042,26 @@ public static class RoomSettings
                 return normalized;
             default:
                 return DefaultRadioactiveTreasureDensity;
+        }
+    }
+
+    public static string NormalizeAlienSecretsDensity(string density)
+    {
+        string normalized = string.IsNullOrWhiteSpace(density)
+            ? DefaultAlienSecretsDensity
+            : density.Trim().ToLowerInvariant().Replace(" ", "_");
+
+        switch (normalized)
+        {
+            case AlienSecretsDensityNone:
+            case AlienSecretsDensityVeryLow:
+            case AlienSecretsDensityLow:
+            case AlienSecretsDensityMedium:
+            case AlienSecretsDensityHigh:
+            case AlienSecretsDensityVeryHigh:
+                return normalized;
+            default:
+                return DefaultAlienSecretsDensity;
         }
     }
 
@@ -1410,6 +1451,7 @@ public static class RoomSettings
             case "none":
                 return ArtifactAsteroidsDensityOff;
             case ArtifactAsteroidsDensityOff:
+            case ArtifactAsteroidsDensityVeryLow:
             case ArtifactAsteroidsDensityLow:
             case ArtifactAsteroidsDensityMedium:
             case ArtifactAsteroidsDensityHigh:
@@ -1423,6 +1465,8 @@ public static class RoomSettings
     {
         switch (GetArtifactAsteroidsDensity())
         {
+            case ArtifactAsteroidsDensityVeryLow:
+                return 1;
             case ArtifactAsteroidsDensityLow:
                 return 3;
             case ArtifactAsteroidsDensityMedium:

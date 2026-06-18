@@ -1274,7 +1274,8 @@ public sealed class GuidanceSystemOverlay : MonoBehaviourPun
             if (treasure == null)
                 continue;
 
-            ConsiderLoot(treasure.transform.position, treasure.itemId, origin, ref bestPosition, ref bestValue, ref bestDistance);
+            string itemId = InventoryItemCatalog.ResolveAlienSecretItemId(treasure.itemId, treasure.visualVariantIndex);
+            ConsiderLoot(treasure.transform.position, itemId, origin, ref bestPosition, ref bestValue, ref bestDistance);
         }
 
         ShipWreck[] wrecks = FindObjectsByType<ShipWreck>(FindObjectsInactive.Exclude);
@@ -3243,6 +3244,7 @@ public sealed class SpaceBombDeployable : PlayerDeployableBase
             case EnemyBotKind.GravitySquid:
             case EnemyBotKind.HunterLance:
             case EnemyBotKind.CosmicWorm:
+            case EnemyBotKind.RiftWarden:
                 return 2f;
             default:
                 return 1f;
@@ -6059,7 +6061,8 @@ public sealed class LootingFriendController : MonoBehaviourPun
             if (treasure == null || treasure.isBeingCollected || InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
                 continue;
 
-            if (!PlayerProfileService.Instance.HasFreeShipInventorySlot(treasure.itemId))
+            string itemId = InventoryItemCatalog.ResolveAlienSecretItemId(treasure.itemId, treasure.visualVariantIndex);
+            if (!PlayerProfileService.Instance.HasFreeShipInventorySlot(itemId))
                 continue;
 
             ConsiderTarget(treasure.GetComponent<PhotonView>(), treasure.transform.position, origin, ref best, ref bestDistance);
@@ -6199,10 +6202,11 @@ public sealed class LootingFriendController : MonoBehaviourPun
         if (treasure == null || treasure.isBeingCollected || InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
             return;
 
-        if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, treasure.itemId))
+        string itemId = InventoryItemCatalog.ResolveAlienSecretItemId(treasure.itemId, treasure.visualVariantIndex);
+        if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, itemId))
             return;
 
-        photonView.RPC(nameof(ReceiveLootingFriendItemRpc), photonView.Owner, targetViewId, treasure.itemId, true, -1);
+        photonView.RPC(nameof(ReceiveLootingFriendItemRpc), photonView.Owner, targetViewId, itemId, true, -1);
     }
 
     [PunRPC]
@@ -6288,7 +6292,10 @@ public sealed class LootingFriendController : MonoBehaviourPun
         if (treasure)
         {
             Treasure treasureComponent = target.GetComponent<Treasure>();
-            if (treasureComponent != null && string.Equals(treasureComponent.itemId, itemId, StringComparison.Ordinal))
+            string resolvedTreasureItemId = treasureComponent != null
+                ? InventoryItemCatalog.ResolveAlienSecretItemId(treasureComponent.itemId, treasureComponent.visualVariantIndex)
+                : null;
+            if (treasureComponent != null && string.Equals(resolvedTreasureItemId, itemId, StringComparison.Ordinal))
                 PhotonNetwork.Destroy(target.gameObject);
             return;
         }

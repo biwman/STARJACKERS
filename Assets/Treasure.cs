@@ -6,6 +6,7 @@ public class Treasure : MonoBehaviourPun
     public const float CollectRange = 2.2f;
     public int value;
     public string itemId = InventoryItemCatalog.AsteroidResourceId;
+    public int visualVariantIndex = -1;
 
     private SpriteRenderer sr;
     private Color originalColor;
@@ -67,6 +68,20 @@ public class Treasure : MonoBehaviourPun
         {
             itemId = instancedItemId;
         }
+
+        if (photonView != null &&
+            photonView.InstantiationData != null &&
+            photonView.InstantiationData.Length > 1)
+        {
+            visualVariantIndex = photonView.InstantiationData[1] switch
+            {
+                int asInt => asInt,
+                short asShort => asShort,
+                byte asByte => asByte,
+                string asString when int.TryParse(asString, out int parsed) => parsed,
+                _ => visualVariantIndex
+            };
+        }
     }
 
     public float GetColliderSizeMultiplier()
@@ -77,7 +92,8 @@ public class Treasure : MonoBehaviourPun
         if (InventoryItemCatalog.IsContainerItem(itemId) || InventoryItemCatalog.IsBlueprintScrapContainerItem(itemId))
             return 0.78f;
 
-        if (itemId == InventoryItemCatalog.SpaceAnimalRemainsId)
+        if (itemId == InventoryItemCatalog.SpaceAnimalRemainsId ||
+            itemId == InventoryItemCatalog.SpaceAnimalBonesId)
             return 0.82f;
 
         switch (InventoryItemCatalog.GetRarity(itemId))

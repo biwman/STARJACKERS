@@ -416,7 +416,7 @@ public sealed class RoundWarmupService : MonoBehaviour
         string starterUserId = ResolveRoundStarterUserId();
         string starterNickname = ResolveRoundStarterNickname();
 
-        return new Hashtable
+        Hashtable props = new Hashtable
         {
             ["gameStarted"] = false,
             [RoomSettings.SessionStateKey] = RoomSettings.SessionStatePreparing,
@@ -455,6 +455,8 @@ public sealed class RoundWarmupService : MonoBehaviour
             [ScienceStationLayoutKey] = string.Empty,
             [ArtifactAsteroidLayoutKey] = string.Empty
         };
+        MapInstanceService.AppendClearRoundProperties(props);
+        return props;
     }
 
     static Hashtable BuildRoundStartProperties()
@@ -498,6 +500,7 @@ public sealed class RoundWarmupService : MonoBehaviour
             [ScienceStationLayoutKey] = string.Empty,
             [ArtifactAsteroidLayoutKey] = string.Empty
         };
+        MapInstanceService.AppendClearRoundProperties(props);
 
         ApplySingleRoundRuleStartProperties(props, selectedMapId, roundStartUtcMs);
         Debug.Log(
@@ -760,6 +763,7 @@ public sealed class RoundWarmupService : MonoBehaviour
         PirateBaseCollectionBeamVfx.Prewarm();
         GravitySquidTetherVfx.Prewarm();
         HunterLanceBeamVfx.Prewarm();
+        RiftWardenVfx.Prewarm();
         SpaceAnimalDeathVfx.Prewarm();
         PirateBaseLaunchVfx.Prewarm();
     }

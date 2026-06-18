@@ -68,6 +68,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         ShipDamageState.ClearAllRuntimeDamage();
         TreasureCollector.ResetRoundReservations();
         RoundWarmupService.ResetRoundTransientEffects();
+        RoundMessageLayer.ClearAll();
 
         RoundResultsSnapshotData snapshot = RoundResultsTracker.BuildSnapshot(endReason);
 
@@ -110,6 +111,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.ScienceStationOccupancyStateKey] = string.Empty;
         props[RoomSettings.RoundResultsKey] = RoundResultsTracker.SerializeSnapshot(snapshot);
         props[RoomSettings.RoundEndReasonKey] = snapshot != null ? snapshot.endReason : endReason;
+        MapInstanceService.AppendClearRoundProperties(props);
 
         if (PhotonNetwork.CurrentRoom != null)
         {
@@ -127,12 +129,14 @@ public class GameManager : MonoBehaviourPunCallbacks
         leavingRoomToProfile = true;
         GameplayHudVisibility.ResetSuppression();
         EarlyRoundExitUI.HideAll();
+        RoundMessageLayer.ClearAll();
 
         PlayerMovement.gameStarted = false;
         PlayerShooting.gameStarted = false;
         ShipDamageState.ClearAllRuntimeDamage();
         TreasureCollector.ResetRoundReservations();
         RoundWarmupService.ResetRoundTransientEffects();
+        MapTravelService.ResetLocalRuntimeState();
 
         if (!PhotonNetwork.IsConnected)
         {
@@ -166,6 +170,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         ShipDamageState.ClearAllRuntimeDamage();
         TreasureCollector.ResetRoundReservations();
         RoundWarmupService.ResetRoundTransientEffects();
+        RoundMessageLayer.ClearAll();
 
         Hashtable props = new Hashtable();
         props["gameStarted"] = false;
@@ -208,6 +213,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.RoundResultsKey] = string.Empty;
         props[RoomSettings.FinishedRoundResultsKey] = string.Empty;
         props[RoomSettings.RoundEndReasonKey] = string.Empty;
+        MapInstanceService.AppendClearRoundProperties(props);
 
         if (PhotonNetwork.CurrentRoom != null)
         {

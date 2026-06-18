@@ -41,9 +41,9 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     const float NameplateYOffset = 0.92f;
     const float HitAndRunBreakAwayDuration = 1.85f;
     const float HitAndRunMinimumAttackDuration = 0.95f;
-    const float BotUtilityGlobalCooldownMin = 9f;
-    const float BotUtilityGlobalCooldownMax = 18f;
-    const float BotUtilityUseChance = 0.36f;
+    const float BotUtilityGlobalCooldownMin = 6f;
+    const float BotUtilityGlobalCooldownMax = 11f;
+    const float BotUtilityUseChance = 0.62f;
     const float BotLootingFriendRange = 4.25f;
     const float BotLootingFriendCollectSeconds = 4.8f;
     const float BotLootingFriendScanInterval = 0.55f;
@@ -118,6 +118,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     float hostilePlayerUntil;
     int shipSkinIndex;
     int spawnOrdinal;
+    int loadoutSeed;
     NeutralRiderCombatLoadout combatLoadout;
     readonly List<BotUtilityRuntime> botUtilities = new List<BotUtilityRuntime>();
     string riderName = "Rider";
@@ -289,7 +290,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         return name;
     }
 
-    public static object[] BuildInstantiationData(int skinIndex, NeutralRiderArchetype archetype, string name, int ordinal)
+    public static object[] BuildInstantiationData(int skinIndex, NeutralRiderArchetype archetype, string name, int ordinal, int configuredLoadoutSeed = 0)
     {
         return new object[]
         {
@@ -297,7 +298,8 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             Mathf.Clamp(skinIndex, ShipCatalog.ExplorerBasicSkinIndex, ShipCatalog.MaxShipSkinIndex),
             (int)archetype,
             string.IsNullOrWhiteSpace(name) ? "Rider" : name,
-            Mathf.Max(0, ordinal)
+            Mathf.Max(0, ordinal),
+            Mathf.Max(0, configuredLoadoutSeed)
         };
     }
 
@@ -368,6 +370,10 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             : NeutralRiderArchetype.Scavenger;
         riderName = GetNameFromInstantiationData(data);
         spawnOrdinal = data != null && data.Length > 4 ? ConvertToInt(data[4], 0, 0, 999) : 0;
+        int fallbackLoadoutSeed = BuildFallbackLoadoutSeed(spawnOrdinal, shipSkinIndex, archetype);
+        loadoutSeed = data != null && data.Length > 5 && data[5] is not string
+            ? ConvertToInt(data[5], fallbackLoadoutSeed, 0, int.MaxValue)
+            : fallbackLoadoutSeed;
         forcedAggressive = data != null &&
                            data.Length > 5 &&
                            data[5] is string extraMarker &&
@@ -617,7 +623,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             };
         }
 
-        int seed = Mathf.Abs((spawnOrdinal * 97) + (shipSkinIndex * 31) + ((int)archetype * 13));
+        int seed = ResolveLoadoutSeed(17);
         string weaponId = ResolveBotWeaponId(shipType, seed);
         WeaponAttackProfile profile = WeaponAttackCatalog.GetNormalAttackByWeaponId(weaponId);
 
@@ -647,21 +653,22 @@ public sealed class NeutralRiderController : MonoBehaviourPun
                 pool = new[]
                 {
                     WeaponAttackCatalog.GatlingGunId,
-                    WeaponAttackCatalog.PlasmaGunId,
-                    WeaponAttackCatalog.RailGunId,
                     WeaponAttackCatalog.DoubleIonizerId,
-                    WeaponAttackCatalog.RocketLauncherId
+                    WeaponAttackCatalog.RocketLauncherId,
+                    WeaponAttackCatalog.RailGunId,
+                    WeaponAttackCatalog.PulseDisruptorId,
+                    WeaponAttackCatalog.PlasmaGunId
                 };
                 break;
             case ShipType.Avenger:
                 pool = new[]
                 {
                     WeaponAttackCatalog.ArtilleryGunId,
-                    WeaponAttackCatalog.RocketLauncherId,
                     WeaponAttackCatalog.DoubleRocketLauncherId,
-                    WeaponAttackCatalog.PlasmaGunId,
+                    WeaponAttackCatalog.RocketLauncherId,
                     WeaponAttackCatalog.RailGunId,
-                    WeaponAttackCatalog.GatlingGunId
+                    WeaponAttackCatalog.GatlingGunId,
+                    WeaponAttackCatalog.PulseDisruptorId
                 };
                 break;
             case ShipType.Arrow:
@@ -670,18 +677,20 @@ public sealed class NeutralRiderController : MonoBehaviourPun
                     WeaponAttackCatalog.GatlingGunId,
                     WeaponAttackCatalog.TripleGunId,
                     WeaponAttackCatalog.PulseDisruptorId,
-                    WeaponAttackCatalog.PlasmaGunId,
-                    WeaponAttackCatalog.RocketLauncherId
+                    WeaponAttackCatalog.RocketLauncherId,
+                    WeaponAttackCatalog.AstroCutterId,
+                    WeaponAttackCatalog.PlasmaGunId
                 };
                 break;
             case ShipType.Invader:
                 pool = new[]
                 {
                     WeaponAttackCatalog.DoubleIonizerId,
-                    WeaponAttackCatalog.PlasmaGunId,
                     WeaponAttackCatalog.PulseDisruptorId,
                     WeaponAttackCatalog.AstroCutterId,
-                    WeaponAttackCatalog.DoubleRocketLauncherId
+                    WeaponAttackCatalog.DoubleRocketLauncherId,
+                    WeaponAttackCatalog.RailGunId,
+                    WeaponAttackCatalog.PlasmaGunId
                 };
                 break;
             case ShipType.Pathfinder:
@@ -691,7 +700,8 @@ public sealed class NeutralRiderController : MonoBehaviourPun
                     WeaponAttackCatalog.PulseDisruptorId,
                     WeaponAttackCatalog.AstroCutterId,
                     WeaponAttackCatalog.DoubleIonizerId,
-                    WeaponAttackCatalog.ArtilleryGunId
+                    WeaponAttackCatalog.ArtilleryGunId,
+                    WeaponAttackCatalog.RocketLauncherId
                 };
                 break;
             default:
@@ -708,7 +718,25 @@ public sealed class NeutralRiderController : MonoBehaviourPun
                 break;
         }
 
-        return pool[Mathf.Abs(seed) % pool.Length];
+        if (seed % 100 < 28)
+        {
+            string[] wildcardPool =
+            {
+                WeaponAttackCatalog.GatlingGunId,
+                WeaponAttackCatalog.ArtilleryGunId,
+                WeaponAttackCatalog.RocketLauncherId,
+                WeaponAttackCatalog.DoubleRocketLauncherId,
+                WeaponAttackCatalog.RailGunId,
+                WeaponAttackCatalog.DoubleIonizerId,
+                WeaponAttackCatalog.AstroCutterId,
+                WeaponAttackCatalog.PulseDisruptorId,
+                WeaponAttackCatalog.TripleGunId,
+                WeaponAttackCatalog.PlasmaGunId
+            };
+            return wildcardPool[Mathf.Abs(seed / 7) % wildcardPool.Length];
+        }
+
+        return pool[Mathf.Abs(seed / 3) % pool.Length];
     }
 
     CombatTactic ResolveCombatTactic(ShipType shipType, string weaponId, int seed)
@@ -744,26 +772,49 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (ShipCatalog.GetGadgetSlots(shipSkinIndex) <= 0 || shipType == ShipType.CargoTruck)
             return System.Array.Empty<string>();
 
-        List<string> items = new List<string>(2);
-        if (archetype == NeutralRiderArchetype.Coward)
+        string[] pool = archetype switch
         {
-            items.Add(seed % 2 == 0 ? InventoryItemCatalog.StasisBuoyId : InventoryItemCatalog.SpaceBombId);
-        }
-        else if (archetype == NeutralRiderArchetype.Hunter)
-        {
-            items.Add(seed % 3 == 0 ? InventoryItemCatalog.RocketAutoTurretId : InventoryItemCatalog.SpaceTorpedoId);
-        }
-        else if (archetype == NeutralRiderArchetype.Raider)
-        {
-            items.Add(seed % 2 == 0 ? InventoryItemCatalog.GadgetMineId : InventoryItemCatalog.SpaceTorpedoId);
-        }
-        else
-        {
-            items.Add(seed % 2 == 0 ? InventoryItemCatalog.GadgetMineId : InventoryItemCatalog.StasisBuoyId);
-        }
+            NeutralRiderArchetype.Hunter => new[]
+            {
+                InventoryItemCatalog.SpaceTorpedoId,
+                InventoryItemCatalog.RocketAutoTurretId,
+                InventoryItemCatalog.AutoTurretId,
+                InventoryItemCatalog.StasisBuoyId
+            },
+            NeutralRiderArchetype.Raider => new[]
+            {
+                InventoryItemCatalog.SpaceTorpedoId,
+                InventoryItemCatalog.GadgetMineId,
+                InventoryItemCatalog.SpaceBombId,
+                InventoryItemCatalog.AutoTurretId
+            },
+            NeutralRiderArchetype.Coward => new[]
+            {
+                InventoryItemCatalog.StasisBuoyId,
+                InventoryItemCatalog.SpaceBombId,
+                InventoryItemCatalog.GadgetMineId
+            },
+            _ => new[]
+            {
+                InventoryItemCatalog.StasisBuoyId,
+                InventoryItemCatalog.GadgetMineId,
+                InventoryItemCatalog.SpaceBombId,
+                InventoryItemCatalog.AutoTurretId
+            }
+        };
 
-        if (ShipCatalog.GetGadgetSlots(shipSkinIndex) > 1 && seed % 4 == 0)
-            items.Add(archetype == NeutralRiderArchetype.Hunter ? InventoryItemCatalog.AutoTurretId : InventoryItemCatalog.SpaceBombId);
+        List<string> items = new List<string>(2);
+        items.Add(pool[Mathf.Abs(seed) % pool.Length]);
+
+        if (ShipCatalog.GetGadgetSlots(shipSkinIndex) > 1 && seed % 100 < 66)
+        {
+            string second = pool[Mathf.Abs(seed / 5 + 1) % pool.Length];
+            if (string.Equals(second, items[0], StringComparison.Ordinal))
+                second = pool[(Mathf.Abs(seed / 11) + 2) % pool.Length];
+
+            if (!string.Equals(second, items[0], StringComparison.Ordinal))
+                items.Add(second);
+        }
 
         return items.ToArray();
     }
@@ -784,7 +835,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (itemIds == null || itemIds.Length == 0)
             return;
 
-        int seed = Mathf.Abs((spawnOrdinal * 53) + (shipSkinIndex * 19) + (int)archetype);
+        int seed = ResolveLoadoutSeed(43);
         for (int i = 0; i < itemIds.Length; i++)
         {
             string itemId = itemIds[i];
@@ -796,11 +847,11 @@ public sealed class NeutralRiderController : MonoBehaviourPun
                 ItemId = itemId,
                 Charges = ResolveBotUtilityCharges(itemId, seed + i),
                 Cooldown = ResolveBotUtilityCooldown(itemId),
-                NextUseTime = Time.time + 5f + ((seed + i * 11) % 7)
+                NextUseTime = Time.time + 2.4f + ((seed + i * 11) % 4)
             });
         }
 
-        nextBotUtilityUseTime = Time.time + 6f + (seed % 6);
+        nextBotUtilityUseTime = Time.time + 2.6f + (seed % 4);
     }
 
     void ConfigureBotSupport()
@@ -843,18 +894,32 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     float ResolveBotUtilityCooldown(string itemId)
     {
         if (string.Equals(itemId, InventoryItemCatalog.SpaceTorpedoId, StringComparison.Ordinal))
-            return 18f;
+            return 13f;
 
         if (string.Equals(itemId, InventoryItemCatalog.RocketAutoTurretId, StringComparison.Ordinal) ||
             string.Equals(itemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal))
         {
-            return 32f;
+            return 24f;
         }
 
         if (string.Equals(itemId, InventoryItemCatalog.StasisBuoyId, StringComparison.Ordinal))
-            return 22f;
+            return 17f;
 
-        return 16f;
+        return 12f;
+    }
+
+    int ResolveLoadoutSeed(int salt)
+    {
+        int seed = loadoutSeed != 0 ? loadoutSeed : BuildFallbackLoadoutSeed(spawnOrdinal, shipSkinIndex, archetype);
+        unchecked
+        {
+            int hash = seed;
+            hash = (hash * 397) ^ (spawnOrdinal * 92821);
+            hash = (hash * 397) ^ (shipSkinIndex * 68917);
+            hash = (hash * 397) ^ ((int)archetype * 19391);
+            hash = (hash * 397) ^ salt;
+            return hash & int.MaxValue;
+        }
     }
 
     bool CanUseMainWeapon()
@@ -1402,25 +1467,29 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (string.Equals(itemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal) ||
             string.Equals(itemId, InventoryItemCatalog.SpaceBombId, StringComparison.Ordinal))
         {
-            return hasThreat && threatDistance <= 6.2f && (mode == Mode.Flee || Time.time < hitAndRunBreakAwayUntil);
+            return hasThreat &&
+                   threatDistance <= 7.8f &&
+                   (mode == Mode.Flee || threatDistance <= 4.8f || Time.time < hitAndRunBreakAwayUntil);
         }
 
         if (string.Equals(itemId, InventoryItemCatalog.StasisBuoyId, StringComparison.Ordinal))
-            return hasThreat && threatDistance <= 7.2f && (mode == Mode.Flee || GetHealthRatio() <= 0.42f);
+            return hasThreat &&
+                   threatDistance <= 8.5f &&
+                   (mode == Mode.Flee || threatDistance <= 5.5f || GetHealthRatio() <= 0.65f);
 
         if (string.Equals(itemId, InventoryItemCatalog.SpaceTorpedoId, StringComparison.Ordinal))
         {
             return mode == Mode.Combat &&
                    hasThreat &&
-                   threatDistance >= 3.2f &&
-                   threatDistance <= ResolveCombatWeaponRange() + 1.5f &&
-                   IsPointAhead(threatPosition, 0.58f);
+                   threatDistance >= 2.4f &&
+                   threatDistance <= ResolveCombatWeaponRange() + 3f &&
+                   IsPointAhead(threatPosition, 0.35f);
         }
 
         if (string.Equals(itemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal) ||
             string.Equals(itemId, InventoryItemCatalog.RocketAutoTurretId, StringComparison.Ordinal))
         {
-            return mode == Mode.Combat && hasThreat && threatDistance <= 9.5f && GetHealthRatio() > 0.28f;
+            return mode == Mode.Combat && hasThreat && threatDistance <= 11f && GetHealthRatio() > 0.2f;
         }
 
         return false;
@@ -2280,6 +2349,18 @@ public sealed class NeutralRiderController : MonoBehaviourPun
                PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("gameStarted", out object value) &&
                value is bool started &&
                started;
+    }
+
+    static int BuildFallbackLoadoutSeed(int ordinal, int skinIndex, NeutralRiderArchetype archetype)
+    {
+        unchecked
+        {
+            int hash = 216613626;
+            hash = (hash * 16777619) ^ Mathf.Max(0, ordinal);
+            hash = (hash * 16777619) ^ Mathf.Clamp(skinIndex, ShipCatalog.ExplorerBasicSkinIndex, ShipCatalog.MaxShipSkinIndex);
+            hash = (hash * 16777619) ^ (int)archetype;
+            return hash & int.MaxValue;
+        }
     }
 
     static int ConvertToInt(object value, int fallback, int min, int max)

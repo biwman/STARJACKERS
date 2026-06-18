@@ -79,8 +79,14 @@ public class ExtractionZone : MonoBehaviourPun
     GameObject cachedMessageObject;
     float nextMessageSearchTime;
 
+    void Awake()
+    {
+        ApplyMapInstanceDataFromPhoton();
+    }
+
     void Start()
     {
+        ApplyMapInstanceDataFromPhoton();
         sr = GetComponent<SpriteRenderer>();
         if (sr != null)
         {
@@ -651,17 +657,33 @@ public class ExtractionZone : MonoBehaviourPun
 
     bool IsCarrierExtraction()
     {
-        return string.Equals(RoomSettings.GetExtractionType(), RoomSettings.ExtractionTypeCarrier, System.StringComparison.Ordinal);
+        return string.Equals(GetEffectiveExtractionType(), RoomSettings.ExtractionTypeCarrier, System.StringComparison.Ordinal);
     }
 
     bool IsSpaceCityExtraction()
     {
-        return string.Equals(RoomSettings.GetExtractionType(), RoomSettings.ExtractionTypeSpaceCity, System.StringComparison.Ordinal);
+        return string.Equals(GetEffectiveExtractionType(), RoomSettings.ExtractionTypeSpaceCity, System.StringComparison.Ordinal);
     }
 
     bool IsAncientPortalExtraction()
     {
-        return string.Equals(RoomSettings.GetExtractionType(), RoomSettings.ExtractionTypeAncientPortal, System.StringComparison.Ordinal);
+        return string.Equals(GetEffectiveExtractionType(), RoomSettings.ExtractionTypeAncientPortal, System.StringComparison.Ordinal);
+    }
+
+    string GetEffectiveExtractionType()
+    {
+        return MapInstanceService.TryGetExtractionTypeForObject(gameObject, out string extractionType)
+            ? extractionType
+            : RoomSettings.GetExtractionType();
+    }
+
+    void ApplyMapInstanceDataFromPhoton()
+    {
+        if (photonView == null)
+            return;
+
+        if (MapInstanceService.TryReadPhotonInstantiationData(photonView.InstantiationData, out string instanceId, out string extractionType))
+            MapInstanceService.ConfigureMember(gameObject, instanceId, extractionType);
     }
 
     bool ShouldAwardCharlieLastSecondExtractionBonus(PlayerHealth playerHealth, string outcome)

@@ -139,6 +139,14 @@ public sealed class RoundMessageLayer : MonoBehaviour
         instance.ClearPersistentObjectiveInternal(ownerKey);
     }
 
+    public static void ClearAll()
+    {
+        if (instance == null)
+            return;
+
+        instance.ClearAllInternal();
+    }
+
     public static bool SetPersistentObjectiveIfEmpty(string ownerKey, string message)
     {
         if (string.IsNullOrWhiteSpace(ownerKey) || string.IsNullOrWhiteSpace(message))
@@ -241,7 +249,7 @@ public sealed class RoundMessageLayer : MonoBehaviour
 
     void CreateTopWarning()
     {
-        GameObject panel = CreatePanel("TopWarning", new Vector2(0f, -84f), new Vector2(1080f, 72f), new Color(0.16f, 0.035f, 0.02f, 0.84f));
+        GameObject panel = CreatePanel("TopWarning", new Vector2(0f, -68f), new Vector2(1080f, 66f), new Color(0.16f, 0.035f, 0.02f, 0.84f));
         topWarningGroup = panel.GetComponent<CanvasGroup>();
         topWarningBackground = panel.GetComponent<Image>();
         topWarningText = CreateText(panel.transform, "Text", 36f, TextAlignmentOptions.Center, FontStyles.Bold);
@@ -257,7 +265,7 @@ public sealed class RoundMessageLayer : MonoBehaviour
 
     void CreateTopCenter()
     {
-        GameObject panel = CreatePanel("TopCenter", new Vector2(0f, -194f), new Vector2(1120f, 84f), new Color(0.12f, 0.085f, 0.02f, 0.82f));
+        GameObject panel = CreatePanel("TopCenter", new Vector2(0f, -142f), new Vector2(1120f, 84f), new Color(0.12f, 0.085f, 0.02f, 0.82f));
         topCenterRect = panel.GetComponent<RectTransform>();
         topCenterGroup = panel.GetComponent<CanvasGroup>();
         topCenterBackground = panel.GetComponent<Image>();
@@ -273,7 +281,7 @@ public sealed class RoundMessageLayer : MonoBehaviour
 
     void CreatePersistentObjective()
     {
-        GameObject panel = CreatePanel("PersistentObjective", new Vector2(0f, -198f), new Vector2(1180f, 98f), new Color(0.02f, 0.1f, 0.16f, 0.76f));
+        GameObject panel = CreatePanel("PersistentObjective", new Vector2(0f, -146f), new Vector2(1180f, 98f), new Color(0.02f, 0.1f, 0.16f, 0.76f));
         persistentObjectiveGroup = panel.GetComponent<CanvasGroup>();
         persistentObjectiveBackground = panel.GetComponent<Image>();
         persistentObjectiveText = CreateText(panel.transform, "Text", 30f, TextAlignmentOptions.Center, FontStyles.Bold);
@@ -585,7 +593,7 @@ public sealed class RoundMessageLayer : MonoBehaviour
 
         if (topCenterRect != null)
         {
-            topCenterRect.anchoredPosition = longMessage ? new Vector2(0f, -164f) : new Vector2(0f, -194f);
+            topCenterRect.anchoredPosition = longMessage ? new Vector2(0f, -140f) : new Vector2(0f, -142f);
             topCenterRect.sizeDelta = longMessage ? new Vector2(1180f, 122f) : new Vector2(1120f, 84f);
         }
 
@@ -656,6 +664,73 @@ public sealed class RoundMessageLayer : MonoBehaviour
         topWarningText.color = activeWarningPriority == RoundMessagePriority.Danger
             ? Color.Lerp(new Color(1f, 0.42f, 0.24f, 1f), new Color(1f, 0.9f, 0.42f, 1f), pulse)
             : Color.Lerp(new Color(1f, 0.7f, 0.28f, 1f), new Color(1f, 0.95f, 0.52f, 1f), pulse);
+    }
+
+    void ClearAllInternal()
+    {
+        activeTopCenterMessage = null;
+        topCenterQueue.Clear();
+        if (topCenterRoutine != null)
+        {
+            StopCoroutine(topCenterRoutine);
+            topCenterRoutine = null;
+        }
+
+        activeWarningMessage = null;
+        activeWarningUntil = -1f;
+        activeStatusTitle = null;
+        activeStatusLabel = null;
+        activeStatusUntil = -1f;
+        persistentObjectiveOwnerKey = null;
+        persistentObjectiveMessage = null;
+        leftFeedMessages.Clear();
+
+        if (topCenterGroup != null)
+        {
+            topCenterGroup.alpha = 0f;
+            topCenterGroup.gameObject.SetActive(false);
+        }
+
+        if (topCenterText != null)
+            topCenterText.text = string.Empty;
+
+        if (topWarningGroup != null)
+        {
+            topWarningGroup.alpha = 0f;
+            topWarningGroup.gameObject.SetActive(false);
+        }
+
+        if (topWarningText != null)
+            topWarningText.text = string.Empty;
+
+        if (persistentObjectiveText != null)
+            persistentObjectiveText.text = string.Empty;
+        ApplyPersistentObjective();
+
+        if (statusFeedGroup != null)
+        {
+            statusFeedGroup.alpha = 0f;
+            statusFeedGroup.gameObject.SetActive(false);
+        }
+
+        if (statusFeedTitleText != null)
+            statusFeedTitleText.text = string.Empty;
+        if (statusFeedLabelText != null)
+            statusFeedLabelText.text = string.Empty;
+
+        if (leftFeedViews != null)
+        {
+            for (int i = 0; i < leftFeedViews.Length; i++)
+            {
+                LeftFeedView view = leftFeedViews[i];
+                if (view == null || view.RootObject == null)
+                    continue;
+
+                if (view.Group != null)
+                    view.Group.alpha = 0f;
+                view.RootObject.SetActive(false);
+            }
+        }
     }
 
     void SetPersistentObjectiveInternal(string ownerKey, string message)

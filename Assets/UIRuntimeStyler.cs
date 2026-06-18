@@ -21,6 +21,7 @@ public class UIRuntimeStyler : MonoBehaviour
     static Sprite cachedJoystickBoosterRingSprite;
     static Sprite cachedMovementJoystickDiscSprite;
     static Sprite cachedMovementJoystickGlowSprite;
+    static Sprite cachedShadedJoystickHandleSprite;
     static bool styleRefreshQueued;
 
     readonly List<GameObject> sceneObjects = new List<GameObject>(256);
@@ -79,6 +80,7 @@ public class UIRuntimeStyler : MonoBehaviour
         LoadRuntimeUiSprite("UI/icon_crafting", ref cachedCraftingIconSprite, "RuntimeCraftingIconSprite");
         LoadRuntimeUiSprite("UI/icon_trader", ref cachedTraderIconSprite, "RuntimeTraderIconSprite");
         LoadRuntimeUiSprite("UI/icon_inventory", ref cachedInventoryIconSprite, "RuntimeInventoryIconSprite");
+        GetShadedJoystickHandleSprite();
     }
 
     void Awake()
@@ -946,6 +948,10 @@ public class UIRuntimeStyler : MonoBehaviour
 
         Image[] images = root.GetComponentsInChildren<Image>(true);
         RectTransform rootRect = root.GetComponent<RectTransform>();
+        Joystick joystick = root.GetComponent<Joystick>();
+        Sprite handleSprite = string.Equals(objectName, "ShootJoystickBG", System.StringComparison.Ordinal)
+            ? GetShadedJoystickHandleSprite()
+            : null;
 
         if (rootRect != null)
         {
@@ -964,6 +970,16 @@ public class UIRuntimeStyler : MonoBehaviour
             }
 
             image.color = handleColor;
+            if (handleSprite != null && IsJoystickHandleImage(root, joystick, image))
+            {
+                image.sprite = handleSprite;
+                image.type = Image.Type.Simple;
+                image.preserveAspect = false;
+                image.raycastTarget = false;
+                image.material = null;
+                image.canvasRenderer.SetAlpha(1f);
+            }
+
             if (rect != null)
             {
                 rect.sizeDelta = new Vector2(145f, 145f);
@@ -971,6 +987,21 @@ public class UIRuntimeStyler : MonoBehaviour
 
             ApplyOutline(image.gameObject, new Color(0f, 0f, 0f, 0.28f), new Vector2(2f, -2f));
         }
+    }
+
+    static bool IsJoystickHandleImage(GameObject root, Joystick joystick, Image image)
+    {
+        if (root == null || image == null || image.gameObject == root)
+            return false;
+
+        RectTransform rect = image.rectTransform;
+        if (joystick != null && joystick.handle != null && rect == joystick.handle)
+            return true;
+
+        string name = image.gameObject.name;
+        return string.Equals(name, "ShootJoystickHandle", System.StringComparison.Ordinal) ||
+               string.Equals(name, "JoystickHandle", System.StringComparison.Ordinal) ||
+               string.Equals(name, "Handle", System.StringComparison.Ordinal);
     }
 
     void ApplyOutline(GameObject target, Color effectColor, Vector2 distance)
@@ -1668,6 +1699,55 @@ public class UIRuntimeStyler : MonoBehaviour
         sprite.name = spriteName;
         sprite.hideFlags = HideFlags.HideAndDontSave;
         return sprite;
+    }
+
+    static Sprite GetShadedJoystickHandleSprite()
+    {
+        if (cachedShadedJoystickHandleSprite != null)
+            return cachedShadedJoystickHandleSprite;
+
+        const int size = 512;
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        texture.name = "RuntimeShadedJoystickHandleTexture";
+        texture.hideFlags = HideFlags.HideAndDontSave;
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        Color[] pixels = new Color[size * size];
+        float center = (size - 1) * 0.5f;
+        float radius = center;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - center;
+                float dy = y - center;
+                float normalizedDistance = Mathf.Sqrt(dx * dx + dy * dy) / radius;
+                if (normalizedDistance > 1f)
+                {
+                    pixels[(y * size) + x] = Color.clear;
+                    continue;
+                }
+
+                float nx = dx / radius;
+                float ny = dy / radius;
+                float edgeShade = Mathf.SmoothStep(0.54f, 1f, normalizedDistance);
+                float topLeftHighlight = Mathf.Clamp01(1f - Vector2.Distance(new Vector2(nx, ny), new Vector2(-0.34f, 0.36f)) / 0.68f);
+                float lowerShadow = Mathf.Clamp01((ny + 0.18f) * -0.7f + normalizedDistance * 0.24f);
+                float centerLift = 1f - Mathf.SmoothStep(0.05f, 0.62f, normalizedDistance);
+                float shade = 0.9f + topLeftHighlight * 0.24f + centerLift * 0.08f - edgeShade * 0.26f - lowerShadow * 0.15f;
+                shade = Mathf.Clamp(shade, 0.58f, 1.1f);
+                pixels[(y * size) + x] = new Color(shade, shade, shade, 1f);
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply(false, true);
+
+        cachedShadedJoystickHandleSprite = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f);
+        cachedShadedJoystickHandleSprite.name = "RuntimeShadedJoystickHandleSprite";
+        cachedShadedJoystickHandleSprite.hideFlags = HideFlags.HideAndDontSave;
+        return cachedShadedJoystickHandleSprite;
     }
 
     static Sprite GetPlayButtonShapeSprite()

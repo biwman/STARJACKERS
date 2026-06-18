@@ -148,9 +148,10 @@ public sealed class NeutralRiderManager : MonoBehaviour
     {
         Vector2 spawn = GetSpawnPosition(ordinal);
         NeutralRiderArchetype archetype = ResolveArchetype(ordinal);
-        int skinIndex = ResolveShipSkin(ordinal, archetype);
+        int loadoutSeed = ResolveRoundSeed(ordinal, 173);
+        int skinIndex = ResolveShipSkin(ordinal, archetype, loadoutSeed);
         string name = NeutralRiderController.GetGeneratedName(ordinal);
-        object[] data = NeutralRiderController.BuildInstantiationData(skinIndex, archetype, name, ordinal);
+        object[] data = NeutralRiderController.BuildInstantiationData(skinIndex, archetype, name, ordinal, loadoutSeed);
         GameObject riderObject = PhotonNetwork.Instantiate("Player", spawn, Quaternion.identity, 0, data);
         if (riderObject == null)
             return false;
@@ -209,7 +210,7 @@ public sealed class NeutralRiderManager : MonoBehaviour
         return true;
     }
 
-    int ResolveShipSkin(int ordinal, NeutralRiderArchetype archetype)
+    int ResolveShipSkin(int ordinal, NeutralRiderArchetype archetype, int loadoutSeed)
     {
         int[] skins = archetype switch
         {
@@ -218,45 +219,82 @@ public sealed class NeutralRiderManager : MonoBehaviour
                 ShipCatalog.AvengerDarkGreenSkinIndex,
                 ShipCatalog.AvengerMilitarySkinIndex,
                 ShipCatalog.AvengerNasaSkinIndex,
-                ShipCatalog.ArrowSharkSkinIndex
+                ShipCatalog.ArrowSharkSkinIndex,
+                ShipCatalog.PathfinderClassicSkinIndex,
+                ShipCatalog.InvaderGoldplateSkinIndex
             },
             NeutralRiderArchetype.Raider => new[]
             {
                 ShipCatalog.ViperStandardSkinIndex,
+                ShipCatalog.ViperSnowSkinIndex,
                 ShipCatalog.ViperNavySkinIndex,
                 ShipCatalog.InvaderCamoSkinIndex,
-                ShipCatalog.InvaderVolcanicSkinIndex
+                ShipCatalog.InvaderVolcanicSkinIndex,
+                ShipCatalog.ArrowSmoothSkinIndex,
+                ShipCatalog.PathfinderAngelSkinIndex
             },
             NeutralRiderArchetype.Coward => new[]
             {
                 ShipCatalog.ExplorerBasicSkinIndex,
                 ShipCatalog.ExplorerSilverSkinIndex,
-                ShipCatalog.CargoTruckWhitePantherSkinIndex,
-                ShipCatalog.ArrowSmoothSkinIndex
+                ShipCatalog.ExplorerGildedSkinIndex,
+                ShipCatalog.ArrowSmoothSkinIndex,
+                ShipCatalog.PathfinderClassicSkinIndex,
+                ShipCatalog.CargoTruckWhitePantherSkinIndex
             },
             _ => new[]
             {
-                ShipCatalog.CargoTruckGreenTruckSkinIndex,
-                ShipCatalog.CargoTruckSandSigmaSkinIndex,
                 ShipCatalog.ExplorerGildedSkinIndex,
-                ShipCatalog.ArrowSportySkinIndex
+                ShipCatalog.ExplorerSilverSkinIndex,
+                ShipCatalog.ArrowSportySkinIndex,
+                ShipCatalog.PathfinderClassicSkinIndex,
+                ShipCatalog.InvaderGoldplateSkinIndex,
+                ShipCatalog.CargoTruckGreenTruckSkinIndex,
+                ShipCatalog.CargoTruckSandSigmaSkinIndex
             }
         };
 
-        return skins[Mathf.Abs((ordinal * 5) + (int)archetype * 3) % skins.Length];
+        return skins[Mathf.Abs(loadoutSeed + ordinal * 37 + (int)archetype * 11) % skins.Length];
     }
 
     NeutralRiderArchetype ResolveArchetype(int ordinal)
     {
-        NeutralRiderArchetype[] archetypes =
+        NeutralRiderArchetype[] archetypes = ordinal == 0
+            ? new[]
+            {
+                NeutralRiderArchetype.Raider,
+                NeutralRiderArchetype.Hunter,
+                NeutralRiderArchetype.Raider,
+                NeutralRiderArchetype.Scavenger
+            }
+            : new[]
         {
             NeutralRiderArchetype.Scavenger,
             NeutralRiderArchetype.Raider,
             NeutralRiderArchetype.Hunter,
-            NeutralRiderArchetype.Coward
+            NeutralRiderArchetype.Coward,
+            NeutralRiderArchetype.Raider,
+            NeutralRiderArchetype.Hunter
         };
 
-        return archetypes[Mathf.Abs(ordinal) % archetypes.Length];
+        int seed = ResolveRoundSeed(ordinal, 71);
+        return archetypes[Mathf.Abs(seed) % archetypes.Length];
+    }
+
+    int ResolveRoundSeed(int ordinal, int salt)
+    {
+        long timeSeed = lastHandledStartTime > 0d
+            ? (long)(lastHandledStartTime * 1000d)
+            : PhotonNetwork.ServerTimestamp;
+
+        unchecked
+        {
+            int hash = (int)(timeSeed ^ (timeSeed >> 32));
+            hash = (hash * 397) ^ (ordinal * 92821);
+            hash = (hash * 397) ^ (spawnedThisRound * 68917);
+            hash = (hash * 397) ^ salt;
+            return hash & int.MaxValue;
+        }
     }
 
     int SeedSpawnState(double currentStartTime)

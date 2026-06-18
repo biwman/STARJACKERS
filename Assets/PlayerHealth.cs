@@ -28,6 +28,7 @@ public class PlayerHealth : MonoBehaviourPun
     const float AlienAegisBarrierDamageMultiplier = 0.5f;
     const float AlienAegisBarrierDuration = 3f;
     const float RadioactiveCargoDamageInterval = 1f;
+    const float SpaceAnimalBonesDropChance = 0.15f;
     const string EnvironmentalDamageSource = "environmental";
     const string NebulaDamageSource = "nebula";
     public const string PilotDamageSourceRamming = "ramming";
@@ -1316,6 +1317,11 @@ public class PlayerHealth : MonoBehaviourPun
             SpawnInvulnerabilityVfx.Attach(this);
     }
 
+    public void BeginMapTravelArrivalProtection()
+    {
+        BeginSpawnInvulnerability(1.25f);
+    }
+
     public void RepairVitalsAuthority(int amount)
     {
         if (!PhotonNetwork.IsMasterClient || IsWreck || isEvacuationAnimating || amount <= 0)
@@ -1795,7 +1801,7 @@ public class PlayerHealth : MonoBehaviourPun
             thruster.DisableAndClearTrails();
 
         if (PhotonNetwork.IsMasterClient)
-            SpawnSpaceAnimalRemainsDrop();
+            SpawnSpaceAnimalDeathLootDrop();
 
         float visualTargetSize = bot != null ? bot.VisualTargetSize : 2.4f;
         photonView.RPC(
@@ -1823,18 +1829,22 @@ public class PlayerHealth : MonoBehaviourPun
             Destroy(gameObject);
     }
 
-    void SpawnSpaceAnimalRemainsDrop()
+    void SpawnSpaceAnimalDeathLootDrop()
     {
-        Vector2 driftDirection = Random.insideUnitCircle.normalized;
+        Vector2 driftDirection = Quaternion.Euler(0f, 0f, Random.Range(0f, 360f)) * Vector2.up;
         if (driftDirection.sqrMagnitude < 0.001f)
             driftDirection = Vector2.up;
+
+        string dropItemId = Random.value < SpaceAnimalBonesDropChance
+            ? InventoryItemCatalog.SpaceAnimalBonesId
+            : InventoryItemCatalog.SpaceAnimalRemainsId;
 
         GameObject drop = PhotonNetwork.Instantiate(
             "TreasureNetwork",
             transform.position,
             Quaternion.identity,
             0,
-            new object[] { InventoryItemCatalog.SpaceAnimalRemainsId });
+            new object[] { dropItemId });
 
         if (drop == null)
             return;
@@ -2711,6 +2721,8 @@ public class PlayerHealth : MonoBehaviourPun
             wreck = gameObject.AddComponent<ShipWreck>();
 
         string rewardItemId = wreckProfile != null ? wreckProfile.RewardItemId : InventoryItemCatalog.DroidScrapId;
+        if (string.Equals(rewardItemId, InventoryItemCatalog.AlienSecretId, System.StringComparison.Ordinal))
+            rewardItemId = InventoryItemCatalog.GetAlienSecretItemId(Random.Range(0, InventoryItemCatalog.AlienSecretVariantCount));
         string serializedLoot = PlayerProfileService.SerializeShipInventorySlots(new[] { rewardItemId });
         wreck.InitializeFromLootJson(serializedLoot, -1, kindValue);
         wreck.SetDestroyWhenEmpty(wreckProfile == null || wreckProfile.DestroyWhenEmpty);
@@ -2764,15 +2776,15 @@ public class PlayerHealth : MonoBehaviourPun
         switch (enemyKind)
         {
             case EnemyBotKind.PirateFighter:
-                return 0.05f;
+                return 0.075f;
             case EnemyBotKind.Corsair:
-                return 0.06f;
+                return 0.09f;
             case EnemyBotKind.PirateFighterElite:
-                return 0.15f;
+                return 0.225f;
             case EnemyBotKind.PirateFighterAce:
-                return 0.50f;
+                return 0.75f;
             case EnemyBotKind.PirateBase:
-                return 0.20f;
+                return 0.30f;
             default:
                 return 0f;
         }
@@ -4477,6 +4489,7 @@ public class AstronautSurvivor : MonoBehaviourPun
             case EnemyBotKind.SpaceManta:
             case EnemyBotKind.GravitySquid:
             case EnemyBotKind.CosmicWorm:
+            case EnemyBotKind.RiftWarden:
                 return 0;
             case EnemyBotKind.NeutralFighter:
             case EnemyBotKind.PirateFighter:

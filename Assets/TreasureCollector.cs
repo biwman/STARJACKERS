@@ -855,7 +855,7 @@ public class TreasureCollector : MonoBehaviourPun
 
     void RequestTreasureCollectionReservation(Treasure treasure)
     {
-        if (treasure == null || treasure.isBeingCollected)
+        if (treasure == null || treasure.isBeingCollected || IsTreasureTemporarilyLocked(treasure))
         {
             AbortCollection(treasure);
             return;
@@ -881,7 +881,7 @@ public class TreasureCollector : MonoBehaviourPun
         if (!photonView.IsMine)
             return;
 
-        if (treasure == null || treasure.isBeingCollected)
+        if (treasure == null || treasure.isBeingCollected || IsTreasureTemporarilyLocked(treasure))
         {
             CancelActiveCollection();
             return;
@@ -897,7 +897,7 @@ public class TreasureCollector : MonoBehaviourPun
 
     IEnumerator CollectTreasureRoutine(Treasure treasureToCollect)
     {
-        if (treasureToCollect == null || treasureToCollect.isBeingCollected)
+        if (treasureToCollect == null || treasureToCollect.isBeingCollected || IsTreasureTemporarilyLocked(treasureToCollect))
         {
             AbortCollection(treasureToCollect);
             yield break;
@@ -911,7 +911,7 @@ public class TreasureCollector : MonoBehaviourPun
 
         while (timer < requiredCollectTime)
         {
-            if (!isCollecting || treasureToCollect == null || !IsTreasureInCollectRange(treasureToCollect, true))
+            if (!isCollecting || treasureToCollect == null || IsTreasureTemporarilyLocked(treasureToCollect) || !IsTreasureInCollectRange(treasureToCollect, true))
             {
                 AbortCollection(treasureToCollect);
                 yield break;
@@ -923,7 +923,9 @@ public class TreasureCollector : MonoBehaviourPun
             yield return null;
         }
 
-        string collectedItemId = treasureToCollect.itemId;
+        string collectedItemId = InventoryItemCatalog.ResolveAlienSecretItemId(
+            treasureToCollect.itemId,
+            treasureToCollect.visualVariantIndex);
         PhotonView treasureView = treasureToCollect.GetComponent<PhotonView>();
         int treasureViewId = treasureView != null ? treasureView.ViewID : 0;
 
@@ -1480,6 +1482,9 @@ public class TreasureCollector : MonoBehaviourPun
         if (treasure == null || !PlayerProfileService.HasInstance)
             return false;
 
+        if (IsTreasureTemporarilyLocked(treasure))
+            return false;
+
         if (InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
         {
             return PlayerProfileService.Instance.HasFreeShipInventorySlot() ||
@@ -1504,8 +1509,16 @@ public class TreasureCollector : MonoBehaviourPun
     bool IsTreasureUsable(Treasure treasure)
     {
         return treasure != null &&
+               !IsTreasureTemporarilyLocked(treasure) &&
                (!treasure.isBeingCollected || (isCollecting && currentTreasure == treasure)) &&
                IsTreasureInCollectRange(treasure);
+    }
+
+    bool IsTreasureTemporarilyLocked(Treasure treasure)
+    {
+        return treasure != null &&
+               InventoryItemCatalog.IsAlienSecretItem(treasure.itemId) &&
+               RiftWardenLockdownField.IsTreasureLocked(treasure);
     }
 
     bool IsWreckUsable(ShipWreck wreck)
@@ -2116,7 +2129,7 @@ public class TreasureCollector : MonoBehaviourPun
         bool accepted = false;
         PhotonView pv = PhotonView.Find(viewID);
         Treasure treasure = pv != null ? pv.GetComponent<Treasure>() : null;
-        if (treasure != null && !treasure.isBeingCollected && IsTreasureInCollectRange(treasure, true))
+        if (treasure != null && !treasure.isBeingCollected && !IsTreasureTemporarilyLocked(treasure) && IsTreasureInCollectRange(treasure, true))
         {
             if (!ReservedTreasureCollections.TryGetValue(viewID, out int reservedActor) ||
                 reservedActor == photonView.OwnerActorNr)
@@ -2244,7 +2257,8 @@ public class TreasureCollector : MonoBehaviourPun
         if (ReservedTreasureCollections.TryGetValue(viewId, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
             return false;
 
-        if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, treasure.itemId))
+        string collectibleItemId = InventoryItemCatalog.ResolveAlienSecretItemId(treasure.itemId, treasure.visualVariantIndex);
+        if (!PlayerProfileService.PlayerHasFreeShipInventorySlot(photonView.Owner, collectibleItemId))
             return false;
 
         queuedViewIds.Add(viewId);
@@ -2254,7 +2268,7 @@ public class TreasureCollector : MonoBehaviourPun
         {
             Kind = NovaPendingCollectibleKind.Treasure,
             ViewId = viewId,
-            ItemId = treasure.itemId
+            ItemId = collectibleItemId
         });
         return true;
     }
@@ -2455,8 +2469,11 @@ public class TreasureCollector : MonoBehaviourPun
 
         PhotonView targetView = PhotonView.Find(pending.ViewId);
         Treasure treasure = targetView != null ? targetView.GetComponent<Treasure>() : null;
+        string resolvedTreasureItemId = treasure != null
+            ? InventoryItemCatalog.ResolveAlienSecretItemId(treasure.itemId, treasure.visualVariantIndex)
+            : null;
         if (treasure == null || string.IsNullOrWhiteSpace(pending.ItemId) ||
-            !string.Equals(treasure.itemId, pending.ItemId, System.StringComparison.Ordinal))
+            !string.Equals(resolvedTreasureItemId, pending.ItemId, System.StringComparison.Ordinal))
         {
             ReleaseNovaTreasureReservation(pending.ViewId, treasure);
             return;
@@ -2851,7 +2868,7 @@ public class TreasureCollector : MonoBehaviourPun
         if (artifact.GetInteractionDistanceToPoint(GetShipTipPosition()) > ArtifactAsteroid.ExamineRange + ArtifactExamineKeepAliveDistance)
             return;
 
-        ArtifactAsteroidSpawner.TryActivateAuthority(artifactId);
+        ArtifactAsteroidSpawner.TryActivateAuthority(artifactId, photonView.Owner);
     }
 
     [PunRPC]
@@ -3066,7 +3083,10 @@ public class TreasureCollector : MonoBehaviourPun
         if (treasure != null)
             treasure.isBeingCollected = false;
 
-        if (!stored || treasureView == null || treasure == null || !string.Equals(treasure.itemId, itemId, System.StringComparison.Ordinal))
+        string resolvedTreasureItemId = treasure != null
+            ? InventoryItemCatalog.ResolveAlienSecretItemId(treasure.itemId, treasure.visualVariantIndex)
+            : null;
+        if (!stored || treasureView == null || treasure == null || !string.Equals(resolvedTreasureItemId, itemId, System.StringComparison.Ordinal))
             return;
 
         SpaceTrapTarget.DetonateIfArmed(treasureViewId, photonView != null ? photonView.ViewID : 0);

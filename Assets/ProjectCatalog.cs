@@ -51,7 +51,7 @@ public sealed class ProjectStepDefinition
                 matches = InventoryItemCatalog.GetCategory(itemId) == InventoryItemCategory.Shield;
                 break;
             default:
-                matches = string.Equals(itemId, ItemId, StringComparison.Ordinal);
+                matches = InventoryItemCatalog.MatchesItemRequirement(itemId, ItemId);
                 break;
         }
 
@@ -110,6 +110,8 @@ public static class ProjectCatalog
     public const string SupplyToSurviveId = "supply_to_survive";
     public const string SpaceMayhemId = "space_mayhem";
     public const string OmertaId = "omerta";
+    public const string AlienSecretsId = "alien_secrets";
+    public const string CryoshadeMeatsId = "cryoshade_meats";
 
     static readonly ProjectDefinition[] Projects = BuildProjects();
     static readonly Dictionary<string, ProjectDefinition> ProjectsById = BuildProjectsById();
@@ -357,6 +359,56 @@ public static class ProjectCatalog
                         AnyWeapon("weapons", "Epic+ Weapon", 2, InventoryItemRarity.Epic),
                         AnyShield("shields", "Rare+ Shield", 3, InventoryItemRarity.Rare),
                         Exact("pirate_base_core", "Pirate Base Core", InventoryItemCatalog.PirateBaseCoreId, 1))
+                }
+            },
+            new ProjectDefinition
+            {
+                Id = AlienSecretsId,
+                DisplayName = "ALIEN SECRETS",
+                Description = "The first fragment looked worthless: a shard of cold alien glass drifting between asteroids. Then the station receivers began repeating a signal nobody had transmitted.\n\nA retired xenolinguist offered the raider a quiet contract. Bring more fragments, keep them away from pirates, and do not let corporate survey ships know the signal exists. Each recovered secret adds a new stroke to a star map older than any colony chart.\n\nBy the time the pattern becomes clear, the raider is no longer collecting relics. He is assembling a key for a gate that should have stayed silent.",
+                TileResourcePath = "ALIEN_SECRETS_PROJECT",
+                BackgroundResourcePath = "ALIEN_SECRETS_PROJECT",
+                Stages = new[]
+                {
+                    Stage("stage_1", "LOST SIGNAL",
+                        RewardWithBlueprintScrap(2500, 1),
+                        Exact("alien_secrets", "Alien Secret", InventoryItemCatalog.AlienSecretId, 3)),
+                    Stage("stage_2", "DEAD LANGUAGE",
+                        RewardWithBlueprintScrap(5000, 2),
+                        Exact("alien_secrets", "Alien Secret", InventoryItemCatalog.AlienSecretId, 6)),
+                    Stage("stage_3", "STAR ALIGNMENT",
+                        Reward(8000, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.TreasureScannerId)),
+                        Exact("alien_secrets", "Alien Secret", InventoryItemCatalog.AlienSecretId, 10)),
+                    Stage("stage_4", "THE GATE ANSWERS",
+                        Reward(12000, InventoryItemCatalog.AncientGateKeyId),
+                        Exact("alien_secrets", "Alien Secret", InventoryItemCatalog.AlienSecretId, 15))
+                }
+            },
+            new ProjectDefinition
+            {
+                Id = CryoshadeMeatsId,
+                DisplayName = "CRYOSHADE MEATS",
+                Description = "The stall sign promises premium spacefarer provisions, but nobody at Cryoshade Meats talks like a cook. They pay too well for bone dust, tissue scraps, and the dark organic remains left behind by cosmic animals.\n\nAt first the job is simple: hunt the beasts, chill the samples, deliver the cargo before it spoils. Then the buyers start asking which creature screamed, which one shed light after death, and whether any specimen was small enough to fit inside a portable cryo-vault.\n\nCryoshade is not stocking a kitchen. Someone is searching for a rare alpha-class space animal, and the raider is about to deliver it alive enough to matter.",
+                TileResourcePath = "CRYOSHADE_MEATS_PROJECT",
+                BackgroundResourcePath = "CRYOSHADE_MEATS_PROJECT",
+                Stages = new[]
+                {
+                    Stage("stage_1", "FRESH SAMPLE",
+                        RewardWithBlueprintScrap(2000, 1),
+                        Exact("animal_bones", "Cosmic Animal Bones", InventoryItemCatalog.SpaceAnimalBonesId, 1),
+                        Exact("animal_remains", "Space Animal Remains", InventoryItemCatalog.SpaceAnimalRemainsId, 3)),
+                    Stage("stage_2", "COLD STORAGE",
+                        RewardWithBlueprintScrap(4000, 2),
+                        Exact("animal_bones", "Cosmic Animal Bones", InventoryItemCatalog.SpaceAnimalBonesId, 1),
+                        Exact("animal_remains", "Space Animal Remains", InventoryItemCatalog.SpaceAnimalRemainsId, 6)),
+                    Stage("stage_3", "BLACK MARKET CUTS",
+                        Reward(7000, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.BioTrapId)),
+                        Exact("animal_bones", "Cosmic Animal Bones", InventoryItemCatalog.SpaceAnimalBonesId, 2),
+                        Exact("animal_remains", "Space Animal Remains", InventoryItemCatalog.SpaceAnimalRemainsId, 10)),
+                    Stage("stage_4", "THE ALPHA SAMPLE",
+                        Reward(10000, InventoryItemCatalog.PreservedAlphaSpecimenId),
+                        Exact("animal_bones", "Cosmic Animal Bones", InventoryItemCatalog.SpaceAnimalBonesId, 2),
+                        Exact("animal_remains", "Space Animal Remains", InventoryItemCatalog.SpaceAnimalRemainsId, 15))
                 }
             }
         };

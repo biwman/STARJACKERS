@@ -783,7 +783,8 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.PirateBase, false, 1, false, 500, 1000, 1f, 0, 90, 0),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
             new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
-            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90))
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.RiftWarden, true, 1, false, 260, 220, 1f, 0, 120, 18))
     };
 
     static readonly Dictionary<string, LobbyMapDefinition> MapsById = BuildMapsById();
@@ -961,6 +962,13 @@ public static class LobbyMapCatalog
             : RoomSettings.DefaultRadioactiveTreasureDensity;
     }
 
+    public static string GetDefaultAlienSecretsDensity(string mapId)
+    {
+        return string.Equals(mapId, HiddenDimensionMapId, System.StringComparison.Ordinal)
+            ? RoomSettings.AlienSecretsDensityMedium
+            : RoomSettings.DefaultAlienSecretsDensity;
+    }
+
     public static string GetDefaultArtifactAsteroidsDensity(string mapId)
     {
         if (string.Equals(mapId, HiddenDimensionMapId, System.StringComparison.Ordinal))
@@ -1067,6 +1075,7 @@ public static class LobbyMapCatalog
         props[RoomSettings.ObstacleNoBordersKey] = map.ObstaclesNoBorders;
         props[RoomSettings.TreasureDensityKey] = map.ResourceDensity;
         props[RoomSettings.RadioactiveTreasureDensityKey] = GetDefaultRadioactiveTreasureDensity(map.Id);
+        props[RoomSettings.AlienSecretsDensityKey] = GetDefaultAlienSecretsDensity(map.Id);
         props[RoomSettings.ResourceRichnessKey] = map.ResourceRichness;
         props[RoomSettings.SpaceJunkDensityKey] = map.SpaceJunkDensity;
         props[RoomSettings.ContainersDensityKey] = map.ContainersDensity;

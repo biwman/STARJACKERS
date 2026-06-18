@@ -82,6 +82,17 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
     MaterialPropertyBlock propertyBlock;
     Camera cachedCamera;
 
+    bool useOverrideSettings;
+    string overrideMapId = string.Empty;
+    string overrideParallaxBackgroundId = string.Empty;
+    string overrideBackgroundObjectId = string.Empty;
+    string overrideMapSizeMode = string.Empty;
+    string overrideInstanceId = string.Empty;
+    int overrideBackgroundIndex = RoomSettings.DefaultMapBackground;
+    int sortingOrderOffset;
+    Vector2 overrideMapSize = Vector2.zero;
+    bool layerRenderersVisible = true;
+
     int builtSeed = int.MinValue;
     AdvancedBackgroundStyle builtStyle = AdvancedBackgroundStyle.None;
     string builtBackgroundObjectId = string.Empty;
@@ -119,9 +130,36 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         }
     }
 
+    public void ConfigureRuntimeMapInstance(
+        string mapId,
+        Vector2 mapSize,
+        string parallaxBackgroundId,
+        string backgroundObjectId,
+        int backgroundIndex,
+        string mapSizeMode,
+        string instanceId,
+        int rendererSortingOrderOffset)
+    {
+        useOverrideSettings = true;
+        overrideMapId = string.IsNullOrWhiteSpace(mapId) ? RoomSettings.DefaultLobbyMapId : mapId;
+        overrideMapSize = mapSize.x > 0f && mapSize.y > 0f ? mapSize : RoomSettings.GetMapDimensions();
+        overrideParallaxBackgroundId = RoomSettings.NormalizeParallaxBackgroundId(parallaxBackgroundId);
+        overrideBackgroundObjectId = RoomSettings.NormalizeBackgroundObjectId(backgroundObjectId);
+        overrideBackgroundIndex = Mathf.Clamp(backgroundIndex, 1, RoomSettings.MaxMapBackground);
+        overrideMapSizeMode = string.IsNullOrWhiteSpace(mapSizeMode) ? RoomSettings.DefaultMapSize : mapSizeMode;
+        overrideInstanceId = string.IsNullOrWhiteSpace(instanceId) ? MapInstanceService.MainInstanceId : instanceId;
+        sortingOrderOffset = rendererSortingOrderOffset;
+        builtSeed = int.MinValue;
+        RefreshInternal();
+    }
+
     static AdvancedBackgroundStyle ResolveStyleForCurrentSettings()
     {
-        string mapId = RoomSettings.GetSelectedLobbyMapId();
+        return ResolveStyleForMap(RoomSettings.GetSelectedLobbyMapId());
+    }
+
+    static AdvancedBackgroundStyle ResolveStyleForMap(string mapId)
+    {
         if (string.Equals(mapId, LobbyMapCatalog.GravityWellMapId, StringComparison.Ordinal))
             return AdvancedBackgroundStyle.GravityWell;
 
@@ -167,6 +205,11 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         if (!gameObject.activeSelf || layers[0] == null)
             return;
 
+        bool visible = ShouldRenderForCurrentCamera();
+        SetLayerRenderersVisible(visible);
+        if (!visible)
+            return;
+
         UpdateLayerTransforms();
         if (Time.unscaledTime >= nextGlowUpdate)
         {
@@ -177,24 +220,26 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
 
     void RefreshInternal()
     {
-        AdvancedBackgroundStyle style = ResolveStyleForCurrentSettings();
+        AdvancedBackgroundStyle style = ResolveStyle();
         if (style == AdvancedBackgroundStyle.None)
         {
-            if (gameObject.activeSelf)
+            if (useOverrideSettings)
+                SetLayerRenderersVisible(false);
+            else if (gameObject.activeSelf)
                 gameObject.SetActive(false);
             return;
         }
 
-        if (!gameObject.activeSelf)
+        if (!useOverrideSettings && !gameObject.activeSelf)
             gameObject.SetActive(true);
 
-        Vector2 mapSize = RoomSettings.GetMapDimensions();
-        string backgroundObjectId = RoomSettings.GetBackgroundObjectId();
+        Vector2 mapSize = GetConfiguredMapSize();
+        string backgroundObjectId = GetConfiguredBackgroundObjectId();
         int seed = BuildSeed(
-            RoomSettings.GetSelectedLobbyMapId(),
-            RoomSettings.GetMapBackgroundIndex(),
-            RoomSettings.GetMapSizeMode(),
-            RoomSettings.GetParallaxBackgroundId());
+            GetConfiguredMapId(),
+            GetConfiguredBackgroundIndex(),
+            GetConfiguredMapSizeMode(),
+            GetConfiguredParallaxBackgroundId());
         if (seed != builtSeed ||
             style != builtStyle ||
             !string.Equals(backgroundObjectId, builtBackgroundObjectId, StringComparison.Ordinal) ||
@@ -204,13 +249,96 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
             BuildLayers(style, seed, mapSize);
         }
 
-        UpdateLayerTransforms();
-        UpdateLayerGlow();
+        bool visible = ShouldRenderForCurrentCamera();
+        SetLayerRenderersVisible(visible);
+        if (visible)
+        {
+            UpdateLayerTransforms();
+            UpdateLayerGlow();
+        }
     }
 
     bool ShouldShowAdvancedBackground()
     {
-        return ResolveStyleForCurrentSettings() != AdvancedBackgroundStyle.None;
+        return ResolveStyle() != AdvancedBackgroundStyle.None;
+    }
+
+    AdvancedBackgroundStyle ResolveStyle()
+    {
+        return ResolveStyleForMap(GetConfiguredMapId());
+    }
+
+    string GetConfiguredMapId()
+    {
+        return useOverrideSettings ? overrideMapId : RoomSettings.GetSelectedLobbyMapId();
+    }
+
+    Vector2 GetConfiguredMapSize()
+    {
+        return useOverrideSettings ? overrideMapSize : RoomSettings.GetMapDimensions();
+    }
+
+    string GetConfiguredParallaxBackgroundId()
+    {
+        return useOverrideSettings ? overrideParallaxBackgroundId : RoomSettings.GetParallaxBackgroundId();
+    }
+
+    string GetConfiguredBackgroundObjectId()
+    {
+        return useOverrideSettings ? overrideBackgroundObjectId : RoomSettings.GetBackgroundObjectId();
+    }
+
+    int GetConfiguredBackgroundIndex()
+    {
+        return useOverrideSettings ? overrideBackgroundIndex : RoomSettings.GetMapBackgroundIndex();
+    }
+
+    string GetConfiguredMapSizeMode()
+    {
+        return useOverrideSettings ? overrideMapSizeMode : RoomSettings.GetMapSizeMode();
+    }
+
+    bool ShouldRenderForCurrentCamera()
+    {
+        if (!useOverrideSettings || string.IsNullOrWhiteSpace(overrideInstanceId))
+            return true;
+
+        Camera camera = ResolveCamera();
+        if (camera == null)
+            return false;
+
+        return string.Equals(
+            MapInstanceService.GetInstanceIdForWorldPosition(camera.transform.position),
+            overrideInstanceId,
+            StringComparison.Ordinal);
+    }
+
+    int ResolveSortingOrder(int baseSortingOrder)
+    {
+        return baseSortingOrder + sortingOrderOffset;
+    }
+
+    void SetLayerRenderersVisible(bool visible)
+    {
+        if (layerRenderersVisible == visible)
+            return;
+
+        layerRenderersVisible = visible;
+        for (int i = 0; i < layers.Length; i++)
+        {
+            LayerState layer = layers[i];
+            if (layer == null)
+                continue;
+
+            if (layer.SpriteRenderer != null)
+                layer.SpriteRenderer.enabled = visible;
+
+            if (layer.Renderer != null)
+                layer.Renderer.enabled = visible;
+
+            if (layer.EdgeEffectRenderer != null)
+                layer.EdgeEffectRenderer.enabled = visible;
+        }
     }
 
     void BuildLayers(AdvancedBackgroundStyle style, int seed, Vector2 mapSize)
@@ -251,13 +379,13 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
 
         builtSeed = seed;
         builtStyle = AdvancedBackgroundStyle.NoobHaven;
-        builtBackgroundObjectId = RoomSettings.GetBackgroundObjectId();
+        builtBackgroundObjectId = GetConfiguredBackgroundObjectId();
         builtMapSize = mapSize;
     }
 
     LayerState CreateNoobHavenBackdropLayer(Vector2 mapSize)
     {
-        string backgroundId = RoomSettings.GetParallaxBackgroundId();
+        string backgroundId = GetConfiguredParallaxBackgroundId();
         Sprite sprite = LoadNoobHavenBackdropSprite(backgroundId);
         if (sprite == null)
             return null;
@@ -269,7 +397,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         renderer.sprite = sprite;
         renderer.color = Color.white;
         renderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
-        renderer.sortingOrder = BackdropSortingOrder;
+        renderer.sortingOrder = ResolveSortingOrder(BackdropSortingOrder);
 
         Vector2 spriteSize = sprite.bounds.size;
         if (spriteSize.x <= 0.001f || spriteSize.y <= 0.001f)
@@ -455,7 +583,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
 
         builtSeed = seed;
         builtStyle = AdvancedBackgroundStyle.GravityWell;
-        builtBackgroundObjectId = RoomSettings.GetBackgroundObjectId();
+        builtBackgroundObjectId = GetConfiguredBackgroundObjectId();
         builtMapSize = mapSize;
     }
 
@@ -476,7 +604,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         layers[layerIndex++] = CreateLayer("ToxicMidStars", 260, extent, 0.065f, 0.22f, 1f, 1f, 0.2f, Vector2.zero, 0.45f, 0.08f, MidSortingOrder, LayerStyle.Star, random);
         layers[layerIndex++] = CreateLayer("ToxicIonDust", 132, extent, 0.06f, 0.2f, 2.3f, 0.5f, 0.34f, new Vector2(-0.001f, 0.001f), 0.36f, 0.065f, DustSortingOrder, LayerStyle.Dust, random);
 
-        string objectId = RoomSettings.GetBackgroundObjectId();
+        string objectId = GetConfiguredBackgroundObjectId();
         if (!string.Equals(objectId, RoomSettings.BackgroundObjectOff, StringComparison.Ordinal))
         {
             float targetSize = Mathf.Clamp(Mathf.Min(mapSize.x, mapSize.y) * 0.34f, 11f, 17f);
@@ -515,7 +643,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
 
         builtSeed = seed;
         builtStyle = AdvancedBackgroundStyle.ToxicArea;
-        builtBackgroundObjectId = RoomSettings.GetBackgroundObjectId();
+        builtBackgroundObjectId = GetConfiguredBackgroundObjectId();
         builtMapSize = mapSize;
     }
 
@@ -541,7 +669,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         renderer.sprite = sprite;
         renderer.color = color;
         renderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
-        renderer.sortingOrder = sortingOrder;
+        renderer.sortingOrder = ResolveSortingOrder(sortingOrder);
 
         Vector2 spriteSize = sprite.bounds.size;
         float maxDimension = Mathf.Max(spriteSize.x, spriteSize.y);
@@ -572,7 +700,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
 
     LayerState CreateBackgroundObjectLayer(Vector2 mapSize, System.Random random)
     {
-        string objectId = RoomSettings.GetBackgroundObjectId();
+        string objectId = GetConfiguredBackgroundObjectId();
         if (string.Equals(objectId, RoomSettings.BackgroundObjectOff, StringComparison.Ordinal))
             return null;
 
@@ -587,7 +715,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         renderer.sprite = sprite;
         renderer.color = Color.white;
         renderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
-        renderer.sortingOrder = BackgroundObjectSortingOrder;
+        renderer.sortingOrder = ResolveSortingOrder(BackgroundObjectSortingOrder);
 
         Vector2 spriteSize = sprite.bounds.size;
         float maxDimension = Mathf.Max(spriteSize.x, spriteSize.y);
@@ -642,15 +770,15 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         return PickBackgroundObjectOffset(mapSize, targetSize, random);
     }
 
-    static bool IsGravityWellBackgroundObject13(string objectId)
+    bool IsGravityWellBackgroundObject13(string objectId)
     {
-        return string.Equals(RoomSettings.GetSelectedLobbyMapId(), LobbyMapCatalog.GravityWellMapId, StringComparison.Ordinal) &&
+        return string.Equals(GetConfiguredMapId(), LobbyMapCatalog.GravityWellMapId, StringComparison.Ordinal) &&
                string.Equals(RoomSettings.NormalizeBackgroundObjectId(objectId), RoomSettings.BackgroundObject13, StringComparison.Ordinal);
     }
 
-    static bool IsHiddenDimensionBackgroundObject14(string objectId)
+    bool IsHiddenDimensionBackgroundObject14(string objectId)
     {
-        return string.Equals(RoomSettings.GetSelectedLobbyMapId(), LobbyMapCatalog.HiddenDimensionMapId, StringComparison.Ordinal) &&
+        return string.Equals(GetConfiguredMapId(), LobbyMapCatalog.HiddenDimensionMapId, StringComparison.Ordinal) &&
                string.Equals(RoomSettings.NormalizeBackgroundObjectId(objectId), RoomSettings.BackgroundObject14, StringComparison.Ordinal);
     }
 
@@ -680,7 +808,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         effectRenderer = effectObject.GetComponent<MeshRenderer>();
         effectRenderer.sharedMaterial = GetSharedMaterial();
         effectRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
-        effectRenderer.sortingOrder = BackgroundObjectSortingOrder + 1;
+        effectRenderer.sortingOrder = ResolveSortingOrder(BackgroundObjectSortingOrder + 1);
         effectRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         effectRenderer.receiveShadows = false;
         effectTransform = effectObject.transform;
@@ -807,7 +935,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         MeshRenderer renderer = layerObject.GetComponent<MeshRenderer>();
         renderer.sharedMaterial = GetSharedMaterial();
         renderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
-        renderer.sortingOrder = sortingOrder;
+        renderer.sortingOrder = ResolveSortingOrder(sortingOrder);
         renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         renderer.receiveShadows = false;
 
@@ -1213,6 +1341,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
 
         builtStyle = AdvancedBackgroundStyle.None;
         builtBackgroundObjectId = string.Empty;
+        layerRenderersVisible = true;
     }
 
     static Material GetSharedMaterial()

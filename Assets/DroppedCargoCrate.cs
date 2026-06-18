@@ -276,14 +276,16 @@ public class DroppedCargoCrate : MonoBehaviourPun, IOnEventCallback
 
     void BounceAgainstMapBounds()
     {
-        Vector2 mapSize = RoomSettings.GetGameplayMapDimensions();
         Vector2 position = rb != null ? rb.position : (Vector2)transform.position;
+        MapInstanceService.TryGetBoundsForWorldPosition(position, out MapInstanceService.BoundsInfo bounds);
+        Vector2 mapSize = bounds.Size;
+        Vector2 center = bounds.Center;
         bool bounced = false;
 
-        float minX = -mapSize.x * 0.5f + DriftBouncePadding;
-        float maxX = mapSize.x * 0.5f - DriftBouncePadding;
-        float minY = -mapSize.y * 0.5f + DriftBouncePadding;
-        float maxY = mapSize.y * 0.5f - DriftBouncePadding;
+        float minX = center.x - mapSize.x * 0.5f + DriftBouncePadding;
+        float maxX = center.x + mapSize.x * 0.5f - DriftBouncePadding;
+        float minY = center.y - mapSize.y * 0.5f + DriftBouncePadding;
+        float maxY = center.y + mapSize.y * 0.5f - DriftBouncePadding;
 
         if (position.x < minX)
         {

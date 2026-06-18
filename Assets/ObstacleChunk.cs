@@ -65,7 +65,7 @@ public class ObstacleChunk : MonoBehaviour
     public int CurrentHealth => currentHealth;
     public int SplitCount => splitCount;
     public int SpriteVariantIndex => spriteVariantIndex;
-    public bool CanSplit => maxHealth > 1 && splitCount < RoomSettings.GetObstacleMaxSplitCount() && sizeFactor > (MinimumSizeFactor * 2f) + 0.0001f;
+    public bool CanSplit => maxHealth > 1 && splitCount < MapInstanceService.GetObstacleMaxSplitCountForPosition(transform.position) && sizeFactor > (MinimumSizeFactor * 2f) + 0.0001f;
 
     public static ObstacleChunk Find(string id)
     {
@@ -194,7 +194,7 @@ public class ObstacleChunk : MonoBehaviour
 
     public float GetTargetWorldSize()
     {
-        return DefaultTargetWorldSize * RoomSettings.GetObstacleSizeMultiplier() * sizeFactor;
+        return DefaultTargetWorldSize * MapInstanceService.GetObstacleSizeMultiplierForPosition(transform.position) * sizeFactor;
     }
 
     public static float ComputeStableSizeFactor(string key)

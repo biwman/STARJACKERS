@@ -27,6 +27,8 @@ public class GameVisualTheme : MonoBehaviour
     const float ContainerTargetSize = 1.05f;
     const float RandomLootWreckTargetSize = 1.24f;
     const float SpaceAnimalRemainsTargetSize = 1.1f;
+    const float SpaceAnimalBonesTargetSize = 1.08f;
+    const float AlienSecretTargetSize = 1.18f;
     const float TreasureColliderSizeMultiplier = 0.9f;
     const float PlayerBodyColliderWidthFactor = 0.46f;
     const float PlayerBodyColliderHeightFactor = 0.62f;
@@ -53,16 +55,25 @@ public class GameVisualTheme : MonoBehaviour
     Sprite richTreasureSprite;
     Sprite epicTreasureSprite;
     Sprite legendaryTreasureSprite;
+    Sprite hiddenDimensionTreasureSprite;
+    Sprite hiddenDimensionGoldTreasureSprite;
+    Sprite hiddenDimensionRareTreasureSprite;
+    Sprite hiddenDimensionRichTreasureSprite;
+    Sprite hiddenDimensionEpicTreasureSprite;
+    Sprite hiddenDimensionLegendaryTreasureSprite;
     Sprite platinumChunkSprite;
     Sprite spaceJunkTrashSprite;
     Sprite spaceJunkStandardSprite;
     Sprite spaceJunkAsteroidSprite;
     Sprite spaceAnimalRemainsSprite;
+    Sprite spaceAnimalBonesSprite;
     Sprite radioactiveTreasureSprite;
     Sprite[] containerSprites;
     Sprite[] blueprintScrapContainerSprites;
     Sprite[] randomLootWreckSprites;
+    Sprite[] alienSecretSprites;
     Sprite[] obstacleSprites;
+    Sprite[] hiddenDimensionObstacleSprites;
     Sprite portalExtractionSprite;
     Sprite carrierExtractionSprite;
     Sprite spaceCityExtractionSprite;
@@ -375,20 +386,29 @@ public class GameVisualTheme : MonoBehaviour
             epicTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_burgundy_epic_resource", "Assets/Resources/treasure_asteroid_burgundy_epic_resource.png", "Assets/treasure_asteroid_burgundy_epic.png");
             legendaryTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_gold_legendary_resource", "Assets/Resources/treasure_asteroid_gold_legendary_resource.png", "Assets/treasure_asteroid_gold_legendary.png");
         }
+        hiddenDimensionTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_white_common_resource", "Assets/Resources/treasure_asteroid_white_common_resource.png", "Assets/treasure_asteroid_white_common.png");
+        hiddenDimensionGoldTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_green_uncommon_resource", "Assets/Resources/treasure_asteroid_green_uncommon_resource.png", "Assets/treasure_asteroid_green_uncommon.png");
+        hiddenDimensionRareTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_blue_rare_resource", "Assets/Resources/treasure_asteroid_blue_rare_resource.png", "Assets/treasure_asteroid_blue_rare.png");
+        hiddenDimensionRichTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_violet_very_rare_resource", "Assets/Resources/treasure_asteroid_violet_very_rare_resource.png", "Assets/treasure_asteroid_violet_very_rare.png");
+        hiddenDimensionEpicTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_burgundy_epic_resource", "Assets/Resources/treasure_asteroid_burgundy_epic_resource.png", "Assets/treasure_asteroid_burgundy_epic.png");
+        hiddenDimensionLegendaryTreasureSprite = LoadSpriteFromResourcesOrEditor("treasure_asteroid_gold_legendary_resource", "Assets/Resources/treasure_asteroid_gold_legendary_resource.png", "Assets/treasure_asteroid_gold_legendary.png");
         platinumChunkSprite = LoadSpriteFromResourcesOrEditor("Items/platinum_chunk", "Assets/Resources/Items/platinum_chunk.png");
         spaceJunkTrashSprite = LoadSpriteFromResourcesOrEditor("space_junk_trash", "Assets/Resources/space_junk_trash.png", "Assets/space_junk_trash.png");
         spaceJunkStandardSprite = LoadSpriteFromResourcesOrEditor("space_junk_standard", "Assets/Resources/space_junk_standard.png", "Assets/space_junk_standard.png");
         spaceJunkAsteroidSprite = LoadSpriteFromResourcesOrEditor("space_junk_asteroid", "Assets/Resources/space_junk_asteroid.png", "Assets/space_junk_asteroid.png");
         spaceAnimalRemainsSprite = LoadSpriteFromResourcesOrEditor("space_animal_remains_resource", "Assets/Resources/space_animal_remains_resource.png", "Assets/Resources/space_animal_remains_resource.png");
+        spaceAnimalBonesSprite = LoadSpriteFromResourcesOrEditor("Items/animal_bones", "Assets/Resources/Items/animal_bones.png");
         radioactiveTreasureSprite = LoadSpriteFromResourcesOrEditor("radioactive_treasure", "Assets/Resources/radioactive_treasure.png", "Assets/Resources/radioactive_treasure.png");
         containerSprites = LoadSpritesFromResourcesOrEditor("kontenery_9", "Assets/Resources/kontenery_9.png", "Assets/kontenery_9.png");
         blueprintScrapContainerSprites = LoadSpritesFromResourcesOrEditor("Enemies/ContainerShip/containers_set2", "Assets/Resources/Enemies/ContainerShip/containers_set2.png", "Assets/containers_set2.png");
         randomLootWreckSprites = LoadRandomLootWreckSprites();
+        alienSecretSprites = LoadAlienSecretSprites();
         obstacleSprites = snowFieldTheme
             ? LoadSnowObstacleSprites()
             : toxicAreaTheme
                 ? LoadRadioactiveObstacleSprites()
                 : LoadDefaultObstacleSprites();
+        hiddenDimensionObstacleSprites = LoadDefaultObstacleSprites();
         portalExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/portal_nieaktywny_resource", "Assets/Resources/Visuals/Bases/portal_nieaktywny_resource.png", "Assets/portal_nieaktywny.png");
         carrierExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/lotniskowiec_strefa_resource", "Assets/Resources/Visuals/Bases/lotniskowiec_strefa_resource.png", "Assets/lotniskowiec_strefa.png");
         spaceCityExtractionSprite = LoadSpriteFromResourcesOrEditor("Visuals/Bases/baza_strefa_resource", "Assets/Resources/Visuals/Bases/baza_strefa_resource.png", "Assets/baza_strefa.png");
@@ -725,13 +745,33 @@ public class GameVisualTheme : MonoBehaviour
         if (treasure == null)
             return treasureSprite;
 
+        bool hiddenDimensionTarget = string.Equals(
+            MapInstanceService.GetMapIdForTransform(treasure.transform),
+            LobbyMapCatalog.HiddenDimensionMapId,
+            System.StringComparison.Ordinal);
+        Sprite activeTreasureSprite = hiddenDimensionTarget && hiddenDimensionTreasureSprite != null ? hiddenDimensionTreasureSprite : treasureSprite;
+        Sprite activeGoldTreasureSprite = hiddenDimensionTarget && hiddenDimensionGoldTreasureSprite != null ? hiddenDimensionGoldTreasureSprite : goldTreasureSprite;
+        Sprite activeRareTreasureSprite = hiddenDimensionTarget && hiddenDimensionRareTreasureSprite != null ? hiddenDimensionRareTreasureSprite : rareTreasureSprite;
+        Sprite activeRichTreasureSprite = hiddenDimensionTarget && hiddenDimensionRichTreasureSprite != null ? hiddenDimensionRichTreasureSprite : richTreasureSprite;
+        Sprite activeEpicTreasureSprite = hiddenDimensionTarget && hiddenDimensionEpicTreasureSprite != null ? hiddenDimensionEpicTreasureSprite : epicTreasureSprite;
+        Sprite activeLegendaryTreasureSprite = hiddenDimensionTarget && hiddenDimensionLegendaryTreasureSprite != null ? hiddenDimensionLegendaryTreasureSprite : legendaryTreasureSprite;
+
+        if (InventoryItemCatalog.IsAlienSecretItem(treasure.itemId))
+        {
+            int variantIndex = ResolveAlienSecretVariantIndex(treasure);
+            if (alienSecretSprites != null && variantIndex >= 0 && variantIndex < alienSecretSprites.Length && alienSecretSprites[variantIndex] != null)
+                return alienSecretSprites[variantIndex];
+
+            return activeTreasureSprite;
+        }
+
         if (InventoryItemCatalog.IsContainerItem(treasure.itemId))
         {
             int variantIndex = InventoryItemCatalog.GetContainerVariantIndex(treasure.itemId);
             if (containerSprites != null && variantIndex >= 0 && variantIndex < containerSprites.Length && containerSprites[variantIndex] != null)
                 return containerSprites[variantIndex];
 
-            return treasureSprite;
+            return activeTreasureSprite;
         }
 
         if (InventoryItemCatalog.IsBlueprintScrapContainerItem(treasure.itemId))
@@ -740,7 +780,7 @@ public class GameVisualTheme : MonoBehaviour
             if (blueprintScrapContainerSprites != null && variantIndex >= 0 && variantIndex < blueprintScrapContainerSprites.Length && blueprintScrapContainerSprites[variantIndex] != null)
                 return blueprintScrapContainerSprites[variantIndex];
 
-            return treasureSprite;
+            return activeTreasureSprite;
         }
 
         if (InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
@@ -749,36 +789,41 @@ public class GameVisualTheme : MonoBehaviour
             if (randomLootWreckSprites != null && variantIndex >= 0 && variantIndex < randomLootWreckSprites.Length && randomLootWreckSprites[variantIndex] != null)
                 return randomLootWreckSprites[variantIndex];
 
-            return treasureSprite;
+            return activeTreasureSprite;
         }
 
         switch (treasure.itemId)
         {
             case InventoryItemCatalog.PlatinumChunkId:
-                return platinumChunkSprite != null ? platinumChunkSprite : legendaryTreasureSprite != null ? legendaryTreasureSprite : treasureSprite;
+                return platinumChunkSprite != null ? platinumChunkSprite : activeLegendaryTreasureSprite != null ? activeLegendaryTreasureSprite : activeTreasureSprite;
             case InventoryItemCatalog.AsteroidGoldId:
-                return goldTreasureSprite != null ? goldTreasureSprite : treasureSprite;
+                return activeGoldTreasureSprite != null ? activeGoldTreasureSprite : activeTreasureSprite;
             case InventoryItemCatalog.AsteroidRareId:
-                return rareTreasureSprite != null ? rareTreasureSprite : treasureSprite;
+                return activeRareTreasureSprite != null ? activeRareTreasureSprite : activeTreasureSprite;
             case InventoryItemCatalog.RichAsteroidId:
-                return richTreasureSprite != null ? richTreasureSprite : treasureSprite;
+                return activeRichTreasureSprite != null ? activeRichTreasureSprite : activeTreasureSprite;
             case InventoryItemCatalog.AsteroidEpicId:
-                return epicTreasureSprite != null ? epicTreasureSprite : treasureSprite;
+                return activeEpicTreasureSprite != null ? activeEpicTreasureSprite : activeTreasureSprite;
             case InventoryItemCatalog.AsteroidLegendaryId:
-                return legendaryTreasureSprite != null ? legendaryTreasureSprite : treasureSprite;
+                return activeLegendaryTreasureSprite != null ? activeLegendaryTreasureSprite : activeTreasureSprite;
             case InventoryItemCatalog.LegacySpaceJunkId:
             case InventoryItemCatalog.SpaceJunkStandardId:
-                return spaceJunkStandardSprite != null ? spaceJunkStandardSprite : treasureSprite;
+                return spaceJunkStandardSprite != null ? spaceJunkStandardSprite : activeTreasureSprite;
             case InventoryItemCatalog.SpaceJunkTrashId:
-                return spaceJunkTrashSprite != null ? spaceJunkTrashSprite : treasureSprite;
+                return spaceJunkTrashSprite != null ? spaceJunkTrashSprite : activeTreasureSprite;
             case InventoryItemCatalog.SpaceJunkAsteroidId:
-                return spaceJunkAsteroidSprite != null ? spaceJunkAsteroidSprite : treasureSprite;
+                return spaceJunkAsteroidSprite != null ? spaceJunkAsteroidSprite : activeTreasureSprite;
             case InventoryItemCatalog.SpaceAnimalRemainsId:
-                return spaceAnimalRemainsSprite != null ? spaceAnimalRemainsSprite : treasureSprite;
+                return spaceAnimalRemainsSprite != null ? spaceAnimalRemainsSprite : activeTreasureSprite;
+            case InventoryItemCatalog.SpaceAnimalBonesId:
+                if (spaceAnimalBonesSprite != null)
+                    return spaceAnimalBonesSprite;
+
+                return spaceAnimalRemainsSprite != null ? spaceAnimalRemainsSprite : activeTreasureSprite;
             case InventoryItemCatalog.RadioactiveTreasureId:
-                return radioactiveTreasureSprite != null ? radioactiveTreasureSprite : treasureSprite;
+                return radioactiveTreasureSprite != null ? radioactiveTreasureSprite : activeTreasureSprite;
             default:
-                return treasureSprite;
+                return activeTreasureSprite;
         }
     }
 
@@ -798,13 +843,48 @@ public class GameVisualTheme : MonoBehaviour
         if (treasure != null && InventoryItemCatalog.IsRandomLootWreckItem(treasure.itemId))
             return RandomLootWreckTargetSize;
 
+        if (treasure != null && InventoryItemCatalog.IsAlienSecretItem(treasure.itemId))
+            return AlienSecretTargetSize;
+
         if (treasure != null && treasure.itemId == InventoryItemCatalog.SpaceAnimalRemainsId)
             return SpaceAnimalRemainsTargetSize;
+
+        if (treasure != null && treasure.itemId == InventoryItemCatalog.SpaceAnimalBonesId)
+            return SpaceAnimalBonesTargetSize;
 
         if (treasure != null && treasure.itemId == InventoryItemCatalog.PlatinumChunkId)
             return 1.28f;
 
         return TreasureTargetSize;
+    }
+
+    int ResolveAlienSecretVariantIndex(Treasure treasure)
+    {
+        if (treasure == null)
+            return 0;
+
+        if (treasure.visualVariantIndex >= 0)
+            return InventoryItemCatalog.NormalizeAlienSecretVariantIndex(treasure.visualVariantIndex);
+
+        int itemVariantIndex = InventoryItemCatalog.GetAlienSecretVariantIndex(treasure.itemId);
+        if (itemVariantIndex >= 0)
+            return itemVariantIndex;
+
+        int hash = treasure.photonView != null ? treasure.photonView.ViewID : treasure.name.GetHashCode();
+        return Mathf.Abs(hash) % InventoryItemCatalog.AlienSecretVariantCount;
+    }
+
+    Sprite[] LoadAlienSecretSprites()
+    {
+        Sprite[] sprites = new Sprite[InventoryItemCatalog.AlienSecretVariantCount];
+        for (int i = 0; i < sprites.Length; i++)
+        {
+            string path = InventoryItemCatalog.GetAlienSecretSpriteResourcePath(i);
+            string assetPath = "Assets/Resources/" + path + ".png";
+            sprites[i] = LoadSpriteFromResourcesOrEditor(path, assetPath, assetPath);
+        }
+
+        return sprites;
     }
 
     Sprite[] LoadRandomLootWreckSprites()
@@ -858,13 +938,14 @@ public class GameVisualTheme : MonoBehaviour
 
     void ApplyObstacleVisualInternal(GameObject target, SpriteRenderer renderer)
     {
-        if (target == null || renderer == null || obstacleSprites == null || obstacleSprites.Length == 0)
+        Sprite[] activeObstacleSprites = GetObstacleSpritesForTarget(target);
+        if (target == null || renderer == null || activeObstacleSprites == null || activeObstacleSprites.Length == 0)
             return;
 
         PolygonCollider2D polygonCollider = target.GetComponent<PolygonCollider2D>();
         BoxCollider2D boxCollider = target.GetComponent<BoxCollider2D>();
 
-        Sprite obstacleSprite = GetStableObstacleSprite(target);
+        Sprite obstacleSprite = GetStableObstacleSprite(target, activeObstacleSprites);
         if (obstacleSprite == null)
             return;
 
@@ -876,7 +957,7 @@ public class GameVisualTheme : MonoBehaviour
         renderer.sortingLayerName = WorldSortingLayerName;
         renderer.sortingOrder = ObstacleSortingOrder;
 
-        float obstacleSize = ObstacleTargetSize * RoomSettings.GetObstacleSizeMultiplier() * GetStableObstacleSizeMultiplier(target);
+        float obstacleSize = ObstacleTargetSize * MapInstanceService.GetObstacleSizeMultiplierForPosition(target.transform.position) * GetStableObstacleSizeMultiplier(target);
         FitSpriteToTargetSize(renderer, obstacleSize);
 
         if (polygonCollider == null)
@@ -901,7 +982,11 @@ public class GameVisualTheme : MonoBehaviour
             return;
 
         RadioactiveObstacleHazard hazard = target.GetComponent<RadioactiveObstacleHazard>();
-        if (IsToxicAreaTheme())
+        bool toxicAreaTheme = string.Equals(
+            MapInstanceService.GetMapIdForTransform(target.transform),
+            LobbyMapCatalog.ToxicAreaMapId,
+            System.StringComparison.Ordinal);
+        if (toxicAreaTheme)
         {
             if (hazard == null)
                 hazard = target.AddComponent<RadioactiveObstacleHazard>();
@@ -916,18 +1001,20 @@ public class GameVisualTheme : MonoBehaviour
 
     void ApplyExtractionZoneSprites()
     {
-        string extractionType = RoomSettings.GetExtractionType();
-        Sprite extractionSprite = GetExtractionZoneSprite(extractionType);
-        if (extractionSprite == null)
-            return;
-
-        float targetSize = GetExtractionZoneTargetSize(extractionType);
-
         ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
         foreach (ExtractionZone zone in zones)
         {
             if (zone == null)
                 continue;
+
+            string extractionType = MapInstanceService.TryGetExtractionTypeForObject(zone.gameObject, out string zoneExtractionType)
+                ? zoneExtractionType
+                : RoomSettings.GetExtractionType();
+            Sprite extractionSprite = GetExtractionZoneSprite(extractionType);
+            if (extractionSprite == null)
+                continue;
+
+            float targetSize = GetExtractionZoneTargetSize(extractionType);
 
             SpriteRenderer renderer = zone.GetComponent<SpriteRenderer>();
             if (renderer == null)
@@ -1020,16 +1107,32 @@ public class GameVisualTheme : MonoBehaviour
         return Mathf.Lerp(0.5f, 1.5f, noise);
     }
 
-    Sprite GetStableObstacleSprite(GameObject target)
+    Sprite[] GetObstacleSpritesForTarget(GameObject target)
     {
-        if (target == null || obstacleSprites == null || obstacleSprites.Length == 0)
+        if (target != null &&
+            string.Equals(
+                MapInstanceService.GetMapIdForTransform(target.transform),
+                LobbyMapCatalog.HiddenDimensionMapId,
+                System.StringComparison.Ordinal))
+        {
+            return hiddenDimensionObstacleSprites != null && hiddenDimensionObstacleSprites.Length > 0
+                ? hiddenDimensionObstacleSprites
+                : obstacleSprites;
+        }
+
+        return obstacleSprites;
+    }
+
+    Sprite GetStableObstacleSprite(GameObject target, Sprite[] activeObstacleSprites)
+    {
+        if (target == null || activeObstacleSprites == null || activeObstacleSprites.Length == 0)
             return null;
 
         ObstacleChunk chunk = target.GetComponent<ObstacleChunk>();
         if (chunk != null && chunk.SpriteVariantIndex >= 0)
         {
-            int chunkIndex = Mathf.Clamp(chunk.SpriteVariantIndex, 0, obstacleSprites.Length - 1);
-            return obstacleSprites[chunkIndex];
+            int chunkIndex = Mathf.Clamp(chunk.SpriteVariantIndex, 0, activeObstacleSprites.Length - 1);
+            return activeObstacleSprites[chunkIndex];
         }
 
         MovingSpaceObject movingObject = target.GetComponent<MovingSpaceObject>();
@@ -1037,9 +1140,9 @@ public class GameVisualTheme : MonoBehaviour
             ? movingObject.StableId
             : target.name;
 
-        int index = ObstacleChunk.ComputeStableSpriteVariantIndex(stableKey, obstacleSprites.Length);
-        index = Mathf.Clamp(index, 0, obstacleSprites.Length - 1);
-        return obstacleSprites[index];
+        int index = ObstacleChunk.ComputeStableSpriteVariantIndex(stableKey, activeObstacleSprites.Length);
+        index = Mathf.Clamp(index, 0, activeObstacleSprites.Length - 1);
+        return activeObstacleSprites[index];
     }
 
     Sprite GetMappedWreckSprite(int shipSkinIndex, Sprite fallback)

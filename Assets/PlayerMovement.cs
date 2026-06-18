@@ -43,6 +43,7 @@ public class PlayerMovement : MonoBehaviourPun
     int equippedFuelTankCount;
     int equippedHybridEngineCount;
     int equippedDoubleEngineCount;
+    int equippedSuperBoosterCount;
     int equippedAfterburnerStabilizerCount;
     int equippedBlackMarketThrusterCount;
     string lastAppliedEngineSignature = string.Empty;
@@ -58,6 +59,9 @@ public class PlayerMovement : MonoBehaviourPun
     const float BrakeDriftResponsivenessMultiplier = 0.8f;
     const float MaxDriftInertiaSlowdown = 4.2f;
     const float MovingObjectImpulseRequestCooldown = 0.045f;
+    const float EngineAudioIdleVolume = 0.12f;
+    const float EngineAudioFullVolume = 0.42f;
+    const float EngineAudioVolumeMultiplier = 1.5f;
     const float BatteringRequiredBoosterSeconds = 2f;
     const float BatteringFullSpeedRatio = 0.9f;
     const float BatteringSpeedGraceSeconds = 0.25f;
@@ -1409,7 +1413,8 @@ public class PlayerMovement : MonoBehaviourPun
         if (!engineAudioSource.isPlaying)
             engineAudioSource.Play();
 
-        engineAudioSource.volume = Mathf.Lerp(0.12f, 0.42f, normalizedSpeed);
+        float engineVolume = Mathf.Lerp(EngineAudioIdleVolume, EngineAudioFullVolume, normalizedSpeed);
+        engineAudioSource.volume = Mathf.Clamp01(engineVolume * EngineAudioVolumeMultiplier);
         engineAudioSource.pitch = Mathf.Lerp(0.88f, 1.24f, normalizedSpeed);
     }
 
@@ -1600,6 +1605,7 @@ public class PlayerMovement : MonoBehaviourPun
         equippedFuelTankCount = fuelTankCount;
         equippedHybridEngineCount = hybridCount;
         equippedDoubleEngineCount = doubleEngineCount;
+        equippedSuperBoosterCount = superBoosterCount;
         equippedAfterburnerStabilizerCount = afterburnerStabilizerCount;
         equippedBlackMarketThrusterCount = blackMarketThrusterCount;
         equippedEngineTrailItemId = engineTrailItemId;
@@ -1762,7 +1768,28 @@ public class PlayerMovement : MonoBehaviourPun
         if (enemyBot != null && enemyBot.Kind == EnemyBotKind.Mothership)
             return AudioManager.Instance.MothershipEngineClip;
 
-        return fusionEngineEquipped ? AudioManager.Instance.FusionEngineClip : AudioManager.Instance.EngineClip;
+        if (equippedBlackMarketThrusterCount > 0)
+            return AudioManager.Instance.BlackMarketThrusterEngineClip;
+
+        if (equippedDoubleEngineCount > 0)
+            return AudioManager.Instance.DoubleEngineClip;
+
+        if (equippedHybridEngineCount > 0)
+            return AudioManager.Instance.HybridEngineClip;
+
+        if (equippedFusionEngineCount > 0)
+            return AudioManager.Instance.FusionEngineClip;
+
+        if (equippedPowerEngineCount > 0)
+            return AudioManager.Instance.PowerEngineClip;
+
+        if (equippedIonEngineCount > 0)
+            return AudioManager.Instance.IonEngineClip;
+
+        if (equippedSuperBoosterCount > 0)
+            return AudioManager.Instance.SuperBoosterEngineClip;
+
+        return AudioManager.Instance.EngineClip;
     }
 
     void SyncEngineAudioClip()
@@ -1832,6 +1859,36 @@ public class PlayerMovement : MonoBehaviourPun
 
         if (!hasAuthority)
             rb.linearVelocity = Vector2.zero;
+    }
+
+    [PunRPC]
+    public void TeleportToMapInstanceRpc(float x, float y, string instanceId)
+    {
+        Vector2 target = new Vector2(x, y);
+        MapInstanceService.ConfigureMember(gameObject, instanceId);
+
+        if (rb == null)
+            rb = GetComponent<Rigidbody2D>();
+
+        if (rb != null)
+        {
+            rb.position = target;
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+        }
+
+        transform.position = new Vector3(target.x, target.y, transform.position.z);
+        PlayerHealth health = GetComponent<PlayerHealth>();
+        if (health != null)
+            health.BeginMapTravelArrivalProtection();
+
+        EngineThrusterVFX thruster = GetComponent<EngineThrusterVFX>();
+        if (thruster != null)
+            thruster.TriggerBoostBurst(0.42f, 1.6f);
+
+        CameraFollow camera = Camera.main != null ? Camera.main.GetComponent<CameraFollow>() : null;
+        if (camera != null && photonView != null && photonView.IsMine)
+            camera.SnapToTarget();
     }
 }
 

@@ -114,7 +114,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RoomSettings.AsteroidShowerActiveKey,
         RoomSettings.CosmicWormModeKey,
         RoomSettings.CosmicWormStartUtcMsKey,
-        RoomSettings.CosmicWormActiveKey
+        RoomSettings.CosmicWormActiveKey,
+        MapInstanceService.MapTravelLockedKey
     };
 
     static NetworkManager instance;
@@ -892,6 +893,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             return true;
         }
 
+        if (TryGetRoomBool(info, MapInstanceService.MapTravelLockedKey, out bool travelLocked) && travelLocked)
+        {
+            reason = "SPACE-TIME DISTORTIONS DETECTED";
+            return true;
+        }
+
         float? remainingTime = GetRemainingTime(info, state);
         if (state == RoomSettings.SessionStateInPlay &&
             remainingTime.HasValue &&
@@ -935,6 +942,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.EndDisasterWarningSecondsKey] = RoomSettings.DefaultEndDisasterWarningSeconds,
             [RoomSettings.TreasureDensityKey] = RoomSettings.DefaultTreasureDensity,
             [RoomSettings.RadioactiveTreasureDensityKey] = RoomSettings.DefaultRadioactiveTreasureDensity,
+            [RoomSettings.AlienSecretsDensityKey] = RoomSettings.DefaultAlienSecretsDensity,
             [RoomSettings.ResourceRichnessKey] = RoomSettings.DefaultResourceRichness,
             [RoomSettings.CrazyEnemiesModeKey] = RoomSettings.DefaultMapEffectMode,
             [RoomSettings.CrazyEnemiesStartUtcMsKey] = -1d,
@@ -999,6 +1007,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.EnemyAttackCooldownMultiplierPercentKey] = RoomSettings.DefaultEnemyAttackCooldownMultiplierPercent
         };
 
+        MapInstanceService.AppendClearRoundProperties(props);
         AddDefaultMapEffectChanceProperties(props);
         HashSet<string> rememberedKeys = ApplyRememberedLobbySettings(props);
         ApplyRememberedMapPresetDefaults(props, rememberedKeys);
@@ -1191,6 +1200,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (!rememberedKeys.Contains(RoomSettings.CloudsSizeKey))
             props[RoomSettings.CloudsSizeKey] = map.CloudsSize;
 
+        if (!rememberedKeys.Contains(RoomSettings.AlienSecretsDensityKey))
+            props[RoomSettings.AlienSecretsDensityKey] = LobbyMapCatalog.GetDefaultAlienSecretsDensity(map.Id);
+
         if (!rememberedKeys.Contains(RoomSettings.ParallaxBackgroundKey))
             props[RoomSettings.ParallaxBackgroundKey] = LobbyMapCatalog.GetDefaultParallaxBackgroundId(map.Id);
 
@@ -1295,6 +1307,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.ObstacleNoBordersKey:
             case RoomSettings.TreasureDensityKey:
             case RoomSettings.RadioactiveTreasureDensityKey:
+            case RoomSettings.AlienSecretsDensityKey:
             case RoomSettings.ResourceRichnessKey:
             case RoomSettings.CrazyEnemiesModeKey:
             case RoomSettings.CrazyEnemiesStartUtcMsKey:
@@ -1385,6 +1398,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                                  remainingTime.HasValue &&
                                  remainingTime.Value < LateJoinBlockThresholdSeconds;
             bool roundStarting = state == RoomSettings.SessionStatePreparing;
+            bool travelLocked = TryGetRoomBool(info, MapInstanceService.MapTravelLockedKey, out bool locked) && locked;
             bool baseCanJoin = info.IsOpen && !info.RemovedFromList && info.PlayerCount < info.MaxPlayers;
             SessionRoomEntry entry = new SessionRoomEntry
             {
@@ -1398,9 +1412,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
                 MapName = GetMapDisplayName(info),
                 ActiveEffectsLabel = GetActiveEffectsLabel(info, state),
                 RemainingTimeSeconds = remainingTime,
-                CanJoin = baseCanJoin && !blockedByLocalDeath && !tooLateToJoin && !roundStarting,
+                CanJoin = baseCanJoin && !blockedByLocalDeath && !tooLateToJoin && !roundStarting && !travelLocked,
                 BlockedByLocalDeath = blockedByLocalDeath,
-                BlockReason = roundStarting ? "ROUND STARTING" : tooLateToJoin ? "TOO LATE TO JOIN" : localFinishReason
+                BlockReason = roundStarting ? "ROUND STARTING" : travelLocked ? "SPACE-TIME DISTORTIONS DETECTED" : tooLateToJoin ? "TOO LATE TO JOIN" : localFinishReason
             };
 
             entries.Add(entry);
@@ -1871,6 +1885,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         FogOfWarOverlay.EnsureExists();
         AsteroidShowerController.EnsureExists();
         ToxicBorderController.EnsureExists();
+        MapTravelService.EnsureExists();
 
         if (PhotonNetwork.LocalPlayer != null && string.IsNullOrWhiteSpace(PhotonNetwork.NickName))
         {
@@ -2216,6 +2231,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     void LeaveCurrentRoomToSessionBrowser(string status, bool keepPendingAction = false)
     {
+        RoundMessageLayer.ClearAll();
+
         if (returnToBrowserAfterLeave)
         {
             if (keepPendingAction)
@@ -2446,6 +2463,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RoundPilotHudUI.DestroyAllRuntimeObjects();
         ShipDamageState.ClearAllRuntimeDamage();
         RoundWarmupService.ResetRoundTransientEffects();
+        RoundMessageLayer.ClearAll();
         RoundResultsTracker.ResetForCurrentRoom();
         TreasureCollector.ResetRoundReservations();
         ObstacleSpawner.ResetForSessionTransition();
@@ -2456,6 +2474,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         SpaceFactorySpawner.ResetForSessionTransition();
         ScienceStationSpawner.ResetForSessionTransition();
         ArtifactAsteroidSpawner.ResetForSessionTransition();
+        MapTravelService.ResetLocalRuntimeState();
 
         HashSet<GameObject> queued = new HashSet<GameObject>();
         QueueDestroyFromComponents<PlayerHealth>(queued);
