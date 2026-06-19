@@ -1151,6 +1151,25 @@ public static class LobbyMapCatalog
                 SetPresetProperty(props, RoomSettings.CorsairHpKey, enemyPreset.Hp, preservedKeys);
             }
         }
+
+        ApplyDefaultDisabledEnemyPreset(EnemyBotKind.MilitaryVan, props, preservedKeys);
+    }
+
+    static void ApplyDefaultDisabledEnemyPreset(EnemyBotKind kind, Hashtable props, ISet<string> preservedKeys)
+    {
+        EnemyBotDefinition definition = EnemyBotCatalog.GetDefinition(kind);
+        if (definition == null)
+            return;
+
+        SetPresetProperty(props, definition.EnabledRoomKey, false, preservedKeys);
+        SetPresetProperty(props, definition.CountRoomKey, definition.DefaultCount, preservedKeys);
+        SetPresetProperty(props, definition.HpRoomKey, definition.DefaultHp, preservedKeys);
+        SetPresetProperty(props, definition.ShieldRoomKey, definition.DefaultShield, preservedKeys);
+        SetPresetProperty(props, definition.DamageRoomKey, definition.DefaultDamage, preservedKeys);
+        SetPresetProperty(props, definition.SpeedRoomKey, definition.DefaultSpeedMultiplier, preservedKeys);
+        SetPresetProperty(props, definition.SpawnSecondRoomKey, definition.DefaultSpawnSecond, preservedKeys);
+        SetPresetProperty(props, definition.RespawnEnabledRoomKey, RoomSettings.DefaultEnemyRespawnEnabled, preservedKeys);
+        SetPresetProperty(props, definition.RespawnIntervalRoomKey, RoomSettings.DefaultEnemyRespawnIntervalSeconds, preservedKeys);
     }
 
     static void SetPresetProperty(Hashtable props, string key, object value, ISet<string> preservedKeys)

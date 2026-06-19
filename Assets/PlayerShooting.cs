@@ -2416,6 +2416,43 @@ public class PlayerShooting : MonoBehaviourPun
         return true;
     }
 
+    public bool TryFireBotVolleyAtPointFromWorld(Vector3[] spawnPositions, Vector2 targetPoint, float cooldownOffset = 0f)
+    {
+        if (GetComponent<EnemyBot>() == null && !IsNeutralRiderShip())
+            return false;
+
+        if (!photonView.IsMine || !IsGameStarted())
+            return false;
+
+        UpdateReload();
+
+        if (Time.time < nextFireTime || spawnPositions == null || spawnPositions.Length == 0)
+            return false;
+
+        if (!infiniteAmmo && (isReloading || currentAmmo <= 0))
+            return false;
+
+        int ownerId = photonView != null ? photonView.ViewID : 0;
+        bool spawned = false;
+        for (int i = 0; i < spawnPositions.Length; i++)
+        {
+            Vector2 shotDirection = targetPoint - (Vector2)spawnPositions[i];
+            if (shotDirection.sqrMagnitude < 0.04f)
+                shotDirection = transform.up;
+
+            spawned |= SpawnBullet(shotDirection.normalized, spawnPositions[i], ownerId);
+        }
+
+        if (!spawned)
+            return false;
+
+        photonView.RPC(nameof(PlayLaserSfx), RpcTarget.All);
+        if (!infiniteAmmo)
+            ConsumeAmmo();
+        nextFireTime = Time.time + (fireRate * GetFireIntervalMultiplier()) + Mathf.Max(0f, cooldownOffset);
+        return true;
+    }
+
     public bool FireBotProjectileFromWorld(Vector2 direction, Vector3 spawnPosition)
     {
         if (GetComponent<EnemyBot>() == null && !IsNeutralRiderShip())

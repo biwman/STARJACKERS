@@ -9,6 +9,9 @@ using UnityEngine.UI;
 
 public class EndGameWatcher : MonoBehaviour
 {
+    static readonly Vector2 EndScreenPanelSize = new Vector2(1600f, 1000f);
+    static readonly Vector2 EndScreenBackButtonSize = new Vector2(680f, 172f);
+
     private static EndGameWatcher instance;
 
     private bool hasSeenRunningGame = false;
@@ -200,7 +203,7 @@ public class EndGameWatcher : MonoBehaviour
                 panelRect.anchorMax = new Vector2(0.5f, 0.5f);
                 panelRect.pivot = new Vector2(0.5f, 0.5f);
                 panelRect.anchoredPosition = Vector2.zero;
-                panelRect.sizeDelta = new Vector2(900f, 600f);
+                panelRect.sizeDelta = EndScreenPanelSize;
             }
 
             StyleSummaryPanel(summaryPanel);
@@ -220,8 +223,8 @@ public class EndGameWatcher : MonoBehaviour
                 rect.anchorMin = new Vector2(0f, 1f);
                 rect.anchorMax = new Vector2(1f, 1f);
                 rect.pivot = new Vector2(0.5f, 1f);
-                rect.anchoredPosition = new Vector2(0f, -32f);
-                rect.sizeDelta = new Vector2(-112f, 54f);
+                rect.anchoredPosition = new Vector2(0f, -64f);
+                rect.sizeDelta = new Vector2(-180f, 108f);
             }
         }
 
@@ -231,7 +234,7 @@ public class EndGameWatcher : MonoBehaviour
             TextMeshProUGUI messageText = messageTextObject.GetComponent<TextMeshProUGUI>();
             if (messageText != null)
             {
-                messageText.fontSize = 42f;
+                messageText.fontSize = 84f;
                 messageText.fontStyle = FontStyles.Bold;
                 messageText.color = new Color(0.92f, 0.98f, 1f, 1f);
                 messageText.alignment = TextAlignmentOptions.Left;
@@ -249,8 +252,8 @@ public class EndGameWatcher : MonoBehaviour
                 rect.anchorMin = new Vector2(0f, 0f);
                 rect.anchorMax = new Vector2(1f, 1f);
                 rect.pivot = new Vector2(0.5f, 0.5f);
-                rect.offsetMin = new Vector2(56f, 130f);
-                rect.offsetMax = new Vector2(-56f, -146f);
+                rect.offsetMin = new Vector2(96f, 220f);
+                rect.offsetMax = new Vector2(-96f, -230f);
             }
 
             Image listImage = listObject.GetComponent<Image>();
@@ -263,8 +266,8 @@ public class EndGameWatcher : MonoBehaviour
             if (layout == null)
                 layout = listObject.AddComponent<VerticalLayoutGroup>();
             layout.childAlignment = TextAnchor.UpperCenter;
-            layout.spacing = 10f;
-            layout.padding = new RectOffset(18, 18, 18, 18);
+            layout.spacing = 14f;
+            layout.padding = new RectOffset(24, 24, 24, 24);
             layout.childControlWidth = true;
             layout.childControlHeight = false;
             layout.childForceExpandWidth = true;
@@ -310,7 +313,7 @@ public class EndGameWatcher : MonoBehaviour
         rect.anchorMax = new Vector2(1f, 1f);
         rect.pivot = new Vector2(0.5f, 1f);
         rect.anchoredPosition = Vector2.zero;
-        rect.sizeDelta = new Vector2(0f, 8f);
+        rect.sizeDelta = new Vector2(0f, 16f);
 
         Image image = accent.GetComponent<Image>();
         image.color = new Color(0.08f, 0.62f, 0.78f, 1f);
@@ -331,12 +334,12 @@ public class EndGameWatcher : MonoBehaviour
         rect.anchorMin = new Vector2(0f, 1f);
         rect.anchorMax = new Vector2(1f, 1f);
         rect.pivot = new Vector2(0.5f, 1f);
-        rect.anchoredPosition = new Vector2(0f, -84f);
-        rect.sizeDelta = new Vector2(-96f, 26f);
+        rect.anchoredPosition = new Vector2(0f, -168f);
+        rect.sizeDelta = new Vector2(-180f, 52f);
 
         TextMeshProUGUI text = subtitleObject.GetComponent<TextMeshProUGUI>();
         text.text = "Final round results";
-        text.fontSize = 18f;
+        text.fontSize = 36f;
         text.fontStyle = FontStyles.Normal;
         text.alignment = TextAlignmentOptions.Left;
         text.color = new Color(0.68f, 0.78f, 0.88f, 0.95f);
@@ -519,8 +522,8 @@ public class EndGameWatcher : MonoBehaviour
             rect.anchorMin = new Vector2(0.5f, 0f);
             rect.anchorMax = new Vector2(0.5f, 0f);
             rect.pivot = new Vector2(0.5f, 0f);
-            rect.anchoredPosition = new Vector2(0f, 20f);
-            rect.sizeDelta = new Vector2(340f, 86f);
+            rect.anchoredPosition = new Vector2(0f, 32f);
+            rect.sizeDelta = EndScreenBackButtonSize;
         }
 
         Image image = backButtonObject.GetComponent<Image>();
@@ -535,7 +538,7 @@ public class EndGameWatcher : MonoBehaviour
         if (buttonText != null)
         {
             buttonText.text = "BACK";
-            buttonText.fontSize = 34f;
+            buttonText.fontSize = 68f;
             buttonText.fontStyle = FontStyles.Bold;
             buttonText.alignment = TextAlignmentOptions.Center;
             buttonText.color = Color.white;
@@ -741,8 +744,8 @@ public class EndGameWatcher : MonoBehaviour
         rect.anchorMin = new Vector2(0f, 0f);
         rect.anchorMax = new Vector2(1f, 1f);
         rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.offsetMin = new Vector2(56f, 130f);
-        rect.offsetMax = new Vector2(-56f, -146f);
+        rect.offsetMin = new Vector2(96f, 220f);
+        rect.offsetMax = new Vector2(-96f, -230f);
 
         Image image = runtimeList.GetComponent<Image>();
         image.color = new Color(0.012f, 0.019f, 0.028f, 0.92f);
@@ -750,8 +753,8 @@ public class EndGameWatcher : MonoBehaviour
 
         VerticalLayoutGroup layout = runtimeList.GetComponent<VerticalLayoutGroup>();
         layout.childAlignment = TextAnchor.UpperCenter;
-        layout.spacing = 10f;
-        layout.padding = new RectOffset(18, 18, 18, 18);
+        layout.spacing = 14f;
+        layout.padding = new RectOffset(24, 24, 24, 24);
         layout.childControlWidth = true;
         layout.childControlHeight = false;
         layout.childForceExpandWidth = true;
@@ -770,17 +773,17 @@ public class EndGameWatcher : MonoBehaviour
         rect.anchorMin = new Vector2(0f, 1f);
         rect.anchorMax = new Vector2(1f, 1f);
         rect.pivot = new Vector2(0.5f, 1f);
-        rect.sizeDelta = new Vector2(0f, 26f);
+        rect.sizeDelta = new Vector2(0f, 52f);
 
         LayoutElement layout = row.GetComponent<LayoutElement>();
-        layout.preferredHeight = 26f;
+        layout.preferredHeight = 52f;
         layout.flexibleWidth = 1f;
 
-        CreateScoreCell(row.transform, "HeaderPlace", "#", 0f, 0.08f, 14f, new Color(0.48f, 0.67f, 0.77f, 1f), TextAlignmentOptions.Center, ui);
-        CreateScoreCell(row.transform, "HeaderPilot", "PILOT", 0.09f, 0.44f, 14f, new Color(0.48f, 0.67f, 0.77f, 1f), TextAlignmentOptions.Left, ui);
-        CreateScoreCell(row.transform, "HeaderXp", "XP", 0.45f, 0.58f, 14f, new Color(0.48f, 0.67f, 0.77f, 1f), TextAlignmentOptions.Right, ui);
-        CreateScoreCell(row.transform, "HeaderStatus", "STATUS", 0.60f, 0.78f, 14f, new Color(0.48f, 0.67f, 0.77f, 1f), TextAlignmentOptions.Left, ui);
-        CreateScoreCell(row.transform, "HeaderCargo", "CARGO", 0.80f, 1f, 14f, new Color(0.48f, 0.67f, 0.77f, 1f), TextAlignmentOptions.Right, ui);
+        CreateScoreCell(row.transform, "HeaderPlace", "#", 0f, 0.07f, 28f, new Color(0.48f, 0.67f, 0.77f, 1f), TextAlignmentOptions.Center, ui);
+        CreateScoreCell(row.transform, "HeaderPilot", "PILOT", 0.08f, 0.42f, 28f, new Color(0.48f, 0.67f, 0.77f, 1f), TextAlignmentOptions.Left, ui);
+        CreateScoreCell(row.transform, "HeaderXp", "XP", 0.43f, 0.56f, 28f, new Color(0.48f, 0.67f, 0.77f, 1f), TextAlignmentOptions.Right, ui);
+        CreateScoreCell(row.transform, "HeaderStatus", "STATUS", 0.58f, 0.76f, 28f, new Color(0.48f, 0.67f, 0.77f, 1f), TextAlignmentOptions.Left, ui);
+        CreateScoreCell(row.transform, "HeaderCargo", "CARGO", 0.78f, 1f, 28f, new Color(0.48f, 0.67f, 0.77f, 1f), TextAlignmentOptions.Right, ui);
     }
 
     void CreateScoreRow(
@@ -801,10 +804,10 @@ public class EndGameWatcher : MonoBehaviour
         rect.anchorMin = new Vector2(0f, 1f);
         rect.anchorMax = new Vector2(1f, 1f);
         rect.pivot = new Vector2(0.5f, 1f);
-        rect.sizeDelta = new Vector2(0f, 48f);
+        rect.sizeDelta = new Vector2(0f, 88f);
 
         LayoutElement layout = row.GetComponent<LayoutElement>();
-        layout.preferredHeight = 48f;
+        layout.preferredHeight = 88f;
         layout.flexibleWidth = 1f;
 
         Image rowImage = row.GetComponent<Image>();
@@ -813,11 +816,11 @@ public class EndGameWatcher : MonoBehaviour
             : new Color(0.055f, 0.09f, 0.13f, 0.92f);
         rowImage.raycastTarget = false;
 
-        CreateScoreCell(row.transform, "ScoreRowPlace", "#" + placement, 0f, 0.08f, 20f, new Color(0.72f, 0.84f, 0.92f, 1f), TextAlignmentOptions.Center, ui);
-        CreateScoreCell(row.transform, "ScoreRowPilot", string.IsNullOrWhiteSpace(nickname) ? "Player" : nickname, 0.09f, 0.44f, 20f, new Color(0.9f, 0.97f, 1f, 1f), TextAlignmentOptions.Left, ui);
-        CreateScoreCell(row.transform, "ScoreRowXp", Mathf.Max(0, finalScore) + " XP", 0.45f, 0.58f, 20f, new Color(1f, 0.88f, 0.5f, 1f), TextAlignmentOptions.Right, ui);
-        CreateScoreCell(row.transform, "ScoreRowStatus", string.IsNullOrWhiteSpace(outcome) ? "ACTIVE" : outcome, 0.60f, 0.78f, 19f, GetOutcomeColor(outcome), TextAlignmentOptions.Left, ui);
-        CreateScoreCell(row.transform, "ScoreRowCargo", includeCargo ? Mathf.Max(0, cargoValueAstrons) + " ASTRONS" : "-", 0.80f, 1f, 19f, new Color(0.72f, 0.84f, 0.92f, 1f), TextAlignmentOptions.Right, ui);
+        CreateScoreCell(row.transform, "ScoreRowPlace", "#" + placement, 0f, 0.07f, 40f, new Color(0.72f, 0.84f, 0.92f, 1f), TextAlignmentOptions.Center, ui);
+        CreateScoreCell(row.transform, "ScoreRowPilot", string.IsNullOrWhiteSpace(nickname) ? "Player" : nickname, 0.08f, 0.42f, 40f, new Color(0.9f, 0.97f, 1f, 1f), TextAlignmentOptions.Left, ui);
+        CreateScoreCell(row.transform, "ScoreRowXp", Mathf.Max(0, finalScore) + " XP", 0.43f, 0.56f, 40f, new Color(1f, 0.88f, 0.5f, 1f), TextAlignmentOptions.Right, ui);
+        CreateScoreCell(row.transform, "ScoreRowStatus", string.IsNullOrWhiteSpace(outcome) ? "ACTIVE" : outcome, 0.58f, 0.76f, 38f, GetOutcomeColor(outcome), TextAlignmentOptions.Left, ui);
+        CreateScoreCell(row.transform, "ScoreRowCargo", includeCargo ? Mathf.Max(0, cargoValueAstrons) + " ASTRONS" : "-", 0.78f, 1f, 38f, new Color(0.72f, 0.84f, 0.92f, 1f), TextAlignmentOptions.Right, ui);
     }
 
     TextMeshProUGUI CreateScoreCell(Transform parent, string objectName, string value, float anchorMinX, float anchorMaxX, float fontSize, Color color, TextAlignmentOptions alignment, EndScreenUI ui)
@@ -827,13 +830,16 @@ public class EndGameWatcher : MonoBehaviour
         RectTransform textRect = textObject.GetComponent<RectTransform>();
         textRect.anchorMin = new Vector2(anchorMinX, 0f);
         textRect.anchorMax = new Vector2(anchorMaxX, 1f);
-        textRect.offsetMin = new Vector2(4f, 0f);
-        textRect.offsetMax = new Vector2(-4f, 0f);
+        textRect.offsetMin = new Vector2(8f, 0f);
+        textRect.offsetMax = new Vector2(-8f, 0f);
 
         TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
         text.text = value;
         text.alignment = alignment;
         text.fontSize = fontSize;
+        text.enableAutoSizing = true;
+        text.fontSizeMax = fontSize;
+        text.fontSizeMin = Mathf.Max(20f, fontSize * 0.72f);
         text.fontStyle = FontStyles.Bold;
         text.color = color;
         text.textWrappingMode = TextWrappingModes.NoWrap;

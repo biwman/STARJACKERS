@@ -53,12 +53,22 @@ public sealed class MapInstanceToxicBorder : MonoBehaviour
     {
         if (!ShouldRun())
         {
+            SetRenderersVisible(false);
             HideLocalWarningIfNeeded();
             return;
         }
 
-        UpdateVisualPulse();
-        UpdateExposureOutlines();
+        bool cameraInInstance = IsCurrentCameraInInstance();
+        SetRenderersVisible(cameraInInstance);
+        if (cameraInInstance)
+        {
+            UpdateVisualPulse();
+            UpdateExposureOutlines();
+        }
+        else
+        {
+            HideLocalWarningIfNeeded();
+        }
 
         if (Time.time < nextDamageTick)
             return;
@@ -88,6 +98,27 @@ public sealed class MapInstanceToxicBorder : MonoBehaviour
 
         return !string.Equals(instanceId, MapInstanceService.HiddenDimensionInstanceId, System.StringComparison.Ordinal) ||
                MapInstanceService.IsHiddenDimensionActive();
+    }
+
+    bool IsCurrentCameraInInstance()
+    {
+        Camera camera = Camera.main;
+        if (camera == null)
+            return true;
+
+        return string.Equals(
+            MapInstanceService.GetInstanceIdForWorldPosition(camera.transform.position),
+            instanceId,
+            System.StringComparison.Ordinal);
+    }
+
+    void SetRenderersVisible(bool visible)
+    {
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] != null && renderers[i].enabled != visible)
+                renderers[i].enabled = visible;
+        }
     }
 
     static bool CanApplyAuthorityDamage()

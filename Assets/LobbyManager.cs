@@ -187,9 +187,10 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         RoomSettings.FogOfWarRuleId,
         RoomSettings.PirateBaseRuleId,
         RoomSettings.AsteroidShowerRuleId,
-        RoomSettings.CosmicWormRuleId
+        RoomSettings.CosmicWormRuleId,
+        RoomSettings.MilitaryConvoyRuleId
     };
-    static readonly string[] MapEffectChanceColumnLabels = { "CE", "FoW", "PB", "AS", "CW" };
+    static readonly string[] MapEffectChanceColumnLabels = { "CE", "FoW", "PB", "AS", "CW", "MC" };
     static readonly int[] MapEffectChancePercentOptions =
     {
         0, 1, 5, 10, 15, 20, 25, 30, 35, 40, 45,
@@ -4718,6 +4719,24 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.MilitaryConvoyModeKey))
+        {
+            props[RoomSettings.MilitaryConvoyModeKey] = RoomSettings.DefaultMapEffectMode;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.MilitaryConvoyStartUtcMsKey))
+        {
+            props[RoomSettings.MilitaryConvoyStartUtcMsKey] = -1d;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.MilitaryConvoyActiveKey))
+        {
+            props[RoomSettings.MilitaryConvoyActiveKey] = false;
+            changed = true;
+        }
+
         if (EnsureDefaultMapEffectModeProperties(props))
             changed = true;
 
@@ -5084,7 +5103,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             RoomSettings.FogOfWarRuleId,
             RoomSettings.PirateBaseRuleId,
             RoomSettings.AsteroidShowerRuleId,
-            RoomSettings.CosmicWormRuleId
+            RoomSettings.CosmicWormRuleId,
+            RoomSettings.MilitaryConvoyRuleId
         };
 
         IReadOnlyList<LobbyMapDefinition> maps = LobbyMapCatalog.AllMaps;
@@ -5136,7 +5156,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             RoomSettings.FogOfWarModeKey,
             RoomSettings.PirateBaseModeKey,
             RoomSettings.AsteroidShowerModeKey,
-            RoomSettings.CosmicWormModeKey
+            RoomSettings.CosmicWormModeKey,
+            RoomSettings.MilitaryConvoyModeKey
         };
 
         for (int i = 0; i < modeKeys.Length; i++)
@@ -7237,6 +7258,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                changedProps.ContainsKey(RoomSettings.CosmicWormModeKey) ||
                changedProps.ContainsKey(RoomSettings.CosmicWormStartUtcMsKey) ||
                changedProps.ContainsKey(RoomSettings.CosmicWormActiveKey) ||
+               changedProps.ContainsKey(RoomSettings.MilitaryConvoyModeKey) ||
+               changedProps.ContainsKey(RoomSettings.MilitaryConvoyStartUtcMsKey) ||
+               changedProps.ContainsKey(RoomSettings.MilitaryConvoyActiveKey) ||
                ContainsMapEffectChanceRoomSettingChange(changedProps) ||
                changedProps.ContainsKey(RoomSettings.SpaceJunkDensityKey) ||
                changedProps.ContainsKey(RoomSettings.ContainersDensityKey) ||

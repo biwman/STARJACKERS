@@ -16,6 +16,7 @@ public sealed class MapTravelService : MonoBehaviourPunCallbacks
     const float HiddenRiftTimeBonusSeconds = 120f;
     const float EndSequenceBlockSeconds = 40f;
     const float HiddenPreparationDelaySeconds = 0.35f;
+    const float HiddenRuntimeCheckInterval = 0.5f;
     const int HiddenLocalObjectsPerFrame = 5;
     const int HiddenNetworkSpawnsPerFrame = 3;
     const int BaseObstacleCount = 10;
@@ -54,6 +55,7 @@ public sealed class MapTravelService : MonoBehaviourPunCallbacks
     Coroutine hiddenBuildRoutine;
     Coroutine hiddenNetworkSpawnRoutine;
     float nextHiddenRequiredEnemyCheckTime;
+    float nextHiddenRuntimeCheckTime;
 
     struct RiftState
     {
@@ -103,6 +105,7 @@ public sealed class MapTravelService : MonoBehaviourPunCallbacks
         instance.finalizedRiftToken = string.Empty;
         instance.builtHiddenSignature = string.Empty;
         instance.hiddenBuildRoutineSignature = string.Empty;
+        instance.nextHiddenRuntimeCheckTime = 0f;
         instance.StopHiddenPreparationRoutines();
         MapTravelRiftVfx.ClearAll();
         ObstacleSpawner.DestroyRuntimeObstaclesInInstance(MapInstanceService.HiddenDimensionInstanceId);
@@ -139,7 +142,12 @@ public sealed class MapTravelService : MonoBehaviourPunCallbacks
             return;
         }
 
-        TryBuildHiddenDimensionLocalRuntime();
+        if (Time.unscaledTime >= nextHiddenRuntimeCheckTime)
+        {
+            nextHiddenRuntimeCheckTime = Time.unscaledTime + HiddenRuntimeCheckInterval;
+            TryBuildHiddenDimensionLocalRuntime();
+        }
+
         if (PhotonNetwork.IsMasterClient)
             TrySpawnHiddenDimensionNetworkObjects();
     }
@@ -618,6 +626,7 @@ public sealed class MapTravelService : MonoBehaviourPunCallbacks
         hiddenNetworkSpawnRoutine = null;
         hiddenBuildRoutineSignature = string.Empty;
         nextHiddenRequiredEnemyCheckTime = 0f;
+        nextHiddenRuntimeCheckTime = 0f;
     }
 
     void TrySpawnHiddenDimensionNetworkObjects()

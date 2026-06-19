@@ -289,6 +289,7 @@ public class GameTimer : MonoBehaviourPun
         if (player == null ||
             !player.isActiveAndEnabled ||
             player.IsWreck ||
+            (player.IsAstronautControlled && player.CurrentHP <= 0) ||
             player.IsBotControlled ||
             player.IsNeutralRiderControlled ||
             player.IsEvacuationAnimating ||

@@ -99,6 +99,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.PirateBaseActiveKey] = false;
         props[RoomSettings.AsteroidShowerActiveKey] = false;
         props[RoomSettings.CosmicWormActiveKey] = false;
+        props[RoomSettings.MilitaryConvoyActiveKey] = false;
         props[RoomSettings.ShipUnlockPlotStartTimeKey] = -1d;
         props[RoomSettings.ShipUnlockPlotActiveKey] = ShipUnlockPlotCoordinator.GetPlotId(ShipUnlockPlotType.None);
         props[LoneShipModeStartTimeKey] = -1d;
@@ -200,6 +201,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         props[RoomSettings.PirateBaseActiveKey] = false;
         props[RoomSettings.AsteroidShowerActiveKey] = false;
         props[RoomSettings.CosmicWormActiveKey] = false;
+        props[RoomSettings.MilitaryConvoyActiveKey] = false;
         props[RoomSettings.ShipUnlockPlotStartTimeKey] = -1d;
         props[RoomSettings.ShipUnlockPlotActiveKey] = ShipUnlockPlotCoordinator.GetPlotId(ShipUnlockPlotType.None);
         props[LoneShipModeStartTimeKey] = -1d;

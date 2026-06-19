@@ -6,6 +6,8 @@ public class EnemyBotManager : MonoBehaviour
 {
     const float ScanInterval = 0.2f;
     const float RuntimeComponentScanInterval = 1f;
+    const int MilitaryVanEventConvoySize = 4;
+    const double MilitaryVanRespawnDelaySeconds = 18d;
     const string SpawnStateStartTimeRoomKey = "enemyRuntime.spawnStateStartTime";
     const string SpawnedCountRoomKeyPrefix = "enemyRuntime.spawned.";
 
@@ -21,6 +23,11 @@ public class EnemyBotManager : MonoBehaviour
     bool hasRescueShipSummonFocus;
     Vector2 rescueShipSummonFocusPosition;
     int rescueShipSummonTargetViewId = -1;
+    bool militaryVanInitialSpawned;
+    int militaryVanConvoySize;
+    int militaryVanDestroyedThisRound;
+    double militaryVanRespawnAt = -1d;
+    readonly System.Collections.Generic.HashSet<int> militaryVanRemovedViewIds = new System.Collections.Generic.HashSet<int>();
 
     public static void EnsureExists()
     {
@@ -37,6 +44,30 @@ public class EnemyBotManager : MonoBehaviour
             return;
 
         instance.RegisterRescueShipSummonTrigger(damagedBot);
+    }
+
+    public static void NotifyMilitaryVanEscaped(EnemyBot van)
+    {
+        if (instance == null || van == null)
+            return;
+
+        instance.RegisterMilitaryVanRemoved(van, false);
+    }
+
+    public static void NotifyMilitaryVanDestroyed(EnemyBot van)
+    {
+        if (instance == null || van == null)
+            return;
+
+        instance.RegisterMilitaryVanRemoved(van, true);
+    }
+
+    public static void NotifyMilitaryVanAttacked(EnemyBot sourceVan, int attackerViewId)
+    {
+        if (instance == null || sourceVan == null)
+            return;
+
+        instance.BroadcastMilitaryVanDefense(sourceVan, attackerViewId);
     }
 
     void Awake()
@@ -123,6 +154,7 @@ public class EnemyBotManager : MonoBehaviour
             spawnedThisRound.Clear();
             lastHandledRespawnTick.Clear();
             ResetRescueShipSummonState();
+            ResetMilitaryVanConvoyState();
             return;
         }
 
@@ -136,6 +168,7 @@ public class EnemyBotManager : MonoBehaviour
             spawnedThisRound.Clear();
             lastHandledRespawnTick.Clear();
             ResetRescueShipSummonState();
+            ResetMilitaryVanConvoyState();
             if (!SeedSpawnStateFromRoomProperties(currentStartTime))
                 SeedSpawnStateFromActiveRound(currentStartTime);
             EnsureSpawnStateRoomStart(currentStartTime);
@@ -156,6 +189,12 @@ public class EnemyBotManager : MonoBehaviour
         if (definition.Kind == EnemyBotKind.RescueShip)
         {
             HandleRescueShipSpawn(definition, currentStartTime);
+            return;
+        }
+
+        if (definition.Kind == EnemyBotKind.MilitaryVan)
+        {
+            HandleMilitaryVanSpawn(definition, currentStartTime);
             return;
         }
 
@@ -314,6 +353,106 @@ public class EnemyBotManager : MonoBehaviour
             GameVisualTheme.RequestRuntimeRefresh();
     }
 
+    void HandleMilitaryVanSpawn(EnemyBotDefinition definition, double currentStartTime)
+    {
+        if (!RoomSettings.GetEnemyEnabled(definition.Kind))
+        {
+            DestroyExistingBots(definition.Kind);
+            ResetMilitaryVanConvoyState();
+            SetSpawnedCount(definition.Kind, 0);
+            return;
+        }
+
+        double elapsed = currentStartTime > 0d ? PhotonNetwork.Time - currentStartTime : 0d;
+        int spawnSecond = RoomSettings.GetEnemySpawnSecond(definition.Kind);
+        if (currentStartTime > 0d)
+        {
+            if (elapsed < spawnSecond)
+                return;
+        }
+        else if (spawnSecond > 0)
+        {
+            return;
+        }
+
+        int targetConvoySize = RoomSettings.IsMilitaryConvoyActive()
+            ? MilitaryVanEventConvoySize
+            : RoomSettings.GetEnemyCount(definition.Kind);
+
+        if (!militaryVanInitialSpawned)
+        {
+            double initialSpawnNow = PhotonNetwork.Time;
+            if (militaryVanRespawnAt > 0d && initialSpawnNow < militaryVanRespawnAt)
+                return;
+
+            int convoySize = Mathf.Max(1, targetConvoySize);
+            militaryVanDestroyedThisRound = 0;
+            militaryVanRespawnAt = -1d;
+            militaryVanRemovedViewIds.Clear();
+            int spawned = SpawnMilitaryVanWave(definition, convoySize, 0);
+            if (spawned <= 0)
+            {
+                militaryVanConvoySize = 0;
+                militaryVanRespawnAt = initialSpawnNow + 2d;
+                Debug.LogWarning("EnemyBotManager: military convoy spawn failed; will retry.");
+                return;
+            }
+
+            militaryVanInitialSpawned = true;
+            militaryVanConvoySize = convoySize;
+            return;
+        }
+
+        int activeCount = CountActiveNeutralBots(definition.Kind);
+        if (activeCount > 0)
+        {
+            militaryVanRespawnAt = -1d;
+            return;
+        }
+
+        int remainingConvoyCount = Mathf.Max(0, militaryVanConvoySize - militaryVanDestroyedThisRound);
+        if (remainingConvoyCount <= 0)
+            return;
+
+        double now = PhotonNetwork.Time;
+        if (militaryVanRespawnAt <= 0d)
+        {
+            militaryVanRespawnAt = now + MilitaryVanRespawnDelaySeconds;
+            return;
+        }
+
+        if (now < militaryVanRespawnAt)
+            return;
+
+        militaryVanRespawnAt = -1d;
+        if (SpawnMilitaryVanWave(definition, remainingConvoyCount, militaryVanDestroyedThisRound) <= 0)
+            militaryVanRespawnAt = now + 2d;
+    }
+
+    int SpawnMilitaryVanWave(EnemyBotDefinition definition, int count, int ordinalOffset)
+    {
+        if (definition == null || count <= 0)
+            return 0;
+
+        bool hasFocus = TryGetMilitaryVanEntryFocus(out Vector2 focusPosition);
+        int spawned = 0;
+        for (int i = 0; i < count; i++)
+        {
+            if (!SpawnEnemy(definition, ordinalOffset + i, true, hasFocus, focusPosition, true))
+                break;
+
+            spawned++;
+        }
+
+        if (spawned > 0)
+        {
+            SetSpawnedCount(definition.Kind, GetSpawnedCount(definition.Kind) + spawned);
+            GameVisualTheme.RequestRuntimeRefresh();
+        }
+
+        return spawned;
+    }
+
     void RegisterRescueShipSummonTrigger(EnemyBot damagedBot)
     {
         if (!PhotonNetwork.IsMasterClient || damagedBot == null || PhotonNetwork.CurrentRoom == null)
@@ -340,6 +479,53 @@ public class EnemyBotManager : MonoBehaviour
         hasRescueShipSummonFocus = false;
         rescueShipSummonFocusPosition = Vector2.zero;
         rescueShipSummonTargetViewId = -1;
+    }
+
+    void ResetMilitaryVanConvoyState()
+    {
+        militaryVanInitialSpawned = false;
+        militaryVanConvoySize = 0;
+        militaryVanDestroyedThisRound = 0;
+        militaryVanRespawnAt = -1d;
+        militaryVanRemovedViewIds.Clear();
+    }
+
+    void RegisterMilitaryVanRemoved(EnemyBot van, bool destroyed)
+    {
+        if (!PhotonNetwork.IsMasterClient || van == null || van.Kind != EnemyBotKind.MilitaryVan)
+            return;
+
+        int viewId = van.photonView != null ? van.photonView.ViewID : 0;
+        if (viewId > 0 && !militaryVanRemovedViewIds.Add(viewId))
+            return;
+
+        if (destroyed)
+            militaryVanDestroyedThisRound = Mathf.Min(Mathf.Max(1, militaryVanConvoySize), militaryVanDestroyedThisRound + 1);
+
+        militaryVanRespawnAt = -1d;
+    }
+
+    void BroadcastMilitaryVanDefense(EnemyBot sourceVan, int attackerViewId)
+    {
+        if (!PhotonNetwork.IsMasterClient || sourceVan == null)
+            return;
+
+        Vector2 focus = sourceVan.transform.position;
+        EnemyBot[] bots = FindObjectsByType<EnemyBot>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < bots.Length; i++)
+        {
+            EnemyBot candidate = bots[i];
+            if (candidate == null || candidate.Kind != EnemyBotKind.MilitaryVan)
+                continue;
+
+            PlayerHealth candidateHealth = candidate.GetComponent<PlayerHealth>();
+            if (candidateHealth != null && candidateHealth.IsWreck)
+                continue;
+
+            EnemyMilitaryVanBehavior behavior = candidate.GetComponent<EnemyMilitaryVanBehavior>();
+            if (behavior != null)
+                behavior.EnterDefenseMode(attackerViewId, focus, false);
+        }
     }
 
     bool TryGetRescueShipSpawnFocus(out Vector2 focusPosition)
@@ -380,12 +566,37 @@ public class EnemyBotManager : MonoBehaviour
         return false;
     }
 
-    bool SpawnEnemy(EnemyBotDefinition definition, int spawnOrdinal, bool forceOffscreen = false, bool hasEntryFocus = false, Vector2 entryFocusPosition = default)
+    bool TryGetMilitaryVanEntryFocus(out Vector2 focusPosition)
+    {
+        ExtractionZone[] zones = RuntimeSceneQueryCache.GetExtractionZones();
+        if (zones != null && zones.Length > 0)
+        {
+            int startIndex = Random.Range(0, zones.Length);
+            for (int i = 0; i < zones.Length; i++)
+            {
+                ExtractionZone zone = zones[(startIndex + i) % zones.Length];
+                if (zone == null || !zone.gameObject.activeInHierarchy)
+                    continue;
+
+                focusPosition = zone.transform.position;
+                return true;
+            }
+        }
+
+        focusPosition = Vector2.zero;
+        return false;
+    }
+
+    bool SpawnEnemy(EnemyBotDefinition definition, int spawnOrdinal, bool forceOffscreen = false, bool hasEntryFocus = false, Vector2 entryFocusPosition = default, bool allowToxicBorderOffscreen = false)
     {
         Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
         Vector2 spawn;
-        bool allowOffscreenEntry = forceOffscreen && !RoomSettings.AreToxicBordersEnabled();
-        if (allowOffscreenEntry)
+        bool allowOffscreenEntry = forceOffscreen && (allowToxicBorderOffscreen || !RoomSettings.AreToxicBordersEnabled());
+        if (allowOffscreenEntry && definition != null && definition.Kind == EnemyBotKind.MilitaryVan)
+        {
+            spawn = GetMilitaryVanEntrySpawnPosition(definition, spawnOrdinal, hasEntryFocus, entryFocusPosition);
+        }
+        else if (allowOffscreenEntry)
         {
             spawn = GetOffscreenSpawnPosition(definition, mapSize, hasEntryFocus, entryFocusPosition);
         }
@@ -410,6 +621,84 @@ public class EnemyBotManager : MonoBehaviour
         }
 
         return botObject != null;
+    }
+
+    Vector2 GetMilitaryVanEntrySpawnPosition(EnemyBotDefinition definition, int spawnOrdinal, bool hasEntryFocus, Vector2 entryFocusPosition)
+    {
+        Vector2 gameplaySize = RoomSettings.GetGameplayMapDimensions();
+        Vector2 outerSize = RoomSettings.GetMapDimensions();
+        float halfX = gameplaySize.x * 0.5f;
+        float halfY = gameplaySize.y * 0.5f;
+        float outerHalfX = Mathf.Max(halfX, outerSize.x * 0.5f);
+        float outerHalfY = Mathf.Max(halfY, outerSize.y * 0.5f);
+        float targetSize = definition != null ? Mathf.Max(0.5f, definition.TargetSize) : 1f;
+        bool hasToxicEntryBand = RoomSettings.AreToxicBordersEnabled() && (outerHalfX > halfX + 0.25f || outerHalfY > halfY + 0.25f);
+        float borderWidthX = Mathf.Max(0f, outerHalfX - halfX);
+        float borderWidthY = Mathf.Max(0f, outerHalfY - halfY);
+        float marginX = hasToxicEntryBand
+            ? Mathf.Clamp(borderWidthX * 0.62f, 0.75f, Mathf.Max(0.8f, borderWidthX - 0.2f))
+            : Mathf.Clamp(targetSize * 0.35f, 0.9f, 1.8f);
+        float marginY = hasToxicEntryBand
+            ? Mathf.Clamp(borderWidthY * 0.62f, 0.75f, Mathf.Max(0.8f, borderWidthY - 0.2f))
+            : Mathf.Clamp(targetSize * 0.35f, 0.9f, 1.8f);
+
+        int edge = hasEntryFocus
+            ? ResolveMilitaryVanOppositeEntryEdge(entryFocusPosition, halfX, halfY)
+            : Random.Range(0, 4);
+        float formationSpacing = Mathf.Clamp(targetSize * 0.48f, 1.05f, 2.2f);
+        float formationOffset = ((spawnOrdinal % MilitaryVanEventConvoySize) - 1.5f) * formationSpacing + Random.Range(-0.28f, 0.28f);
+        float edgeInset = Mathf.Max(0.75f, targetSize * 0.18f);
+        float focusX = hasEntryFocus ? entryFocusPosition.x : Random.Range(-halfX * 0.7f, halfX * 0.7f);
+        float focusY = hasEntryFocus ? entryFocusPosition.y : Random.Range(-halfY * 0.7f, halfY * 0.7f);
+
+        switch (edge)
+        {
+            case 0:
+                return new Vector2(
+                    Mathf.Clamp(focusX + formationOffset, -halfX + edgeInset, halfX - edgeInset),
+                    ResolveMilitaryVanEntryCoordinate(halfY, outerHalfY, marginY, hasToxicEntryBand));
+            case 1:
+                return new Vector2(
+                    Mathf.Clamp(focusX + formationOffset, -halfX + edgeInset, halfX - edgeInset),
+                    -ResolveMilitaryVanEntryCoordinate(halfY, outerHalfY, marginY, hasToxicEntryBand));
+            case 2:
+                return new Vector2(
+                    -ResolveMilitaryVanEntryCoordinate(halfX, outerHalfX, marginX, hasToxicEntryBand),
+                    Mathf.Clamp(focusY + formationOffset, -halfY + edgeInset, halfY - edgeInset));
+            default:
+                return new Vector2(
+                    ResolveMilitaryVanEntryCoordinate(halfX, outerHalfX, marginX, hasToxicEntryBand),
+                    Mathf.Clamp(focusY + formationOffset, -halfY + edgeInset, halfY - edgeInset));
+        }
+    }
+
+    static int ResolveMilitaryVanOppositeEntryEdge(Vector2 focusPosition, float halfX, float halfY)
+    {
+        float topDistance = Mathf.Abs(halfY - focusPosition.y);
+        float bottomDistance = Mathf.Abs(-halfY - focusPosition.y);
+        float leftDistance = Mathf.Abs(-halfX - focusPosition.x);
+        float rightDistance = Mathf.Abs(halfX - focusPosition.x);
+        float farthest = Mathf.Max(Mathf.Max(topDistance, bottomDistance), Mathf.Max(leftDistance, rightDistance));
+
+        if (Mathf.Approximately(farthest, topDistance))
+            return 0;
+
+        if (Mathf.Approximately(farthest, bottomDistance))
+            return 1;
+
+        if (Mathf.Approximately(farthest, leftDistance))
+            return 2;
+
+        return 3;
+    }
+
+    static float ResolveMilitaryVanEntryCoordinate(float innerHalf, float outerHalf, float margin, bool clampToOuterBand)
+    {
+        float value = innerHalf + Mathf.Max(0.5f, margin);
+        if (!clampToOuterBand)
+            return value;
+
+        return Mathf.Min(value, Mathf.Max(innerHalf + 0.35f, outerHalf - 0.25f));
     }
 
     object[] BuildEnemyInstantiationData(EnemyBotDefinition definition, int spawnOrdinal)

@@ -64,9 +64,6 @@ public class BoosterBarUI : MonoBehaviourPun
     {
         if (ringRoot != null)
             Destroy(ringRoot);
-
-        if (handleVisualRect != null)
-            Destroy(handleVisualRect.gameObject);
     }
 
     void CreateBoosterRing()

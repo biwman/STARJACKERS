@@ -29,6 +29,7 @@ public sealed class RoundWarmupService : MonoBehaviour
     const string PirateBaseStartAnnouncement = "The pirates have become unbearable recently...";
     const string AsteroidShowerStartAnnouncement = "Watch out! Meteors incoming!";
     const string CosmicWormStartAnnouncement = "Something is lurking for you...";
+    const string MilitaryConvoyStartAnnouncement = "Military convoy approaching.";
 
     static readonly string[] PhotonPrefabResourcePaths =
     {
@@ -270,6 +271,9 @@ public sealed class RoundWarmupService : MonoBehaviour
         if (RoomSettings.IsCosmicWormActive())
             return CosmicWormStartAnnouncement;
 
+        if (RoomSettings.IsMilitaryConvoyActive())
+            return MilitaryConvoyStartAnnouncement;
+
         return string.Empty;
     }
 
@@ -432,6 +436,7 @@ public sealed class RoundWarmupService : MonoBehaviour
             [RoomSettings.PirateBaseActiveKey] = false,
             [RoomSettings.AsteroidShowerActiveKey] = false,
             [RoomSettings.CosmicWormActiveKey] = false,
+            [RoomSettings.MilitaryConvoyActiveKey] = false,
             [RoomSettings.ShipUnlockPlotStartTimeKey] = -1d,
             [RoomSettings.ShipUnlockPlotActiveKey] = ShipUnlockPlotCoordinator.GetPlotId(ShipUnlockPlotType.None),
             [LoneShipModeStartTimeKey] = -1d,
@@ -570,6 +575,9 @@ public sealed class RoundWarmupService : MonoBehaviour
         if (IsActiveRule(props, RoomSettings.CosmicWormActiveKey))
             return RoomSettings.CosmicWormRuleId;
 
+        if (IsActiveRule(props, RoomSettings.MilitaryConvoyActiveKey))
+            return RoomSettings.MilitaryConvoyRuleId;
+
         return "none";
     }
 
@@ -590,13 +598,15 @@ public sealed class RoundWarmupService : MonoBehaviour
         props[RoomSettings.PirateBaseActiveKey] = false;
         props[RoomSettings.AsteroidShowerActiveKey] = false;
         props[RoomSettings.CosmicWormActiveKey] = false;
+        props[RoomSettings.MilitaryConvoyActiveKey] = false;
 
-        List<string> activeCandidates = new List<string>(5);
+        List<string> activeCandidates = new List<string>(6);
         AddRoundRuleCandidate(activeCandidates, RoomSettings.CrazyEnemiesActiveKey, RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, selectedMapId, RoomSettings.CrazyEnemiesRuleId, roundStartUtcMs);
         AddRoundRuleCandidate(activeCandidates, RoomSettings.FogOfWarActiveKey, RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, selectedMapId, RoomSettings.FogOfWarRuleId, roundStartUtcMs);
         AddRoundRuleCandidate(activeCandidates, RoomSettings.PirateBaseActiveKey, RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, selectedMapId, RoomSettings.PirateBaseRuleId, roundStartUtcMs);
         AddRoundRuleCandidate(activeCandidates, RoomSettings.AsteroidShowerActiveKey, RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, selectedMapId, RoomSettings.AsteroidShowerRuleId, roundStartUtcMs);
         AddRoundRuleCandidate(activeCandidates, RoomSettings.CosmicWormActiveKey, RoomSettings.CosmicWormModeKey, RoomSettings.CosmicWormStartUtcMsKey, selectedMapId, RoomSettings.CosmicWormRuleId, roundStartUtcMs);
+        AddRoundRuleCandidate(activeCandidates, RoomSettings.MilitaryConvoyActiveKey, RoomSettings.MilitaryConvoyModeKey, RoomSettings.MilitaryConvoyStartUtcMsKey, selectedMapId, RoomSettings.MilitaryConvoyRuleId, roundStartUtcMs);
 
         if (activeCandidates.Count <= 0)
             return;

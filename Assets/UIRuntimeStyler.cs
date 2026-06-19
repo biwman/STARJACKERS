@@ -10,6 +10,7 @@ using UnityEngine.UI;
 public class UIRuntimeStyler : MonoBehaviour
 {
     static readonly ProfilerMarker ApplyStylesMarker = new ProfilerMarker("UIRuntimeStyler.ApplyStyles");
+    static readonly Vector2 EndScreenPanelSize = new Vector2(1600f, 1000f);
 
     static UIRuntimeStyler instance;
     static Sprite playButtonShapeSprite;
@@ -659,7 +660,7 @@ public class UIRuntimeStyler : MonoBehaviour
             RectTransform rect = endScreen.GetComponent<RectTransform>();
             if (rect != null)
             {
-                rect.sizeDelta = new Vector2(900f, 600f);
+                rect.sizeDelta = EndScreenPanelSize;
             }
         }
 
@@ -678,7 +679,7 @@ public class UIRuntimeStyler : MonoBehaviour
 
             if (rect != null)
             {
-                rect.sizeDelta = new Vector2(900f, 600f);
+                rect.sizeDelta = EndScreenPanelSize;
             }
         }
 
@@ -688,7 +689,7 @@ public class UIRuntimeStyler : MonoBehaviour
             TMP_Text text = endMessageTextObject.GetComponent<TMP_Text>();
             if (text != null)
             {
-                text.fontSize = 42f;
+                text.fontSize = 84f;
                 text.fontStyle = FontStyles.Bold;
                 text.color = new Color(0.92f, 0.98f, 1f, 1f);
                 text.alignment = TextAlignmentOptions.Left;

@@ -115,6 +115,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         RoomSettings.CosmicWormModeKey,
         RoomSettings.CosmicWormStartUtcMsKey,
         RoomSettings.CosmicWormActiveKey,
+        RoomSettings.MilitaryConvoyModeKey,
+        RoomSettings.MilitaryConvoyStartUtcMsKey,
+        RoomSettings.MilitaryConvoyActiveKey,
         MapInstanceService.MapTravelLockedKey
     };
 
@@ -959,6 +962,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.CosmicWormModeKey] = RoomSettings.DefaultMapEffectMode,
             [RoomSettings.CosmicWormStartUtcMsKey] = -1d,
             [RoomSettings.CosmicWormActiveKey] = false,
+            [RoomSettings.MilitaryConvoyModeKey] = RoomSettings.DefaultMapEffectMode,
+            [RoomSettings.MilitaryConvoyStartUtcMsKey] = -1d,
+            [RoomSettings.MilitaryConvoyActiveKey] = false,
             [RoomSettings.MapEffectModeDefaultsVersionKey] = RoomSettings.MapEffectModeDefaultsVersion,
             [RoomSettings.SpaceJunkDensityKey] = RoomSettings.DefaultSpaceJunkDensity,
             [RoomSettings.ContainersDensityKey] = RoomSettings.DefaultContainersDensity,
@@ -1028,7 +1034,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             RoomSettings.FogOfWarRuleId,
             RoomSettings.PirateBaseRuleId,
             RoomSettings.AsteroidShowerRuleId,
-            RoomSettings.CosmicWormRuleId
+            RoomSettings.CosmicWormRuleId,
+            RoomSettings.MilitaryConvoyRuleId
         };
 
         IReadOnlyList<LobbyMapDefinition> maps = LobbyMapCatalog.AllMaps;
@@ -1319,6 +1326,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.AsteroidShowerStartUtcMsKey:
             case RoomSettings.CosmicWormModeKey:
             case RoomSettings.CosmicWormStartUtcMsKey:
+            case RoomSettings.MilitaryConvoyModeKey:
+            case RoomSettings.MilitaryConvoyStartUtcMsKey:
             case RoomSettings.SpaceJunkDensityKey:
             case RoomSettings.ContainersDensityKey:
             case RoomSettings.FireNebulaDensityKey:
@@ -1449,6 +1458,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         AddActiveEffectLabel(labels, info, state, "PIRATE BASE", RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, RoomSettings.PirateBaseActiveKey);
         AddActiveEffectLabel(labels, info, state, "ASTEROID SHOWER", RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, RoomSettings.AsteroidShowerActiveKey);
         AddActiveEffectLabel(labels, info, state, "COSMIC WORM", RoomSettings.CosmicWormModeKey, RoomSettings.CosmicWormStartUtcMsKey, RoomSettings.CosmicWormActiveKey);
+        AddActiveEffectLabel(labels, info, state, "MILITARY CONVOY", RoomSettings.MilitaryConvoyModeKey, RoomSettings.MilitaryConvoyStartUtcMsKey, RoomSettings.MilitaryConvoyActiveKey);
         return labels.Count > 0 ? string.Join(", ", labels) : string.Empty;
     }
 

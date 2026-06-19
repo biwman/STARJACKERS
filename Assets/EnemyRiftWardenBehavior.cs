@@ -10,8 +10,13 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
     const float DormantOrbitRadius = 2.8f;
     const float MovementBlend = 0.14f;
     const float RotationBlendDegrees = 140f;
-    const float BeamWindupSeconds = 1.08f;
-    const float BeamFlashSeconds = 0.28f;
+    const float BeamWindupSeconds = 0.52f;
+    const float BeamActiveSeconds = 3.2f;
+    const float BeamEndpointSpeed = 5f;
+    const float BeamHitRadius = 0.52f;
+    const float BeamDamageTickInterval = 0.42f;
+    const float BeamTickDamageMultiplier = 0.42f;
+    const float BeamRangePadding = 2.5f;
     const float BeamCooldownMin = 5.2f;
     const float BeamCooldownMax = 7.4f;
     const float RippleWarningSeconds = 1.18f;
@@ -29,6 +34,11 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
     const float LockdownCooldownMin = 6.4f;
     const float LockdownCooldownMax = 9.2f;
     const float LockdownTriggerRadius = 4.8f;
+    const float LockdownClusterRadius = 5.2f;
+    const int MaxLockdownSecrets = 4;
+    const float SecretStateRefreshInterval = 0.35f;
+    const float GuardAnchorRefreshInterval = 0.28f;
+    const float TargetSecretProximityRefreshInterval = 0.24f;
     const string BeamDamageSource = "rift_warden_beam";
     const string RippleDamageSource = "rift_warden_time_ripple";
 
@@ -45,7 +55,15 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
     float nextRippleTime;
     float nextBlinkTime;
     float nextLockdownTime;
+    float nextAlienSecretCountRefreshTime;
+    float nextGuardAnchorRefreshTime;
+    float nextTargetSecretProximityCheckTime;
+    int cachedAlienSecretCount = -1;
+    bool hasCachedGuardAnchor;
+    bool cachedTargetNearSecret;
     Transform currentTarget;
+    Vector2 cachedGuardAnchor;
+    Vector2 cachedTargetSecretPosition;
     Vector2 currentMoveDirection = Vector2.up;
 
     public override void Initialize(EnemyBot owner)
@@ -56,7 +74,7 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
         health = owner.GetComponent<PlayerHealth>();
         movement = owner.Definition != null ? owner.Definition.Movement : null;
         orbitAngle = view != null ? Mathf.Abs(view.ViewID * 0.173f) % (Mathf.PI * 2f) : Random.Range(0f, Mathf.PI * 2f);
-        initialAlienSecretCount = CountAlienSecrets();
+        initialAlienSecretCount = CountAlienSecrets(true);
         ScheduleAllAttacks(1.2f);
     }
 
@@ -69,7 +87,7 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
             return;
 
         if (initialAlienSecretCount < 0)
-            initialAlienSecretCount = CountAlienSecrets();
+            initialAlienSecretCount = CountAlienSecrets(true);
 
         RefreshTargetIfNeeded();
 
@@ -209,20 +227,71 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
     IEnumerator BeamRoutine(Transform target)
     {
         attacking = true;
+        nextBeamTime = Time.time + BeamWindupSeconds + BeamActiveSeconds + Random.Range(BeamCooldownMin, BeamCooldownMax);
+
         Vector2 start = transform.position;
-        Vector2 end = target != null ? (Vector2)target.position : start + (Vector2)transform.up * movement.ShootDistance;
+        Vector2 initialDesiredEnd = ResolveBeamDesiredEnd(target, start);
+        Vector2 beamEnd = start;
+        PhotonView targetView = target != null ? target.GetComponent<PhotonView>() : null;
+        float scaledWindup = ScaleEnemyAttackWindup(BeamWindupSeconds);
+
         if (bot != null && bot.photonView != null)
-            bot.photonView.RPC(nameof(EnemyBot.PlayRiftWardenBeamRpc), RpcTarget.All, start.x, start.y, end.x, end.y, BeamWindupSeconds, false);
+        {
+            bot.photonView.RPC(
+                nameof(EnemyBot.PlayRiftWardenTrackingBeamRpc),
+                RpcTarget.All,
+                view != null ? view.ViewID : 0,
+                targetView != null ? targetView.ViewID : 0,
+                start.x,
+                start.y,
+                initialDesiredEnd.x,
+                initialDesiredEnd.y,
+                scaledWindup,
+                BeamActiveSeconds);
+        }
 
-        yield return new WaitForSeconds(ScaleEnemyAttackWindup(BeamWindupSeconds));
+        float windupUntil = Time.time + scaledWindup;
+        while (Time.time < windupUntil)
+        {
+            start = transform.position;
+            beamEnd = MoveTrackingBeamEndpoint(beamEnd, target, start, Time.deltaTime);
+            yield return null;
+        }
 
-        start = transform.position;
-        end = target != null ? (Vector2)target.position : end;
-        if (bot != null && bot.photonView != null)
-            bot.photonView.RPC(nameof(EnemyBot.PlayRiftWardenBeamRpc), RpcTarget.All, start.x, start.y, end.x, end.y, BeamFlashSeconds, true);
+        float activeUntil = Time.time + BeamActiveSeconds;
+        float nextDamageTime = Time.time + BeamDamageTickInterval;
+        int tickDamage = Mathf.Max(1, Mathf.RoundToInt(RoomSettings.GetEnemyDamage(bot.Kind) * BeamTickDamageMultiplier));
+        while (Time.time < activeUntil)
+        {
+            start = transform.position;
+            beamEnd = MoveTrackingBeamEndpoint(beamEnd, target, start, Time.deltaTime);
+            if (Time.time >= nextDamageTime)
+            {
+                nextDamageTime = Time.time + BeamDamageTickInterval;
+                if (IsTrackingBeamHittingTarget(target, start, beamEnd))
+                {
+                    DamageTarget(
+                        target,
+                        tickDamage,
+                        WeaponDamageType.Ion,
+                        WeaponDeliveryMethod.Beam,
+                        WeaponDeliveryFlags.ShieldFocused,
+                        BeamDamageSource);
+                }
+            }
 
-        DamageTarget(target, RoomSettings.GetEnemyDamage(bot.Kind), WeaponDamageType.Ion, WeaponDeliveryMethod.Beam, WeaponDeliveryFlags.ShieldFocused, BeamDamageSource);
+            yield return null;
+        }
+
         attacking = false;
+    }
+
+    Vector2 MoveTrackingBeamEndpoint(Vector2 currentEnd, Transform target, Vector2 start, float deltaTime)
+    {
+        return Vector2.MoveTowards(
+            currentEnd,
+            ResolveBeamDesiredEnd(target, start),
+            BeamEndpointSpeed * Mathf.Max(0f, deltaTime));
     }
 
     void TryStartRipple()
@@ -274,14 +343,21 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
         if (Time.time < nextLockdownTime)
             return;
 
-        Treasure secret = FindLockdownSecret();
-        if (secret == null || secret.photonView == null)
+        List<Treasure> secrets = FindLockdownSecrets();
+        if (secrets.Count <= 0)
+            return;
+
+        if (bot == null || bot.photonView == null)
             return;
 
         nextLockdownTime = Time.time + Random.Range(LockdownCooldownMin, LockdownCooldownMax);
-        Vector3 position = secret.transform.position;
-        if (bot != null && bot.photonView != null)
+        for (int i = 0; i < secrets.Count; i++)
         {
+            Treasure secret = secrets[i];
+            if (secret == null || secret.photonView == null)
+                continue;
+
+            Vector3 position = secret.transform.position;
             bot.photonView.RPC(
                 nameof(EnemyBot.PlayRiftWardenLockdownRpc),
                 RpcTarget.All,
@@ -291,6 +367,37 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
                 LockdownRadius,
                 LockdownDuration);
         }
+    }
+
+    Vector2 ResolveBeamDesiredEnd(Transform target, Vector2 start)
+    {
+        Vector2 desired = target != null ? (Vector2)target.position : start + (Vector2)transform.up * movement.ShootDistance;
+        Vector2 fromStart = desired - start;
+        float maxRange = movement.ShootDistance + BeamRangePadding;
+        if (fromStart.sqrMagnitude > maxRange * maxRange)
+            desired = start + fromStart.normalized * maxRange;
+
+        return desired;
+    }
+
+    bool IsTrackingBeamHittingTarget(Transform target, Vector2 beamStart, Vector2 beamEnd)
+    {
+        if (target == null || !MapInstanceService.IsSameInstance(transform.position, target.position))
+            return false;
+
+        return DistancePointToSegment(target.position, beamStart, beamEnd) <= BeamHitRadius;
+    }
+
+    static float DistancePointToSegment(Vector2 point, Vector2 segmentStart, Vector2 segmentEnd)
+    {
+        Vector2 segment = segmentEnd - segmentStart;
+        float segmentLengthSqr = segment.sqrMagnitude;
+        if (segmentLengthSqr <= 0.0001f)
+            return Vector2.Distance(point, segmentStart);
+
+        float t = Mathf.Clamp01(Vector2.Dot(point - segmentStart, segment) / segmentLengthSqr);
+        Vector2 closest = segmentStart + segment * t;
+        return Vector2.Distance(point, closest);
     }
 
     void ApplyRippleDamage(Vector2 center)
@@ -404,15 +511,29 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
 
     Vector2 ResolveGuardAnchor()
     {
+        if (hasCachedGuardAnchor && Time.time < nextGuardAnchorRefreshTime)
+            return cachedGuardAnchor;
+
+        nextGuardAnchorRefreshTime = Time.time + GuardAnchorRefreshInterval;
         Treasure secret = FindNearestAlienSecret(transform.position);
         if (secret != null)
-            return secret.transform.position;
+        {
+            cachedGuardAnchor = secret.transform.position;
+            hasCachedGuardAnchor = true;
+            return cachedGuardAnchor;
+        }
 
         ExtractionZone portal = FindNearestAncientPortal(transform.position);
         if (portal != null)
-            return portal.transform.position;
+        {
+            cachedGuardAnchor = portal.transform.position;
+            hasCachedGuardAnchor = true;
+            return cachedGuardAnchor;
+        }
 
-        return TryGetHiddenBounds(out MapInstanceService.BoundsInfo bounds) ? bounds.Center : Vector2.zero;
+        cachedGuardAnchor = TryGetHiddenBounds(out MapInstanceService.BoundsInfo bounds) ? bounds.Center : Vector2.zero;
+        hasCachedGuardAnchor = true;
+        return cachedGuardAnchor;
     }
 
     Vector2 ResolveBlinkDestination()
@@ -429,8 +550,8 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
     Treasure FindLockdownSecret()
     {
         Treasure best = null;
-        float bestDistance = float.MaxValue;
-        Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
+        float bestDistanceSqr = float.MaxValue;
+        Treasure[] treasures = RuntimeSceneQueryCache.GetTreasures();
         for (int i = 0; i < treasures.Length; i++)
         {
             Treasure treasure = treasures[i];
@@ -438,14 +559,14 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
                 continue;
 
             bool playerNearby = IsAnyPlayerNear(treasure.transform.position, LockdownTriggerRadius);
-            float distance = Vector2.Distance(transform.position, treasure.transform.position);
-            if (!playerNearby && distance > movement.DetectionRadius)
+            float distanceSqr = ((Vector2)transform.position - (Vector2)treasure.transform.position).sqrMagnitude;
+            if (!playerNearby && distanceSqr > movement.DetectionRadius * movement.DetectionRadius)
                 continue;
 
-            float score = playerNearby ? distance * 0.4f : distance;
-            if (score < bestDistance)
+            float score = playerNearby ? distanceSqr * 0.16f : distanceSqr;
+            if (score < bestDistanceSqr)
             {
-                bestDistance = score;
+                bestDistanceSqr = score;
                 best = treasure;
             }
         }
@@ -453,21 +574,68 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
         return best;
     }
 
+    List<Treasure> FindLockdownSecrets()
+    {
+        List<Treasure> result = new List<Treasure>(MaxLockdownSecrets);
+        Treasure primary = FindLockdownSecret();
+        if (primary == null)
+            return result;
+
+        result.Add(primary);
+        Vector2 center = primary.transform.position;
+        float clusterRadiusSqr = LockdownClusterRadius * LockdownClusterRadius;
+        List<TreasureDistance> candidates = new List<TreasureDistance>();
+        Treasure[] treasures = RuntimeSceneQueryCache.GetTreasures();
+        for (int i = 0; i < treasures.Length; i++)
+        {
+            Treasure treasure = treasures[i];
+            if (treasure == primary || !IsActiveAlienSecret(treasure) || RiftWardenLockdownField.IsTreasureLocked(treasure))
+                continue;
+
+            float distanceSqr = ((Vector2)treasure.transform.position - center).sqrMagnitude;
+            if (distanceSqr > clusterRadiusSqr)
+                continue;
+
+            candidates.Add(new TreasureDistance(treasure, distanceSqr));
+        }
+
+        candidates.Sort((a, b) => a.DistanceSqr.CompareTo(b.DistanceSqr));
+        for (int i = 0; i < candidates.Count && result.Count < MaxLockdownSecrets; i++)
+        {
+            if (candidates[i].Treasure != null)
+                result.Add(candidates[i].Treasure);
+        }
+
+        return result;
+    }
+
+    struct TreasureDistance
+    {
+        public readonly Treasure Treasure;
+        public readonly float DistanceSqr;
+
+        public TreasureDistance(Treasure treasure, float distanceSqr)
+        {
+            Treasure = treasure;
+            DistanceSqr = distanceSqr;
+        }
+    }
+
     Treasure FindNearestAlienSecret(Vector2 origin)
     {
         Treasure best = null;
-        float bestDistance = float.MaxValue;
-        Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
+        float bestDistanceSqr = float.MaxValue;
+        Treasure[] treasures = RuntimeSceneQueryCache.GetTreasures();
         for (int i = 0; i < treasures.Length; i++)
         {
             Treasure treasure = treasures[i];
             if (!IsActiveAlienSecret(treasure))
                 continue;
 
-            float distance = Vector2.Distance(origin, treasure.transform.position);
-            if (distance < bestDistance)
+            float distanceSqr = (origin - (Vector2)treasure.transform.position).sqrMagnitude;
+            if (distanceSqr < bestDistanceSqr)
             {
-                bestDistance = distance;
+                bestDistanceSqr = distanceSqr;
                 best = treasure;
             }
         }
@@ -478,24 +646,18 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
     ExtractionZone FindNearestAncientPortal(Vector2 origin)
     {
         ExtractionZone best = null;
-        float bestDistance = float.MaxValue;
-        ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
+        float bestDistanceSqr = float.MaxValue;
+        ExtractionZone[] zones = RuntimeSceneQueryCache.GetExtractionZones();
         for (int i = 0; i < zones.Length; i++)
         {
             ExtractionZone zone = zones[i];
-            if (zone == null || !MapInstanceService.IsSameInstance(transform.position, zone.transform.position))
+            if (!IsActiveAncientPortal(zone))
                 continue;
 
-            if (!MapInstanceService.TryGetExtractionTypeForObject(zone.gameObject, out string extractionType) ||
-                !string.Equals(extractionType, RoomSettings.ExtractionTypeAncientPortal, System.StringComparison.Ordinal))
+            float distanceSqr = (origin - (Vector2)zone.transform.position).sqrMagnitude;
+            if (distanceSqr < bestDistanceSqr)
             {
-                continue;
-            }
-
-            float distance = Vector2.Distance(origin, zone.transform.position);
-            if (distance < bestDistance)
-            {
-                bestDistance = distance;
+                bestDistanceSqr = distanceSqr;
                 best = zone;
             }
         }
@@ -503,17 +665,22 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
         return best;
     }
 
-    int CountAlienSecrets()
+    int CountAlienSecrets(bool force = false)
     {
+        if (!force && cachedAlienSecretCount >= 0 && Time.time < nextAlienSecretCountRefreshTime)
+            return cachedAlienSecretCount;
+
         int count = 0;
-        Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
+        Treasure[] treasures = RuntimeSceneQueryCache.GetTreasures();
         for (int i = 0; i < treasures.Length; i++)
         {
             if (IsActiveAlienSecret(treasures[i]))
                 count++;
         }
 
-        return count;
+        cachedAlienSecretCount = count;
+        nextAlienSecretCountRefreshTime = Time.time + SecretStateRefreshInterval;
+        return cachedAlienSecretCount;
     }
 
     bool IsActiveAlienSecret(Treasure treasure)
@@ -523,20 +690,42 @@ public class EnemyRiftWardenBehavior : EnemyBotBehaviorBase
                MapInstanceService.IsSameInstance(transform.position, treasure.transform.position);
     }
 
+    bool IsActiveAncientPortal(ExtractionZone zone)
+    {
+        if (zone == null || !MapInstanceService.IsSameInstance(transform.position, zone.transform.position))
+            return false;
+
+        return MapInstanceService.TryGetExtractionTypeForObject(zone.gameObject, out string extractionType) &&
+               string.Equals(extractionType, RoomSettings.ExtractionTypeAncientPortal, System.StringComparison.Ordinal);
+    }
+
     bool IsTargetNearAnyAlienSecret(Vector2 position, float radius)
     {
-        Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
+        if (Time.time < nextTargetSecretProximityCheckTime &&
+            (position - cachedTargetSecretPosition).sqrMagnitude <= 1f)
+        {
+            return cachedTargetNearSecret;
+        }
+
+        nextTargetSecretProximityCheckTime = Time.time + TargetSecretProximityRefreshInterval;
+        cachedTargetSecretPosition = position;
+        cachedTargetNearSecret = false;
+        float radiusSqr = radius * radius;
+        Treasure[] treasures = RuntimeSceneQueryCache.GetTreasures();
         for (int i = 0; i < treasures.Length; i++)
         {
             Treasure treasure = treasures[i];
             if (!IsActiveAlienSecret(treasure))
                 continue;
 
-            if (Vector2.Distance(position, treasure.transform.position) <= radius)
-                return true;
+            if ((position - (Vector2)treasure.transform.position).sqrMagnitude <= radiusSqr)
+            {
+                cachedTargetNearSecret = true;
+                break;
+            }
         }
 
-        return false;
+        return cachedTargetNearSecret;
     }
 
     bool IsAnyPlayerNear(Vector2 position, float radius)
@@ -613,6 +802,7 @@ public sealed class RiftWardenVfx : MonoBehaviour
     enum VfxMode
     {
         Beam,
+        TrackingBeam,
         Ripple,
         Blink,
         Lockdown,
@@ -623,6 +813,8 @@ public sealed class RiftWardenVfx : MonoBehaviour
     const int BeamSegments = 16;
     const float ZOffset = -0.09f;
     const int SortingOrder = GameVisualTheme.EnemySortingOrder + 28;
+    const float TrackingBeamEndpointSpeed = 5f;
+    const float TrackingBeamMaxRange = 16.5f;
 
     static Material sharedMaterial;
 
@@ -639,6 +831,11 @@ public sealed class RiftWardenVfx : MonoBehaviour
     float duration;
     bool blast;
     int followTreasureViewId;
+    int sourceViewId;
+    int targetViewId;
+    PhotonView cachedSourceView;
+    PhotonView cachedTargetView;
+    Vector2 trackingFallbackEnd;
 
     public static void Prewarm()
     {
@@ -662,6 +859,20 @@ public sealed class RiftWardenVfx : MonoBehaviour
         vfx.duration = Mathf.Max(0.08f, duration);
         vfx.blast = blast;
         vfx.InitializeBeamLines(blast ? 0.13f : 0.07f, blast ? 0.42f : 0.24f);
+    }
+
+    public static void PlayTrackingBeam(int sourceViewId, int targetViewId, Vector2 start, Vector2 end, float windupDuration, float activeDuration)
+    {
+        RiftWardenVfx vfx = Create("RiftWardenTrackingBeamVfx", VfxMode.TrackingBeam);
+        vfx.sourceViewId = sourceViewId;
+        vfx.targetViewId = targetViewId;
+        vfx.start = start;
+        vfx.end = start;
+        vfx.trackingFallbackEnd = end;
+        vfx.warningDuration = Mathf.Max(0.01f, windupDuration);
+        vfx.activeDuration = Mathf.Max(0.08f, activeDuration);
+        vfx.duration = vfx.warningDuration + vfx.activeDuration;
+        vfx.InitializeBeamLines(0.1f, 0.34f);
     }
 
     public static void PlayRipple(Vector2 center, float radius, float warningDuration, float activeDuration)
@@ -746,6 +957,9 @@ public sealed class RiftWardenVfx : MonoBehaviour
             case VfxMode.Beam:
                 UpdateBeam(t);
                 break;
+            case VfxMode.TrackingBeam:
+                UpdateTrackingBeam(t);
+                break;
             case VfxMode.Blink:
                 UpdateBlink(t);
                 break;
@@ -774,6 +988,45 @@ public sealed class RiftWardenVfx : MonoBehaviour
         float fade = blast ? Mathf.Lerp(1f, 0f, t) : Mathf.Lerp(0.28f, 0.72f, Mathf.PingPong(t * 3f, 1f));
         ApplyGradient(glowLine, new Color(0.04f, 0.85f, 0.78f), new Color(0.55f, 1f, 0.94f), fade * (blast ? 0.58f : 0.38f));
         ApplyGradient(coreLine, Color.white, new Color(0.25f, 1f, 0.9f), fade * (blast ? 0.95f : 0.72f));
+    }
+
+    void UpdateTrackingBeam(float t)
+    {
+        Vector2 currentStart = ResolveTrackedPosition(sourceViewId, ref cachedSourceView, start);
+        Vector2 desiredEnd = ResolveTrackedPosition(targetViewId, ref cachedTargetView, trackingFallbackEnd);
+        Vector2 startToEnd = desiredEnd - currentStart;
+        if (startToEnd.sqrMagnitude > TrackingBeamMaxRange * TrackingBeamMaxRange)
+            desiredEnd = currentStart + startToEnd.normalized * TrackingBeamMaxRange;
+
+        float elapsed = Time.time - startedAt;
+        bool active = elapsed >= warningDuration;
+        float endpointSpeed = TrackingBeamEndpointSpeed * (active ? 1f : 0.86f);
+        end = Vector2.MoveTowards(end, desiredEnd, endpointSpeed * Time.deltaTime);
+        start = currentStart;
+
+        float pulse = Mathf.PingPong(Time.time * (active ? 7.6f : 4.2f), 1f);
+        Vector2 delta = end - start;
+        Vector2 normal = delta.sqrMagnitude > 0.001f ? new Vector2(-delta.y, delta.x).normalized : Vector2.right;
+        float activeFade = active ? 1f : Mathf.Lerp(0.35f, 0.72f, Mathf.PingPong(t * 4f, 1f));
+        float endFade = Mathf.Min(1f, 1f - Mathf.Clamp01((t - 0.88f) / 0.12f));
+
+        glowLine.widthMultiplier = active ? Mathf.Lerp(0.28f, 0.42f, pulse) : 0.2f;
+        coreLine.widthMultiplier = active ? Mathf.Lerp(0.085f, 0.14f, pulse) : 0.045f;
+        UpdateSegmentedLine(glowLine, start, end, normal, active ? 0.13f : 0.055f, pulse);
+        UpdateSegmentedLine(coreLine, start, end, normal, active ? 0.042f : 0.018f, pulse + 0.31f);
+        ApplyGradient(glowLine, new Color(0.02f, 0.82f, 0.78f), new Color(0.55f, 0.95f, 1f), activeFade * endFade * 0.58f);
+        ApplyGradient(coreLine, Color.white, new Color(0.24f, 1f, 0.9f), activeFade * endFade * 0.96f);
+    }
+
+    static Vector2 ResolveTrackedPosition(int viewId, ref PhotonView cachedView, Vector2 fallback)
+    {
+        if (viewId <= 0)
+            return fallback;
+
+        if (cachedView == null || cachedView.ViewID != viewId)
+            cachedView = PhotonView.Find(viewId);
+
+        return cachedView != null ? (Vector2)cachedView.transform.position : fallback;
     }
 
     void UpdateBlink(float t)

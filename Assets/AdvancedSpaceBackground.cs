@@ -300,10 +300,21 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
 
     bool ShouldRenderForCurrentCamera()
     {
-        if (!useOverrideSettings || string.IsNullOrWhiteSpace(overrideInstanceId))
-            return true;
-
         Camera camera = ResolveCamera();
+        if (!useOverrideSettings || string.IsNullOrWhiteSpace(overrideInstanceId))
+        {
+            if (!MapInstanceService.IsHiddenDimensionActive())
+                return true;
+
+            if (camera == null)
+                return true;
+
+            return string.Equals(
+                MapInstanceService.GetInstanceIdForWorldPosition(camera.transform.position),
+                MapInstanceService.MainInstanceId,
+                StringComparison.Ordinal);
+        }
+
         if (camera == null)
             return false;
 

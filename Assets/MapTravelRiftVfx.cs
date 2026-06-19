@@ -4,13 +4,15 @@ using UnityEngine;
 
 public sealed class MapTravelRiftVfx : MonoBehaviour
 {
-    const int RingSegments = 160;
+    const int RingSegments = 80;
     const float CollapseHoldSeconds = 0.95f;
     const int DiskTextureSize = 128;
+    const float FractureGeometryUpdateInterval = 0.08f;
 
     static readonly Dictionary<string, MapTravelRiftVfx> ActiveByToken = new Dictionary<string, MapTravelRiftVfx>(System.StringComparer.Ordinal);
     static Material additiveMaterial;
     static Sprite diskSprite;
+    static Vector3[] unitCirclePositions;
 
     string token;
     double startTime;
@@ -24,6 +26,8 @@ public sealed class MapTravelRiftVfx : MonoBehaviour
     LineRenderer innerRing;
     LineRenderer fractureRing;
     ParticleSystem motes;
+    float nextFractureGeometryUpdate;
+    float lastFractureProgress = -1f;
 
     public static void Show(string riftToken, Vector2 origin, float worldRadius, double riftStartTime, float riftDuration)
     {
@@ -130,7 +134,7 @@ public sealed class MapTravelRiftVfx : MonoBehaviour
 
         DrawRing(outerRing, visibleRadius, 0.09f + pulse * 0.075f, new Color(0.5f, 1f, 0.96f, Mathf.Lerp(0.55f, 0.95f, pulse) * intensity));
         DrawRing(innerRing, visibleRadius * Mathf.Lerp(0.48f, 0.62f, slowPulse), 0.045f, new Color(0.92f, 0.42f, 1f, 0.58f * intensity));
-        DrawFractureRing(fractureRing, visibleRadius * Mathf.Lerp(0.76f, 0.92f, pulse), 0.038f, new Color(0.72f, 0.92f, 1f, 0.72f * intensity), progress);
+        DrawFractureRing(visibleRadius * Mathf.Lerp(0.76f, 0.92f, pulse), 0.038f, new Color(0.72f, 0.92f, 1f, 0.72f * intensity), progress);
 
         if (motes != null)
         {
@@ -179,6 +183,7 @@ public sealed class MapTravelRiftVfx : MonoBehaviour
         renderer.useWorldSpace = false;
         renderer.loop = true;
         renderer.positionCount = RingSegments;
+        renderer.SetPositions(GetUnitCirclePositions());
         renderer.material = GetAdditiveMaterial();
         renderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
         renderer.sortingOrder = 1810 + sortingOrder;
@@ -253,28 +258,49 @@ public sealed class MapTravelRiftVfx : MonoBehaviour
         renderer.widthMultiplier = width;
         renderer.startColor = color;
         renderer.endColor = color;
-        for (int i = 0; i < RingSegments; i++)
-        {
-            float angle = (i / (float)RingSegments) * Mathf.PI * 2f;
-            renderer.SetPosition(i, new Vector3(Mathf.Cos(angle) * ringRadius, Mathf.Sin(angle) * ringRadius, 0f));
-        }
+        renderer.transform.localScale = new Vector3(ringRadius, ringRadius, 1f);
     }
 
-    static void DrawFractureRing(LineRenderer renderer, float ringRadius, float width, Color color, float progress)
+    void DrawFractureRing(float ringRadius, float width, Color color, float progress)
     {
-        if (renderer == null)
+        if (fractureRing == null)
             return;
 
-        renderer.widthMultiplier = width;
-        renderer.startColor = color;
-        renderer.endColor = color;
+        fractureRing.widthMultiplier = width;
+        fractureRing.startColor = color;
+        fractureRing.endColor = color;
+        fractureRing.transform.localScale = new Vector3(ringRadius, ringRadius, 1f);
+
+        if (Time.unscaledTime < nextFractureGeometryUpdate &&
+            Mathf.Abs(progress - lastFractureProgress) < 0.035f)
+        {
+            return;
+        }
+
+        nextFractureGeometryUpdate = Time.unscaledTime + FractureGeometryUpdateInterval;
+        lastFractureProgress = progress;
         for (int i = 0; i < RingSegments; i++)
         {
             float angle = (i / (float)RingSegments) * Mathf.PI * 2f;
             float noise = Mathf.PerlinNoise(i * 0.071f + progress * 2.4f, Time.time * 0.26f);
             float jag = Mathf.Lerp(0.93f, 1.08f, noise);
-            renderer.SetPosition(i, new Vector3(Mathf.Cos(angle) * ringRadius * jag, Mathf.Sin(angle) * ringRadius * jag, 0f));
+            fractureRing.SetPosition(i, new Vector3(Mathf.Cos(angle) * jag, Mathf.Sin(angle) * jag, 0f));
         }
+    }
+
+    static Vector3[] GetUnitCirclePositions()
+    {
+        if (unitCirclePositions != null && unitCirclePositions.Length == RingSegments)
+            return unitCirclePositions;
+
+        unitCirclePositions = new Vector3[RingSegments];
+        for (int i = 0; i < RingSegments; i++)
+        {
+            float angle = (i / (float)RingSegments) * Mathf.PI * 2f;
+            unitCirclePositions[i] = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+        }
+
+        return unitCirclePositions;
     }
 
     static Material GetAdditiveMaterial()

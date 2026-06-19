@@ -337,6 +337,8 @@ public class PlayerHealth : MonoBehaviourPun
 
     void OnDestroy()
     {
+        RuntimeSceneQueryCache.InvalidateAll();
+
         if (photonView != null &&
             photonView.IsMine &&
             PhotonNetwork.LocalPlayer != null &&
@@ -1315,6 +1317,24 @@ public class PlayerHealth : MonoBehaviourPun
         spawnInvulnerableUntil = Mathf.Max(spawnInvulnerableUntil, Time.time + duration);
         if (RoomSettings.AreVisualEffectsEnabled())
             SpawnInvulnerabilityVfx.Attach(this);
+    }
+
+    public void BeginBotSpawnInvulnerability(float duration)
+    {
+        if (duration <= 0f || IsWreck || !IsBotControlled)
+            return;
+
+        spawnInvulnerableUntil = Mathf.Max(spawnInvulnerableUntil, Time.time + duration);
+        if (RoomSettings.AreVisualEffectsEnabled())
+            SpawnInvulnerabilityVfx.Attach(this);
+    }
+
+    public void ClearBotSpawnInvulnerability()
+    {
+        if (!IsBotControlled)
+            return;
+
+        spawnInvulnerableUntil = Mathf.Min(spawnInvulnerableUntil, Time.time);
     }
 
     public void BeginMapTravelArrivalProtection()
@@ -2639,6 +2659,8 @@ public class PlayerHealth : MonoBehaviourPun
         IsWreck = true;
         ActorIdentity.Ensure(gameObject);
         EnemyBotKind enemyKind = (EnemyBotKind)kindValue;
+        if (PhotonNetwork.IsMasterClient && enemyKind == EnemyBotKind.MilitaryVan)
+            EnemyBotManager.NotifyMilitaryVanDestroyed(GetComponent<EnemyBot>());
 
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null)
@@ -2720,9 +2742,7 @@ public class PlayerHealth : MonoBehaviourPun
         if (wreck == null)
             wreck = gameObject.AddComponent<ShipWreck>();
 
-        string rewardItemId = wreckProfile != null ? wreckProfile.RewardItemId : InventoryItemCatalog.DroidScrapId;
-        if (string.Equals(rewardItemId, InventoryItemCatalog.AlienSecretId, System.StringComparison.Ordinal))
-            rewardItemId = InventoryItemCatalog.GetAlienSecretItemId(Random.Range(0, InventoryItemCatalog.AlienSecretVariantCount));
+        string rewardItemId = ResolveEnemyWreckRewardItemId(enemyKind, wreckProfile);
         string serializedLoot = PlayerProfileService.SerializeShipInventorySlots(new[] { rewardItemId });
         wreck.InitializeFromLootJson(serializedLoot, -1, kindValue);
         wreck.SetDestroyWhenEmpty(wreckProfile == null || wreckProfile.DestroyWhenEmpty);
@@ -2743,6 +2763,18 @@ public class PlayerHealth : MonoBehaviourPun
 
         ConfigureEnemyWreckCollider(enemyKind, renderer);
         GameVisualTheme.ApplyPlayerVisual(this);
+    }
+
+    string ResolveEnemyWreckRewardItemId(EnemyBotKind enemyKind, EnemyWreckProfile wreckProfile)
+    {
+        if (enemyKind == EnemyBotKind.MilitaryVan && Random.value < 0.2f)
+            return InventoryItemCatalog.CashSuitcaseId;
+
+        string rewardItemId = wreckProfile != null ? wreckProfile.RewardItemId : InventoryItemCatalog.DroidScrapId;
+        if (string.Equals(rewardItemId, InventoryItemCatalog.AlienSecretId, System.StringComparison.Ordinal))
+            return InventoryItemCatalog.GetAlienSecretItemId(Random.Range(0, InventoryItemCatalog.AlienSecretVariantCount));
+
+        return rewardItemId;
     }
 
     void TryDropPirateCaseNearEnemyWreck(EnemyBotKind enemyKind, Rigidbody2D wreckBody)

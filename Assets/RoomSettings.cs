@@ -41,16 +41,20 @@ public static class RoomSettings
     public const string AsteroidShowerModeKey = "mapEffect.asteroidShower.mode";
     public const string AsteroidShowerStartUtcMsKey = "mapEffect.asteroidShower.startUtcMs";
     public const string AsteroidShowerActiveKey = "mapEffect.asteroidShower.active";
+    public const string MilitaryConvoyModeKey = "mapEffect.militaryConvoy.mode";
+    public const string MilitaryConvoyStartUtcMsKey = "mapEffect.militaryConvoy.startUtcMs";
+    public const string MilitaryConvoyActiveKey = "mapEffect.militaryConvoy.active";
     public const string MapEffectModeDefaultsVersionKey = "mapEffectModeDefaultsVersion";
     public const int MapEffectModeDefaultsVersion = 1;
     public const string MapEffectChanceKeyPrefix = "mapEffectChance.";
     public const string MapEffectChanceDefaultsVersionKey = "mapEffectChanceDefaultsVersion";
-    public const int MapEffectChanceDefaultsVersion = 2;
+    public const int MapEffectChanceDefaultsVersion = 3;
     public const string CrazyEnemiesRuleId = "CE";
     public const string FogOfWarRuleId = "FoW";
     public const string PirateBaseRuleId = "PB";
     public const string AsteroidShowerRuleId = "AS";
     public const string CosmicWormRuleId = "CW";
+    public const string MilitaryConvoyRuleId = "MC";
     public const string SpaceJunkDensityKey = "spaceJunkDensity";
     public const string ContainersDensityKey = "containersDensity";
     public const string ArtifactAsteroidsDensityKey = "artifactAsteroidsDensity";
@@ -1560,6 +1564,9 @@ public static class RoomSettings
         if (kind == EnemyBotKind.PirateBase && IsPirateBaseEffectReadyOrActive())
             return true;
 
+        if (kind == EnemyBotKind.MilitaryVan && IsMilitaryConvoyActive())
+            return true;
+
         if (PhotonNetwork.CurrentRoom != null &&
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(definition.EnabledRoomKey, out object value) &&
             value is bool enabled)
@@ -1832,6 +1839,7 @@ public static class RoomSettings
             case PirateBaseModeKey:
             case AsteroidShowerModeKey:
             case CosmicWormModeKey:
+            case MilitaryConvoyModeKey:
                 return true;
             default:
                 return false;
@@ -1876,6 +1884,9 @@ public static class RoomSettings
         string normalizedRuleId = string.IsNullOrWhiteSpace(ruleId)
             ? string.Empty
             : ruleId.Trim();
+
+        if (normalizedRuleId == MilitaryConvoyRuleId)
+            return normalizedMapId == "just_space" || normalizedMapId == "hidden_dimension" ? 0 : 5;
 
         switch (normalizedMapId)
         {
@@ -1940,6 +1951,8 @@ public static class RoomSettings
                 return asteroidShowerPercent;
             case CosmicWormRuleId:
                 return cosmicWormPercent;
+            case MilitaryConvoyRuleId:
+                return 5;
             default:
                 return DefaultMapEffectChancePercent;
         }
@@ -2011,6 +2024,11 @@ public static class RoomSettings
     public static bool IsCosmicWormActive()
     {
         return IsMapEffectActive(CosmicWormActiveKey);
+    }
+
+    public static bool IsMilitaryConvoyActive()
+    {
+        return IsMapEffectActive(MilitaryConvoyActiveKey);
     }
 
     static bool IsPirateBaseEffectReadyOrActive()

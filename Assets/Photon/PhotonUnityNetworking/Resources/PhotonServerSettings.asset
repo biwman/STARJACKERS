@@ -283,6 +283,7 @@ MonoBehaviour:
   - StopHackingDeviceEffects
   - RecordPathfinderHackProgressRpc
   - TeleportToMapInstanceRpc
+  - PlayRiftWardenTrackingBeamRpc
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

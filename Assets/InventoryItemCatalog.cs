@@ -219,6 +219,7 @@ public static class InventoryItemCatalog
     public const string SpaceMineWreckId = "space_mine_wreck";
     public const string SpaceTruckWreckId = "space_truck_wreck";
     public const string ContainerShipWreckId = "container_ship_wreck";
+    public const string MilitaryVanWreckId = "military_van_wreck";
     public const string MothershipCoreId = "mothership_core";
     public const string VoidMawCoreId = "void_maw_core";
     public const string NeutralFighterSalvageId = "neutral_fighter_salvage";
@@ -1341,6 +1342,20 @@ public static class InventoryItemCatalog
                 SellValueAstrons = 1050,
                 IconResourcePath = "Enemies/ContainerShip/container_ship_wreck",
                 ProjectFileName = "Resources/Enemies/ContainerShip/container_ship_wreck.png",
+                SalvageOutputs = new[] { AsteroidGoldId, SpaceJunkStandardId }
+            },
+            [MilitaryVanWreckId] = new InventoryItemDefinition
+            {
+                Id = MilitaryVanWreckId,
+                DisplayName = "Military Van Wreck",
+                ShortLabel = "MVW",
+                Description = "Armored convoy salvage recovered from a destroyed Military Van.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
+                Rarity = InventoryItemRarity.Rare,
+                SellValueAstrons = 850,
+                IconResourcePath = "Enemies/MilitaryVan/military_van_wreck",
+                ProjectFileName = "Resources/Enemies/MilitaryVan/military_van_wreck.png",
                 SalvageOutputs = new[] { AsteroidGoldId, SpaceJunkStandardId }
             },
             [MothershipCoreId] = new InventoryItemDefinition
