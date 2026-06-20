@@ -2939,34 +2939,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
         scrollbarRect.anchorMax = new Vector2(0.5f, 0.5f);
         scrollbarRect.pivot = new Vector2(0.5f, 0.5f);
         scrollbarRect.anchoredPosition = new Vector2(589f, -12f);
-        scrollbarRect.sizeDelta = new Vector2(68f, 592f);
+        scrollbarRect.sizeDelta = new Vector2(RuntimeScrollbarStyler.GetPreferredWidth(RuntimeScrollbarStyler.Size.Small), 592f);
 
-        Image scrollbarBg = scrollbarObject.GetComponent<Image>();
-        scrollbarBg.color = new Color(0.1f, 0.14f, 0.18f, 0.9f);
-
-        GameObject slidingAreaObject = new GameObject("Sliding Area", typeof(RectTransform));
-        slidingAreaObject.transform.SetParent(scrollbarObject.transform, false);
-        RectTransform slidingAreaRect = slidingAreaObject.GetComponent<RectTransform>();
-        slidingAreaRect.anchorMin = Vector2.zero;
-        slidingAreaRect.anchorMax = Vector2.one;
-        slidingAreaRect.offsetMin = new Vector2(4f, 4f);
-        slidingAreaRect.offsetMax = new Vector2(-4f, -4f);
-
-        GameObject handleObject = new GameObject("Handle", typeof(RectTransform), typeof(Image));
-        handleObject.transform.SetParent(slidingAreaObject.transform, false);
-        RectTransform handleRect = handleObject.GetComponent<RectTransform>();
-        handleRect.anchorMin = new Vector2(0f, 1f);
-        handleRect.anchorMax = new Vector2(1f, 1f);
-        handleRect.pivot = new Vector2(0.5f, 1f);
-        handleRect.sizeDelta = new Vector2(0f, 92f);
-
-        Image handleImage = handleObject.GetComponent<Image>();
-        handleImage.color = new Color(0.22f, 0.74f, 0.62f, 0.96f);
-
-        Scrollbar scrollbar = scrollbarObject.GetComponent<Scrollbar>();
-        scrollbar.direction = Scrollbar.Direction.BottomToTop;
-        scrollbar.handleRect = handleRect;
-        scrollbar.targetGraphic = handleImage;
+        Scrollbar scrollbar = RuntimeScrollbarStyler.ApplyVertical(scrollbarObject, RuntimeScrollbarStyler.Size.Small, RuntimeScrollbarStyler.Tone.Mint);
 
         craftingRecipeScrollRect = viewportObject.GetComponent<ScrollRect>();
         craftingRecipeScrollRect.horizontal = false;
@@ -3068,34 +3043,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
         scrollbarRect.anchorMax = new Vector2(0.5f, 0.5f);
         scrollbarRect.pivot = new Vector2(0.5f, 0.5f);
         scrollbarRect.anchoredPosition = new Vector2(846f, -122f);
-        scrollbarRect.sizeDelta = new Vector2(58f, 836f);
+        scrollbarRect.sizeDelta = new Vector2(RuntimeScrollbarStyler.GetPreferredWidth(RuntimeScrollbarStyler.Size.Small), 836f);
 
-        Image scrollbarBg = scrollbarObject.GetComponent<Image>();
-        scrollbarBg.color = new Color(0.1f, 0.14f, 0.18f, 0.92f);
-
-        GameObject slidingAreaObject = new GameObject("Sliding Area", typeof(RectTransform));
-        slidingAreaObject.transform.SetParent(scrollbarObject.transform, false);
-        RectTransform slidingAreaRect = slidingAreaObject.GetComponent<RectTransform>();
-        slidingAreaRect.anchorMin = Vector2.zero;
-        slidingAreaRect.anchorMax = Vector2.one;
-        slidingAreaRect.offsetMin = new Vector2(4f, 4f);
-        slidingAreaRect.offsetMax = new Vector2(-4f, -4f);
-
-        GameObject handleObject = new GameObject("Handle", typeof(RectTransform), typeof(Image));
-        handleObject.transform.SetParent(slidingAreaObject.transform, false);
-        RectTransform handleRect = handleObject.GetComponent<RectTransform>();
-        handleRect.anchorMin = new Vector2(0f, 1f);
-        handleRect.anchorMax = new Vector2(1f, 1f);
-        handleRect.pivot = new Vector2(0.5f, 1f);
-        handleRect.sizeDelta = new Vector2(0f, 96f);
-
-        Image handleImage = handleObject.GetComponent<Image>();
-        handleImage.color = new Color(0.22f, 0.54f, 0.88f, 0.96f);
-
-        Scrollbar scrollbar = scrollbarObject.GetComponent<Scrollbar>();
-        scrollbar.direction = Scrollbar.Direction.BottomToTop;
-        scrollbar.handleRect = handleRect;
-        scrollbar.targetGraphic = handleImage;
+        Scrollbar scrollbar = RuntimeScrollbarStyler.ApplyVertical(scrollbarObject, RuntimeScrollbarStyler.Size.Small, RuntimeScrollbarStyler.Tone.Blue);
 
         craftingBlueprintScrollRect = viewportObject.GetComponent<ScrollRect>();
         craftingBlueprintScrollRect.horizontal = false;
@@ -3148,7 +3098,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         float sidePadding = Mathf.Clamp(panelWidth * 0.045f, 20f, 56f);
         float topPadding = Mathf.Clamp(panelHeight * 0.13f, 82f, 142f);
         float bottomPadding = Mathf.Clamp(panelHeight * 0.05f, 22f, 54f);
-        float scrollbarWidth = Mathf.Clamp(panelWidth * 0.035f, 30f, 58f);
+        float scrollbarWidth = RuntimeScrollbarStyler.GetPreferredWidth(RuntimeScrollbarStyler.Size.Small);
         float gap = Mathf.Clamp(panelWidth * 0.012f, 10f, 18f);
         float viewportWidth = Mathf.Max(160f, panelWidth - sidePadding * 2f - scrollbarWidth - gap);
         float viewportHeight = Mathf.Max(140f, panelHeight - topPadding - bottomPadding);
@@ -3651,34 +3601,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
         scrollbarRect.anchorMax = new Vector2(0.5f, 0.5f);
         scrollbarRect.pivot = new Vector2(0.5f, 0.5f);
         scrollbarRect.anchoredPosition = new Vector2(472f, -22f);
-        scrollbarRect.sizeDelta = new Vector2(34f, 578f);
+        scrollbarRect.sizeDelta = new Vector2(RuntimeScrollbarStyler.GetPreferredWidth(RuntimeScrollbarStyler.Size.Small), 578f);
 
-        Image scrollbarBg = scrollbarObject.GetComponent<Image>();
-        scrollbarBg.color = new Color(0.1f, 0.14f, 0.18f, 0.9f);
-
-        GameObject slidingAreaObject = new GameObject("Sliding Area", typeof(RectTransform));
-        slidingAreaObject.transform.SetParent(scrollbarObject.transform, false);
-        RectTransform slidingAreaRect = slidingAreaObject.GetComponent<RectTransform>();
-        slidingAreaRect.anchorMin = Vector2.zero;
-        slidingAreaRect.anchorMax = Vector2.one;
-        slidingAreaRect.offsetMin = new Vector2(4f, 4f);
-        slidingAreaRect.offsetMax = new Vector2(-4f, -4f);
-
-        GameObject handleObject = new GameObject("Handle", typeof(RectTransform), typeof(Image));
-        handleObject.transform.SetParent(slidingAreaObject.transform, false);
-        RectTransform handleRect = handleObject.GetComponent<RectTransform>();
-        handleRect.anchorMin = new Vector2(0f, 1f);
-        handleRect.anchorMax = new Vector2(1f, 1f);
-        handleRect.pivot = new Vector2(0.5f, 1f);
-        handleRect.sizeDelta = new Vector2(0f, 92f);
-
-        Image handleImage = handleObject.GetComponent<Image>();
-        handleImage.color = new Color(0.24f, 0.72f, 0.92f, 0.96f);
-
-        Scrollbar scrollbar = scrollbarObject.GetComponent<Scrollbar>();
-        scrollbar.direction = Scrollbar.Direction.BottomToTop;
-        scrollbar.handleRect = handleRect;
-        scrollbar.targetGraphic = handleImage;
+        Scrollbar scrollbar = RuntimeScrollbarStyler.ApplyVertical(scrollbarObject, RuntimeScrollbarStyler.Size.Small, RuntimeScrollbarStyler.Tone.Gold);
 
         shopScrollRect = viewportObject.GetComponent<ScrollRect>();
         shopScrollRect.horizontal = false;
@@ -5687,34 +5612,9 @@ public class PlayerProfilePanelUI : MonoBehaviour
         scrollbarRect.anchorMax = new Vector2(0.5f, 1f);
         scrollbarRect.pivot = new Vector2(0f, 1f);
         scrollbarRect.anchoredPosition = new Vector2(anchoredPosition.x - 100f, anchoredPosition.y);
-        scrollbarRect.sizeDelta = new Vector2(88f, viewportSize.y);
+        scrollbarRect.sizeDelta = new Vector2(RuntimeScrollbarStyler.GetPreferredWidth(RuntimeScrollbarStyler.Size.Small), viewportSize.y);
 
-        Image scrollbarBg = scrollbarObject.GetComponent<Image>();
-        scrollbarBg.color = new Color(0.1f, 0.14f, 0.18f, 0.88f);
-
-        GameObject slidingAreaObject = new GameObject("Sliding Area", typeof(RectTransform));
-        slidingAreaObject.transform.SetParent(scrollbarObject.transform, false);
-        RectTransform slidingAreaRect = slidingAreaObject.GetComponent<RectTransform>();
-        slidingAreaRect.anchorMin = Vector2.zero;
-        slidingAreaRect.anchorMax = Vector2.one;
-        slidingAreaRect.offsetMin = new Vector2(4f, 4f);
-        slidingAreaRect.offsetMax = new Vector2(-4f, -4f);
-
-        GameObject handleObject = new GameObject("Handle", typeof(RectTransform), typeof(Image));
-        handleObject.transform.SetParent(slidingAreaObject.transform, false);
-        RectTransform handleRect = handleObject.GetComponent<RectTransform>();
-        handleRect.anchorMin = new Vector2(0f, 1f);
-        handleRect.anchorMax = new Vector2(1f, 1f);
-        handleRect.pivot = new Vector2(0.5f, 1f);
-        handleRect.sizeDelta = new Vector2(0f, 96f);
-
-        Image handleImage = handleObject.GetComponent<Image>();
-        handleImage.color = new Color(0.23f, 0.74f, 0.62f, 0.95f);
-
-        Scrollbar scrollbar = scrollbarObject.GetComponent<Scrollbar>();
-        scrollbar.direction = Scrollbar.Direction.BottomToTop;
-        scrollbar.handleRect = handleRect;
-        scrollbar.targetGraphic = handleImage;
+        Scrollbar scrollbar = RuntimeScrollbarStyler.ApplyVertical(scrollbarObject, RuntimeScrollbarStyler.Size.Small, RuntimeScrollbarStyler.Tone.Mint);
 
         playerInventoryScrollRect = viewportObject.GetComponent<ScrollRect>();
         playerInventoryScrollRect.horizontal = false;
@@ -8311,7 +8211,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (playerInventoryScrollRect != null)
             SetAnchoredRect(playerInventoryScrollRect.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX - 10f, -578f), new Vector2(playerScrollWidth, 362f));
         if (playerInventoryScrollbarObject != null)
-            SetAnchoredRect(playerInventoryScrollbarObject.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX + (playerScrollWidth * 0.5f) + 28f, -578f), new Vector2(56f, 362f));
+            SetAnchoredRect(playerInventoryScrollbarObject.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(centerX + (playerScrollWidth * 0.5f) + 28f, -578f), new Vector2(RuntimeScrollbarStyler.GetPreferredWidth(RuntimeScrollbarStyler.Size.Small), 362f));
     }
 
     void LayoutPlayerInventoryLabel(float filterButtonCenterX, float sortButtonCenterX)
@@ -8424,7 +8324,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             SetAnchoredRect(playerInventoryScrollRect.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(playerCenterX, -578f), new Vector2(playerScrollWidth, 362f));
 
         if (playerInventoryScrollbarObject != null)
-            SetAnchoredRect(playerInventoryScrollbarObject.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(playerRightEdge + 28f, -578f), new Vector2(56f, 362f));
+            SetAnchoredRect(playerInventoryScrollbarObject.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(playerRightEdge + 28f, -578f), new Vector2(RuntimeScrollbarStyler.GetPreferredWidth(RuntimeScrollbarStyler.Size.Small), 362f));
     }
 
     void ConfigureStorageBackdrop(bool visible, float centerX, float topY, float width, float height)
@@ -8529,7 +8429,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (scrollbarRect != null)
         {
             scrollbarRect.anchoredPosition = new Vector2(386f, -6f);
-            scrollbarRect.sizeDelta = new Vector2(56f, 610f);
+            scrollbarRect.sizeDelta = new Vector2(RuntimeScrollbarStyler.GetPreferredWidth(RuntimeScrollbarStyler.Size.Small), 610f);
         }
 
         if (craftingRecipeAvailabilityButton != null)
@@ -8650,7 +8550,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         if (scrollbarRect != null)
         {
             scrollbarRect.anchoredPosition = new Vector2(318f, -22f);
-            scrollbarRect.sizeDelta = new Vector2(30f, 610f);
+            scrollbarRect.sizeDelta = new Vector2(RuntimeScrollbarStyler.GetPreferredWidth(RuntimeScrollbarStyler.Size.Small), 610f);
         }
     }
 

@@ -173,8 +173,17 @@ public class SessionBrowserPanelUI : MonoBehaviour
         if (cachedCanvasTransform != null && cachedCanvasTransform.gameObject.scene.IsValid())
             return cachedCanvasTransform;
 
-        GameObject canvasObject = GameObject.Find("Canvas");
-        cachedCanvasTransform = canvasObject != null ? canvasObject.transform : null;
+        Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Exclude);
+        cachedCanvasTransform = null;
+        for (int i = 0; i < canvases.Length; i++)
+        {
+            if (canvases[i] != null && canvases[i].name == "Canvas")
+            {
+                cachedCanvasTransform = canvases[i].transform;
+                break;
+            }
+        }
+
         return cachedCanvasTransform;
     }
 

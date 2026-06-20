@@ -99,7 +99,7 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
 
     void OnDisable()
     {
-        StopActiveTetherVfx();
+        StopActiveTetherVfx(false);
     }
 
     public void NotifyDamageSource(int attackerViewID)
@@ -551,10 +551,21 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
 
     void StopActiveTetherVfx()
     {
-        if (view == null || !view.IsMine || activeTargetViewId <= 0 || bot == null || bot.photonView == null)
+        StopActiveTetherVfx(true);
+    }
+
+    void StopActiveTetherVfx(bool broadcastToRoom)
+    {
+        if (view == null || activeTargetViewId <= 0 || bot == null || bot.photonView == null)
             return;
 
-        bot.photonView.RPC(nameof(EnemyBot.StopGravitySquidTetherRpc), RpcTarget.All);
+        int sourceViewId = bot.photonView.ViewID;
+        GravitySquidTetherVfx.StopBeam(sourceViewId);
+
+        if (!broadcastToRoom || !view.IsMine || !PhotonNetwork.InRoom || !gameObject.activeInHierarchy)
+            return;
+
+        bot.photonView.RPC(nameof(EnemyBot.StopGravitySquidTetherRpc), RpcTarget.Others);
     }
 
     void SetAnimationSpeed(float multiplier)

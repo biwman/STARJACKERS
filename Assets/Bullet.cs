@@ -1,4 +1,6 @@
+using ExitGames.Client.Photon;
 using Photon.Pun;
+using Photon.Realtime;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -224,7 +226,7 @@ public class Bullet : MonoBehaviourPun
             ApplyDamageToHealth(playerTarget, impactPoint, true);
             Vector2 playerOnlyVfxDirection = GetTravelDirection();
             if (!string.IsNullOrWhiteSpace(hitEffectId))
-                photonView.RPC(nameof(PlayImpactVfx), RpcTarget.All, hitEffectId, impactPoint.x, impactPoint.y, playerOnlyVfxDirection.x, playerOnlyVfxDirection.y, ResolveImpactVfxScale());
+                BroadcastImpactVfx(hitEffectId, impactPoint, playerOnlyVfxDirection, ResolveImpactVfxScale());
 
             ApplyBulletPush(collision);
             if (!pierces)
@@ -271,7 +273,7 @@ public class Bullet : MonoBehaviourPun
         Vector2 vfxPoint = collision.contactCount > 0 ? collision.GetContact(0).point : (Vector2)transform.position;
         Vector2 vfxDirection = GetTravelDirection();
         if (!string.IsNullOrWhiteSpace(hitEffectId))
-            photonView.RPC(nameof(PlayImpactVfx), RpcTarget.All, hitEffectId, vfxPoint.x, vfxPoint.y, vfxDirection.x, vfxDirection.y, ResolveImpactVfxScale());
+            BroadcastImpactVfx(hitEffectId, vfxPoint, vfxDirection, ResolveImpactVfxScale());
 
         if (IsRocketProjectile())
             ApplyAreaDamage(vfxPoint, null);
@@ -356,7 +358,7 @@ public class Bullet : MonoBehaviourPun
         }
 
         if (!string.IsNullOrWhiteSpace(hitEffectId))
-            photonView.RPC(nameof(PlayImpactVfx), RpcTarget.All, hitEffectId, arcTargetPosition.x, arcTargetPosition.y, 0f, 1f, Mathf.Max(visualScaleMultiplier, areaDamageRadius));
+            BroadcastImpactVfx(hitEffectId, arcTargetPosition, Vector2.up, Mathf.Max(visualScaleMultiplier, areaDamageRadius));
 
         DestroyBullet();
     }
@@ -747,8 +749,8 @@ public class Bullet : MonoBehaviourPun
         if (destroyRequested)
             return;
 
-        if (!string.IsNullOrWhiteSpace(hitEffectId) && photonView != null)
-            photonView.RPC(nameof(PlayImpactVfx), RpcTarget.All, hitEffectId, impactPoint.x, impactPoint.y, direction.x, direction.y, ResolveImpactVfxScale());
+        if (!string.IsNullOrWhiteSpace(hitEffectId))
+            BroadcastImpactVfx(hitEffectId, impactPoint, direction, ResolveImpactVfxScale());
 
         ApplyAreaDamage(impactPoint, null);
         DestroyBullet();
@@ -1841,17 +1843,23 @@ public class Bullet : MonoBehaviourPun
         return sharedProjectileLineMaterial;
     }
 
+    void BroadcastImpactVfx(string effectId, Vector2 position, Vector2 direction, float scale)
+    {
+        BulletImpactVfxEventRouter.Broadcast(
+            effectId,
+            new Vector3(position.x, position.y, transform.position.z),
+            direction,
+            scale);
+    }
+
     [PunRPC]
     void PlayImpactVfx(string effectId, float x, float y, float directionX, float directionY, float scale)
     {
-        Vector2 direction = new Vector2(directionX, directionY);
-        if (direction.sqrMagnitude <= 0.001f)
-            direction = Vector2.up;
-
-        if (string.Equals(effectId, "rocket", System.StringComparison.OrdinalIgnoreCase))
-            AudioManager.Instance.PlayRocketExplosionAt(new Vector3(x, y, transform.position.z));
-
-        BulletImpactVfx.Spawn(effectId, new Vector3(x, y, transform.position.z - 0.04f), direction.normalized, scale);
+        BulletImpactVfxEventRouter.SpawnLocal(
+            effectId,
+            new Vector3(x, y, transform.position.z),
+            new Vector2(directionX, directionY),
+            scale);
     }
 
     float GetOwnerLength()
@@ -1890,5 +1898,128 @@ public class Bullet : MonoBehaviourPun
             maxScale = 1f;
 
         collider2D.radius = worldRadius / maxScale;
+    }
+}
+
+public sealed class BulletImpactVfxEventRouter : MonoBehaviour, IOnEventCallback
+{
+    const byte ImpactVfxEventCode = 85;
+
+    static BulletImpactVfxEventRouter instance;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    static void Bootstrap()
+    {
+        EnsureExists();
+    }
+
+    public static void EnsureExists()
+    {
+        if (instance != null)
+            return;
+
+        GameObject existing = GameObject.Find("BulletImpactVfxEventRouter");
+        if (existing != null && existing.TryGetComponent(out BulletImpactVfxEventRouter router))
+        {
+            instance = router;
+            return;
+        }
+
+        GameObject root = new GameObject("BulletImpactVfxEventRouter");
+        instance = root.AddComponent<BulletImpactVfxEventRouter>();
+        DontDestroyOnLoad(root);
+    }
+
+    void Awake()
+    {
+        if (instance != null && instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        instance = this;
+        DontDestroyOnLoad(gameObject);
+    }
+
+    void OnEnable()
+    {
+        PhotonNetwork.AddCallbackTarget(this);
+    }
+
+    void OnDisable()
+    {
+        PhotonNetwork.RemoveCallbackTarget(this);
+    }
+
+    public void OnEvent(EventData photonEvent)
+    {
+        if (photonEvent == null || photonEvent.Code != ImpactVfxEventCode)
+            return;
+
+        object[] payload = photonEvent.CustomData as object[];
+        if (payload == null || payload.Length < 7)
+            return;
+
+        string effectId = payload[0] as string;
+        Vector3 position = new Vector3(
+            ConvertToFloat(payload[1]),
+            ConvertToFloat(payload[2]),
+            ConvertToFloat(payload[3]));
+        Vector2 direction = new Vector2(ConvertToFloat(payload[4]), ConvertToFloat(payload[5]));
+        float scale = ConvertToFloat(payload[6]);
+        SpawnLocal(effectId, position, direction, scale);
+    }
+
+    public static void Broadcast(string effectId, Vector3 position, Vector2 direction, float scale)
+    {
+        if (string.IsNullOrWhiteSpace(effectId))
+            return;
+
+        EnsureExists();
+        SpawnLocal(effectId, position, direction, scale);
+
+        if (!CanRaiseRoomEvent())
+            return;
+
+        object[] payload = { effectId, position.x, position.y, position.z, direction.x, direction.y, scale };
+        PhotonNetwork.RaiseEvent(
+            ImpactVfxEventCode,
+            payload,
+            new RaiseEventOptions { Receivers = ReceiverGroup.Others },
+            SendOptions.SendUnreliable);
+    }
+
+    public static void SpawnLocal(string effectId, Vector3 position, Vector2 direction, float scale)
+    {
+        if (string.IsNullOrWhiteSpace(effectId))
+            return;
+
+        if (direction.sqrMagnitude <= 0.001f)
+            direction = Vector2.up;
+
+        if (string.Equals(effectId, "rocket", System.StringComparison.OrdinalIgnoreCase) && AudioManager.Instance != null)
+            AudioManager.Instance.PlayRocketExplosionAt(position);
+
+        BulletImpactVfx.Spawn(effectId, new Vector3(position.x, position.y, position.z - 0.04f), direction.normalized, scale);
+    }
+
+    static bool CanRaiseRoomEvent()
+    {
+        return PhotonNetwork.IsConnected && PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null;
+    }
+
+    static float ConvertToFloat(object value)
+    {
+        if (value is float floatValue)
+            return floatValue;
+
+        if (value is double doubleValue)
+            return (float)doubleValue;
+
+        if (value is int intValue)
+            return intValue;
+
+        return 0f;
     }
 }

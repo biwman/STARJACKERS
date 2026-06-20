@@ -4,7 +4,7 @@ using UnityEngine;
 
 public sealed class GravityWellPhysicsField : MonoBehaviourPunCallbacks
 {
-    const float CacheRefreshInterval = 0.45f;
+    const float CacheRefreshInterval = 0.8f;
     const float InnerDeadRadius = 1.7f;
     const float PullAcceleration = 0.82f;
     const float TangentialAcceleration = 0.48f;

@@ -1828,6 +1828,468 @@ public class UIRuntimeStyler : MonoBehaviour
     }
 }
 
+public static class RuntimeScrollbarStyler
+{
+    public enum Size
+    {
+        Small,
+        Medium,
+        Large
+    }
+
+    public enum Tone
+    {
+        Mint,
+        Blue,
+        Gold
+    }
+
+    struct SizeSettings
+    {
+        public float Width;
+        public float TrackWidth;
+        public float OuterPadding;
+        public float SlidingPadding;
+        public float GripWidth;
+        public float GripSpacing;
+        public float GripLineHeight;
+        public float MinVisibleSize;
+        public float FixedVisibleSize;
+    }
+
+    struct ToneSettings
+    {
+        public Color Root;
+        public Color Track;
+        public Color TrackAccent;
+        public Color Handle;
+        public Color Highlighted;
+        public Color Pressed;
+        public Color HandleShade;
+        public Color HandleLight;
+        public Color Grip;
+        public Color Outline;
+    }
+
+    static Sprite roundedTrackSprite;
+    static Sprite roundedHandleSprite;
+    static Sprite roundedCapSprite;
+
+    public static float GetPreferredWidth(Size size)
+    {
+        return GetSizeSettings(size).Width;
+    }
+
+    public static Scrollbar ApplyVertical(GameObject scrollbarObject, Size size, Tone tone)
+    {
+        if (scrollbarObject == null)
+            return null;
+
+        SizeSettings sizeSettings = GetSizeSettings(size);
+        ToneSettings toneSettings = GetToneSettings(tone);
+
+        RectTransform rootRect = GetOrAdd<RectTransform>(scrollbarObject);
+        if (rootRect != null && rootRect.sizeDelta.x <= 0f)
+            rootRect.sizeDelta = new Vector2(sizeSettings.Width, rootRect.sizeDelta.y);
+
+        Image rootImage = GetOrAdd<Image>(scrollbarObject);
+        rootImage.sprite = GetRoundedTrackSprite();
+        rootImage.type = Image.Type.Sliced;
+        rootImage.color = toneSettings.Root;
+        rootImage.raycastTarget = true;
+
+        Outline rootOutline = GetOrAdd<Outline>(scrollbarObject);
+        rootOutline.effectColor = toneSettings.Outline;
+        rootOutline.effectDistance = new Vector2(1.5f, -1.5f);
+
+        GameObject trackObject = FindOrCreateChild(scrollbarObject.transform, "Runtime Track", typeof(RectTransform), typeof(Image));
+        RectTransform trackRect = trackObject.GetComponent<RectTransform>();
+        trackRect.anchorMin = new Vector2(0.5f, 0f);
+        trackRect.anchorMax = new Vector2(0.5f, 1f);
+        trackRect.pivot = new Vector2(0.5f, 0.5f);
+        trackRect.anchoredPosition = Vector2.zero;
+        trackRect.sizeDelta = new Vector2(sizeSettings.TrackWidth, -sizeSettings.OuterPadding * 2f);
+
+        Image trackImage = trackObject.GetComponent<Image>();
+        trackImage.sprite = GetRoundedTrackSprite();
+        trackImage.type = Image.Type.Sliced;
+        trackImage.color = toneSettings.Track;
+        trackImage.raycastTarget = false;
+        trackObject.transform.SetAsFirstSibling();
+
+        GameObject trackAccentObject = FindOrCreateChild(trackObject.transform, "Runtime Track Accent", typeof(RectTransform), typeof(Image));
+        RectTransform trackAccentRect = trackAccentObject.GetComponent<RectTransform>();
+        trackAccentRect.anchorMin = new Vector2(0.5f, 0f);
+        trackAccentRect.anchorMax = new Vector2(0.5f, 1f);
+        trackAccentRect.pivot = new Vector2(0.5f, 0.5f);
+        trackAccentRect.anchoredPosition = new Vector2(-sizeSettings.TrackWidth * 0.18f, 0f);
+        trackAccentRect.sizeDelta = new Vector2(Mathf.Max(2f, sizeSettings.TrackWidth * 0.28f), -sizeSettings.OuterPadding * 2f - 4f);
+
+        Image trackAccentImage = trackAccentObject.GetComponent<Image>();
+        trackAccentImage.sprite = GetRoundedTrackSprite();
+        trackAccentImage.type = Image.Type.Sliced;
+        trackAccentImage.color = toneSettings.TrackAccent;
+        trackAccentImage.raycastTarget = false;
+
+        GameObject slidingAreaObject = FindOrCreateChild(scrollbarObject.transform, "Sliding Area", typeof(RectTransform));
+        RectTransform slidingAreaRect = slidingAreaObject.GetComponent<RectTransform>();
+        slidingAreaRect.anchorMin = Vector2.zero;
+        slidingAreaRect.anchorMax = Vector2.one;
+        slidingAreaRect.offsetMin = new Vector2(sizeSettings.SlidingPadding, sizeSettings.SlidingPadding);
+        slidingAreaRect.offsetMax = new Vector2(-sizeSettings.SlidingPadding, -sizeSettings.SlidingPadding);
+        slidingAreaObject.transform.SetAsLastSibling();
+
+        GameObject handleObject = FindOrCreateChild(slidingAreaObject.transform, "Handle", typeof(RectTransform), typeof(Image));
+        RectTransform handleRect = handleObject.GetComponent<RectTransform>();
+        handleRect.anchorMin = Vector2.zero;
+        handleRect.anchorMax = new Vector2(1f, 1f);
+        handleRect.pivot = new Vector2(0.5f, 0.5f);
+        handleRect.anchoredPosition = Vector2.zero;
+        handleRect.sizeDelta = Vector2.zero;
+        handleRect.offsetMin = Vector2.zero;
+        handleRect.offsetMax = Vector2.zero;
+
+        Image handleImage = handleObject.GetComponent<Image>();
+        handleImage.sprite = GetRoundedHandleSprite();
+        handleImage.type = Image.Type.Sliced;
+        handleImage.color = toneSettings.Handle;
+        handleImage.raycastTarget = true;
+
+        Outline handleOutline = GetOrAdd<Outline>(handleObject);
+        handleOutline.effectColor = toneSettings.Outline;
+        handleOutline.effectDistance = new Vector2(1.2f, -1.2f);
+
+        ConfigureHandleLayer(handleObject.transform, "Runtime Handle Shade", new Vector2(0f, 0f), new Vector2(1f, 0.42f), Vector2.zero, new Vector2(0f, 1f), toneSettings.HandleShade);
+        ConfigureHandleLayer(handleObject.transform, "Runtime Handle Light", new Vector2(0f, 0.68f), new Vector2(1f, 1f), new Vector2(3f, 1f), new Vector2(-3f, -3f), toneSettings.HandleLight);
+        ConfigureGrip(handleObject.transform, sizeSettings, toneSettings);
+
+        Scrollbar scrollbar = GetOrAdd<Scrollbar>(scrollbarObject);
+        scrollbar.direction = Scrollbar.Direction.BottomToTop;
+        scrollbar.handleRect = handleRect;
+        scrollbar.targetGraphic = handleImage;
+        scrollbar.transition = Selectable.Transition.ColorTint;
+
+        ColorBlock colors = scrollbar.colors;
+        colors.normalColor = toneSettings.Handle;
+        colors.highlightedColor = toneSettings.Highlighted;
+        colors.selectedColor = toneSettings.Highlighted;
+        colors.pressedColor = toneSettings.Pressed;
+        colors.disabledColor = new Color(toneSettings.Handle.r, toneSettings.Handle.g, toneSettings.Handle.b, 0.38f);
+        colors.colorMultiplier = 1f;
+        colors.fadeDuration = 0.08f;
+        scrollbar.colors = colors;
+
+        RuntimeScrollbarHandleLengthController lengthController = GetOrAdd<RuntimeScrollbarHandleLengthController>(scrollbarObject);
+        lengthController.Configure(scrollbar, sizeSettings.MinVisibleSize, sizeSettings.FixedVisibleSize);
+
+        return scrollbar;
+    }
+
+    public static void ApplyVerticalState(Scrollbar scrollbar, float normalizedPosition, float visibleSize)
+    {
+        if (scrollbar == null)
+            return;
+
+        visibleSize = Mathf.Clamp01(visibleSize);
+        normalizedPosition = Mathf.Clamp01(normalizedPosition);
+
+        scrollbar.size = visibleSize;
+        scrollbar.value = normalizedPosition;
+
+        RectTransform handleRect = scrollbar.handleRect;
+        if (handleRect == null)
+            return;
+
+        float clampedSize = Mathf.Clamp(visibleSize, 0.02f, 1f);
+        float start = normalizedPosition * (1f - clampedSize);
+        handleRect.anchorMin = new Vector2(0f, start);
+        handleRect.anchorMax = new Vector2(1f, start + clampedSize);
+        handleRect.pivot = new Vector2(0.5f, 0.5f);
+        handleRect.anchoredPosition = Vector2.zero;
+        handleRect.sizeDelta = Vector2.zero;
+        handleRect.offsetMin = Vector2.zero;
+        handleRect.offsetMax = Vector2.zero;
+    }
+
+    static void ConfigureHandleLayer(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax, Color color)
+    {
+        GameObject layerObject = FindOrCreateChild(parent, name, typeof(RectTransform), typeof(Image));
+        RectTransform rect = layerObject.GetComponent<RectTransform>();
+        rect.anchorMin = anchorMin;
+        rect.anchorMax = anchorMax;
+        rect.offsetMin = offsetMin;
+        rect.offsetMax = offsetMax;
+
+        Image image = layerObject.GetComponent<Image>();
+        image.sprite = GetRoundedCapSprite();
+        image.type = Image.Type.Sliced;
+        image.color = color;
+        image.raycastTarget = false;
+    }
+
+    static void ConfigureGrip(Transform parent, SizeSettings sizeSettings, ToneSettings toneSettings)
+    {
+        GameObject gripObject = FindOrCreateChild(parent, "Runtime Handle Grip", typeof(RectTransform));
+        RectTransform gripRect = gripObject.GetComponent<RectTransform>();
+        gripRect.anchorMin = new Vector2(0.5f, 0.5f);
+        gripRect.anchorMax = new Vector2(0.5f, 0.5f);
+        gripRect.pivot = new Vector2(0.5f, 0.5f);
+        gripRect.anchoredPosition = Vector2.zero;
+        gripRect.sizeDelta = new Vector2(sizeSettings.GripWidth, sizeSettings.GripSpacing * 2f + sizeSettings.GripLineHeight * 3f);
+
+        for (int i = 0; i < 3; i++)
+        {
+            GameObject lineObject = FindOrCreateChild(gripObject.transform, "Grip Line " + i, typeof(RectTransform), typeof(Image));
+            RectTransform lineRect = lineObject.GetComponent<RectTransform>();
+            lineRect.anchorMin = new Vector2(0.5f, 0.5f);
+            lineRect.anchorMax = new Vector2(0.5f, 0.5f);
+            lineRect.pivot = new Vector2(0.5f, 0.5f);
+            lineRect.anchoredPosition = new Vector2(0f, (1 - i) * sizeSettings.GripSpacing);
+            lineRect.sizeDelta = new Vector2(sizeSettings.GripWidth, sizeSettings.GripLineHeight);
+
+            Image lineImage = lineObject.GetComponent<Image>();
+            lineImage.sprite = GetRoundedCapSprite();
+            lineImage.type = Image.Type.Sliced;
+            lineImage.color = toneSettings.Grip;
+            lineImage.raycastTarget = false;
+        }
+    }
+
+    static SizeSettings GetSizeSettings(Size size)
+    {
+        switch (size)
+        {
+            case Size.Large:
+                return new SizeSettings
+                {
+                    Width = 54f,
+                    TrackWidth = 20f,
+                    OuterPadding = 7f,
+                    SlidingPadding = 9f,
+                    GripWidth = 17f,
+                    GripSpacing = 7f,
+                    GripLineHeight = 2.2f,
+                    MinVisibleSize = 0.2f,
+                    FixedVisibleSize = 0.22f
+                };
+            case Size.Medium:
+                return new SizeSettings
+                {
+                    Width = 48f,
+                    TrackWidth = 18f,
+                    OuterPadding = 6f,
+                    SlidingPadding = 8f,
+                    GripWidth = 15f,
+                    GripSpacing = 6f,
+                    GripLineHeight = 2f,
+                    MinVisibleSize = 0.24f,
+                    FixedVisibleSize = 0f
+                };
+            default:
+                return new SizeSettings
+                {
+                    Width = 42f,
+                    TrackWidth = 16f,
+                    OuterPadding = 6f,
+                    SlidingPadding = 7f,
+                    GripWidth = 14f,
+                    GripSpacing = 5.5f,
+                    GripLineHeight = 1.8f,
+                    MinVisibleSize = 0.3f,
+                    FixedVisibleSize = 0f
+                };
+        }
+    }
+
+    static ToneSettings GetToneSettings(Tone tone)
+    {
+        switch (tone)
+        {
+            case Tone.Blue:
+                return new ToneSettings
+                {
+                    Root = new Color(0.025f, 0.04f, 0.07f, 0.52f),
+                    Track = new Color(0.02f, 0.03f, 0.05f, 0.7f),
+                    TrackAccent = new Color(0.45f, 0.72f, 1f, 0.14f),
+                    Handle = new Color(0.25f, 0.58f, 0.95f, 0.98f),
+                    Highlighted = new Color(0.34f, 0.7f, 1f, 1f),
+                    Pressed = new Color(0.15f, 0.39f, 0.75f, 1f),
+                    HandleShade = new Color(0.04f, 0.1f, 0.2f, 0.28f),
+                    HandleLight = new Color(0.78f, 0.92f, 1f, 0.24f),
+                    Grip = new Color(0.94f, 0.98f, 1f, 0.62f),
+                    Outline = new Color(0f, 0f, 0f, 0.36f)
+                };
+            case Tone.Gold:
+                return new ToneSettings
+                {
+                    Root = new Color(0.055f, 0.04f, 0.02f, 0.5f),
+                    Track = new Color(0.035f, 0.025f, 0.015f, 0.72f),
+                    TrackAccent = new Color(1f, 0.78f, 0.36f, 0.13f),
+                    Handle = new Color(0.92f, 0.62f, 0.24f, 0.98f),
+                    Highlighted = new Color(1f, 0.74f, 0.34f, 1f),
+                    Pressed = new Color(0.68f, 0.4f, 0.13f, 1f),
+                    HandleShade = new Color(0.18f, 0.09f, 0.02f, 0.25f),
+                    HandleLight = new Color(1f, 0.96f, 0.78f, 0.24f),
+                    Grip = new Color(1f, 0.98f, 0.86f, 0.64f),
+                    Outline = new Color(0f, 0f, 0f, 0.34f)
+                };
+            default:
+                return new ToneSettings
+                {
+                    Root = new Color(0.02f, 0.04f, 0.055f, 0.54f),
+                    Track = new Color(0.015f, 0.025f, 0.035f, 0.72f),
+                    TrackAccent = new Color(0.4f, 0.95f, 0.82f, 0.13f),
+                    Handle = new Color(0.25f, 0.82f, 0.72f, 0.98f),
+                    Highlighted = new Color(0.36f, 0.95f, 0.84f, 1f),
+                    Pressed = new Color(0.14f, 0.62f, 0.57f, 1f),
+                    HandleShade = new Color(0.02f, 0.11f, 0.12f, 0.27f),
+                    HandleLight = new Color(0.82f, 1f, 0.95f, 0.24f),
+                    Grip = new Color(0.93f, 1f, 0.98f, 0.62f),
+                    Outline = new Color(0f, 0f, 0f, 0.36f)
+                };
+        }
+    }
+
+    static GameObject FindOrCreateChild(Transform parent, string childName, params System.Type[] componentTypes)
+    {
+        Transform existing = parent.Find(childName);
+        GameObject childObject = existing != null
+            ? existing.gameObject
+            : new GameObject(childName, componentTypes);
+
+        if (existing == null)
+            childObject.transform.SetParent(parent, false);
+
+        for (int i = 0; i < componentTypes.Length; i++)
+            GetOrAdd(childObject, componentTypes[i]);
+
+        return childObject;
+    }
+
+    static T GetOrAdd<T>(GameObject target) where T : Component
+    {
+        T component = target.GetComponent<T>();
+        if (component == null)
+            component = target.AddComponent<T>();
+        return component;
+    }
+
+    static Component GetOrAdd(GameObject target, System.Type type)
+    {
+        Component component = target.GetComponent(type);
+        if (component == null)
+            component = target.AddComponent(type);
+        return component;
+    }
+
+    static Sprite GetRoundedTrackSprite()
+    {
+        if (roundedTrackSprite == null)
+            roundedTrackSprite = CreateRoundedSprite("RuntimeScrollbarTrackSprite", 48, 96, 20f, 16f);
+        return roundedTrackSprite;
+    }
+
+    static Sprite GetRoundedHandleSprite()
+    {
+        if (roundedHandleSprite == null)
+            roundedHandleSprite = CreateRoundedSprite("RuntimeScrollbarHandleSprite", 64, 128, 26f, 20f);
+        return roundedHandleSprite;
+    }
+
+    static Sprite GetRoundedCapSprite()
+    {
+        if (roundedCapSprite == null)
+            roundedCapSprite = CreateRoundedSprite("RuntimeScrollbarCapSprite", 40, 40, 16f, 12f);
+        return roundedCapSprite;
+    }
+
+    static Sprite CreateRoundedSprite(string spriteName, int width, int height, float radius, float border)
+    {
+        Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        texture.name = spriteName + "_Texture";
+        texture.hideFlags = HideFlags.HideAndDontSave;
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        Color[] pixels = new Color[width * height];
+        Vector2 halfSize = new Vector2(width * 0.5f, height * 0.5f);
+        radius = Mathf.Clamp(radius, 1f, Mathf.Min(width, height) * 0.5f);
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                float px = x + 0.5f - halfSize.x;
+                float py = y + 0.5f - halfSize.y;
+                float qx = Mathf.Abs(px) - halfSize.x + radius;
+                float qy = Mathf.Abs(py) - halfSize.y + radius;
+                float outsideX = Mathf.Max(qx, 0f);
+                float outsideY = Mathf.Max(qy, 0f);
+                float signedDistance = Mathf.Sqrt(outsideX * outsideX + outsideY * outsideY) + Mathf.Min(Mathf.Max(qx, qy), 0f) - radius;
+                float alpha = Mathf.Clamp01(0.5f - signedDistance);
+                pixels[y * width + x] = new Color(1f, 1f, 1f, alpha);
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply(false, true);
+
+        Sprite sprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, width, height),
+            new Vector2(0.5f, 0.5f),
+            100f,
+            0,
+            SpriteMeshType.FullRect,
+            new Vector4(border, border, border, border));
+        sprite.name = spriteName;
+        sprite.hideFlags = HideFlags.HideAndDontSave;
+        return sprite;
+    }
+}
+
+class RuntimeScrollbarHandleLengthController : MonoBehaviour
+{
+    Scrollbar scrollbar;
+    float minVisibleSize;
+    float fixedVisibleSize;
+
+    public void Configure(Scrollbar targetScrollbar, float minimumVisibleSize, float fixedSize)
+    {
+        scrollbar = targetScrollbar;
+        minVisibleSize = Mathf.Clamp01(minimumVisibleSize);
+        fixedVisibleSize = Mathf.Clamp01(fixedSize);
+        Apply();
+    }
+
+    void OnEnable()
+    {
+        Canvas.willRenderCanvases += Apply;
+    }
+
+    void OnDisable()
+    {
+        Canvas.willRenderCanvases -= Apply;
+    }
+
+    void LateUpdate()
+    {
+        Apply();
+    }
+
+    void Apply()
+    {
+        if (scrollbar == null || !scrollbar.gameObject.activeInHierarchy)
+            return;
+
+        float targetSize = fixedVisibleSize > 0f
+            ? fixedVisibleSize
+            : Mathf.Max(scrollbar.size, minVisibleSize);
+
+        RuntimeScrollbarStyler.ApplyVerticalState(scrollbar, scrollbar.value, targetSize);
+    }
+}
+
 class SaveRunButtonVisualController : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler
 {
     Button button;

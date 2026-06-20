@@ -448,12 +448,12 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
         if (backdropLayer != null)
             layers[0] = backdropLayer;
 
-        layers[1] = CreateLayer("GravityFarStars", 520, extent, 0.035f, 0.18f, 1f, 1f, 0.055f, new Vector2(0.0012f, -0.0007f), 0.28f, 0.09f, FarSortingOrder, LayerStyle.Star, random);
+        layers[1] = CreateLayer("GravityFarStars", 320, extent, 0.035f, 0.18f, 1f, 1f, 0.055f, new Vector2(0.0012f, -0.0007f), 0.28f, 0.09f, FarSortingOrder, LayerStyle.Star, random);
         layers[2] = CreateMeshLayer(
             "GravityLensDust",
             BuildOrbitParticleMesh(
                 "GravityLensDustMesh",
-                270,
+                150,
                 middleRadius * 0.48f,
                 outerRadius * 1.08f,
                 0.55f,
@@ -475,7 +475,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
             "GravityFractureGlow",
             BuildOrbitParticleMesh(
                 "GravityFractureGlowMesh",
-                140,
+                80,
                 middleRadius * 0.56f,
                 outerRadius * 1.14f,
                 0.42f,
@@ -497,7 +497,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
             "AccretionDiskGold",
             BuildOrbitParticleMesh(
                 "AccretionDiskGoldMesh",
-                210,
+                130,
                 2.8f,
                 middleRadius * 1.08f,
                 1.1f,
@@ -519,7 +519,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
             "AccretionDiskIon",
             BuildOrbitParticleMesh(
                 "AccretionDiskIonMesh",
-                160,
+                100,
                 4.2f,
                 outerRadius,
                 0.75f,
@@ -541,7 +541,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
             "WhiteHotInnerDisk",
             BuildOrbitParticleMesh(
                 "WhiteHotInnerDiskMesh",
-                98,
+                64,
                 2.4f,
                 Mathf.Max(7.5f, middleRadius * 0.46f),
                 0.75f,
@@ -563,7 +563,7 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
             "NearEmberStreaks",
             BuildOrbitParticleMesh(
                 "NearEmberStreaksMesh",
-                130,
+                78,
                 5.2f,
                 outerRadius * 1.2f,
                 0.35f,
@@ -713,6 +713,9 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
     {
         string objectId = GetConfiguredBackgroundObjectId();
         if (string.Equals(objectId, RoomSettings.BackgroundObjectOff, StringComparison.Ordinal))
+            return null;
+
+        if (IsGravityWellBackgroundObject13(objectId))
             return null;
 
         Sprite sprite = LoadBackgroundObjectSprite(objectId);

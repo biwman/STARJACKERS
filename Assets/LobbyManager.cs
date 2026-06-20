@@ -940,46 +940,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         }
 
         GameObject scrollbarObject = FindOrCreateChild(mapSelectionRootObject, "MapSelectionScrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
-        Image scrollbarBackground = scrollbarObject.GetComponent<Image>();
-        if (scrollbarBackground != null)
-        {
-            scrollbarBackground.color = new Color(0.08f, 0.12f, 0.16f, 0.74f);
-            scrollbarBackground.raycastTarget = true;
-        }
-
-        GameObject slidingAreaObject = FindOrCreateChild(scrollbarObject, "Sliding Area", typeof(RectTransform));
-        RectTransform slidingAreaRect = slidingAreaObject.GetComponent<RectTransform>();
-        if (slidingAreaRect != null)
-        {
-            slidingAreaRect.anchorMin = Vector2.zero;
-            slidingAreaRect.anchorMax = Vector2.one;
-            slidingAreaRect.offsetMin = new Vector2(4f, 4f);
-            slidingAreaRect.offsetMax = new Vector2(-4f, -4f);
-        }
-
-        GameObject handleObject = FindOrCreateChild(slidingAreaObject, "Handle", typeof(RectTransform), typeof(Image));
-        RectTransform handleRect = handleObject.GetComponent<RectTransform>();
-        if (handleRect != null)
-        {
-            handleRect.anchorMin = new Vector2(0f, 1f);
-            handleRect.anchorMax = new Vector2(1f, 1f);
-            handleRect.pivot = new Vector2(0.5f, 1f);
-        }
-
-        Image handleImage = handleObject.GetComponent<Image>();
-        if (handleImage != null)
-        {
-            handleImage.color = new Color(0.25f, 0.84f, 0.64f, 0.95f);
-            handleImage.raycastTarget = true;
-        }
-
-        fullScreenMapSelectionScrollbar = scrollbarObject.GetComponent<Scrollbar>();
-        if (fullScreenMapSelectionScrollbar != null)
-        {
-            fullScreenMapSelectionScrollbar.direction = Scrollbar.Direction.BottomToTop;
-            fullScreenMapSelectionScrollbar.handleRect = handleRect;
-            fullScreenMapSelectionScrollbar.targetGraphic = handleImage;
-        }
+        fullScreenMapSelectionScrollbar = RuntimeScrollbarStyler.ApplyVertical(scrollbarObject, RuntimeScrollbarStyler.Size.Large, RuntimeScrollbarStyler.Tone.Mint);
 
         fullScreenMapSelectionScrollRect = viewportObject.GetComponent<ScrollRect>();
         if (fullScreenMapSelectionScrollRect != null)
@@ -1803,8 +1764,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         if (mapSelectionTilesRootRect != null)
         {
             int columns = 3;
-            float scrollbarWidth = 32f;
-            float scrollbarGap = 16f;
+            float scrollbarWidth = RuntimeScrollbarStyler.GetPreferredWidth(RuntimeScrollbarStyler.Size.Large);
+            float scrollbarGap = 14f;
             float viewportWidth = Mathf.Max(360f, canvasWidth - FullScreenSideMargin * 2f - scrollbarWidth - scrollbarGap);
             float viewportHeight = usableHeight;
             float fittedTileWidth = Mathf.Min(MapTileWidth, (viewportWidth - MapTileSpacingX * (columns - 1)) / columns);
@@ -1816,6 +1777,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             float totalWidth = columns * fittedTileWidth + (columns - 1) * MapTileSpacingX;
             float startX = Mathf.Max(0f, (contentWidth - totalWidth) * 0.5f);
             bool canScroll = contentHeight > viewportHeight + 1f;
+            float scrollbarVisibleSize = canScroll ? Mathf.Clamp01(viewportHeight / Mathf.Max(viewportHeight, contentHeight)) : 1f;
+            float scrollbarNormalizedPosition = 1f;
 
             if (fullScreenMapSelectionViewportRect != null)
             {
@@ -1853,7 +1816,6 @@ public class LobbyManager : MonoBehaviourPunCallbacks
                 }
 
                 fullScreenMapSelectionScrollbar.gameObject.SetActive(canScroll);
-                fullScreenMapSelectionScrollbar.size = canScroll ? Mathf.Clamp01(viewportHeight / Mathf.Max(viewportHeight, contentHeight)) : 1f;
             }
 
             if (fullScreenMapSelectionScrollRect != null)
@@ -1865,15 +1827,25 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
                 if (!canScroll)
                 {
+                    fullScreenMapSelectionScrollRect.StopMovement();
                     fullScreenMapSelectionScrollRect.verticalNormalizedPosition = 1f;
                     mapSelectionTilesRootRect.anchoredPosition = Vector2.zero;
+                    scrollbarNormalizedPosition = 1f;
                 }
                 else if (!fullScreenMapSelectionScrollInitialized)
                 {
+                    fullScreenMapSelectionScrollRect.StopMovement();
                     fullScreenMapSelectionScrollRect.verticalNormalizedPosition = 1f;
                     fullScreenMapSelectionScrollInitialized = true;
+                    scrollbarNormalizedPosition = 1f;
+                }
+                else
+                {
+                    scrollbarNormalizedPosition = Mathf.Clamp01(fullScreenMapSelectionScrollRect.verticalNormalizedPosition);
                 }
             }
+
+            RuntimeScrollbarStyler.ApplyVerticalState(fullScreenMapSelectionScrollbar, scrollbarNormalizedPosition, scrollbarVisibleSize);
 
             if (mapSelectionScreenTitleText != null)
                 mapSelectionScreenTitleText.rectTransform.anchoredPosition = new Vector2(FullScreenSideMargin, -(contentTop - 30f));
@@ -3326,32 +3298,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         scrollbarRect.anchorMax = new Vector2(0.5f, 1f);
         scrollbarRect.pivot = new Vector2(0f, 1f);
         scrollbarRect.anchoredPosition = new Vector2(680f, -116f);
-        scrollbarRect.sizeDelta = new Vector2(42f, 700f);
+        scrollbarRect.sizeDelta = new Vector2(RuntimeScrollbarStyler.GetPreferredWidth(RuntimeScrollbarStyler.Size.Large), 700f);
 
-        Image scrollbarBg = scrollbarObject.GetComponent<Image>();
-        scrollbarBg.color = new Color(0.1f, 0.14f, 0.18f, 0.88f);
-
-        GameObject slidingAreaObject = FindOrCreateChild(scrollbarObject, "Sliding Area", typeof(RectTransform));
-        RectTransform slidingAreaRect = slidingAreaObject.GetComponent<RectTransform>();
-        slidingAreaRect.anchorMin = Vector2.zero;
-        slidingAreaRect.anchorMax = Vector2.one;
-        slidingAreaRect.offsetMin = new Vector2(4f, 4f);
-        slidingAreaRect.offsetMax = new Vector2(-4f, -4f);
-
-        GameObject handleObject = FindOrCreateChild(slidingAreaObject, "Handle", typeof(RectTransform), typeof(Image));
-        RectTransform handleRect = handleObject.GetComponent<RectTransform>();
-        handleRect.anchorMin = new Vector2(0f, 1f);
-        handleRect.anchorMax = new Vector2(1f, 1f);
-        handleRect.pivot = new Vector2(0.5f, 1f);
-        handleRect.sizeDelta = new Vector2(0f, 140f);
-
-        Image handleImage = handleObject.GetComponent<Image>();
-        handleImage.color = new Color(0.23f, 0.74f, 0.62f, 0.95f);
-
-        Scrollbar scrollbar = scrollbarObject.GetComponent<Scrollbar>();
-        scrollbar.direction = Scrollbar.Direction.BottomToTop;
-        scrollbar.handleRect = handleRect;
-        scrollbar.targetGraphic = handleImage;
+        Scrollbar scrollbar = RuntimeScrollbarStyler.ApplyVertical(scrollbarObject, RuntimeScrollbarStyler.Size.Large, RuntimeScrollbarStyler.Tone.Mint);
 
         mapSelectionScrollRect = viewportObject.GetComponent<ScrollRect>();
         mapSelectionScrollRect.horizontal = false;
@@ -3457,7 +3406,14 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         }
 
         if (mapSelectionScrollRect != null)
+        {
+            float overlayViewportHeight = viewportRect != null ? viewportRect.sizeDelta.y : 700f;
+            float overlayContentHeight = mapSelectionContentRect != null ? mapSelectionContentRect.sizeDelta.y : overlayViewportHeight;
+            float overlayScrollbarSize = Mathf.Clamp01(overlayViewportHeight / Mathf.Max(overlayViewportHeight, overlayContentHeight));
+            mapSelectionScrollRect.StopMovement();
             mapSelectionScrollRect.verticalNormalizedPosition = 1f;
+            RuntimeScrollbarStyler.ApplyVerticalState(scrollbar, 1f, overlayScrollbarSize);
+        }
 
         mapSelectionOverlayObject.SetActive(false);
     }

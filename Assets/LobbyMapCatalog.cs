@@ -691,7 +691,7 @@ public static class LobbyMapCatalog
             330f,
             "super_large",
             1f,
-            "medium",
+            "low",
             true,
             300,
             150,
@@ -712,7 +712,7 @@ public static class LobbyMapCatalog
             true,
             true,
             true,
-            RoomSettings.SpaceJunkDensityMedium,
+            RoomSettings.SpaceJunkDensityLow,
             RoomSettings.ContainersDensityLow,
             2,
             0,
@@ -858,6 +858,7 @@ public static class LobbyMapCatalog
             case TheThreatMapId:
                 return RoomSettings.BackgroundObject8;
             case GravityWellMapId:
+                return RoomSettings.BackgroundObjectOff;
             case ToxicAreaMapId:
                 return RoomSettings.BackgroundObject13;
             default:
