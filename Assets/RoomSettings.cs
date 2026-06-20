@@ -48,7 +48,7 @@ public static class RoomSettings
     public const int MapEffectModeDefaultsVersion = 1;
     public const string MapEffectChanceKeyPrefix = "mapEffectChance.";
     public const string MapEffectChanceDefaultsVersionKey = "mapEffectChanceDefaultsVersion";
-    public const int MapEffectChanceDefaultsVersion = 3;
+    public const int MapEffectChanceDefaultsVersion = 4;
     public const string CrazyEnemiesRuleId = "CE";
     public const string FogOfWarRuleId = "FoW";
     public const string PirateBaseRuleId = "PB";
@@ -1886,7 +1886,12 @@ public static class RoomSettings
             : ruleId.Trim();
 
         if (normalizedRuleId == MilitaryConvoyRuleId)
-            return normalizedMapId == "just_space" || normalizedMapId == "hidden_dimension" ? 0 : 5;
+        {
+            if (normalizedMapId == "just_space" || normalizedMapId == "hidden_dimension")
+                return 0;
+
+            return normalizedMapId == "noob_haven" ? 15 : 5;
+        }
 
         switch (normalizedMapId)
         {

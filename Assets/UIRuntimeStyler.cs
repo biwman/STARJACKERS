@@ -424,6 +424,7 @@ public class UIRuntimeStyler : MonoBehaviour
                name.StartsWith("ShipInventoryHudSlot", System.StringComparison.Ordinal) ||
                name.StartsWith("RoomRow_", System.StringComparison.Ordinal) ||
                name.StartsWith("BackButton", System.StringComparison.Ordinal) ||
+               name.StartsWith("ExitGameButton", System.StringComparison.Ordinal) ||
                name.StartsWith("EarlyRoundSummaryBackButton", System.StringComparison.Ordinal) ||
                name.StartsWith("BrowserBackButton", System.StringComparison.Ordinal) ||
                name.StartsWith("BrowserRefreshButton", System.StringComparison.Ordinal) ||

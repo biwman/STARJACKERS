@@ -957,6 +957,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         CreateShopBrowser(panelObject.transform);
 
         exitGameButton = CreateButton(panelObject.transform, "ExitGameButton", "EXIT GAME", new Vector2(820f, -72f), new Vector2(210f, 54f), OnExitGameClicked);
+        StyleExitGameButton();
         shopButton = CreateButton(panelObject.transform, "ShopButton", "SHOP", new Vector2(224f, -668f), new Vector2(108f, 108f), OnShopButtonClicked);
         StyleButton(shopButton, new Color(0.16f, 0.38f, 0.48f, 0.98f), new Color(0.22f, 0.5f, 0.62f, 1f));
         TMP_Text shopText = shopButton.GetComponentInChildren<TMP_Text>(true);
@@ -1053,7 +1054,10 @@ public class PlayerProfilePanelUI : MonoBehaviour
         }
 
         if (exitGameButton != null)
+        {
             exitGameButton.transform.SetParent(rightActionRootObject.transform, false);
+            StyleExitGameButton();
+        }
         if (saveAndRunButton != null)
             saveAndRunButton.transform.SetParent(rightActionRootObject.transform, false);
 
@@ -2408,7 +2412,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         pilotPortraitNameText = CreateText(pilotPortraitRootObject.transform, "PilotPortraitName", "JAKE", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, -42f), new Vector2(340f, 34f), 24f, TextAlignmentOptions.Center);
         pilotPortraitNameText.raycastTarget = false;
 
-        pilotPortraitCaptionText = CreateText(pilotPortraitRootObject.transform, "PilotPortraitCaption", "PILOT", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 294f), new Vector2(260f, 26f), 18f, TextAlignmentOptions.Center);
+        pilotPortraitCaptionText = CreateText(pilotPortraitRootObject.transform, "PilotPortraitCaption", "PILOT", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 294f), new Vector2(260f, 52f), 36f, TextAlignmentOptions.Center);
         pilotPortraitCaptionText.fontStyle = FontStyles.Normal;
         pilotPortraitCaptionText.color = new Color(0.78f, 0.86f, 0.94f, 0.94f);
         pilotPortraitCaptionText.raycastTarget = false;
@@ -2461,7 +2465,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             OnProjectsHomeButtonClicked();
         });
 
-        projectsButtonCaptionText = CreateText(projectsButtonRootObject.transform, "ProjectsButtonCaption", "PROJECTS", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 226f), new Vector2(260f, 26f), 18f, TextAlignmentOptions.Center);
+        projectsButtonCaptionText = CreateText(projectsButtonRootObject.transform, "ProjectsButtonCaption", "PROJECTS", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 226f), new Vector2(300f, 52f), 36f, TextAlignmentOptions.Center);
         projectsButtonCaptionText.fontStyle = FontStyles.Normal;
         projectsButtonCaptionText.color = new Color(0.78f, 0.86f, 0.94f, 0.94f);
         projectsButtonCaptionText.raycastTarget = false;
@@ -5819,6 +5823,23 @@ public class PlayerProfilePanelUI : MonoBehaviour
         button.colors = colors;
     }
 
+    void StyleExitGameButton()
+    {
+        if (exitGameButton == null)
+            return;
+
+        Color normal = new Color(0.5f, 0.08f, 0.1f, 0.98f);
+        Color highlighted = new Color(0.72f, 0.13f, 0.16f, 1f);
+        StyleButton(exitGameButton, normal, highlighted);
+
+        Outline outline = exitGameButton.GetComponent<Outline>();
+        if (outline == null)
+            outline = exitGameButton.gameObject.AddComponent<Outline>();
+        outline.effectColor = Color.Lerp(highlighted, Color.white, 0.25f) * new Color(1f, 1f, 1f, 0.72f);
+        outline.effectDistance = new Vector2(2f, -2f);
+        outline.useGraphicAlpha = true;
+    }
+
     void StyleCompactInventoryUtilityButton(Button button)
     {
         if (button == null)
@@ -7454,6 +7475,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
             rect.pivot = new Vector2(1f, 1f);
             rect.anchoredPosition = new Vector2(-44f, -34f);
             rect.sizeDelta = new Vector2(194f, 54f);
+            StyleExitGameButton();
         }
 
         if (saveAndRunButton != null)
@@ -7607,7 +7629,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         rect.anchorMax = new Vector2(1f, 0.5f);
         rect.pivot = new Vector2(1f, 0.5f);
         rect.anchoredPosition = new Vector2(-70f, 246f);
-        rect.sizeDelta = new Vector2(340f, 330f);
+        rect.sizeDelta = new Vector2(340f, 350f);
 
         if (pilotPortraitRootObject != null)
             pilotPortraitRootObject.transform.SetAsLastSibling();
@@ -7626,7 +7648,7 @@ public class PlayerProfilePanelUI : MonoBehaviour
         rect.anchorMax = new Vector2(1f, 0.5f);
         rect.pivot = new Vector2(1f, 0.5f);
         rect.anchoredPosition = new Vector2(-28f, -184f);
-        rect.sizeDelta = new Vector2(370f, 250f);
+        rect.sizeDelta = new Vector2(370f, 280f);
         projectsButtonRootObject.transform.SetAsLastSibling();
     }
 

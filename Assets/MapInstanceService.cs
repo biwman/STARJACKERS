@@ -69,11 +69,12 @@ public static class MapInstanceService
             if (IsHiddenDimensionActive())
             {
                 LobbyMapDefinition hiddenMap = LobbyMapCatalog.Get(LobbyMapCatalog.HiddenDimensionMapId);
+                bool toxicBordersEnabled = hiddenMap == null || hiddenMap.ToxicBordersEnabled;
                 bounds = new BoundsInfo(
                     HiddenDimensionInstanceId,
                     LobbyMapCatalog.HiddenDimensionMapId,
                     GetHiddenDimensionCenter(),
-                    GetMapDimensions(hiddenMap, true),
+                    GetMapDimensions(hiddenMap, toxicBordersEnabled),
                     GetMapDimensions(hiddenMap, false),
                     RoomSettings.ExtractionTypeAncientPortal);
                 return true;

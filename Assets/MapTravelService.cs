@@ -376,7 +376,7 @@ public sealed class MapTravelService : MonoBehaviourPunCallbacks
         }
 
         Vector2 innerSize = MapInstanceService.GetMapDimensions(hiddenMap, false);
-        Vector2 outerSize = MapInstanceService.GetMapDimensions(hiddenMap, true);
+        Vector2 outerSize = MapInstanceService.GetMapDimensions(hiddenMap, hiddenMap.ToxicBordersEnabled);
         Vector2 center = ResolveHiddenDimensionCenter(outerSize);
         int seed = BuildStableSeed(hiddenMap.Id);
         List<Vector2> extractionPositions = BuildExtractionPositions(hiddenMap, center, innerSize, seed);
@@ -445,7 +445,7 @@ public sealed class MapTravelService : MonoBehaviourPunCallbacks
         }
 
         Vector2 innerSize = MapInstanceService.GetMapDimensions(hiddenMap, false);
-        Vector2 outerSize = MapInstanceService.GetMapDimensions(hiddenMap, true);
+        Vector2 outerSize = MapInstanceService.GetMapDimensions(hiddenMap, hiddenMap.ToxicBordersEnabled);
         Vector2 center = ResolveHiddenDimensionCenter(outerSize);
         int seed = BuildStableSeed(hiddenMap.Id);
         yield return null;

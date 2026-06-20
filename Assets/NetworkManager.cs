@@ -29,6 +29,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     const string PhotonUserIdPrefsKey = "BrawlRaiders.PhotonUserId.v1";
     const string RememberedLobbySettingsPrefsKey = "BrawlRaiders.LastLobbySettings.v2";
     const string FinishedRoundsPrefsKey = "BrawlRaiders.FinishedRounds.v1";
+    const string RandomRoundRulesBrowserLabel = "Round rules: random";
     const int MaxRememberedFinishedRounds = 64;
 
     enum PendingBrowserAction
@@ -1177,6 +1178,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (rememberedKeys == null)
             rememberedKeys = new HashSet<string>(StringComparer.Ordinal);
 
+        props[RoomSettings.ToxicBordersEnabledKey] = map.ToxicBordersEnabled;
+
         if (!rememberedKeys.Contains(RoomSettings.SpaceFactoryCountKey))
             props[RoomSettings.SpaceFactoryCountKey] = map.SpaceFactoryCount;
 
@@ -1298,7 +1301,6 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.SelectedMapKey:
             case RoomSettings.RoundDurationKey:
             case RoomSettings.MapSizeKey:
-            case RoomSettings.ToxicBordersEnabledKey:
             case RoomSettings.MapBackgroundKey:
             case RoomSettings.VisualEffectsEnabledKey:
             case RoomSettings.LowHpHullSparksEnabledKey:
@@ -1452,83 +1454,33 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     string GetActiveEffectsLabel(RoomInfo info, string state)
     {
+        if (state == RoomSettings.SessionStateInLobby || state == RoomSettings.SessionStatePreparing)
+            return RandomRoundRulesBrowserLabel;
+
         List<string> labels = new List<string>();
-        AddActiveEffectLabel(labels, info, state, "CRAZY ENEMIES", RoomSettings.CrazyEnemiesModeKey, RoomSettings.CrazyEnemiesStartUtcMsKey, RoomSettings.CrazyEnemiesActiveKey);
-        AddActiveEffectLabel(labels, info, state, "FOG OF WAR", RoomSettings.FogOfWarModeKey, RoomSettings.FogOfWarStartUtcMsKey, RoomSettings.FogOfWarActiveKey);
-        AddActiveEffectLabel(labels, info, state, "PIRATE BASE", RoomSettings.PirateBaseModeKey, RoomSettings.PirateBaseStartUtcMsKey, RoomSettings.PirateBaseActiveKey);
-        AddActiveEffectLabel(labels, info, state, "ASTEROID SHOWER", RoomSettings.AsteroidShowerModeKey, RoomSettings.AsteroidShowerStartUtcMsKey, RoomSettings.AsteroidShowerActiveKey);
-        AddActiveEffectLabel(labels, info, state, "COSMIC WORM", RoomSettings.CosmicWormModeKey, RoomSettings.CosmicWormStartUtcMsKey, RoomSettings.CosmicWormActiveKey);
-        AddActiveEffectLabel(labels, info, state, "MILITARY CONVOY", RoomSettings.MilitaryConvoyModeKey, RoomSettings.MilitaryConvoyStartUtcMsKey, RoomSettings.MilitaryConvoyActiveKey);
+        AddActiveEffectLabel(labels, info, state, "CRAZY ENEMIES", RoomSettings.CrazyEnemiesActiveKey);
+        AddActiveEffectLabel(labels, info, state, "FOG OF WAR", RoomSettings.FogOfWarActiveKey);
+        AddActiveEffectLabel(labels, info, state, "PIRATE BASE", RoomSettings.PirateBaseActiveKey);
+        AddActiveEffectLabel(labels, info, state, "ASTEROID SHOWER", RoomSettings.AsteroidShowerActiveKey);
+        AddActiveEffectLabel(labels, info, state, "COSMIC WORM", RoomSettings.CosmicWormActiveKey);
+        AddActiveEffectLabel(labels, info, state, "MILITARY CONVOY", RoomSettings.MilitaryConvoyActiveKey);
         return labels.Count > 0 ? string.Join(", ", labels) : string.Empty;
     }
 
-    void AddActiveEffectLabel(List<string> labels, RoomInfo info, string state, string label, string modeKey, string startKey, string activeKey)
+    void AddActiveEffectLabel(List<string> labels, RoomInfo info, string state, string label, string activeKey)
     {
-        if (IsRoomEffectActiveOrReady(info, state, modeKey, startKey, activeKey))
+        if (IsRoomEffectActive(info, state, activeKey))
             labels.Add(label);
     }
 
-    bool IsRoomEffectActiveOrReady(RoomInfo info, string state, string modeKey, string startKey, string activeKey)
+    bool IsRoomEffectActive(RoomInfo info, string state, string activeKey)
     {
         if (info == null)
             return false;
 
-        bool hasActiveFlag = TryGetRoomBool(info, activeKey, out bool active);
-        if (state == RoomSettings.SessionStateInPlay)
-        {
-            if (hasActiveFlag)
-                return active;
-
-            return TryGetRoundStartUtcMs(info, out double roundStartUtcMs) &&
-                   ShouldRoomEffectActivateAt(info, modeKey, startKey, roundStartUtcMs);
-        }
-
-        if (state == RoomSettings.SessionStateInLobby || state == RoomSettings.SessionStatePreparing)
-            return ShouldRoomEffectActivateAt(info, modeKey, startKey, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-
-        return false;
-    }
-
-    bool ShouldRoomEffectActivateAt(RoomInfo info, string modeKey, string startKey, double utcMs)
-    {
-        string mode = GetRoomEffectMode(info, modeKey);
-        if (mode == RoomSettings.MapEffectModeAlwaysOn)
-            return true;
-
-        if (mode != RoomSettings.MapEffectModeUtcStart)
-            return false;
-
-        double startUtcMs = GetRoomDouble(info, startKey, -1d);
-        return startUtcMs >= 0d &&
-               utcMs >= startUtcMs &&
-               utcMs <= startUtcMs + RoomSettings.MapEffectActivationWindowMs;
-    }
-
-    string GetRoomEffectMode(RoomInfo info, string modeKey)
-    {
-        if (info != null &&
-            info.CustomProperties.TryGetValue(modeKey, out object value) &&
-            value is string mode)
-        {
-            return RoomSettings.NormalizeMapEffectMode(mode);
-        }
-
-        return RoomSettings.DefaultMapEffectMode;
-    }
-
-    bool TryGetRoundStartUtcMs(RoomInfo info, out double roundStartUtcMs)
-    {
-        roundStartUtcMs = -1d;
-        double roundEndUtcMs = GetRoomDouble(info, RoomSettings.RoundEndUtcMsKey, -1d);
-        if (roundEndUtcMs <= 0d)
-            return false;
-
-        double durationSeconds = GetRoomDouble(info, RoomSettings.RoundDurationKey, RoomSettings.DefaultRoundDuration);
-        if (durationSeconds <= 0d)
-            durationSeconds = RoomSettings.DefaultRoundDuration;
-
-        roundStartUtcMs = roundEndUtcMs - (durationSeconds * 1000d);
-        return roundStartUtcMs > 0d;
+        return state == RoomSettings.SessionStateInPlay &&
+               TryGetRoomBool(info, activeKey, out bool active) &&
+               active;
     }
 
     bool TryGetRoomBool(RoomInfo info, string key, out bool result)

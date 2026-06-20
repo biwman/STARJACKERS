@@ -41,6 +41,7 @@ public sealed class LobbyMapDefinition
     public string Description { get; }
     public float RoundDurationSeconds { get; }
     public string MapSize { get; }
+    public bool ToxicBordersEnabled { get; }
     public float LoneShipTimerMultiplier { get; }
     public string ObstacleDensity { get; }
     public bool ObstaclesDestroyEnabled { get; }
@@ -137,6 +138,78 @@ public sealed class LobbyMapDefinition
             randomLootWreckCount,
             repairBayCount,
             spaceFactoryCount,
+            RoomSettings.DefaultToxicBordersEnabled,
+            enemyPresets)
+    {
+    }
+
+    public LobbyMapDefinition(
+        string id,
+        string displayName,
+        string description,
+        float roundDurationSeconds,
+        string mapSize,
+        float loneShipTimerMultiplier,
+        string obstacleDensity,
+        bool obstaclesDestroyEnabled,
+        int obstacleHp,
+        int obstacleSizePercent,
+        bool obstaclesNoBorders,
+        string resourceDensity,
+        string resourceRichness,
+        string nebulaDensity,
+        string fireNebulaDensity,
+        string nebulaSize,
+        string fireNebulaSize,
+        int extractionZoneCount,
+        bool movingObjectsEnabled,
+        int obstacleMassFactor,
+        int treasureMassFactor,
+        int mapBackgroundIndex,
+        bool visualEffectsEnabled,
+        bool inventoryLossEnabled,
+        bool equipmentLossEnabled,
+        string spaceJunkDensity,
+        string containersDensity,
+        int randomLootWreckCount,
+        int repairBayCount,
+        int spaceFactoryCount,
+        bool toxicBordersEnabled,
+        params LobbyEnemyMapPreset[] enemyPresets)
+        : this(
+            id,
+            displayName,
+            description,
+            roundDurationSeconds,
+            mapSize,
+            loneShipTimerMultiplier,
+            obstacleDensity,
+            obstaclesDestroyEnabled,
+            obstacleHp,
+            obstacleSizePercent,
+            obstaclesNoBorders,
+            resourceDensity,
+            resourceRichness,
+            nebulaDensity,
+            fireNebulaDensity,
+            nebulaSize,
+            fireNebulaSize,
+            RoomSettings.DefaultCloudsDensity,
+            RoomSettings.DefaultCloudsSize,
+            extractionZoneCount,
+            movingObjectsEnabled,
+            obstacleMassFactor,
+            treasureMassFactor,
+            mapBackgroundIndex,
+            visualEffectsEnabled,
+            inventoryLossEnabled,
+            equipmentLossEnabled,
+            spaceJunkDensity,
+            containersDensity,
+            randomLootWreckCount,
+            repairBayCount,
+            spaceFactoryCount,
+            toxicBordersEnabled,
             enemyPresets)
     {
     }
@@ -175,12 +248,86 @@ public sealed class LobbyMapDefinition
         int repairBayCount,
         int spaceFactoryCount,
         params LobbyEnemyMapPreset[] enemyPresets)
+        : this(
+            id,
+            displayName,
+            description,
+            roundDurationSeconds,
+            mapSize,
+            loneShipTimerMultiplier,
+            obstacleDensity,
+            obstaclesDestroyEnabled,
+            obstacleHp,
+            obstacleSizePercent,
+            obstaclesNoBorders,
+            resourceDensity,
+            resourceRichness,
+            nebulaDensity,
+            fireNebulaDensity,
+            nebulaSize,
+            fireNebulaSize,
+            cloudsDensity,
+            cloudsSize,
+            extractionZoneCount,
+            movingObjectsEnabled,
+            obstacleMassFactor,
+            treasureMassFactor,
+            mapBackgroundIndex,
+            visualEffectsEnabled,
+            inventoryLossEnabled,
+            equipmentLossEnabled,
+            spaceJunkDensity,
+            containersDensity,
+            randomLootWreckCount,
+            repairBayCount,
+            spaceFactoryCount,
+            RoomSettings.DefaultToxicBordersEnabled,
+            enemyPresets)
+    {
+    }
+
+    public LobbyMapDefinition(
+        string id,
+        string displayName,
+        string description,
+        float roundDurationSeconds,
+        string mapSize,
+        float loneShipTimerMultiplier,
+        string obstacleDensity,
+        bool obstaclesDestroyEnabled,
+        int obstacleHp,
+        int obstacleSizePercent,
+        bool obstaclesNoBorders,
+        string resourceDensity,
+        string resourceRichness,
+        string nebulaDensity,
+        string fireNebulaDensity,
+        string nebulaSize,
+        string fireNebulaSize,
+        string cloudsDensity,
+        string cloudsSize,
+        int extractionZoneCount,
+        bool movingObjectsEnabled,
+        int obstacleMassFactor,
+        int treasureMassFactor,
+        int mapBackgroundIndex,
+        bool visualEffectsEnabled,
+        bool inventoryLossEnabled,
+        bool equipmentLossEnabled,
+        string spaceJunkDensity,
+        string containersDensity,
+        int randomLootWreckCount,
+        int repairBayCount,
+        int spaceFactoryCount,
+        bool toxicBordersEnabled,
+        params LobbyEnemyMapPreset[] enemyPresets)
     {
         Id = id;
         DisplayName = displayName;
         Description = string.IsNullOrWhiteSpace(description) ? displayName : description;
         RoundDurationSeconds = roundDurationSeconds;
         MapSize = mapSize;
+        ToxicBordersEnabled = toxicBordersEnabled;
         LoneShipTimerMultiplier = loneShipTimerMultiplier;
         ObstacleDensity = obstacleDensity;
         ObstaclesDestroyEnabled = obstaclesDestroyEnabled;
@@ -1066,6 +1213,7 @@ public static class LobbyMapCatalog
         props[RoomSettings.SelectedMapKey] = map.Id;
         props[RoomSettings.RoundDurationKey] = map.RoundDurationSeconds;
         props[RoomSettings.MapSizeKey] = map.MapSize;
+        props[RoomSettings.ToxicBordersEnabledKey] = map.ToxicBordersEnabled;
         props[RoomSettings.LastShipTimerMultiplierKey] = map.LoneShipTimerMultiplier;
         props[RoomSettings.InventoryLossEnabledKey] = map.InventoryLossEnabled;
         props[RoomSettings.EquipmentLossEnabledKey] = map.EquipmentLossEnabled;

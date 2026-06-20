@@ -379,7 +379,11 @@ public class SessionBrowserPanelUI : MonoBehaviour
         bool hasEffects = !string.IsNullOrWhiteSpace(room.ActiveEffectsLabel);
         rowView.EffectsText.gameObject.SetActive(hasEffects);
         if (hasEffects)
-            rowView.EffectsText.text = "Effects: " + room.ActiveEffectsLabel;
+        {
+            rowView.EffectsText.text = room.State == RoomSettings.SessionStateInPlay
+                ? "Effects: " + room.ActiveEffectsLabel
+                : room.ActiveEffectsLabel;
+        }
 
         rowView.StateText.text = BuildStateLabel(room);
         rowView.StateText.color = room.BlockedByLocalDeath
