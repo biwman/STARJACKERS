@@ -20,8 +20,8 @@ public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
     const float BeamRadius = 0.46f;
     const float HpDamageMultiplier = 0.48f;
     const float LockReverseSpeedMultiplier = 0.18f;
-    const float AvoidanceScanRadius = 2.1f;
-    const float AvoidanceWeight = 0.44f;
+    const float AvoidanceScanRadius = 2.8f;
+    const float AvoidanceWeight = 0.56f;
     const float MapEdgeMargin = 2.6f;
     const float PatrolTurnIntervalMin = 1.05f;
     const float PatrolTurnIntervalMax = 2.05f;
@@ -485,6 +485,9 @@ public class EnemyHunterLanceBehavior : EnemyBotBehaviorBase
 
     bool IsAvoidedObject(Collider2D hit)
     {
+        if (EnemyHazardAvoidanceUtility.IsMineThreat(hit, health))
+            return true;
+
         if (hit.GetComponentInParent<ObstacleChunk>() != null)
             return true;
 

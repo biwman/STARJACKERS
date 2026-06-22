@@ -68,7 +68,7 @@ public sealed class SpaceDrillDeployable : PlayerDeployableBase
 
     public static PhotonView FindNearestLootableAsteroid(Vector2 origin)
     {
-        Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
+        Treasure[] treasures = RuntimeSceneQueryCache.GetTreasures();
         PhotonView best = null;
         float bestDistance = float.MaxValue;
         for (int i = 0; i < treasures.Length; i++)

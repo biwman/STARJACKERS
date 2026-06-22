@@ -202,9 +202,8 @@ public class SessionBrowserPanelUI : MonoBehaviour
         background.color = new Color(0.03f, 0.05f, 0.08f, 0.98f);
 
         CreateText(panelObject.transform, "BrowserTitle", "ACTIVE ROUNDS", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -52f), new Vector2(820f, 54f), 44f, TextAlignmentOptions.Center);
-        CreateText(panelObject.transform, "BrowserSubtitle", "Choose an existing session or create a new multiplayer round.", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -104f), new Vector2(1080f, 34f), 23f, TextAlignmentOptions.Center);
 
-        statusText = CreateText(panelObject.transform, "BrowserStatus", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -148f), new Vector2(1080f, 34f), 22f, TextAlignmentOptions.Center);
+        statusText = CreateText(panelObject.transform, "BrowserStatus", string.Empty, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -132f), new Vector2(1080f, 44f), 28f, TextAlignmentOptions.Center);
         statusText.fontStyle = FontStyles.Normal;
         statusText.color = new Color(0.7f, 0.84f, 0.93f, 0.95f);
 
@@ -259,7 +258,7 @@ public class SessionBrowserPanelUI : MonoBehaviour
         roomListScrollRect.content = roomListContentRect;
         roomListScrollRect.scrollSensitivity = 44f;
 
-        emptyStateText = CreateText(panelObject.transform, "RoomListEmpty", "No sessions are visible right now. Create a new round to start one.", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -46f), new Vector2(1040f, 54f), 26f, TextAlignmentOptions.Center);
+        emptyStateText = CreateText(panelObject.transform, "RoomListEmpty", "No sessions are visible right now. Create a new round to start one.", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -46f), new Vector2(1248f, 65f), 31.2f, TextAlignmentOptions.Center);
         emptyStateText.fontStyle = FontStyles.Normal;
         emptyStateText.color = new Color(0.72f, 0.79f, 0.87f, 0.92f);
     }

@@ -34,7 +34,7 @@ public abstract class PlayerDeployableBase : MonoBehaviourPun
 
     public static IReadOnlyCollection<PlayerDeployableBase> GetActiveDeployables()
     {
-        return new List<PlayerDeployableBase>(ActiveDeployables);
+        return ActiveDeployables;
     }
 
     protected void InitializeCommon()

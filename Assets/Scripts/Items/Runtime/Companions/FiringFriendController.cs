@@ -19,9 +19,11 @@ public sealed class FiringFriendController : MonoBehaviourPun
     const int BulletDamage = 6;
     const float BulletScale = 0.48f;
     const float MuzzleOffset = 0.34f;
+    const float EquipmentRefreshInterval = 0.5f;
     const string BulletEffectId = "pirate_fighter";
     static readonly Color BulletColor = new Color(0.2f, 0.86f, 1f, 1f);
 
+    PlayerHealth health;
     SpriteRenderer visualRenderer;
     float nextScanTime;
     float nextShotTime;
@@ -29,11 +31,14 @@ public sealed class FiringFriendController : MonoBehaviourPun
     int shotsInBurst;
     bool visualActive;
     bool forcedForNeutralRider;
+    bool cachedEquipped;
+    float nextEquipmentRefreshTime;
     Vector2 recentAimDirection = Vector2.up;
     float recentAimUntil;
 
     void Start()
     {
+        health = GetComponent<PlayerHealth>();
         EnsureVisual();
     }
 
@@ -114,7 +119,9 @@ public sealed class FiringFriendController : MonoBehaviourPun
 
     bool CanFiringFriendRun()
     {
-        PlayerHealth health = GetComponent<PlayerHealth>();
+        if (health == null)
+            health = GetComponent<PlayerHealth>();
+
         return health != null &&
                health.isActiveAndEnabled &&
                !health.IsWreck &&
@@ -127,10 +134,15 @@ public sealed class FiringFriendController : MonoBehaviourPun
         if (forcedForNeutralRider)
             return true;
 
+        if (Time.unscaledTime < nextEquipmentRefreshTime)
+            return cachedEquipped;
+
+        nextEquipmentRefreshTime = Time.unscaledTime + EquipmentRefreshInterval;
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
         string[] equipment = PlayerProfileService.GetPlayerEquipmentSlots(owner);
-        return InventoryItemCatalog.HasEquippedItem(equipment, shipSkinIndex, InventoryItemCatalog.FiringFriendId);
+        cachedEquipped = InventoryItemCatalog.HasEquippedItem(equipment, shipSkinIndex, InventoryItemCatalog.FiringFriendId);
+        return cachedEquipped;
     }
 
     bool IsGameStarted()
@@ -149,7 +161,7 @@ public sealed class FiringFriendController : MonoBehaviourPun
     {
         Vector2 origin = visualRenderer != null ? (Vector2)visualRenderer.transform.position : (Vector2)transform.position;
         int ownerActorNumber = photonView != null ? photonView.OwnerActorNr : -1;
-        PlayerHealth[] healths = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] healths = RuntimeSceneQueryCache.GetPlayers();
         Transform best = null;
         float bestDistance = float.MaxValue;
 

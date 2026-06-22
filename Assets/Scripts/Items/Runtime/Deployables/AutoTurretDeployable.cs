@@ -102,7 +102,7 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
     Transform FindNearestTarget()
     {
         int ownerActorNumber = ResolveOwnerActorNumber();
-        PlayerHealth[] healths = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        PlayerHealth[] healths = RuntimeSceneQueryCache.GetPlayers();
         Transform best = null;
         float bestDistance = float.MaxValue;
         for (int i = 0; i < healths.Length; i++)
@@ -124,6 +124,7 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
                 EnemyBot enemyBot = candidate.GetComponent<EnemyBot>();
                 bool hostile = enemyBot != null ||
                                candidate.IsBotControlled ||
+                               candidate.IsNeutralRiderControlled ||
                                HasDifferentPhotonOwner(candidate, ownerActorNumber) ||
                                IsOtherPlayerShipTarget(candidate, ownerActorNumber);
                 if (!hostile)

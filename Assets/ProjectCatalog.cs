@@ -378,10 +378,12 @@ public static class ProjectCatalog
                         Exact("alien_secrets", "Alien Secret", InventoryItemCatalog.AlienSecretId, 6)),
                     Stage("stage_3", "STAR ALIGNMENT",
                         Reward(8000, InventoryItemCatalog.GetBlueprintItemId(InventoryItemCatalog.TreasureScannerId)),
-                        Exact("alien_secrets", "Alien Secret", InventoryItemCatalog.AlienSecretId, 10)),
+                        Exact("alien_secrets", "Alien Secret", InventoryItemCatalog.AlienSecretId, 10),
+                        Exact("rift_warden_wreck", "Rift Warden Wreck", InventoryItemCatalog.RiftWardenWreckId, 1)),
                     Stage("stage_4", "THE GATE ANSWERS",
                         Reward(12000, InventoryItemCatalog.AncientGateKeyId),
-                        Exact("alien_secrets", "Alien Secret", InventoryItemCatalog.AlienSecretId, 15))
+                        Exact("alien_secrets", "Alien Secret", InventoryItemCatalog.AlienSecretId, 15),
+                        Exact("rift_warden_wrecks", "Rift Warden Wreck", InventoryItemCatalog.RiftWardenWreckId, 2))
                 }
             },
             new ProjectDefinition

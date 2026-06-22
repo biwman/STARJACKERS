@@ -29,3 +29,18 @@ public abstract class EnemyBotBehaviorBase : MonoBehaviour
     public abstract void TickBehavior();
 }
 
+public static class EnemyHazardAvoidanceUtility
+{
+    public static bool IsMineThreat(Collider2D hit, PlayerHealth observerHealth)
+    {
+        if (hit == null)
+            return false;
+
+        EnemyBot mine = hit.GetComponentInParent<EnemyBot>();
+        if (mine == null || mine.Kind != EnemyBotKind.SpaceMine)
+            return false;
+
+        return observerHealth == null || !mine.ShouldIgnoreMineTriggerFor(observerHealth);
+    }
+}
+

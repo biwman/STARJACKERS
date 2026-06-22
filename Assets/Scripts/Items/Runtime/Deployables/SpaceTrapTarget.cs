@@ -61,7 +61,7 @@ public sealed class SpaceTrapTarget : MonoBehaviourPun
         PhotonView best = null;
         float bestDistance = float.MaxValue;
 
-        Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
+        Treasure[] treasures = RuntimeSceneQueryCache.GetTreasures();
         for (int i = 0; i < treasures.Length; i++)
         {
             Treasure treasure = treasures[i];
@@ -71,7 +71,7 @@ public sealed class SpaceTrapTarget : MonoBehaviourPun
             ConsiderTrapCandidate(treasure.GetComponent<PhotonView>(), treasure.transform.position, origin, range, ref best, ref bestDistance);
         }
 
-        ShipWreck[] wrecks = FindObjectsByType<ShipWreck>(FindObjectsInactive.Exclude);
+        ShipWreck[] wrecks = RuntimeSceneQueryCache.GetShipWrecks();
         for (int i = 0; i < wrecks.Length; i++)
         {
             ShipWreck wreck = wrecks[i];
@@ -81,7 +81,7 @@ public sealed class SpaceTrapTarget : MonoBehaviourPun
             ConsiderTrapCandidate(wreck.GetComponent<PhotonView>(), wreck.transform.position, origin, range, ref best, ref bestDistance);
         }
 
-        DroppedCargoCrate[] crates = FindObjectsByType<DroppedCargoCrate>(FindObjectsInactive.Exclude);
+        DroppedCargoCrate[] crates = RuntimeSceneQueryCache.GetDroppedCargoCrates();
         for (int i = 0; i < crates.Length; i++)
         {
             DroppedCargoCrate crate = crates[i];

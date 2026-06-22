@@ -55,7 +55,7 @@ public class HealthBarUI : MonoBehaviourPun
             return;
 
         hpRect.sizeDelta = new Vector2(BarWidth, BarHeight);
-        hpRect.anchoredPosition = new Vector2(0f, TopOffset);
+        hpRect.anchoredPosition = new Vector2(MobilePerformanceSettings.UseReducedVfx ? 168f : 0f, TopOffset);
 
         backgroundImage = FindImage(hpBar.transform, "Background");
         fillImage = hpBar.fillRect != null ? hpBar.fillRect.GetComponent<Image>() : null;

@@ -26,8 +26,8 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
     const float PullAcceleration = 12.2f;
     const float PullMaxSpeed = 8.2f;
     const float ChannelMoveSpeedMultiplier = 0.52f;
-    const float AvoidanceScanRadius = 2.05f;
-    const float AvoidanceWeight = 0.42f;
+    const float AvoidanceScanRadius = 2.75f;
+    const float AvoidanceWeight = 0.54f;
     const float MapEdgeMargin = 2.6f;
     const float PatrolTurnIntervalMin = 1.2f;
     const float PatrolTurnIntervalMax = 2.3f;
@@ -502,6 +502,9 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
 
     bool IsAvoidedObject(Collider2D hit)
     {
+        if (EnemyHazardAvoidanceUtility.IsMineThreat(hit, health))
+            return true;
+
         if (hit.GetComponentInParent<ObstacleChunk>() != null)
             return true;
 

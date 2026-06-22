@@ -1,9 +1,13 @@
+using System.Reflection;
 using UnityEngine;
 
 public static class MobilePerformanceSettings
 {
-    public const int AndroidTargetFrameRate = 45;
-    public const float BalancedRenderScale = 0.85f;
+    public const int AndroidTargetFrameRate = 40;
+    public const float BalancedRenderScale = 0.82f;
+    public const float ReducedVfxFrameInterval = 0.05f;
+
+    public static bool UseReducedVfx => Application.isMobilePlatform;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void Apply()
@@ -11,7 +15,23 @@ public static class MobilePerformanceSettings
 #if UNITY_ANDROID && !UNITY_EDITOR
         QualitySettings.vSyncCount = 0;
         Application.targetFrameRate = AndroidTargetFrameRate;
+        ApplyRenderScale(BalancedRenderScale);
 #endif
+    }
+
+    static void ApplyRenderScale(float scale)
+    {
+        object pipelineAsset = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+        if (pipelineAsset == null)
+            pipelineAsset = QualitySettings.renderPipeline;
+        if (pipelineAsset == null)
+            return;
+
+        PropertyInfo renderScaleProperty = pipelineAsset.GetType().GetProperty("renderScale", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (renderScaleProperty == null || !renderScaleProperty.CanWrite)
+            return;
+
+        renderScaleProperty.SetValue(pipelineAsset, Mathf.Clamp(scale, 0.55f, 1f), null);
     }
 }
 

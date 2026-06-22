@@ -15,7 +15,8 @@ public sealed class RoundVitalsIconHudUI : MonoBehaviourPun
     const string HpBarName = "HP_Bar";
     const string ShieldBarName = "Shield_Bar";
     const float ScoreVerticalGap = 48f;
-    const float ScoreHorizontalOffset = -24f;
+    const float DesktopScoreHorizontalOffset = -24f;
+    const float MobileScoreHorizontalOffset = 72f;
     const float IconWidth = 142f;
     const float IconHeight = 140f;
     const float IconGap = 8f;
@@ -281,14 +282,15 @@ public sealed class RoundVitalsIconHudUI : MonoBehaviourPun
             rootRect.anchorMin = scoreRect.anchorMin;
             rootRect.anchorMax = scoreRect.anchorMax;
             rootRect.pivot = scoreRect.pivot;
-            rootRect.anchoredPosition = scoreRect.anchoredPosition + new Vector2(ScoreHorizontalOffset, -ScoreVerticalGap);
+            float horizontalOffset = MobilePerformanceSettings.UseReducedVfx ? MobileScoreHorizontalOffset : DesktopScoreHorizontalOffset;
+            rootRect.anchoredPosition = scoreRect.anchoredPosition + new Vector2(horizontalOffset, -ScoreVerticalGap);
         }
         else
         {
             rootRect.anchorMin = new Vector2(0f, 1f);
             rootRect.anchorMax = new Vector2(0f, 1f);
             rootRect.pivot = new Vector2(0f, 1f);
-            rootRect.anchoredPosition = new Vector2(264f, -76f);
+            rootRect.anchoredPosition = new Vector2(MobilePerformanceSettings.UseReducedVfx ? 360f : 264f, -76f);
         }
 
         if (shieldView != null && health != null && health.MaxShield <= 0)

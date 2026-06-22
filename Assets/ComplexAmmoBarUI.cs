@@ -28,6 +28,7 @@ public sealed class ComplexAmmoBarUI : MonoBehaviourPun
     RectTransform canvasRect;
     RectTransform rootRect;
     GameObject rootObject;
+    Camera cachedCamera;
     readonly List<Segment> segments = new List<Segment>();
     int lastSegmentCount = -1;
 
@@ -90,13 +91,23 @@ public sealed class ComplexAmmoBarUI : MonoBehaviourPun
 
     void RefreshLayout()
     {
-        if (rootRect == null || canvasRect == null || Camera.main == null)
+        Camera camera = ResolveCamera();
+        if (rootRect == null || canvasRect == null || camera == null)
             return;
 
         Vector3 worldPosition = transform.position + Vector3.down * 0.72f;
-        Vector3 screenPosition = Camera.main.WorldToScreenPoint(worldPosition);
+        Vector3 screenPosition = camera.WorldToScreenPoint(worldPosition);
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, screenPosition, null, out Vector2 canvasPosition))
             rootRect.anchoredPosition = canvasPosition;
+    }
+
+    Camera ResolveCamera()
+    {
+        if (cachedCamera != null && cachedCamera.isActiveAndEnabled)
+            return cachedCamera;
+
+        cachedCamera = Camera.main;
+        return cachedCamera;
     }
 
     void RefreshSegments()

@@ -20,8 +20,8 @@ public class EnemyRescueShipBehavior : EnemyBotBehaviorBase
     const float MapEdgeMargin = 2.6f;
     const float MapEdgeSteerWeight = 0.82f;
     const float RecoveryEdgeThreshold = 2.1f;
-    const float AvoidanceScanRadius = 2.1f;
-    const float AvoidanceWeight = 0.4f;
+    const float AvoidanceScanRadius = 2.65f;
+    const float AvoidanceWeight = 0.52f;
 
     Rigidbody2D rb;
     PhotonView view;
@@ -285,6 +285,9 @@ public class EnemyRescueShipBehavior : EnemyBotBehaviorBase
 
     bool IsAvoidedObject(Collider2D hit)
     {
+        if (EnemyHazardAvoidanceUtility.IsMineThreat(hit, health))
+            return true;
+
         if (hit.GetComponentInParent<ObstacleChunk>() != null)
             return true;
 

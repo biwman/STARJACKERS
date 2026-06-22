@@ -309,7 +309,7 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
 
         if (Time.time >= nextDashTrailTime)
         {
-            nextDashTrailTime = Time.time + 0.09f;
+            nextDashTrailTime = Time.time + (MobilePerformanceSettings.UseReducedVfx ? 0.17f : 0.09f);
             Vector2 mouth = GetMouthPosition();
             if (bot.photonView != null)
                 bot.photonView.RPC(nameof(EnemyBot.SpawnCosmicWormDashTrailRpc), RpcTarget.All, mouth.x, mouth.y, attackDirection.x, attackDirection.y, bot.VisualTargetSize * 0.28f);
@@ -835,10 +835,17 @@ public sealed class EnemyCosmicWormBehavior : EnemyBotBehaviorBase
 
 public sealed class CosmicWormVisualController : MonoBehaviour
 {
-    const int SpinePointCount = 20;
-    const int SegmentBandCount = 11;
-    const int MawTeethCount = 14;
+    const int MaxSpinePointCount = 20;
+    const int MobileSpinePointCount = 14;
+    const int MaxSegmentBandCount = 11;
+    const int MobileSegmentBandCount = 6;
+    const int MaxMawTeethCount = 14;
+    const int MobileMawTeethCount = 8;
     const int SortingOrder = 7270;
+
+    static int SpinePointCount => MobilePerformanceSettings.UseReducedVfx ? MobileSpinePointCount : MaxSpinePointCount;
+    static int SegmentBandCount => MobilePerformanceSettings.UseReducedVfx ? MobileSegmentBandCount : MaxSegmentBandCount;
+    static int MawTeethCount => MobilePerformanceSettings.UseReducedVfx ? MobileMawTeethCount : MaxMawTeethCount;
 
     static Sprite mawSealSprite;
     static Sprite jawLidSprite;
@@ -857,6 +864,7 @@ public sealed class CosmicWormVisualController : MonoBehaviour
     LineRenderer[] mawTeeth;
     int phase = 1;
     bool shutdown;
+    float nextVisualRefreshTime;
 
     public static void AttachOrUpdate(EnemyBot owner, int phase, bool immediate)
     {
@@ -882,13 +890,18 @@ public sealed class CosmicWormVisualController : MonoBehaviour
 
     void Configure(EnemyBot owner, int newPhase, bool immediate)
     {
+        int clampedPhase = Mathf.Clamp(newPhase, 1, 3);
+        bool ownerChanged = bot != owner;
+        bool phaseChanged = phase != clampedPhase;
+
         bot = owner;
         health = owner.GetComponent<PlayerHealth>();
-        phase = Mathf.Clamp(newPhase, 1, 3);
-        if (spriteRenderer == null)
+        phase = clampedPhase;
+        if (spriteRenderer == null || ownerChanged)
             spriteRenderer = owner.GetComponent<SpriteRenderer>();
 
-        EnsureVisualObjects();
+        if (ownerChanged || phaseChanged || !HasVisualObjectsForCurrentTier())
+            EnsureVisualObjects();
         if (immediate)
             RefreshVisuals();
     }
@@ -902,6 +915,14 @@ public sealed class CosmicWormVisualController : MonoBehaviour
         {
             ShutdownForWreck();
             return;
+        }
+
+        if (MobilePerformanceSettings.UseReducedVfx)
+        {
+            if (Time.unscaledTime < nextVisualRefreshTime)
+                return;
+
+            nextVisualRefreshTime = Time.unscaledTime + MobilePerformanceSettings.ReducedVfxFrameInterval;
         }
 
         RefreshVisuals();
@@ -978,9 +999,14 @@ public sealed class CosmicWormVisualController : MonoBehaviour
             spineGlow = CosmicWormVfxUtility.CreateLine(transform, "CosmicWormSpineGlow", SortingOrder, 0.09f, false);
             spineGlow.positionCount = SpinePointCount;
         }
+        else if (spineGlow.positionCount != SpinePointCount)
+        {
+            spineGlow.positionCount = SpinePointCount;
+        }
 
         if (segmentBands == null || segmentBands.Length != SegmentBandCount)
         {
+            DestroyVisualObjects(segmentBands);
             segmentBands = new LineRenderer[SegmentBandCount];
             for (int i = 0; i < segmentBands.Length; i++)
                 segmentBands[i] = CosmicWormVfxUtility.CreateLine(transform, "CosmicWormSegmentBand_" + i, SortingOrder + 1 + i, 0.035f, false);
@@ -991,6 +1017,7 @@ public sealed class CosmicWormVisualController : MonoBehaviour
 
         if (mawTeeth == null || mawTeeth.Length != MawTeethCount)
         {
+            DestroyVisualObjects(mawTeeth);
             mawTeeth = new LineRenderer[MawTeethCount];
             for (int i = 0; i < mawTeeth.Length; i++)
                 mawTeeth[i] = CosmicWormVfxUtility.CreateLine(transform, "CosmicWormMawTooth_" + i, SortingOrder + 39 + i, 0.026f, false);
@@ -1004,6 +1031,21 @@ public sealed class CosmicWormVisualController : MonoBehaviour
             lowerJawRenderer = CreateChildRenderer("CosmicWormLowerJawLid", GetJawLidSprite(), SortingOrder + 35);
         if (mawVoidRenderer == null)
             mawVoidRenderer = CreateChildRenderer("CosmicWormMawVoidPulse", GetMawVoidSprite(), SortingOrder + 36);
+    }
+
+    bool HasVisualObjectsForCurrentTier()
+    {
+        return spineGlow != null &&
+               spineGlow.positionCount == SpinePointCount &&
+               segmentBands != null &&
+               segmentBands.Length == SegmentBandCount &&
+               mawRing != null &&
+               mawTeeth != null &&
+               mawTeeth.Length == MawTeethCount &&
+               mawSealRenderer != null &&
+               upperJawRenderer != null &&
+               lowerJawRenderer != null &&
+               mawVoidRenderer != null;
     }
 
     SpriteRenderer CreateChildRenderer(string childName, Sprite sprite, int sortingOrder)
@@ -1095,9 +1137,10 @@ public sealed class CosmicWormVisualController : MonoBehaviour
         spineGlow.startColor = color;
         spineGlow.endColor = new Color(color.r, color.g, color.b, color.a * 0.35f);
 
-        for (int i = 0; i < SpinePointCount; i++)
+        int pointCount = SpinePointCount;
+        for (int i = 0; i < pointCount; i++)
         {
-            float t = SpinePointCount <= 1 ? 0f : (float)i / (SpinePointCount - 1);
+            float t = pointCount <= 1 ? 0f : (float)i / (pointCount - 1);
             float x = Mathf.Lerp(-0.43f, 0.38f, t) * spineLength;
             float wave = Mathf.Sin(t * Mathf.PI * 3.8f + Time.time * (2.4f + phase * 0.5f)) * waveHeight;
             spineGlow.SetPosition(i, center + forward * x + side * wave + Vector3.forward * -0.08f);
@@ -1168,7 +1211,8 @@ public sealed class CosmicWormVisualController : MonoBehaviour
         if (line == null)
             return;
 
-        int safeSegments = Mathf.Max(10, segments);
+        int requestedSegments = MobilePerformanceSettings.UseReducedVfx ? Mathf.Min(segments, 18) : segments;
+        int safeSegments = Mathf.Max(10, requestedSegments);
         line.enabled = color.a > 0.001f;
         line.startColor = color;
         line.endColor = color;

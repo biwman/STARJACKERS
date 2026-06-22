@@ -751,8 +751,8 @@ public sealed class BisonIndustrialPlotController : MonoBehaviour
 public sealed class IndustrialPartsHaulable : PlayerDeployableBase
 {
     public const int AssetVariantCount = 6;
-    const float HaulStartRange = 1.65f;
-    const float HaulKeepAliveRange = 2.45f;
+    const float HaulStartRange = 2.15f;
+    const float HaulKeepAliveRange = 3.05f;
     const float HaulChargeSeconds = 3f;
     const float FollowDistance = 1.55f;
     const float FollowStrength = 8.5f;
@@ -916,7 +916,7 @@ public sealed class IndustrialPartsHaulable : PlayerDeployableBase
         if (!ShipUnlockPlotCoordinator.IsRoundStarter(player.photonView.Owner))
             return false;
 
-        return Vector2.Distance(player.transform.position, transform.position) <= HaulStartRange;
+        return GetDistanceToPlayer(player) <= HaulStartRange;
     }
 
     public bool TryBeginLocalHaul(PlayerHealth player)
@@ -1040,7 +1040,7 @@ public sealed class IndustrialPartsHaulable : PlayerDeployableBase
         if (!GameTimer.IsActiveRoundPlayer(player) || player.IsAstronautControlled || player.IsWreck || player.IsEvacuationAnimating)
             return false;
 
-        return Vector2.Distance(player.transform.position, transform.position) <= HaulKeepAliveRange;
+        return GetDistanceToPlayer(player) <= HaulKeepAliveRange;
     }
 
     bool IsAuthoritativeRpc(PhotonMessageInfo messageInfo)
@@ -1073,7 +1073,20 @@ public sealed class IndustrialPartsHaulable : PlayerDeployableBase
         if (!GameTimer.IsActiveRoundPlayer(player))
             return false;
 
-        return Vector2.Distance(player.transform.position, transform.position) <= maxDistance;
+        return GetDistanceToPlayer(player) <= maxDistance;
+    }
+
+    float GetDistanceToPlayer(PlayerHealth player)
+    {
+        if (player == null)
+            return float.MaxValue;
+
+        Vector2 playerPosition = player.transform.position;
+        Collider2D partsCollider = GetComponent<Collider2D>();
+        if (partsCollider != null && partsCollider.enabled)
+            return Vector2.Distance(playerPosition, partsCollider.ClosestPoint(playerPosition));
+
+        return Vector2.Distance(playerPosition, transform.position);
     }
 
     [PunRPC]

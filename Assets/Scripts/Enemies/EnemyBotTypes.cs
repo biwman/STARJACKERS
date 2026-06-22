@@ -231,6 +231,7 @@ public class EnemyWeaponProfile
     public bool RotateTowardAim;
     public float Range;
     public string ShotSoundId;
+    public string HitEffectId;
     public int MuzzleStreamCount;
 }
 

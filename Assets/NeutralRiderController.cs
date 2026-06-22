@@ -602,7 +602,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         shooting.ConfigureBotWeaponAttackProfile(
             combatLoadout.WeaponProfile,
             ResolveWeaponMuzzleOffset(),
-            Mathf.Max(1, ShipCatalog.GetMainGunSlots(shipSkinIndex)),
+            ResolveBotMuzzleStreamCount(combatLoadout.WeaponId),
             false);
     }
 
@@ -625,6 +625,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
 
         int seed = ResolveLoadoutSeed(17);
         string weaponId = ResolveBotWeaponId(shipType, seed);
+        weaponId = SoftenOvertunedWeaponId(shipType, weaponId, seed);
         WeaponAttackProfile profile = WeaponAttackCatalog.GetNormalAttackByWeaponId(weaponId);
 
         return new NeutralRiderCombatLoadout
@@ -737,6 +738,40 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         }
 
         return pool[Mathf.Abs(seed / 3) % pool.Length];
+    }
+
+    string SoftenOvertunedWeaponId(ShipType shipType, string weaponId, int seed)
+    {
+        if (string.Equals(weaponId, WeaponAttackCatalog.DoubleRocketLauncherId, StringComparison.Ordinal))
+        {
+            bool rareHunterRocketAce = archetype == NeutralRiderArchetype.Hunter &&
+                                       RoomSettings.GetNeutralRiderAggression() == RoomSettings.NeutralRiderAggressionHigh &&
+                                       seed % 100 < 18;
+            return rareHunterRocketAce ? weaponId : WeaponAttackCatalog.RocketLauncherId;
+        }
+
+        if (string.Equals(weaponId, WeaponAttackCatalog.PlasmaGunId, StringComparison.Ordinal) &&
+            shipType == ShipType.Avenger)
+        {
+            return WeaponAttackCatalog.PulseDisruptorId;
+        }
+
+        return weaponId;
+    }
+
+    int ResolveBotMuzzleStreamCount(string weaponId)
+    {
+        int slots = Mathf.Max(1, ShipCatalog.GetMainGunSlots(shipSkinIndex));
+        if (string.Equals(weaponId, WeaponAttackCatalog.PlasmaGunId, StringComparison.Ordinal) ||
+            string.Equals(weaponId, WeaponAttackCatalog.RocketLauncherId, StringComparison.Ordinal) ||
+            string.Equals(weaponId, WeaponAttackCatalog.DoubleRocketLauncherId, StringComparison.Ordinal) ||
+            string.Equals(weaponId, WeaponAttackCatalog.ArtilleryGunId, StringComparison.Ordinal) ||
+            string.Equals(weaponId, WeaponAttackCatalog.RailGunId, StringComparison.Ordinal))
+        {
+            return 1;
+        }
+
+        return Mathf.Clamp(slots, 1, 2);
     }
 
     CombatTactic ResolveCombatTactic(ShipType shipType, string weaponId, int seed)
@@ -886,7 +921,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         }
 
         if (string.Equals(itemId, InventoryItemCatalog.SpaceTorpedoId, StringComparison.Ordinal))
-            return seed % 3 == 0 ? 2 : 1;
+            return 1;
 
         return 2;
     }
@@ -894,18 +929,18 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     float ResolveBotUtilityCooldown(string itemId)
     {
         if (string.Equals(itemId, InventoryItemCatalog.SpaceTorpedoId, StringComparison.Ordinal))
-            return 13f;
+            return 21f;
 
         if (string.Equals(itemId, InventoryItemCatalog.RocketAutoTurretId, StringComparison.Ordinal) ||
             string.Equals(itemId, InventoryItemCatalog.AutoTurretId, StringComparison.Ordinal))
         {
-            return 24f;
+            return 34f;
         }
 
         if (string.Equals(itemId, InventoryItemCatalog.StasisBuoyId, StringComparison.Ordinal))
-            return 17f;
+            return 22f;
 
-        return 12f;
+        return 16f;
     }
 
     int ResolveLoadoutSeed(int salt)
@@ -1401,7 +1436,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (shooting == null)
             return;
 
-        int homingTargetViewId = IsRocketWeapon(combatLoadout.WeaponId) ? targetViewId : 0;
+        int homingTargetViewId = ShouldUseHomingRocketLock() ? targetViewId : 0;
         bool fired = shooting.TryFireBotAtPoint(toTarget.normalized, targetPosition, homingTargetViewId);
         if (!fired)
             return;
@@ -1418,6 +1453,20 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     {
         return string.Equals(weaponId, WeaponAttackCatalog.RocketLauncherId, StringComparison.Ordinal) ||
                string.Equals(weaponId, WeaponAttackCatalog.DoubleRocketLauncherId, StringComparison.Ordinal);
+    }
+
+    bool ShouldUseHomingRocketLock()
+    {
+        if (!IsRocketWeapon(combatLoadout.WeaponId))
+            return false;
+
+        if (archetype != NeutralRiderArchetype.Hunter)
+            return false;
+
+        string aggression = RoomSettings.GetNeutralRiderAggression();
+        int chance = aggression == RoomSettings.NeutralRiderAggressionHigh ? 38 :
+                     aggression == RoomSettings.NeutralRiderAggressionNormal ? 18 : 8;
+        return ResolveLoadoutSeed(71) % 100 < chance;
     }
 
     void TickBotUtilities()
@@ -1932,7 +1981,10 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             return;
 
         collectingBeamTargetViewId = targetViewIdToCollect;
-        view.RPC(nameof(StartNeutralRiderCollectionBeamRpc), RpcTarget.All, targetViewIdToCollect);
+        if (PhotonNetwork.InRoom)
+            view.RPC(nameof(StartNeutralRiderCollectionBeamRpc), RpcTarget.All, targetViewIdToCollect);
+        else
+            StartNeutralRiderCollectionBeamRpc(targetViewIdToCollect);
     }
 
     void StopCollectionBeam()
@@ -1941,7 +1993,10 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             return;
 
         collectingBeamTargetViewId = 0;
-        view.RPC(nameof(StopNeutralRiderCollectionBeamRpc), RpcTarget.All);
+        if (PhotonNetwork.InRoom)
+            view.RPC(nameof(StopNeutralRiderCollectionBeamRpc), RpcTarget.All);
+        else
+            StopNeutralRiderCollectionBeamRpc();
     }
 
     [PunRPC]
@@ -1965,7 +2020,8 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (treasure != null)
         {
             treasure.isBeingCollected = busy;
-            targetView.RPC(nameof(Treasure.SetBeingCollectedRpc), RpcTarget.All, busy);
+            if (PhotonNetwork.InRoom)
+                targetView.RPC(nameof(Treasure.SetBeingCollectedRpc), RpcTarget.All, busy);
             return;
         }
 
@@ -1973,7 +2029,8 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (crate != null)
         {
             crate.isBeingCollected = busy;
-            targetView.RPC(nameof(DroppedCargoCrate.SetBeingCollectedRpc), RpcTarget.All, busy);
+            if (PhotonNetwork.InRoom)
+                targetView.RPC(nameof(DroppedCargoCrate.SetBeingCollectedRpc), RpcTarget.All, busy);
             return;
         }
 
@@ -1981,7 +2038,8 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         if (wreck != null)
         {
             wreck.isBeingCollected = busy;
-            targetView.RPC(nameof(ShipWreck.SetBeingCollectedRpc), RpcTarget.All, busy);
+            if (PhotonNetwork.InRoom)
+                targetView.RPC(nameof(ShipWreck.SetBeingCollectedRpc), RpcTarget.All, busy);
         }
     }
 

@@ -632,6 +632,7 @@ public class EarlyRoundExitUI : MonoBehaviour
         exitRequested = true;
         UpdateExitButtonState();
         NetworkManager.MarkCurrentRoundEndedForLocalPlayer(cachedOutcome);
+        RequestReturnMusicForCachedOutcome();
         await AwardRoundXpIfNeeded();
         HideAll();
         NetworkManager.ReturnToSessionBrowserFromFinishedRound();
@@ -639,11 +640,21 @@ public class EarlyRoundExitUI : MonoBehaviour
 
     void OnBackClicked()
     {
-        if (TryGetSuccessfulReturn(out bool returnedAsAstronaut))
-            AudioManager.Instance.RequestShipReturnMusicForNextMenu(returnedAsAstronaut);
+        RequestReturnMusicForCachedOutcome();
 
         HideAll();
         NetworkManager.ReturnToSessionBrowserFromFinishedRound();
+    }
+
+    void RequestReturnMusicForCachedOutcome()
+    {
+        if (TryGetRoundReturnMusicOutcome(cachedOutcome, out AudioManager.RoundReturnMusicOutcome outcome))
+            AudioManager.Instance.RequestRoundReturnMusicForNextMenu(outcome, RoomSettings.GetSelectedLobbyMapId());
+    }
+
+    bool TryGetRoundReturnMusicOutcome(string outcomeText, out AudioManager.RoundReturnMusicOutcome outcome)
+    {
+        return AudioManager.TryResolveRoundReturnMusicOutcome(outcomeText, out outcome);
     }
 
     bool TryGetSuccessfulReturn(out bool returnedAsAstronaut)
@@ -664,11 +675,30 @@ public class EarlyRoundExitUI : MonoBehaviour
         {
             await PlayerProfileService.Instance.RecordRoundXpAsync(cachedFinalScore, matchToken);
             await PlayerProfileService.Instance.RecordMapSuccessfulReturnAsync(RoomSettings.GetSelectedLobbyMapId(), cachedOutcome, matchToken);
+            await PlayerProfileService.Instance.RecordRoundCareerStatsAsync(cachedOutcome, GetLocalReturnedCargoValueAstrons(), matchToken);
         }
         catch (System.Exception ex)
         {
             Debug.LogError("EarlyRoundExitUI: failed to record early round progress: " + ex);
         }
+    }
+
+    int GetLocalReturnedCargoValueAstrons()
+    {
+        if (!TryGetSuccessfulReturn(out _))
+            return 0;
+
+        string[] shipSlots = PlayerProfileService.GetPlayerShipInventorySlots(PhotonNetwork.LocalPlayer);
+        int totalValue = 0;
+        for (int i = 0; i < shipSlots.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(shipSlots[i]))
+                continue;
+
+            totalValue += InventoryItemCatalog.GetSellValueAstrons(shipSlots[i]);
+        }
+
+        return Mathf.Max(0, totalValue);
     }
 
     string BuildMatchToken()

@@ -15,8 +15,8 @@ public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
     }
 
     const float FleeDuration = 5f;
-    const float AvoidanceScanRadius = 1.75f;
-    const float AvoidanceWeight = 0.62f;
+    const float AvoidanceScanRadius = 2.85f;
+    const float AvoidanceWeight = 0.76f;
     const float MapEdgeSoftTurnMargin = 5.4f;
     const float MapEdgeHardTurnMargin = 1.15f;
     const float MapEdgeLookAheadSeconds = 1.2f;
@@ -343,6 +343,9 @@ public class EnemyNeutralFighterBehavior : EnemyBotBehaviorBase
 
     bool IsAvoidedObject(Collider2D hit)
     {
+        if (EnemyHazardAvoidanceUtility.IsMineThreat(hit, health))
+            return true;
+
         if (hit.GetComponentInParent<ObstacleChunk>() != null)
             return true;
 

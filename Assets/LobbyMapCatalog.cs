@@ -387,6 +387,8 @@ public static class LobbyMapCatalog
     public const string TheThreatMapId = "mothership";
     public const string GravityWellMapId = "gravity_well";
     public const string ToxicAreaMapId = "toxic_area";
+    public const string DefaultReturnMusicProfileId = "default";
+    public const string HazardReturnMusicProfileId = "hazard_remix";
 
     static readonly LobbyMapDefinition[] Maps =
     {
@@ -487,7 +489,8 @@ public static class LobbyMapCatalog
             new LobbyEnemyMapPreset(EnemyBotKind.HunterLance, false, 1, false, 85, 115, 1f, 0, 120, 36),
             new LobbyEnemyMapPreset(EnemyBotKind.RadarShip, false, 1, false, 90, 110, 1.1f, 0, 90, 38),
             new LobbyEnemyMapPreset(EnemyBotKind.RescueShip, false, 1, false, 85, 95, 1.9f, 0, 90, 0),
-            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90)),
+            new LobbyEnemyMapPreset(EnemyBotKind.Mothership, false, 1, false, 200, 200, 1f, 0, 90),
+            new LobbyEnemyMapPreset(EnemyBotKind.RiftWarden, false, 1, false, 260, 220, 1f, 0, 120, 18)),
         new LobbyMapDefinition(
             "minefield",
             "MINEFIELD",
@@ -836,7 +839,7 @@ public static class LobbyMapCatalog
             "A cracked singularity bends the whole sector into a dangerous orbit of dust, wreckage and rare resources.\n" +
             "You lose your inventory and equipment here if you die.",
             330f,
-            "super_large",
+            "very_large",
             1f,
             "low",
             true,
@@ -935,6 +938,7 @@ public static class LobbyMapCatalog
     };
 
     static readonly Dictionary<string, LobbyMapDefinition> MapsById = BuildMapsById();
+    static readonly Dictionary<string, string> ReturnMusicProfilesByMapId = BuildReturnMusicProfilesByMapId();
 
     public static IReadOnlyList<LobbyMapDefinition> AllMaps => Maps;
 
@@ -949,6 +953,17 @@ public static class LobbyMapCatalog
             return GetDefault();
 
         return MapsById.TryGetValue(id, out LobbyMapDefinition map) ? map : GetDefault();
+    }
+
+    public static string GetReturnMusicProfileId(string mapId)
+    {
+        if (string.IsNullOrWhiteSpace(mapId))
+            return DefaultReturnMusicProfileId;
+
+        return ReturnMusicProfilesByMapId.TryGetValue(mapId, out string profileId) &&
+               !string.IsNullOrWhiteSpace(profileId)
+            ? profileId
+            : DefaultReturnMusicProfileId;
     }
 
     public static string GetDefaultParallaxBackgroundId(string mapId)
@@ -1343,6 +1358,17 @@ public static class LobbyMapCatalog
 
         return maps;
     }
+
+    static Dictionary<string, string> BuildReturnMusicProfilesByMapId()
+    {
+        return new Dictionary<string, string>
+        {
+            { TheThreatMapId, HazardReturnMusicProfileId },
+            { ToxicAreaMapId, HazardReturnMusicProfileId },
+            { GravityWellMapId, HazardReturnMusicProfileId },
+            { HiddenDimensionMapId, HazardReturnMusicProfileId }
+        };
+    }
 }
 
 public sealed class LobbyMapUnlockStatus
@@ -1489,7 +1515,7 @@ public static class LobbyMapUnlockCatalog
                 return new LobbyMapUnlockStatus(
                     map.Id,
                     false,
-                    "Find secrets to unlock",
+                    "Carry Ancient Gate Key in a SAFE ship cargo slot.",
                     0,
                     1);
 

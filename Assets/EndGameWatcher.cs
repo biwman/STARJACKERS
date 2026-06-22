@@ -529,10 +529,10 @@ public class EndGameWatcher : MonoBehaviour
         Image image = backButtonObject.GetComponent<Image>();
         if (image != null)
         {
-            image.color = new Color(0.08f, 0.42f, 0.5f, 0.98f);
+            image.color = new Color(0.55f, 0.08f, 0.1f, 0.98f);
             image.type = Image.Type.Sliced;
         }
-        ApplyButtonColors(backButton, new Color(0.08f, 0.42f, 0.5f, 0.98f), new Color(0.12f, 0.58f, 0.68f, 1f), new Color(0.05f, 0.28f, 0.34f, 1f));
+        ApplyButtonColors(backButton, new Color(0.55f, 0.08f, 0.1f, 0.98f), new Color(0.76f, 0.13f, 0.16f, 1f), new Color(0.36f, 0.04f, 0.06f, 1f));
 
         TextMeshProUGUI buttonText = backButtonObject.GetComponentInChildren<TextMeshProUGUI>(true);
         if (buttonText != null)
@@ -551,15 +551,15 @@ public class EndGameWatcher : MonoBehaviour
 
     void OnBackButtonClicked()
     {
-        if (TryGetLocalPlayerSuccessfulReturn(out bool returnedAsAstronaut))
-            AudioManager.Instance.RequestShipReturnMusicForNextMenu(returnedAsAstronaut);
+        if (TryGetLocalPlayerRoundReturnMusicOutcome(out AudioManager.RoundReturnMusicOutcome outcome))
+            AudioManager.Instance.RequestRoundReturnMusicForNextMenu(outcome, RoomSettings.GetSelectedLobbyMapId());
 
         NetworkManager.ReturnToSessionBrowserFromRound();
     }
 
-    bool TryGetLocalPlayerSuccessfulReturn(out bool returnedAsAstronaut)
+    bool TryGetLocalPlayerRoundReturnMusicOutcome(out AudioManager.RoundReturnMusicOutcome outcome)
     {
-        returnedAsAstronaut = false;
+        outcome = AudioManager.RoundReturnMusicOutcome.Ship;
 
         if (PhotonNetwork.LocalPlayer == null)
             return false;
@@ -572,20 +572,10 @@ public class EndGameWatcher : MonoBehaviour
         for (int i = 0; i < snapshot.entries.Length; i++)
         {
             RoundResultEntry entry = snapshot.entries[i];
-            if (entry != null &&
-                entry.actorNumber == actorNumber &&
-                string.Equals(entry.outcome, "extracted", System.StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+            if (entry == null || entry.actorNumber != actorNumber)
+                continue;
 
-            if (entry != null &&
-                entry.actorNumber == actorNumber &&
-                string.Equals(entry.outcome, "evacuated", System.StringComparison.OrdinalIgnoreCase))
-            {
-                returnedAsAstronaut = true;
-                return true;
-            }
+            return AudioManager.TryResolveRoundReturnMusicOutcome(entry.outcome, out outcome);
         }
 
         return false;
@@ -664,6 +654,7 @@ public class EndGameWatcher : MonoBehaviour
 
         int roundXp = 0;
         string localOutcome = string.Empty;
+        int localCargoValueAstrons = 0;
         RoundResultsSnapshotData snapshot = GetSnapshotFromRoom();
         if (snapshot != null && snapshot.entries != null)
         {
@@ -673,6 +664,7 @@ public class EndGameWatcher : MonoBehaviour
                 {
                     roundXp = Mathf.Max(0, snapshot.entries[i].finalScore);
                     localOutcome = snapshot.entries[i].outcome;
+                    localCargoValueAstrons = GetEndScreenCargoValueAstrons(snapshot.entries[i]);
                     break;
                 }
             }
@@ -695,6 +687,15 @@ public class EndGameWatcher : MonoBehaviour
         catch (System.Exception ex)
         {
             Debug.LogError("EndGameWatcher: failed to record map return progress: " + ex);
+        }
+
+        try
+        {
+            await PlayerProfileService.Instance.RecordRoundCareerStatsAsync(localOutcome, localCargoValueAstrons, matchToken);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("EndGameWatcher: failed to record career round stats: " + ex);
         }
     }
 

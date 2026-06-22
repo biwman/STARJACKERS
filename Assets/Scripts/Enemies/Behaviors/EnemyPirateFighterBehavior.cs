@@ -16,8 +16,8 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
     }
 
     const float CriticalHpFraction = 0.3f;
-    const float AvoidanceScanRadius = 1.9f;
-    const float AvoidanceWeight = 0.48f;
+    const float AvoidanceScanRadius = 2.85f;
+    const float AvoidanceWeight = 0.64f;
     const float MapEdgeMargin = 2.4f;
     const float MapEdgeSteerWeight = 0.82f;
     const float PatrolTurnIntervalMin = 0.95f;
@@ -166,7 +166,7 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
             return;
 
         Transform forcedTarget = targetView.transform;
-        if (IsProtectedCharlieTarget(forcedTarget))
+        if (IsProtectedPirateSymbolTarget(forcedTarget))
         {
             if (currentTarget == forcedTarget)
                 currentTarget = null;
@@ -195,7 +195,7 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
         if (IsValidPirateCaseCarrierTarget(currentTarget))
             return currentTarget;
 
-        if (!IsProtectedCharlieTarget(currentTarget) &&
+        if (!IsProtectedPirateSymbolTarget(currentTarget) &&
             EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, validRange, true))
             return currentTarget;
 
@@ -262,7 +262,7 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
         if (candidate.GetComponent<LureBeaconDecoy>() != null)
             return false;
 
-        if (IsProtectedCharlieTarget(candidate.transform))
+        if (IsProtectedPirateSymbolTarget(candidate.transform))
             return false;
 
         if (Vector2.Distance(rb.position, candidate.transform.position) > maxDistance)
@@ -273,7 +273,7 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
         return candidateNebulaState == null || !candidateNebulaState.IsHiddenFromObserver(observerNebulaState);
     }
 
-    bool IsProtectedCharlieTarget(Transform target)
+    bool IsProtectedPirateSymbolTarget(Transform target)
     {
         PlayerHealth targetHealth = target != null ? target.GetComponent<PlayerHealth>() : null;
         if (targetHealth == null || targetHealth.photonView == null)
@@ -282,7 +282,7 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
         if (ValuableCargoCarrierUtility.IsPirateCaseCarrier(targetHealth))
             return false;
 
-        if (!PilotCatalog.IsSelectedPilot(targetHealth.photonView.Owner, PilotCatalog.CharlieSmartId))
+        if (!PlayerProfileService.PlayerHasPirateSymbolInSafePocket(targetHealth.photonView.Owner))
             return false;
 
         return Time.time >= forcedCombatUntil || targetHealth.photonView.ViewID != forcedCombatTargetViewId;
@@ -343,7 +343,7 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
             return;
         }
 
-        if (IsProtectedCharlieTarget(currentTarget))
+        if (IsProtectedPirateSymbolTarget(currentTarget))
             currentTarget = null;
 
         if (currentTarget != null &&
@@ -608,6 +608,9 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
 
     bool IsAvoidedObject(Collider2D hit)
     {
+        if (EnemyHazardAvoidanceUtility.IsMineThreat(hit, health))
+            return true;
+
         if (hit.GetComponentInParent<ObstacleChunk>() != null)
             return true;
 
@@ -699,7 +702,7 @@ public class EnemyPirateFighterBehavior : EnemyBotBehaviorBase
         if (shooting == null || weapon == null || currentTarget == null)
             return;
 
-        if (IsProtectedCharlieTarget(currentTarget))
+        if (IsProtectedPirateSymbolTarget(currentTarget))
             return;
 
         Vector2 aim = (Vector2)currentTarget.position - rb.position;

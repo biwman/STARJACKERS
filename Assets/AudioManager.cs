@@ -13,11 +13,66 @@ public class AudioManager : MonoBehaviour
     const string MenuMusicResourcePath = "Audio/Music/Abandoned Orbital Dock";
     const string ShipReturnMusicResourcePath = "Audio/Music/victory_orbit";
     const string AstronautReturnMusicResourcePath = "Audio/Music/victory_orbit_astronaut_remix";
+    const string HazardShipReturnMusicResourcePath = "Audio/Music/ship_return_remix";
+    const string HazardAstronautReturnMusicResourcePath = "Audio/Music/astronaut_return_remix";
+    const string HazardDeathReturnMusicResourcePath = "Audio/Music/death_remix";
     const float MenuMusicVolume = 0.42f;
     const int SpatialAudioPoolSize = 24;
     const int MaxSpatialOneShotsPerFrame = 12;
 
     static AudioManager instance;
+
+    public enum RoundReturnMusicOutcome
+    {
+        Ship,
+        Astronaut,
+        Death
+    }
+
+    sealed class RoundReturnMusicProfile
+    {
+        public readonly string Id;
+        readonly string shipResourcePath;
+        readonly string astronautResourcePath;
+        readonly string deathResourcePath;
+
+        public RoundReturnMusicProfile(string id, string shipResourcePath, string astronautResourcePath, string deathResourcePath)
+        {
+            Id = string.IsNullOrWhiteSpace(id) ? LobbyMapCatalog.DefaultReturnMusicProfileId : id;
+            this.shipResourcePath = shipResourcePath;
+            this.astronautResourcePath = astronautResourcePath;
+            this.deathResourcePath = deathResourcePath;
+        }
+
+        public string GetResourcePath(RoundReturnMusicOutcome outcome)
+        {
+            switch (outcome)
+            {
+                case RoundReturnMusicOutcome.Astronaut:
+                    return astronautResourcePath;
+                case RoundReturnMusicOutcome.Death:
+                    return deathResourcePath;
+                default:
+                    return shipResourcePath;
+            }
+        }
+    }
+
+    static readonly RoundReturnMusicProfile DefaultRoundReturnMusicProfile = new RoundReturnMusicProfile(
+        LobbyMapCatalog.DefaultReturnMusicProfileId,
+        ShipReturnMusicResourcePath,
+        AstronautReturnMusicResourcePath,
+        null);
+
+    static readonly RoundReturnMusicProfile[] RoundReturnMusicProfiles =
+    {
+        DefaultRoundReturnMusicProfile,
+        new RoundReturnMusicProfile(
+            LobbyMapCatalog.HazardReturnMusicProfileId,
+            HazardShipReturnMusicResourcePath,
+            HazardAstronautReturnMusicResourcePath,
+            HazardDeathReturnMusicResourcePath)
+    };
 
     AudioClip laserClip;
     AudioClip corsairLaserClip;
@@ -94,9 +149,7 @@ public class AudioManager : MonoBehaviour
     AudioClip cosmicWormShotClip;
     AudioClip alienArtifactActivationClip;
     AudioClip menuMusicClip;
-    AudioClip shipReturnMusicClip;
-    AudioClip astronautReturnMusicClip;
-    AudioClip activeShipReturnMusicClip;
+    AudioClip activeRoundReturnMusicClip;
 
     AudioSource oneShotSource;
     AudioSource drillingLoopSource;
@@ -104,10 +157,12 @@ public class AudioManager : MonoBehaviour
     AudioSource menuMusicSource;
     Coroutine evacBuzzerRoutine;
     Coroutine resumeMenuMusicRoutine;
-    bool shipReturnMusicPending;
-    bool shipReturnMusicPendingAsAstronaut;
-    bool shipReturnMusicPlaying;
+    bool roundReturnMusicPending;
+    RoundReturnMusicOutcome pendingRoundReturnMusicOutcome = RoundReturnMusicOutcome.Ship;
+    string pendingRoundReturnMusicMapId;
+    bool roundReturnMusicPlaying;
     float lastClickSoundTime = -100f;
+    readonly Dictionary<string, AudioClip> roundReturnMusicClipCache = new Dictionary<string, AudioClip>();
     readonly List<AudioSource> spatialOneShotSources = new List<AudioSource>(SpatialAudioPoolSize);
     int nextSpatialOneShotSourceIndex;
     int spatialOneShotFrame = -1;
@@ -196,7 +251,7 @@ public class AudioManager : MonoBehaviour
 
     void Update()
     {
-        TryPlayPendingShipReturnMusic();
+        TryPlayPendingRoundReturnMusic();
     }
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -218,8 +273,6 @@ public class AudioManager : MonoBehaviour
         pirateBaseDrillClip = Resources.Load<AudioClip>("Audio/pirate_base_drill");
         clickClip = Resources.Load<AudioClip>("Audio/click");
         menuMusicClip = Resources.Load<AudioClip>(MenuMusicResourcePath);
-        shipReturnMusicClip = Resources.Load<AudioClip>(ShipReturnMusicResourcePath);
-        astronautReturnMusicClip = Resources.Load<AudioClip>(AstronautReturnMusicResourcePath);
         cashClip = Resources.Load<AudioClip>("Audio/cash_sound");
         engineClip = Resources.Load<AudioClip>("Audio/silnik");
         fusionEngineClip = Resources.Load<AudioClip>("Audio/fusion_engine_sound");
@@ -467,17 +520,17 @@ public class AudioManager : MonoBehaviour
         if (menuMusicClip == null || menuMusicSource == null)
             return;
 
-        if (shipReturnMusicPlaying &&
-            activeShipReturnMusicClip != null &&
-            menuMusicSource.clip == activeShipReturnMusicClip &&
+        if (roundReturnMusicPlaying &&
+            activeRoundReturnMusicClip != null &&
+            menuMusicSource.clip == activeRoundReturnMusicClip &&
             menuMusicSource.isPlaying)
         {
             return;
         }
 
         CancelMenuMusicResumeRoutine();
-        shipReturnMusicPlaying = false;
-        activeShipReturnMusicClip = null;
+        roundReturnMusicPlaying = false;
+        activeRoundReturnMusicClip = null;
 
         if (menuMusicSource.clip != menuMusicClip)
             menuMusicSource.clip = menuMusicClip;
@@ -502,10 +555,11 @@ public class AudioManager : MonoBehaviour
     public void StopMenuMusic()
     {
         CancelMenuMusicResumeRoutine();
-        shipReturnMusicPending = false;
-        shipReturnMusicPendingAsAstronaut = false;
-        shipReturnMusicPlaying = false;
-        activeShipReturnMusicClip = null;
+        roundReturnMusicPending = false;
+        pendingRoundReturnMusicOutcome = RoundReturnMusicOutcome.Ship;
+        pendingRoundReturnMusicMapId = null;
+        roundReturnMusicPlaying = false;
+        activeRoundReturnMusicClip = null;
 
         if (menuMusicSource != null && menuMusicSource.isPlaying)
             menuMusicSource.Stop();
@@ -529,35 +583,80 @@ public class AudioManager : MonoBehaviour
 
     public void RequestShipReturnMusicForNextMenu(bool returnedAsAstronaut = false)
     {
-        shipReturnMusicPending = true;
-        shipReturnMusicPendingAsAstronaut = returnedAsAstronaut;
-        TryPlayPendingShipReturnMusic();
+        RequestRoundReturnMusicForNextMenu(
+            returnedAsAstronaut ? RoundReturnMusicOutcome.Astronaut : RoundReturnMusicOutcome.Ship,
+            RoomSettings.GetSelectedLobbyMapId());
     }
 
-    void TryPlayPendingShipReturnMusic()
+    public static bool TryResolveRoundReturnMusicOutcome(string outcomeText, out RoundReturnMusicOutcome outcome)
     {
-        if (!shipReturnMusicPending || shipReturnMusicPlaying)
+        outcome = RoundReturnMusicOutcome.Ship;
+
+        switch ((outcomeText ?? string.Empty).Trim().ToLowerInvariant())
+        {
+            case "extracted":
+                outcome = RoundReturnMusicOutcome.Ship;
+                return true;
+            case "evacuated":
+                outcome = RoundReturnMusicOutcome.Astronaut;
+                return true;
+            case "dead":
+                outcome = RoundReturnMusicOutcome.Death;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public void RequestRoundReturnMusicForNextMenu(RoundReturnMusicOutcome outcome, string mapId = null)
+    {
+        roundReturnMusicPending = true;
+        pendingRoundReturnMusicOutcome = outcome;
+        pendingRoundReturnMusicMapId = string.IsNullOrWhiteSpace(mapId)
+            ? RoomSettings.GetSelectedLobbyMapId()
+            : mapId;
+        TryPlayPendingRoundReturnMusic();
+    }
+
+    void TryPlayPendingRoundReturnMusic()
+    {
+        if (!roundReturnMusicPending || roundReturnMusicPlaying)
             return;
 
         if (PhotonNetwork.InRoom || ShouldMuteMenuMusicForRound())
             return;
 
-        bool returnedAsAstronaut = shipReturnMusicPendingAsAstronaut;
-        shipReturnMusicPending = false;
-        shipReturnMusicPendingAsAstronaut = false;
-        PlayShipReturnMusic(returnedAsAstronaut);
+        RoundReturnMusicOutcome outcome = pendingRoundReturnMusicOutcome;
+        string mapId = pendingRoundReturnMusicMapId;
+        roundReturnMusicPending = false;
+        pendingRoundReturnMusicOutcome = RoundReturnMusicOutcome.Ship;
+        pendingRoundReturnMusicMapId = null;
+        PlayRoundReturnMusic(outcome, mapId);
     }
 
     public void PlayShipReturnMusic(bool returnedAsAstronaut = false)
     {
-        AudioClip returnMusicClip = ResolveShipReturnMusicClip(returnedAsAstronaut);
+        PlayRoundReturnMusic(returnedAsAstronaut ? RoundReturnMusicOutcome.Astronaut : RoundReturnMusicOutcome.Ship, RoomSettings.GetSelectedLobbyMapId());
+    }
 
-        if (returnMusicClip == null || menuMusicSource == null)
+    public void PlayRoundReturnMusic(RoundReturnMusicOutcome outcome, string mapId = null)
+    {
+        AudioClip returnMusicClip = ResolveRoundReturnMusicClip(outcome, mapId);
+
+        if (returnMusicClip == null)
+        {
+            roundReturnMusicPlaying = false;
+            activeRoundReturnMusicClip = null;
+            PlayMenuMusic();
+            return;
+        }
+
+        if (menuMusicSource == null)
             return;
 
         CancelMenuMusicResumeRoutine();
-        shipReturnMusicPlaying = true;
-        activeShipReturnMusicClip = returnMusicClip;
+        roundReturnMusicPlaying = true;
+        activeRoundReturnMusicClip = returnMusicClip;
 
         menuMusicSource.Stop();
         menuMusicSource.clip = returnMusicClip;
@@ -568,21 +667,38 @@ public class AudioManager : MonoBehaviour
         resumeMenuMusicRoutine = StartCoroutine(ResumeMenuMusicAfterShipReturn(returnMusicClip));
     }
 
-    AudioClip ResolveShipReturnMusicClip(bool returnedAsAstronaut)
+    AudioClip ResolveRoundReturnMusicClip(RoundReturnMusicOutcome outcome, string mapId)
     {
-        if (returnedAsAstronaut)
-        {
-            if (astronautReturnMusicClip == null)
-                astronautReturnMusicClip = Resources.Load<AudioClip>(AstronautReturnMusicResourcePath);
+        RoundReturnMusicProfile profile = ResolveRoundReturnMusicProfile(mapId);
+        string resourcePath = profile.GetResourcePath(outcome);
 
-            if (astronautReturnMusicClip != null)
-                return astronautReturnMusicClip;
+        if (string.IsNullOrWhiteSpace(resourcePath) && profile != DefaultRoundReturnMusicProfile)
+            resourcePath = DefaultRoundReturnMusicProfile.GetResourcePath(outcome);
+
+        if (string.IsNullOrWhiteSpace(resourcePath))
+            return null;
+
+        if (roundReturnMusicClipCache.TryGetValue(resourcePath, out AudioClip cachedClip))
+            return cachedClip;
+
+        AudioClip clip = Resources.Load<AudioClip>(resourcePath);
+        if (clip != null)
+            roundReturnMusicClipCache[resourcePath] = clip;
+
+        return clip;
+    }
+
+    static RoundReturnMusicProfile ResolveRoundReturnMusicProfile(string mapId)
+    {
+        string profileId = LobbyMapCatalog.GetReturnMusicProfileId(mapId);
+        for (int i = 0; i < RoundReturnMusicProfiles.Length; i++)
+        {
+            RoundReturnMusicProfile profile = RoundReturnMusicProfiles[i];
+            if (profile != null && string.Equals(profile.Id, profileId, System.StringComparison.Ordinal))
+                return profile;
         }
 
-        if (shipReturnMusicClip == null)
-            shipReturnMusicClip = Resources.Load<AudioClip>(ShipReturnMusicResourcePath);
-
-        return shipReturnMusicClip;
+        return DefaultRoundReturnMusicProfile;
     }
 
     IEnumerator ResumeMenuMusicAfterShipReturn(AudioClip playedClip)
@@ -591,11 +707,11 @@ public class AudioManager : MonoBehaviour
         yield return new WaitForSecondsRealtime(duration);
 
         resumeMenuMusicRoutine = null;
-        if (!shipReturnMusicPlaying || menuMusicSource == null || menuMusicSource.clip != playedClip)
+        if (!roundReturnMusicPlaying || menuMusicSource == null || menuMusicSource.clip != playedClip)
             yield break;
 
-        shipReturnMusicPlaying = false;
-        activeShipReturnMusicClip = null;
+        roundReturnMusicPlaying = false;
+        activeRoundReturnMusicClip = null;
         PlayMenuMusic();
     }
 

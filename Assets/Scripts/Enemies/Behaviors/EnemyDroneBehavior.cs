@@ -42,7 +42,7 @@ public class EnemyDroneBehavior : EnemyBotBehaviorBase
                 weapon.BulletSpeed,
                 weapon.ShotSoundId,
                 weapon.Range,
-                string.Empty,
+                weapon.HitEffectId ?? string.Empty,
                 10f,
                 weapon.DamageType,
                 weapon.DeliveryMethod,
@@ -162,4 +162,3 @@ public class EnemyDroneBehavior : EnemyBotBehaviorBase
         shooting.TryFireBot(aimDirection.normalized);
     }
 }
-

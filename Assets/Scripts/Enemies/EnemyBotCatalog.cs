@@ -47,13 +47,14 @@ public static class EnemyBotCatalog
                 DeliveryMethod = WeaponDeliveryMethod.BurstProjectile,
                 DeliveryFlags = WeaponDeliveryFlags.None,
                 BulletScaleMultiplier = 1f,
-                BulletColor = Color.white,
+                BulletColor = new Color(1f, 0.26f, 0.08f, 1f),
                 BulletSpeed = 10f,
                 MuzzleOffsetDistance = 0.5f,
                 InfiniteAmmo = false,
                 RotateTowardAim = true,
                 Range = 12f,
-                ShotSoundId = string.Empty
+                ShotSoundId = string.Empty,
+                HitEffectId = Bullet.DroidBoltEffectId
             },
             Wreck = new EnemyWreckProfile
             {
@@ -360,13 +361,14 @@ public static class EnemyBotCatalog
                 DeliveryMethod = WeaponDeliveryMethod.BurstProjectile,
                 DeliveryFlags = WeaponDeliveryFlags.MultiStream,
                 BulletScaleMultiplier = 1f,
-                BulletColor = Color.white,
+                BulletColor = new Color(1f, 0.18f, 0.06f, 1f),
                 BulletSpeed = 10.5f,
                 MuzzleOffsetDistance = 0.56f,
                 InfiniteAmmo = true,
                 RotateTowardAim = false,
                 Range = 13.2f,
                 ShotSoundId = string.Empty,
+                HitEffectId = Bullet.MilitaryVanTracerEffectId,
                 MuzzleStreamCount = 2
             },
             Wreck = new EnemyWreckProfile
@@ -1534,7 +1536,7 @@ public static class EnemyBotCatalog
                 AngularDamping = 1.2f,
                 DriftSpeed = 0.08f,
                 AngularVelocityRange = 2.2f,
-                RewardItemId = InventoryItemCatalog.AlienSecretId,
+                RewardItemId = InventoryItemCatalog.RiftWardenWreckId,
                 DestroyWhenEmpty = false,
                 BaseColor = new Color(0.22f, 0.38f, 0.36f, 0.96f)
             },

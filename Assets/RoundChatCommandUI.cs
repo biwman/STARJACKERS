@@ -72,6 +72,7 @@ public sealed class RoundChatCommandUI : MonoBehaviourPun
 
     PlayerHealth health;
     Canvas canvas;
+    Camera cachedCamera;
     RectTransform canvasRect;
     GameObject buttonObject;
     RectTransform buttonRect;
@@ -600,14 +601,15 @@ public sealed class RoundChatCommandUI : MonoBehaviourPun
         if (bubbleObject == null || !bubbleObject.activeSelf)
             return;
 
-        if (Time.time >= bubbleUntil || Camera.main == null || canvasRect == null || !IsRoundHudVisible())
+        Camera camera = ResolveCamera();
+        if (Time.time >= bubbleUntil || camera == null || canvasRect == null || !IsRoundHudVisible())
         {
             HideBubble();
             return;
         }
 
         Vector3 worldPosition = transform.position + Vector3.up * ShipBubbleWorldOffset;
-        Vector3 screenPosition = Camera.main.WorldToScreenPoint(worldPosition);
+        Vector3 screenPosition = camera.WorldToScreenPoint(worldPosition);
         if (screenPosition.z < 0f)
         {
             bubbleObject.SetActive(false);
@@ -616,6 +618,15 @@ public sealed class RoundChatCommandUI : MonoBehaviourPun
 
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, screenPosition, null, out Vector2 canvasPosition))
             bubbleRect.anchoredPosition = canvasPosition;
+    }
+
+    Camera ResolveCamera()
+    {
+        if (cachedCamera != null && cachedCamera.isActiveAndEnabled)
+            return cachedCamera;
+
+        cachedCamera = Camera.main;
+        return cachedCamera;
     }
 
     void HideBubble()

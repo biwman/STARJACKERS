@@ -21,8 +21,8 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
     const float RecoveryDuration = 0.68f;
     const float DashSpeedMultiplier = 5.9f;
     const float DashHitRadiusFactor = 0.42f;
-    const float AvoidanceScanRadius = 1.9f;
-    const float AvoidanceWeight = 0.46f;
+    const float AvoidanceScanRadius = 2.65f;
+    const float AvoidanceWeight = 0.58f;
     const float MapEdgeMargin = 2.4f;
     const float PatrolTurnIntervalMin = 1.2f;
     const float PatrolTurnIntervalMax = 2.4f;
@@ -402,6 +402,9 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
 
     bool IsAvoidedObject(Collider2D hit)
     {
+        if (EnemyHazardAvoidanceUtility.IsMineThreat(hit, health))
+            return true;
+
         if (hit.GetComponentInParent<ObstacleChunk>() != null)
             return true;
 

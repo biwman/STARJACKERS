@@ -17,10 +17,10 @@ public sealed class AdvancedSpaceBackground : MonoBehaviour
     const int BackgroundObjectSortingOrder = GameVisualTheme.BackgroundSortingOrder - 10;
     const float MapPadding = 58f;
     const float NoobHavenBackdropViewportOverscan = 1.18f;
-    const float NoobHavenBackdropParallax = 0.026f;
-    const float BackgroundObjectParallax = 0.06f;
-    const float ToxicPlanetParallax = 0.052f;
-    const float ToxicCloudParallax = 0.092f;
+    const float NoobHavenBackdropParallax = 0.035f;
+    const float BackgroundObjectParallax = 0.082f;
+    const float ToxicPlanetParallax = 0.072f;
+    const float ToxicCloudParallax = 0.12f;
     const float GravityWellCoreParallax = 1f;
     const float GravityWellObjectPulseSpeed = 2.2f;
     const float GravityWellObjectPulseAmount = 0.045f;

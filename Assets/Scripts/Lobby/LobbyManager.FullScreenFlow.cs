@@ -591,7 +591,7 @@ public partial class LobbyManager
         RectTransform canvasRect = EnsureFullScreenLobbyRoot();
         float canvasWidth = canvasRect != null && canvasRect.rect.width > 0f ? canvasRect.rect.width : 1920f;
         float canvasHeight = canvasRect != null && canvasRect.rect.height > 0f ? canvasRect.rect.height : 1080f;
-        float contentTop = FullScreenTopMargin + LobbyTopBarHeight + 56f;
+        float contentTop = FullScreenTopMargin + Mathf.Max(LobbyTopBarHeight, 110f) + 56f;
         float bottomReserved = BottomWideButtonHeight + FullScreenBottomMargin + 30f;
         float usableHeight = Mathf.Max(420f, canvasHeight - contentTop - bottomReserved);
         float tileHeight = Mathf.Min(MapTileHeight, (usableHeight - MapTileSpacingY) * 0.5f);

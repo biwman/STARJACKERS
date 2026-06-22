@@ -4,15 +4,21 @@ using Photon.Realtime;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Profiling;
 
 public class Bullet : MonoBehaviourPun
 {
     static readonly List<Collider2D> ActiveBulletColliders = new List<Collider2D>();
     static readonly Collider2D[] AreaDamageHits = new Collider2D[96];
+    static readonly ProfilerMarker RocketGuidanceMarker = new ProfilerMarker("Bullet.RocketGuidance");
     const string RocketProjectileResourcePath = "Items/rakieta";
     const string PilotBreachProjectileMarker = "sir_breach";
     const string WeaponMetadataMarker = "weapon_meta";
     const string ContainerAutoCannonEffectId = "container_auto_cannon";
+    public const string SimpleBoltEffectId = "simple_bolt";
+    public const string TripleBoltEffectId = "triple_bolt";
+    public const string DroidBoltEffectId = "droid_bolt";
+    public const string MilitaryVanTracerEffectId = "military_van_tracer";
     const float RocketProjectileBaseWorldLength = 0.58f;
     const float PulseDisruptorMinimumDamageMultiplier = 0.35f;
     const int PilotBreachTraceCount = 3;
@@ -62,6 +68,7 @@ public class Bullet : MonoBehaviourPun
     LineRenderer[] pirateFighterStreakLines;
     LineRenderer[] autoTurretBoltLines;
     LineRenderer[] gatlingTracerLines;
+    LineRenderer[] compactBoltLines;
     LineRenderer[] pilotBreachTraceLines;
     SpriteRenderer plasmaInnerRenderer;
     SpriteRenderer plasmaOuterRenderer;
@@ -73,6 +80,15 @@ public class Bullet : MonoBehaviourPun
     float rocketProjectileWorldLength = RocketProjectileBaseWorldLength;
     Rigidbody2D cachedRigidbody;
     Collider2D cachedCollider;
+    PhotonView cachedOwnerView;
+    PlayerShooting cachedOwnerShooting;
+    EnemyBot cachedOwnerBot;
+    PhotonView cachedHomingTargetView;
+    PlayerHealth cachedHomingTargetHealth;
+    int cachedOwnerViewId;
+    int cachedHomingTargetViewId;
+    bool hasResolvedOwnerShooting;
+    bool hasResolvedOwnerBot;
 
     public static void PrewarmRoundAssets()
     {
@@ -103,6 +119,63 @@ public class Bullet : MonoBehaviourPun
     {
         cachedRigidbody = GetComponent<Rigidbody2D>();
         cachedCollider = GetComponent<Collider2D>();
+    }
+
+    PhotonView GetCachedOwnerView()
+    {
+        if (ownerViewID <= 0)
+            return null;
+
+        if (cachedOwnerView == null || cachedOwnerViewId != ownerViewID)
+        {
+            cachedOwnerView = PhotonView.Find(ownerViewID);
+            cachedOwnerViewId = ownerViewID;
+            cachedOwnerShooting = null;
+            cachedOwnerBot = null;
+            hasResolvedOwnerShooting = false;
+            hasResolvedOwnerBot = false;
+        }
+
+        return cachedOwnerView;
+    }
+
+    PlayerShooting GetCachedOwnerShooting()
+    {
+        PhotonView ownerView = GetCachedOwnerView();
+        if (!hasResolvedOwnerShooting)
+        {
+            cachedOwnerShooting = ownerView != null ? ownerView.GetComponent<PlayerShooting>() : null;
+            hasResolvedOwnerShooting = true;
+        }
+
+        return cachedOwnerShooting;
+    }
+
+    EnemyBot GetCachedOwnerBot()
+    {
+        PhotonView ownerView = GetCachedOwnerView();
+        if (!hasResolvedOwnerBot)
+        {
+            cachedOwnerBot = ownerView != null ? ownerView.GetComponent<EnemyBot>() : null;
+            hasResolvedOwnerBot = true;
+        }
+
+        return cachedOwnerBot;
+    }
+
+    PlayerHealth GetCachedHomingTargetHealth()
+    {
+        if (homingTargetViewId <= 0)
+            return null;
+
+        if (cachedHomingTargetView == null || cachedHomingTargetViewId != homingTargetViewId)
+        {
+            cachedHomingTargetView = PhotonView.Find(homingTargetViewId);
+            cachedHomingTargetViewId = homingTargetViewId;
+            cachedHomingTargetHealth = cachedHomingTargetView != null ? cachedHomingTargetView.GetComponent<PlayerHealth>() : null;
+        }
+
+        return cachedHomingTargetHealth;
     }
 
     void Start()
@@ -244,6 +317,12 @@ public class Bullet : MonoBehaviourPun
         PlayerHealth hp = collision.gameObject.GetComponentInParent<PlayerHealth>();
         if (deployable == null && hp != null && hp.GetComponent<LureBeaconDecoy>() == null && hp.photonView.ViewID != ownerViewID)
         {
+            if (ShouldIgnoreFriendlyEnemyTarget(hp))
+            {
+                IgnoreCollision(collision);
+                return;
+            }
+
             Vector2 impactPoint = collision.contactCount > 0 ? collision.GetContact(0).point : (Vector2)transform.position;
             ApplyDamageToHealth(hp, impactPoint, true);
         }
@@ -454,6 +533,9 @@ public class Bullet : MonoBehaviourPun
                 continue;
             }
 
+            if (ShouldIgnoreFriendlyEnemyTarget(hp))
+                continue;
+
             ApplyDamageToHealth(hp, hp.transform.position, false, canDamageOwnerInArea);
         }
     }
@@ -617,16 +699,24 @@ public class Bullet : MonoBehaviourPun
         if (beacon == null || beacon.photonView == null || beacon.photonView.ViewID == ownerViewID)
             return false;
 
-        PhotonView attackerView = ownerViewID > 0 ? PhotonView.Find(ownerViewID) : null;
-        if (attackerView == null)
+        return GetCachedOwnerBot() != null;
+    }
+
+    bool ShouldIgnoreFriendlyEnemyTarget(PlayerHealth hp)
+    {
+        if (hp == null)
             return false;
 
-        return attackerView.GetComponent<EnemyBot>() != null;
+        EnemyBot targetBot = hp.GetComponent<EnemyBot>();
+        if (targetBot == null)
+            return false;
+
+        return EnemyFriendlyFirePolicy.ShouldIgnoreProjectileHit(GetCachedOwnerBot(), targetBot, hitEffectId);
     }
 
     int GetPilotObstacleDamage(int baseDamage, string obstacleStableId)
     {
-        PhotonView ownerView = ownerViewID > 0 ? PhotonView.Find(ownerViewID) : null;
+        PhotonView ownerView = GetCachedOwnerView();
         float multiplier = 1f;
         if (ownerView != null && PilotCatalog.IsSelectedPilot(ownerView.Owner, PilotCatalog.SirNowitzkyId))
             multiplier *= 1.5f;
@@ -642,9 +732,9 @@ public class Bullet : MonoBehaviourPun
 
     void NotifyOwnerComplexHit()
     {
-        PhotonView ownerView = PhotonView.Find(ownerViewID);
-        PlayerShooting shooting = ownerView != null ? ownerView.GetComponent<PlayerShooting>() : null;
-        if (shooting != null && ownerView.IsMine)
+        PhotonView ownerView = GetCachedOwnerView();
+        PlayerShooting shooting = GetCachedOwnerShooting();
+        if (shooting != null && ownerView != null && ownerView.IsMine)
             shooting.AddSuperChargeForDamage();
     }
 
@@ -726,16 +816,18 @@ public class Bullet : MonoBehaviourPun
             : (Vector2)transform.up;
         float speed = rocketSpeed > 0.01f ? rocketSpeed : Mathf.Max(0.5f, rb.linearVelocity.magnitude);
 
-        PhotonView targetView = homingTargetViewId > 0 ? PhotonView.Find(homingTargetViewId) : null;
-        PlayerHealth targetHealth = targetView != null ? targetView.GetComponent<PlayerHealth>() : null;
-        if (targetHealth != null && !targetHealth.IsWreck)
+        using (RocketGuidanceMarker.Auto())
         {
-            Vector2 toTarget = (Vector2)targetView.transform.position - (Vector2)transform.position;
-            if (toTarget.sqrMagnitude > 0.0001f)
+            PlayerHealth targetHealth = GetCachedHomingTargetHealth();
+            if (targetHealth != null && !targetHealth.IsWreck)
             {
-                float maxRadians = Mathf.Max(0f, homingTurnRateDegrees) * Mathf.Deg2Rad * Time.deltaTime;
-                Vector3 guided = Vector3.RotateTowards(currentDirection, toTarget.normalized, maxRadians, 0f);
-                currentDirection = new Vector2(guided.x, guided.y).normalized;
+                Vector2 toTarget = (Vector2)targetHealth.transform.position - (Vector2)transform.position;
+                if (toTarget.sqrMagnitude > 0.0001f)
+                {
+                    float maxRadians = Mathf.Max(0f, homingTurnRateDegrees) * Mathf.Deg2Rad * Time.deltaTime;
+                    Vector3 guided = Vector3.RotateTowards(currentDirection, toTarget.normalized, maxRadians, 0f);
+                    currentDirection = new Vector2(guided.x, guided.y).normalized;
+                }
             }
         }
 
@@ -983,6 +1075,10 @@ public class Bullet : MonoBehaviourPun
             {
                 EnsureGatlingProjectileVisual(spriteRenderer);
             }
+            else if (IsCompactBoltProjectile())
+            {
+                EnsureCompactBoltProjectileVisual(spriteRenderer);
+            }
             else if (IsPlasmaProjectile())
             {
                 EnsurePlasmaProjectileVisual(spriteRenderer);
@@ -1057,6 +1153,34 @@ public class Bullet : MonoBehaviourPun
     bool IsGatlingProjectile()
     {
         return string.Equals(hitEffectId, "gatling", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    bool IsSimpleBoltProjectile()
+    {
+        return string.Equals(hitEffectId, SimpleBoltEffectId, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    bool IsTripleBoltProjectile()
+    {
+        return string.Equals(hitEffectId, TripleBoltEffectId, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    bool IsDroidBoltProjectile()
+    {
+        return string.Equals(hitEffectId, DroidBoltEffectId, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    bool IsMilitaryVanTracerProjectile()
+    {
+        return string.Equals(hitEffectId, MilitaryVanTracerEffectId, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    bool IsCompactBoltProjectile()
+    {
+        return IsSimpleBoltProjectile() ||
+               IsTripleBoltProjectile() ||
+               IsDroidBoltProjectile() ||
+               IsMilitaryVanTracerProjectile();
     }
 
     bool IsPlasmaProjectile()
@@ -1390,6 +1514,9 @@ public class Bullet : MonoBehaviourPun
 
         if (IsGatlingProjectile())
             UpdateGatlingProjectileVisual();
+
+        if (IsCompactBoltProjectile())
+            UpdateCompactBoltProjectileVisual();
 
         if (IsPlasmaProjectile())
             UpdatePlasmaProjectileVisual();
@@ -1736,6 +1863,234 @@ public class Bullet : MonoBehaviourPun
         UpdateGatlingProjectileVisual();
     }
 
+    void EnsureCompactBoltProjectileVisual(SpriteRenderer coreRenderer)
+    {
+        if (compactBoltLines != null && compactBoltLines.Length > 0)
+            return;
+
+        if (coreRenderer != null)
+        {
+            coreRenderer.color = ResolveCompactBoltCoreColor();
+            EnsureProjectileGlow(coreRenderer, ResolveCompactBoltGlowName(), ResolveCompactBoltGlowColor(), ResolveCompactBoltGlowScale());
+        }
+
+        int lineCount = ResolveCompactBoltLineCount();
+        compactBoltLines = new LineRenderer[lineCount];
+        for (int i = 0; i < compactBoltLines.Length; i++)
+        {
+            GameObject lineObject = new GameObject(ResolveCompactBoltObjectPrefix() + "_" + i);
+            lineObject.transform.SetParent(transform, false);
+
+            LineRenderer line = lineObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 2;
+            line.textureMode = LineTextureMode.Stretch;
+            line.alignment = LineAlignment.View;
+            line.numCapVertices = IsMilitaryVanTracerProjectile() ? 3 : 2;
+            line.numCornerVertices = 1;
+            line.sharedMaterial = GetProjectileLineMaterial();
+            line.startColor = ResolveCompactBoltStartColor(i);
+            line.endColor = ResolveCompactBoltEndColor(i);
+            line.widthMultiplier = ResolveCompactBoltLineWidth(i);
+            if (coreRenderer != null)
+            {
+                line.sortingLayerID = coreRenderer.sortingLayerID;
+                line.sortingOrder = coreRenderer.sortingOrder + (i == 0 ? 4 : 3);
+            }
+
+            compactBoltLines[i] = line;
+        }
+
+        UpdateCompactBoltProjectileVisual();
+    }
+
+    string ResolveCompactBoltGlowName()
+    {
+        if (IsTripleBoltProjectile())
+            return "TripleBoltGlow";
+
+        if (IsDroidBoltProjectile())
+            return "DroidBoltGlow";
+
+        if (IsMilitaryVanTracerProjectile())
+            return "MilitaryVanTracerGlow";
+
+        return "SimpleBoltGlow";
+    }
+
+    string ResolveCompactBoltObjectPrefix()
+    {
+        if (IsTripleBoltProjectile())
+            return "TripleBoltTracer";
+
+        if (IsDroidBoltProjectile())
+            return "DroidSparkTracer";
+
+        if (IsMilitaryVanTracerProjectile())
+            return "MilitaryVanTracer";
+
+        return "SimpleBoltTracer";
+    }
+
+    int ResolveCompactBoltLineCount()
+    {
+        return IsMilitaryVanTracerProjectile() ? 3 : 2;
+    }
+
+    Color ResolveCompactBoltCoreColor()
+    {
+        if (IsTripleBoltProjectile())
+            return new Color(1f, 0.94f, 0.66f, 0.96f);
+
+        if (IsDroidBoltProjectile())
+            return new Color(1f, 0.26f, 0.08f, 0.96f);
+
+        if (IsMilitaryVanTracerProjectile())
+            return new Color(1f, 0.18f, 0.06f, 0.94f);
+
+        return new Color(0.78f, 0.96f, 1f, 0.98f);
+    }
+
+    Color ResolveCompactBoltGlowColor()
+    {
+        if (IsTripleBoltProjectile())
+            return new Color(1f, 0.68f, 0.16f, 0.26f);
+
+        if (IsDroidBoltProjectile())
+            return new Color(1f, 0.08f, 0.02f, 0.34f);
+
+        if (IsMilitaryVanTracerProjectile())
+            return new Color(1f, 0.08f, 0.02f, 0.3f);
+
+        return new Color(0.18f, 0.78f, 1f, 0.3f);
+    }
+
+    float ResolveCompactBoltGlowScale()
+    {
+        if (IsMilitaryVanTracerProjectile())
+            return 1.85f;
+
+        if (IsDroidBoltProjectile())
+            return 1.72f;
+
+        return 1.65f;
+    }
+
+    Color ResolveCompactBoltStartColor(int index)
+    {
+        if (IsTripleBoltProjectile())
+            return index == 0 ? new Color(1f, 0.98f, 0.72f, 0.96f) : new Color(1f, 0.58f, 0.12f, 0.34f);
+
+        if (IsDroidBoltProjectile())
+            return index == 0 ? new Color(1f, 0.84f, 0.55f, 0.95f) : new Color(1f, 0.14f, 0.02f, 0.44f);
+
+        if (IsMilitaryVanTracerProjectile())
+        {
+            if (index == 0)
+                return new Color(1f, 0.9f, 0.68f, 0.98f);
+
+            return index == 1 ? new Color(1f, 0.16f, 0.04f, 0.52f) : new Color(1f, 0.55f, 0.12f, 0.32f);
+        }
+
+        return index == 0 ? new Color(0.88f, 0.98f, 1f, 0.98f) : new Color(0.12f, 0.68f, 1f, 0.38f);
+    }
+
+    Color ResolveCompactBoltEndColor(int index)
+    {
+        if (IsTripleBoltProjectile())
+            return index == 0 ? new Color(1f, 0.54f, 0.1f, 0.58f) : new Color(0.85f, 0.18f, 0.02f, 0f);
+
+        if (IsDroidBoltProjectile())
+            return index == 0 ? new Color(1f, 0.18f, 0.04f, 0.62f) : new Color(0.75f, 0.02f, 0.01f, 0f);
+
+        if (IsMilitaryVanTracerProjectile())
+        {
+            if (index == 0)
+                return new Color(1f, 0.24f, 0.06f, 0.72f);
+
+            return index == 1 ? new Color(0.8f, 0.02f, 0.01f, 0.04f) : new Color(0.9f, 0.18f, 0.02f, 0f);
+        }
+
+        return index == 0 ? new Color(0.16f, 0.74f, 1f, 0.66f) : new Color(0.04f, 0.2f, 1f, 0f);
+    }
+
+    float ResolveCompactBoltLineWidth(int index)
+    {
+        float scale = Mathf.Max(0.7f, visualScaleMultiplier);
+        if (IsMilitaryVanTracerProjectile())
+        {
+            if (index == 0)
+                return 0.045f * scale;
+
+            return (index == 1 ? 0.096f : 0.024f) * scale;
+        }
+
+        if (IsDroidBoltProjectile())
+            return (index == 0 ? 0.036f : 0.082f) * scale;
+
+        if (IsTripleBoltProjectile())
+            return (index == 0 ? 0.03f : 0.068f) * scale;
+
+        return (index == 0 ? 0.034f : 0.078f) * scale;
+    }
+
+    float ResolveCompactBoltLength()
+    {
+        float scale = Mathf.Clamp(visualScaleMultiplier, 0.75f, 1.18f);
+        if (IsMilitaryVanTracerProjectile())
+            return 0.5f * scale;
+
+        if (IsTripleBoltProjectile())
+            return 0.36f * scale;
+
+        if (IsDroidBoltProjectile())
+            return 0.34f * scale;
+
+        return 0.42f * scale;
+    }
+
+    void UpdateCompactBoltProjectileVisual()
+    {
+        if (compactBoltLines == null || compactBoltLines.Length == 0)
+            return;
+
+        Vector2 direction = GetTravelDirection();
+        Vector2 tangent = new Vector2(-direction.y, direction.x);
+        Vector3 center = transform.position;
+        float length = ResolveCompactBoltLength();
+        float seed = photonView != null ? photonView.ViewID * 0.17f : 0f;
+        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * (IsMilitaryVanTracerProjectile() ? 30f : 24f) + seed);
+
+        for (int i = 0; i < compactBoltLines.Length; i++)
+        {
+            LineRenderer line = compactBoltLines[i];
+            if (line == null)
+                continue;
+
+            float lead = i == 0 ? 0.22f : IsMilitaryVanTracerProjectile() ? 0.08f : 0.12f;
+            float tail = i == 0 ? 0.62f : IsMilitaryVanTracerProjectile() ? 0.86f : 0.74f;
+            float sideOffset = 0f;
+            if (IsDroidBoltProjectile() && i == 1)
+                sideOffset = Mathf.Sin(Time.time * 38f + seed) * 0.028f;
+            else if (IsMilitaryVanTracerProjectile() && i == 2)
+                sideOffset = Mathf.Sin(Time.time * 32f + seed) * 0.018f;
+
+            Vector3 start = center + (Vector3)(direction * (length * lead)) + (Vector3)(tangent * sideOffset);
+            Vector3 end = center - (Vector3)(direction * (length * tail)) - (Vector3)(tangent * sideOffset * 0.35f);
+            line.SetPosition(0, start);
+            line.SetPosition(1, end);
+            line.widthMultiplier = ResolveCompactBoltLineWidth(i) * Mathf.Lerp(0.9f, 1.12f, i == 0 ? pulse : 1f - pulse);
+        }
+
+        if (projectileGlowRenderer != null)
+        {
+            Color glow = ResolveCompactBoltGlowColor();
+            glow.a *= Mathf.Lerp(0.72f, 1.18f, pulse);
+            projectileGlowRenderer.color = glow;
+            projectileGlowRenderer.transform.localScale = Vector3.one * ResolveCompactBoltGlowScale() * Mathf.Lerp(0.92f, 1.08f, pulse);
+        }
+    }
+
     void UpdateGatlingProjectileVisual()
     {
         if (gatlingTracerLines == null || gatlingTracerLines.Length == 0)
@@ -1864,7 +2219,7 @@ public class Bullet : MonoBehaviourPun
 
     float GetOwnerLength()
     {
-        PhotonView ownerView = PhotonView.Find(ownerViewID);
+        PhotonView ownerView = GetCachedOwnerView();
         if (ownerView == null)
             return fallbackPlayerLength;
 

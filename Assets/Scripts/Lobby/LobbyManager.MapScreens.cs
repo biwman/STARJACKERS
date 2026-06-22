@@ -35,8 +35,8 @@ public partial class LobbyManager
             rootRect.offsetMin = Vector2.zero;
             rootRect.offsetMax = Vector2.zero;
             Image rootImage = mapSelectionRootObject.GetComponent<Image>();
-            rootImage.color = new Color(0f, 0f, 0f, 0f);
-            rootImage.raycastTarget = false;
+            rootImage.color = new Color(0.006f, 0.011f, 0.02f, 0.98f);
+            rootImage.raycastTarget = true;
 
             mapSelectionScreenTitleText = CreateStandaloneLabel(mapSelectionRootObject.transform, "MapSelectionHeader", "SELECT MAP", new Vector2(FullScreenSideMargin, -116f), new Vector2(420f, 34f), 30f, TextAlignmentOptions.Left);
 

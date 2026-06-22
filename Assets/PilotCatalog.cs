@@ -179,7 +179,7 @@ public static class PilotCatalog
         new[]
         {
             "Returning with at least 6 more occupied cargo slots than at round start grants extra 1000 Astrons.",
-            "Pirate Fighters, Elites and Aces do not attack unless attacked first.",
+            "Damage taken from pirate enemies is reduced by 20%.",
             "Returning in the last 30 seconds grants extra 2000 Astrons."
         },
         "Confusion Wave",

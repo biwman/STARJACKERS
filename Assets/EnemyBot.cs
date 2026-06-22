@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Photon.Pun;
 using UnityEngine;
+using Unity.Profiling;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -10,6 +11,7 @@ using UnityEditor;
 [RequireComponent(typeof(Rigidbody2D))]
 public class EnemyBot : MonoBehaviourPun
 {
+    static readonly ProfilerMarker MineOwnerCollisionIgnoreMarker = new ProfilerMarker("EnemyBot.MineOwnerCollisionIgnore");
     const string PlayerPlacedMineMarker = "player_gadget_mine";
     public const string ContainerShipMineMarker = "container_ship_mine";
     const string SummonedDroneMarker = "space_truck_summoned_drone";
@@ -23,6 +25,11 @@ public class EnemyBot : MonoBehaviourPun
     PlayerHealth health;
     EnemyBotBehaviorBase behavior;
     SpriteRenderer cachedRenderer;
+    HideInNebulaTarget cachedNebulaTarget;
+    PlayerShooting cachedPlayerShooting;
+    PhotonView cachedMineOwnerView;
+    Collider2D[] cachedMineColliders;
+    Collider2D[] cachedMineOwnerColliders;
     EnemyBotKind kind;
     bool hasInitialized;
     bool hasAppliedStats;
@@ -55,7 +62,10 @@ public class EnemyBot : MonoBehaviourPun
     float confusedUntil;
     float nextConfusedDirectionAt;
     float nextConfusedShotAt;
+    float nextNebulaTargetLookupAt;
+    float nextMineOwnerCollisionRetryAt;
     Vector2 confusedMoveDirection = Vector2.up;
+    bool mineOwnerCollisionIgnoreApplied;
 
     public EnemyBotKind Kind => kind;
     public EnemyBotDefinition Definition => EnemyBotCatalog.GetDefinition(kind);
@@ -92,8 +102,13 @@ public class EnemyBot : MonoBehaviourPun
     {
         get
         {
-            HideInNebulaTarget nebulaTarget = GetComponent<HideInNebulaTarget>();
-            return nebulaTarget != null ? nebulaTarget.CurrentNebulaSpeedMultiplier : 1f;
+            if (cachedNebulaTarget == null && Time.unscaledTime >= nextNebulaTargetLookupAt)
+            {
+                cachedNebulaTarget = GetComponent<HideInNebulaTarget>();
+                nextNebulaTargetLookupAt = Time.unscaledTime + 0.5f;
+            }
+
+            return cachedNebulaTarget != null ? cachedNebulaTarget.CurrentNebulaSpeedMultiplier : 1f;
         }
     }
 
@@ -199,6 +214,8 @@ public class EnemyBot : MonoBehaviourPun
         view = GetComponent<PhotonView>();
         rb = GetComponent<Rigidbody2D>();
         health = GetComponent<PlayerHealth>();
+        cachedNebulaTarget = GetComponent<HideInNebulaTarget>();
+        cachedPlayerShooting = GetComponent<PlayerShooting>();
         kind = GetKindFromInstantiationData(view != null ? view.InstantiationData : null);
         ResolveSpecialMineOwner(view != null ? view.InstantiationData : null);
         ResolveContainerShipCargoVariant(view != null ? view.InstantiationData : null);
@@ -288,11 +305,21 @@ public class EnemyBot : MonoBehaviourPun
         if (IsConfused)
         {
             ApplyConfusedBehavior();
+            ApplyGravityWellShipDrift();
             return;
         }
 
         behavior?.TickBehavior();
         ApplyToxicBorderVelocityCorrection();
+        ApplyGravityWellShipDrift();
+    }
+
+    void ApplyGravityWellShipDrift()
+    {
+        if (rb == null || isOwnedMine || IsSpaceMine || IsPirateBase)
+            return;
+
+        GravityWellPhysicsField.ApplyShipDrift(rb, 0.72f);
     }
 
     void ApplyToxicBorderVelocityCorrection()
@@ -352,7 +379,7 @@ public class EnemyBot : MonoBehaviourPun
         float targetAngle = Mathf.Atan2(confusedMoveDirection.y, confusedMoveDirection.x) * Mathf.Rad2Deg - 90f;
         rb.MoveRotation(Mathf.MoveTowardsAngle(rb.rotation, targetAngle, 240f * Time.fixedDeltaTime));
 
-        PlayerShooting shooting = GetComponent<PlayerShooting>();
+        PlayerShooting shooting = GetCachedPlayerShooting();
         if (shooting != null && Time.time >= nextConfusedShotAt)
         {
             Vector2 shotDirection = Random.insideUnitCircle;
@@ -741,6 +768,14 @@ public class EnemyBot : MonoBehaviourPun
         }
     }
 
+    PlayerShooting GetCachedPlayerShooting()
+    {
+        if (cachedPlayerShooting == null)
+            cachedPlayerShooting = GetComponent<PlayerShooting>();
+
+        return cachedPlayerShooting;
+    }
+
     [PunRPC]
     void PlayMineDetonationEffects(float x, float y, float z)
     {
@@ -792,6 +827,7 @@ public class EnemyBot : MonoBehaviourPun
         isPlayerPlacedMine = false;
         isOwnedMine = false;
         mineOwnerViewId = 0;
+        ResetMineOwnerCollisionCache();
 
         if (kind != EnemyBotKind.SpaceMine || instantiationData == null || instantiationData.Length < 3)
             return;
@@ -810,6 +846,15 @@ public class EnemyBot : MonoBehaviourPun
             isOwnedMine = true;
             mineOwnerViewId = ownerViewId;
         }
+    }
+
+    void ResetMineOwnerCollisionCache()
+    {
+        cachedMineOwnerView = null;
+        cachedMineColliders = null;
+        cachedMineOwnerColliders = null;
+        mineOwnerCollisionIgnoreApplied = false;
+        nextMineOwnerCollisionRetryAt = 0f;
     }
 
     void ResolveContainerShipCargoVariant(object[] instantiationData)
@@ -1016,26 +1061,49 @@ public class EnemyBot : MonoBehaviourPun
         if (!isOwnedMine || mineOwnerViewId <= 0)
             return;
 
-        PhotonView ownerView = PhotonView.Find(mineOwnerViewId);
-        if (ownerView == null)
+        if (mineOwnerCollisionIgnoreApplied || Time.unscaledTime < nextMineOwnerCollisionRetryAt)
             return;
 
-        Collider2D[] mineColliders = GetComponentsInChildren<Collider2D>(true);
-        Collider2D[] ownerColliders = ownerView.GetComponentsInChildren<Collider2D>(true);
-        for (int i = 0; i < mineColliders.Length; i++)
+        using (MineOwnerCollisionIgnoreMarker.Auto())
         {
-            Collider2D mineCollider = mineColliders[i];
-            if (mineCollider == null)
-                continue;
+            if (cachedMineOwnerView == null || cachedMineOwnerView.ViewID != mineOwnerViewId)
+                cachedMineOwnerView = PhotonView.Find(mineOwnerViewId);
 
-            for (int j = 0; j < ownerColliders.Length; j++)
+            if (cachedMineOwnerView == null)
             {
-                Collider2D ownerCollider = ownerColliders[j];
-                if (ownerCollider == null)
+                nextMineOwnerCollisionRetryAt = Time.unscaledTime + 0.25f;
+                return;
+            }
+
+            if (cachedMineColliders == null || cachedMineColliders.Length == 0)
+                cachedMineColliders = GetComponentsInChildren<Collider2D>(true);
+
+            if (cachedMineOwnerColliders == null || cachedMineOwnerColliders.Length == 0)
+                cachedMineOwnerColliders = cachedMineOwnerView.GetComponentsInChildren<Collider2D>(true);
+
+            if (cachedMineColliders.Length == 0 || cachedMineOwnerColliders.Length == 0)
+            {
+                nextMineOwnerCollisionRetryAt = Time.unscaledTime + 0.5f;
+                return;
+            }
+
+            for (int i = 0; i < cachedMineColliders.Length; i++)
+            {
+                Collider2D mineCollider = cachedMineColliders[i];
+                if (mineCollider == null)
                     continue;
 
-                Physics2D.IgnoreCollision(mineCollider, ownerCollider, true);
+                for (int j = 0; j < cachedMineOwnerColliders.Length; j++)
+                {
+                    Collider2D ownerCollider = cachedMineOwnerColliders[j];
+                    if (ownerCollider == null)
+                        continue;
+
+                    Physics2D.IgnoreCollision(mineCollider, ownerCollider, true);
+                }
             }
+
+            mineOwnerCollisionIgnoreApplied = true;
         }
     }
 

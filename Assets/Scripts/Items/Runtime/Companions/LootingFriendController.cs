@@ -13,7 +13,10 @@ public sealed class LootingFriendController : MonoBehaviourPun
     const float ScanInterval = 0.18f;
     const float CollectRangeMultiplier = 1.3f;
     const float VisualTargetWorldSize = GameVisualTheme.PlayerTargetSize * 0.22f;
+    const float EquipmentRefreshInterval = 0.5f;
 
+    PlayerHealth health;
+    TreasureCollector collector;
     SpriteRenderer visualRenderer;
     LineRenderer beam;
     AudioSource collectAudioSource;
@@ -22,11 +25,15 @@ public sealed class LootingFriendController : MonoBehaviourPun
     float nextScanTime;
     bool visualActive;
     bool forcedForNeutralRider;
+    bool cachedEquipped;
+    float nextEquipmentRefreshTime;
 
     float CollectRange => Treasure.CollectRange * CollectRangeMultiplier;
 
     void Start()
     {
+        health = GetComponent<PlayerHealth>();
+        collector = GetComponent<TreasureCollector>();
         EnsureVisual();
         SetupCollectAudio();
     }
@@ -59,7 +66,9 @@ public sealed class LootingFriendController : MonoBehaviourPun
         if (!photonView.IsMine)
             return;
 
-        TreasureCollector collector = GetComponent<TreasureCollector>();
+        if (collector == null)
+            collector = GetComponent<TreasureCollector>();
+
         if (collector != null && collector.IsCollectingAny)
         {
             StopCollecting();
@@ -93,18 +102,14 @@ public sealed class LootingFriendController : MonoBehaviourPun
 
     public void SetNeutralRiderCollectFx(int targetViewId, bool active)
     {
-        if (photonView != null)
-        {
-            photonView.RPC(nameof(SetLootingFriendCollectFxRpc), RpcTarget.All, targetViewId, active);
-            return;
-        }
-
-        SetLootingFriendCollectFxRpc(targetViewId, active);
+        SetLootingFriendCollectFx(targetViewId, active);
     }
 
     bool CanLootingFriendRun()
     {
-        PlayerHealth health = GetComponent<PlayerHealth>();
+        if (health == null)
+            health = GetComponent<PlayerHealth>();
+
         return health != null &&
                health.isActiveAndEnabled &&
                !health.IsWreck &&
@@ -117,10 +122,15 @@ public sealed class LootingFriendController : MonoBehaviourPun
         if (forcedForNeutralRider)
             return true;
 
+        if (Time.unscaledTime < nextEquipmentRefreshTime)
+            return cachedEquipped;
+
+        nextEquipmentRefreshTime = Time.unscaledTime + EquipmentRefreshInterval;
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
         int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
         string[] equipment = PlayerProfileService.GetPlayerEquipmentSlots(owner);
-        return InventoryItemCatalog.HasEquippedItem(equipment, shipSkinIndex, InventoryItemCatalog.LootingFriendId);
+        cachedEquipped = InventoryItemCatalog.HasEquippedItem(equipment, shipSkinIndex, InventoryItemCatalog.LootingFriendId);
+        return cachedEquipped;
     }
 
     PhotonView FindAutoLootTarget()
@@ -135,7 +145,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
         PhotonView best = null;
         float bestDistance = float.MaxValue;
 
-        Treasure[] treasures = FindObjectsByType<Treasure>(FindObjectsInactive.Exclude);
+        Treasure[] treasures = RuntimeSceneQueryCache.GetTreasures();
         for (int i = 0; i < treasures.Length; i++)
         {
             Treasure treasure = treasures[i];
@@ -149,7 +159,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
             ConsiderTarget(treasure.GetComponent<PhotonView>(), treasure.transform.position, origin, ref best, ref bestDistance);
         }
 
-        ShipWreck[] wrecks = FindObjectsByType<ShipWreck>(FindObjectsInactive.Exclude);
+        ShipWreck[] wrecks = RuntimeSceneQueryCache.GetShipWrecks();
         for (int i = 0; i < wrecks.Length; i++)
         {
             ShipWreck wreck = wrecks[i];
@@ -163,7 +173,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
             ConsiderTarget(wreck.GetComponent<PhotonView>(), wreck.transform.position, origin, ref best, ref bestDistance);
         }
 
-        DroppedCargoCrate[] crates = FindObjectsByType<DroppedCargoCrate>(FindObjectsInactive.Exclude);
+        DroppedCargoCrate[] crates = RuntimeSceneQueryCache.GetDroppedCargoCrates();
         for (int i = 0; i < crates.Length; i++)
         {
             DroppedCargoCrate crate = crates[i];
@@ -205,14 +215,16 @@ public sealed class LootingFriendController : MonoBehaviourPun
         }
 
         int targetViewId = target != null ? target.ViewID : 0;
-        photonView.RPC(nameof(SetLootingFriendCollectFxRpc), RpcTarget.All, targetViewId, true);
+        SetLootingFriendCollectFx(targetViewId, true);
         float startedAt = Time.time;
         while (Time.time < startedAt + CollectDuration)
         {
             if (!CanLootingFriendRun())
                 break;
 
-            TreasureCollector collector = GetComponent<TreasureCollector>();
+            if (collector == null)
+                collector = GetComponent<TreasureCollector>();
+
             if (collector != null && collector.IsCollectingAny)
                 break;
 
@@ -223,7 +235,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
         }
 
         bool completed = target != null && Time.time >= startedAt + CollectDuration && IsTargetStillCollectible(target);
-        photonView.RPC(nameof(SetLootingFriendCollectFxRpc), RpcTarget.All, targetViewId, false);
+        SetLootingFriendCollectFx(targetViewId, false);
         collectRoutine = null;
 
         if (completed)
@@ -261,7 +273,7 @@ public sealed class LootingFriendController : MonoBehaviourPun
 
     void RequestLoot(PhotonView target)
     {
-        if (target == null || photonView == null || !CanLootingFriendRun())
+        if (target == null || photonView == null || !PhotonNetwork.InRoom || !CanLootingFriendRun())
             return;
 
         if (target.GetComponent<Treasure>() != null)
@@ -435,11 +447,22 @@ public sealed class LootingFriendController : MonoBehaviourPun
         }
 
         if (photonView != null && photonView.IsMine && currentTarget != null)
-            photonView.RPC(nameof(SetLootingFriendCollectFxRpc), RpcTarget.All, currentTarget.ViewID, false);
+            SetLootingFriendCollectFx(currentTarget.ViewID, false);
 
         currentTarget = null;
         SetBeamEnabled(false);
         SetCollectAudio(false);
+    }
+
+    void SetLootingFriendCollectFx(int targetViewId, bool active)
+    {
+        if (photonView != null && PhotonNetwork.InRoom)
+        {
+            photonView.RPC(nameof(SetLootingFriendCollectFxRpc), RpcTarget.All, targetViewId, active);
+            return;
+        }
+
+        SetLootingFriendCollectFxRpc(targetViewId, active);
     }
 
     void EnsureVisual()

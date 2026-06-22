@@ -72,6 +72,25 @@ public sealed class BulletImpactVfx : MonoBehaviour
             return;
         }
 
+        if (string.Equals(effectId, Bullet.SimpleBoltEffectId, System.StringComparison.OrdinalIgnoreCase))
+        {
+            ConfigureCompactSpark(direction, scale, new Color(0.82f, 0.97f, 1f, 0.72f), new Color(0.12f, 0.62f, 1f, 0f));
+            return;
+        }
+
+        if (string.Equals(effectId, Bullet.TripleBoltEffectId, System.StringComparison.OrdinalIgnoreCase))
+        {
+            ConfigureCompactSpark(direction, scale, new Color(1f, 0.9f, 0.48f, 0.7f), new Color(0.95f, 0.22f, 0.03f, 0f));
+            return;
+        }
+
+        if (string.Equals(effectId, Bullet.DroidBoltEffectId, System.StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(effectId, Bullet.MilitaryVanTracerEffectId, System.StringComparison.OrdinalIgnoreCase))
+        {
+            ConfigureCompactSpark(direction, scale, new Color(1f, 0.58f, 0.24f, 0.72f), new Color(0.85f, 0.04f, 0.02f, 0f));
+            return;
+        }
+
         ConfigureDefault(direction, scale);
     }
 
@@ -144,6 +163,24 @@ public sealed class BulletImpactVfx : MonoBehaviour
         {
             Vector2 spark = Quaternion.Euler(0f, 0f, -35f + i * 23f) * -direction;
             AddLine(i, Vector2.zero, spark.normalized * Random.Range(0.16f, 0.36f) * scale, Random.Range(0.012f, 0.026f) * scale, new Color(0.9f, 0.95f, 1f, 0.64f), new Color(0.35f, 0.7f, 1f, 0f));
+        }
+    }
+
+    void ConfigureCompactSpark(Vector2 direction, float scale, Color startColor, Color endColor)
+    {
+        duration = DefaultDuration * 0.82f;
+        lines = new LineRenderer[4];
+        baseWidths = new float[lines.Length];
+        startColors = new Color[lines.Length];
+        endColors = new Color[lines.Length];
+
+        Vector2 tangent = new Vector2(-direction.y, direction.x);
+        AddLine(0, Vector2.zero, -direction * 0.24f * scale, 0.022f * scale, startColor, endColor);
+        for (int i = 1; i < lines.Length; i++)
+        {
+            float side = i % 2 == 0 ? 1f : -1f;
+            Vector2 spark = (-direction * Random.Range(0.1f, 0.28f) + tangent * side * Random.Range(0.16f, 0.42f)).normalized;
+            AddLine(i, Vector2.zero, spark * Random.Range(0.12f, 0.28f) * scale, Random.Range(0.01f, 0.022f) * scale, startColor, endColor);
         }
     }
 

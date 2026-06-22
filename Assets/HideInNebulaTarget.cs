@@ -287,9 +287,10 @@ public class HideInNebulaTarget : MonoBehaviour
         bool hasActiveCloak = HasActiveCloak();
         bool shouldHide = hasHiddenNebula || hasActiveCloak;
         bool keepLocallyVisible = IsLocalHumanControlledCharacter();
+        bool keepLootWreckVisible = IsLootWreckWithCargo();
         bool scannerRevealsLocalTarget = hasHiddenNebula && !hasActiveCloak && IsRevealedByLocalShortScanner();
         bool sharesNebulaWithLocalPlayer = hasHiddenNebula && !hasActiveCloak && SharesNebulaWithLocalPlayer();
-        bool shouldBeVisible = !shouldHide || keepLocallyVisible || scannerRevealsLocalTarget || sharesNebulaWithLocalPlayer;
+        bool shouldBeVisible = !shouldHide || keepLocallyVisible || keepLootWreckVisible || scannerRevealsLocalTarget || sharesNebulaWithLocalPlayer;
         SpriteRenderer referenceRenderer = null;
 
         for (int i = 0; i < renderers.Length; i++)
@@ -312,6 +313,15 @@ public class HideInNebulaTarget : MonoBehaviour
                playerHealth != null &&
                !playerHealth.IsBotControlled &&
                !playerHealth.IsWreck;
+    }
+
+    bool IsLootWreckWithCargo()
+    {
+        if (playerHealth == null || !playerHealth.IsWreck)
+            return false;
+
+        ShipWreck wreck = GetComponent<ShipWreck>();
+        return wreck == null || wreck.HasLoot;
     }
 
     bool HasHiddenNebula()

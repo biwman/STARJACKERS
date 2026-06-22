@@ -16,6 +16,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     const float LateJoinBlockThresholdSeconds = 60f;
     const float GameplayRejoinRetryDelaySeconds = 1f;
     const float GameplayRejoinAttemptTimeoutSeconds = 12f;
+    const float PlayerPrefsSaveDebounceSeconds = 0.75f;
     const int GameplayRejoinMaxAttempts = 3;
     const int RoomRejoinGracePeriodMilliseconds = 120000;
     const string ObstacleLayoutKey = "obstacleLayout";
@@ -134,10 +135,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     Coroutine sessionBrowserRecoveryRoutine;
     Coroutine leaveRoomRetryRoutine;
     Coroutine gameplayRejoinRoutine;
+    Coroutine playerPrefsSaveRoutine;
     float joiningLobbyStartedAt = -1f;
     bool reconnectingForBrowserRecovery;
     bool preservePendingBrowserActionAfterLeave;
     bool rejoiningLastRoom;
+    bool playerPrefsSavePending;
     string lastJoinedRoomName;
 
     public static bool SessionRequested { get; private set; }
@@ -335,6 +338,43 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         };
 
         PlayerPrefs.SetString(RememberedLobbySettingsPrefsKey, JsonUtility.ToJson(data));
+        RequestDeferredPlayerPrefsSave();
+    }
+
+    static void RequestDeferredPlayerPrefsSave()
+    {
+        if (instance == null)
+            instance = FindAnyObjectByType<NetworkManager>();
+
+        if (instance != null && instance.isActiveAndEnabled)
+        {
+            instance.RequestDeferredPlayerPrefsSaveInstance();
+            return;
+        }
+
+        PlayerPrefs.Save();
+    }
+
+    void RequestDeferredPlayerPrefsSaveInstance()
+    {
+        playerPrefsSavePending = true;
+        if (playerPrefsSaveRoutine == null)
+            playerPrefsSaveRoutine = StartCoroutine(DeferredPlayerPrefsSaveLoop());
+    }
+
+    System.Collections.IEnumerator DeferredPlayerPrefsSaveLoop()
+    {
+        yield return new WaitForSecondsRealtime(PlayerPrefsSaveDebounceSeconds);
+        playerPrefsSaveRoutine = null;
+        FlushPendingPlayerPrefsSave();
+    }
+
+    void FlushPendingPlayerPrefsSave()
+    {
+        if (!playerPrefsSavePending)
+            return;
+
+        playerPrefsSavePending = false;
         PlayerPrefs.Save();
     }
 
@@ -552,14 +592,36 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     void OnApplicationPause(bool paused)
     {
-        if (!paused)
-            RecoverSessionBrowserConnectionIfNeeded();
+        if (paused)
+        {
+            if (playerPrefsSaveRoutine != null)
+            {
+                StopCoroutine(playerPrefsSaveRoutine);
+                playerPrefsSaveRoutine = null;
+            }
+
+            FlushPendingPlayerPrefsSave();
+            return;
+        }
+
+        RecoverSessionBrowserConnectionIfNeeded();
     }
 
     void OnApplicationFocus(bool focused)
     {
+        if (!focused)
+        {
+            FlushPendingPlayerPrefsSave();
+            return;
+        }
+
         if (focused)
             RecoverSessionBrowserConnectionIfNeeded();
+    }
+
+    void OnApplicationQuit()
+    {
+        FlushPendingPlayerPrefsSave();
     }
 
     void RecoverSessionBrowserConnectionIfNeeded()
@@ -1713,7 +1775,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             .ToList();
 
         PlayerPrefs.SetString(FinishedRoundsPrefsKey, JsonUtility.ToJson(new FinishedRoundRoomsData { entries = entries.ToArray() }));
-        PlayerPrefs.Save();
+        RequestDeferredPlayerPrefsSave();
     }
 
     static string NormalizeLocalFinishedOutcome(string outcome)

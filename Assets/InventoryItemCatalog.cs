@@ -222,6 +222,7 @@ public static class InventoryItemCatalog
     public const string MilitaryVanWreckId = "military_van_wreck";
     public const string MothershipCoreId = "mothership_core";
     public const string VoidMawCoreId = "void_maw_core";
+    public const string RiftWardenWreckId = "rift_warden_wreck";
     public const string NeutralFighterSalvageId = "neutral_fighter_salvage";
     public const string RadarShipSalvageId = "radar_ship_salvage";
     public const string HunterLanceCoreId = "hunter_lance_core";
@@ -1387,6 +1388,20 @@ public static class InventoryItemCatalog
                 CanEnterSafePocket = false,
                 SalvageOutputs = Array.Empty<string>()
             },
+            [RiftWardenWreckId] = new InventoryItemDefinition
+            {
+                Id = RiftWardenWreckId,
+                DisplayName = "Rift Warden Wreck",
+                ShortLabel = "RWD",
+                Description = "Phase-scarred salvage recovered from a destroyed Rift Warden.",
+                ItemType = InventoryItemType.Resource,
+                Category = InventoryItemCategory.Wreck,
+                Rarity = InventoryItemRarity.Epic,
+                SellValueAstrons = 2600,
+                IconResourcePath = "Enemies/RiftWarden/rift_warden_resource",
+                ProjectFileName = "Resources/Enemies/RiftWarden/rift_warden_resource.png",
+                SalvageOutputs = new[] { AsteroidRareId, AsteroidGoldId }
+            },
             [NeutralFighterSalvageId] = new InventoryItemDefinition
             {
                 Id = NeutralFighterSalvageId,
@@ -2427,7 +2442,7 @@ public static class InventoryItemCatalog
                 Id = PirateSymbolId,
                 DisplayName = "Pirate Symbol",
                 ShortLabel = "PIR",
-                Description = "A pirate oath-mark earned through Project OMERTA. It is a quest item for future projects and special events. It can be carried on a ship only in a SAFE cargo slot, so it survives ship loss unless you drop it yourself.",
+                Description = "A pirate oath-mark earned through Project OMERTA. When carried in a SAFE cargo slot, Pirate Fighters, Elites and Aces do not attack unless attacked first. It can be carried on a ship only in a SAFE cargo slot, so it survives ship loss unless you drop it yourself.",
                 ItemType = InventoryItemType.Quest,
                 Category = InventoryItemCategory.QuestItem,
                 Rarity = InventoryItemRarity.Legendary,

@@ -259,6 +259,41 @@ public class PathfinderResearchStationResult
 }
 
 [Serializable]
+public class PlayerCareerStatsData
+{
+    public int ShipEscapes;
+    public int AstronautEscapes;
+    public int ReturnStreakWithoutDeath;
+    public int BestReturnStreakWithoutDeath;
+    public int EnemyKills;
+    public int NeutralRaiderKills;
+    public int HumanPlayerKills;
+    public int AstronsEarned;
+    public int HighestLootReturnedAstrons;
+
+    public static PlayerCareerStatsData Empty()
+    {
+        return new PlayerCareerStatsData();
+    }
+
+    public PlayerCareerStatsData Clone()
+    {
+        return new PlayerCareerStatsData
+        {
+            ShipEscapes = ShipEscapes,
+            AstronautEscapes = AstronautEscapes,
+            ReturnStreakWithoutDeath = ReturnStreakWithoutDeath,
+            BestReturnStreakWithoutDeath = BestReturnStreakWithoutDeath,
+            EnemyKills = EnemyKills,
+            NeutralRaiderKills = NeutralRaiderKills,
+            HumanPlayerKills = HumanPlayerKills,
+            AstronsEarned = AstronsEarned,
+            HighestLootReturnedAstrons = HighestLootReturnedAstrons
+        };
+    }
+}
+
+[Serializable]
 public class PlayerProfileData
 {
     public string Nickname;
@@ -286,6 +321,7 @@ public class PlayerProfileData
     public string[] PilotAtlasMapReturns;
     public PlayerMapUnlockProgressData MapUnlockProgress;
     public PlayerProjectProgressData ProjectProgress;
+    public PlayerCareerStatsData CareerStats;
 
     public static PlayerProfileData Default()
     {
@@ -315,7 +351,8 @@ public class PlayerProfileData
             PilotAshOverloadReturns = 0,
             PilotAtlasMapReturns = Array.Empty<string>(),
             MapUnlockProgress = PlayerProfileService.NormalizeMapUnlockProgress(null),
-            ProjectProgress = ProjectCatalog.NormalizeProgress(null)
+            ProjectProgress = ProjectCatalog.NormalizeProgress(null),
+            CareerStats = PlayerCareerStatsData.Empty()
         };
     }
 }

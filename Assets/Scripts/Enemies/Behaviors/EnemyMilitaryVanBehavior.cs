@@ -11,8 +11,14 @@ public class EnemyMilitaryVanBehavior : EnemyBotBehaviorBase
     const float DefenseSpeedMultiplier = 1.62f;
     const float DefenseDuration = 15f;
     const float EntryProtectionMaxSeconds = 12f;
+    const float EntryProtectionRefreshSeconds = 1.25f;
+    const float EscapeAnimationSeconds = 0.72f;
+    const float EscapeFinalScale = 0.06f;
     const float ExtractionEscapeDistance = 0.85f;
     const float FormationWanderWeight = 0.12f;
+    const float FriendlyLineOfFireRadius = 0.18f;
+
+    static readonly RaycastHit2D[] FriendlyLineOfFireHits = new RaycastHit2D[24];
 
     Rigidbody2D rb;
     PhotonView view;
@@ -31,6 +37,7 @@ public class EnemyMilitaryVanBehavior : EnemyBotBehaviorBase
     bool entryProtectionActive;
     bool hasChosenExtractionRoute;
     bool escapeHandled;
+    Coroutine escapeVisualRoutine;
 
     bool IsDefending => Time.time < defenseUntil;
 
@@ -50,7 +57,7 @@ public class EnemyMilitaryVanBehavior : EnemyBotBehaviorBase
 
     public override void TickBehavior()
     {
-        if (bot == null || view == null || !view.IsMine || rb == null || movement == null)
+        if (bot == null || view == null || !view.IsMine || rb == null || movement == null || escapeHandled)
             return;
 
         if (health != null && health.IsWreck)
@@ -69,6 +76,9 @@ public class EnemyMilitaryVanBehavior : EnemyBotBehaviorBase
 
     public void NotifyDamageSource(int attackerViewId)
     {
+        if (!EnemyFriendlyFirePolicy.ShouldReactToDamageSource(bot, attackerViewId))
+            return;
+
         EnterDefenseMode(attackerViewId, transform.position, true);
     }
 
@@ -101,7 +111,7 @@ public class EnemyMilitaryVanBehavior : EnemyBotBehaviorBase
             weapon.BulletSpeed,
             weapon.ShotSoundId,
             weapon.Range,
-            string.Empty,
+            weapon.HitEffectId ?? string.Empty,
             10f,
             weapon.DamageType,
             weapon.DeliveryMethod,
@@ -121,20 +131,49 @@ public class EnemyMilitaryVanBehavior : EnemyBotBehaviorBase
         if (!entryProtectionActive || health == null)
             return;
 
-        if (IsInsideGameplayBounds() || Time.time >= entryProtectionReleaseAt)
+        if (IsFullyInsideGameplayBounds())
+        {
+            entryProtectionActive = false;
+            health.ClearBotSpawnInvulnerability();
+            return;
+        }
+
+        if (RoomSettings.AreToxicBordersEnabled())
+        {
+            health.BeginBotSpawnInvulnerability(EntryProtectionRefreshSeconds);
+            return;
+        }
+
+        if (Time.time >= entryProtectionReleaseAt)
         {
             entryProtectionActive = false;
             health.ClearBotSpawnInvulnerability();
         }
     }
 
-    bool IsInsideGameplayBounds()
+    bool IsFullyInsideGameplayBounds()
     {
         Vector2 size = RoomSettings.GetGameplayMapDimensions();
-        float halfX = Mathf.Max(0.1f, size.x * 0.5f - 0.2f);
-        float halfY = Mathf.Max(0.1f, size.y * 0.5f - 0.2f);
-        Vector2 position = rb != null ? rb.position : (Vector2)transform.position;
-        return Mathf.Abs(position.x) <= halfX && Mathf.Abs(position.y) <= halfY;
+        float halfX = Mathf.Max(0.1f, size.x * 0.5f);
+        float halfY = Mathf.Max(0.1f, size.y * 0.5f);
+        Bounds bounds = ResolveBodyBounds();
+        return bounds.min.x >= -halfX &&
+               bounds.max.x <= halfX &&
+               bounds.min.y >= -halfY &&
+               bounds.max.y <= halfY;
+    }
+
+    Bounds ResolveBodyBounds()
+    {
+        Collider2D bodyCollider = GetComponentInChildren<Collider2D>();
+        if (bodyCollider != null)
+            return bodyCollider.bounds;
+
+        SpriteRenderer renderer = GetComponentInChildren<SpriteRenderer>();
+        if (renderer != null)
+            return renderer.bounds;
+
+        return new Bounds(rb != null ? rb.position : (Vector2)transform.position, Vector3.one * 0.1f);
     }
 
     void TickCalmFlight()
@@ -226,7 +265,12 @@ public class EnemyMilitaryVanBehavior : EnemyBotBehaviorBase
         if (Vector2.Dot(GetForwardDirection(), aimDirection.normalized) < 0.74f)
             return;
 
-        shooting.TryFireBotVolleyAtPointFromWorld(ResolveMuzzles(), ResolveTargetAimPoint(), Random.Range(-0.035f, 0.035f));
+        Vector2 targetPoint = ResolveTargetAimPoint();
+        Vector3[] clearMuzzles = ResolveMuzzlesWithClearFriendlyLine(targetPoint);
+        if (clearMuzzles.Length <= 0)
+            return;
+
+        shooting.TryFireBotVolleyAtPointFromWorld(clearMuzzles, targetPoint, Random.Range(-0.035f, 0.035f));
     }
 
     Vector3[] ResolveMuzzles()
@@ -247,6 +291,80 @@ public class EnemyMilitaryVanBehavior : EnemyBotBehaviorBase
             center + side * lateral,
             center - side * lateral
         };
+    }
+
+    Vector3[] ResolveMuzzlesWithClearFriendlyLine(Vector2 targetPoint)
+    {
+        Vector3[] muzzles = ResolveMuzzles();
+        List<Vector3> filtered = null;
+        for (int i = 0; i < muzzles.Length; i++)
+        {
+            if (!IsFriendlyLineOfFireBlocked(muzzles[i], targetPoint))
+            {
+                if (filtered != null)
+                    filtered.Add(muzzles[i]);
+
+                continue;
+            }
+
+            if (filtered == null)
+            {
+                filtered = new List<Vector3>(muzzles.Length);
+                for (int previous = 0; previous < i; previous++)
+                    filtered.Add(muzzles[previous]);
+            }
+        }
+
+        return filtered != null ? filtered.ToArray() : muzzles;
+    }
+
+    bool IsFriendlyLineOfFireBlocked(Vector2 origin, Vector2 targetPoint)
+    {
+        Vector2 toTarget = targetPoint - origin;
+        float distance = toTarget.magnitude;
+        if (distance <= 0.05f)
+            return false;
+
+        int hitCount = Physics2D.CircleCast(
+            origin,
+            FriendlyLineOfFireRadius,
+            toTarget / distance,
+            CreateLineOfFireFilter(),
+            FriendlyLineOfFireHits,
+            distance);
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D hitCollider = FriendlyLineOfFireHits[i].collider;
+            if (hitCollider == null || hitCollider.transform == transform || hitCollider.transform.IsChildOf(transform))
+                continue;
+
+            EnemyBot blockerBot = hitCollider.GetComponentInParent<EnemyBot>();
+            if (blockerBot == null || blockerBot == bot)
+                continue;
+
+            PlayerHealth blockerHealth = blockerBot.GetComponent<PlayerHealth>();
+            if (blockerHealth != null && blockerHealth.IsWreck)
+                continue;
+
+            if (EnemyFriendlyFirePolicy.ShouldBlockLineOfFire(bot, blockerBot, ResolveProjectileEffectId()))
+                return true;
+        }
+
+        return false;
+    }
+
+    static ContactFilter2D CreateLineOfFireFilter()
+    {
+        return new ContactFilter2D
+        {
+            useLayerMask = false,
+            useTriggers = false
+        };
+    }
+
+    string ResolveProjectileEffectId()
+    {
+        return weapon != null ? weapon.HitEffectId ?? string.Empty : string.Empty;
     }
 
     Vector2 ResolveTargetAimPoint()
@@ -380,11 +498,104 @@ public class EnemyMilitaryVanBehavior : EnemyBotBehaviorBase
             return;
 
         escapeHandled = true;
+        entryProtectionActive = false;
+        if (health != null)
+            health.BeginBotSpawnInvulnerability(EscapeAnimationSeconds + 0.35f);
+
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+        }
+
+        DisableCollidersForEscape();
+        if (PhotonNetwork.CurrentRoom != null)
+        {
+            if (view != null)
+                view.RPC(nameof(PlayMilitaryVanEscapeAnimationRpc), RpcTarget.All, EscapeAnimationSeconds);
+
+            StartCoroutine(CompleteNetworkEscapeAfterAnimation(EscapeAnimationSeconds));
+        }
+        else
+        {
+            PlayMilitaryVanEscapeAnimationRpc(EscapeAnimationSeconds);
+            StartCoroutine(CompleteLocalEscapeAfterAnimation(EscapeAnimationSeconds));
+        }
+    }
+
+    [PunRPC]
+    void PlayMilitaryVanEscapeAnimationRpc(float duration)
+    {
+        escapeHandled = true;
+        DisableCollidersForEscape();
+        if (escapeVisualRoutine != null)
+            StopCoroutine(escapeVisualRoutine);
+
+        escapeVisualRoutine = StartCoroutine(PlayEscapeVisualRoutine(Mathf.Max(0.08f, duration)));
+    }
+
+    IEnumerator PlayEscapeVisualRoutine(float duration)
+    {
+        SpriteRenderer[] renderers = GetComponentsInChildren<SpriteRenderer>();
+        Color[] startColors = new Color[renderers.Length];
+        for (int i = 0; i < renderers.Length; i++)
+            startColors[i] = renderers[i] != null ? renderers[i].color : Color.white;
+
+        Vector3 startScale = transform.localScale;
+        float startedAt = Time.time;
+        while (Time.time - startedAt < duration)
+        {
+            float t = Mathf.Clamp01((Time.time - startedAt) / duration);
+            float eased = Mathf.SmoothStep(0f, 1f, t);
+            ApplyEscapeVisuals(startScale, startColors, renderers, eased);
+            yield return null;
+        }
+
+        ApplyEscapeVisuals(startScale, startColors, renderers, 1f);
+        escapeVisualRoutine = null;
+    }
+
+    void ApplyEscapeVisuals(Vector3 startScale, Color[] startColors, SpriteRenderer[] renderers, float eased)
+    {
+        float scale = Mathf.Lerp(1f, EscapeFinalScale, Mathf.Clamp01(eased));
+        transform.localScale = new Vector3(startScale.x * scale, startScale.y * scale, startScale.z);
+        float alphaMultiplier = 1f - Mathf.Clamp01(eased);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            SpriteRenderer renderer = renderers[i];
+            if (renderer == null)
+                continue;
+
+            Color color = i < startColors.Length ? startColors[i] : renderer.color;
+            color.a *= alphaMultiplier;
+            renderer.color = color;
+        }
+    }
+
+    IEnumerator CompleteNetworkEscapeAfterAnimation(float duration)
+    {
+        yield return new WaitForSeconds(Mathf.Max(0.08f, duration));
         EnemyBotManager.NotifyMilitaryVanEscaped(bot);
         if (PhotonNetwork.CurrentRoom != null)
             PhotonNetwork.Destroy(gameObject);
         else
             Destroy(gameObject);
     }
-}
 
+    IEnumerator CompleteLocalEscapeAfterAnimation(float duration)
+    {
+        yield return new WaitForSeconds(Mathf.Max(0.08f, duration));
+        EnemyBotManager.NotifyMilitaryVanEscaped(bot);
+        Destroy(gameObject);
+    }
+
+    void DisableCollidersForEscape()
+    {
+        Collider2D[] colliders = GetComponentsInChildren<Collider2D>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            if (colliders[i] != null)
+                colliders[i].enabled = false;
+        }
+    }
+}

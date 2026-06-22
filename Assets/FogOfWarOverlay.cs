@@ -19,6 +19,7 @@ public class FogOfWarOverlay : MonoBehaviour
     const int FogGridColumns = 76;
     const int FogGridRows = 48;
     const float FogMeshRefreshInterval = 1f / 15f;
+    const float MobileFogMeshRefreshInterval = 1f / 10f;
     const float SceneLookupRefreshInterval = 0.35f;
     const float HudCanvasRefreshInterval = 1f;
     const float FogTargetMoveThresholdSqr = 0.0025f;
@@ -146,7 +147,7 @@ public class FogOfWarOverlay : MonoBehaviour
         if (contextChanged)
         {
             lastFogActive = true;
-            nextFogMeshRefreshTime = Time.unscaledTime + FogMeshRefreshInterval;
+            nextFogMeshRefreshTime = Time.unscaledTime + GetFogMeshRefreshInterval();
             CaptureFogViewState(camera, target);
             return true;
         }
@@ -154,9 +155,14 @@ public class FogOfWarOverlay : MonoBehaviour
         if (Time.unscaledTime < nextFogMeshRefreshTime || !HasFogViewChanged(camera, target))
             return false;
 
-        nextFogMeshRefreshTime = Time.unscaledTime + FogMeshRefreshInterval;
+        nextFogMeshRefreshTime = Time.unscaledTime + GetFogMeshRefreshInterval();
         CaptureFogViewState(camera, target);
         return true;
+    }
+
+    float GetFogMeshRefreshInterval()
+    {
+        return Application.isMobilePlatform ? MobileFogMeshRefreshInterval : FogMeshRefreshInterval;
     }
 
     bool HasFogViewChanged(Camera camera, Transform target)

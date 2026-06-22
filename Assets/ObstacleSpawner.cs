@@ -447,6 +447,14 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
         instance.ApplyObstacleDamageInternal(stableId, damage);
     }
 
+    public static void ConsumeObstacle(string stableId)
+    {
+        if (instance == null || string.IsNullOrWhiteSpace(stableId))
+            return;
+
+        instance.ConsumeObstacleInternal(stableId);
+    }
+
     void ApplyObstacleDamageInternal(string stableId, int damage)
     {
         if (!PhotonNetwork.IsMasterClient && PhotonNetwork.IsConnected)
@@ -460,6 +468,30 @@ public class ObstacleSpawner : MonoBehaviourPunCallbacks
             return;
 
         ResolveDestroyedObstacle(chunk);
+    }
+
+    void ConsumeObstacleInternal(string stableId)
+    {
+        if (!PhotonNetwork.IsMasterClient && PhotonNetwork.IsConnected)
+            return;
+
+        ObstacleChunk chunk = ObstacleChunk.Find(stableId);
+        if (chunk == null)
+            return;
+
+        InitializeHiddenTreasureCarrierForRound(true);
+        if (IsHiddenTreasureCarrier(stableId))
+            SetHiddenTreasureRoomState(string.Empty, true);
+
+        DestroyObstacleImmediately(chunk.gameObject);
+
+        if (PhotonNetwork.IsConnected && PhotonNetwork.IsMasterClient)
+            SpaceObjectMotionSync.BroadcastObstacleSplit(stableId, string.Empty, string.Empty);
+        else if (!PhotonNetwork.IsConnected)
+        {
+            string snapshot = CaptureRuntimeStateSnapshotInternal();
+            ApplyRuntimeStateSnapshotInternal(snapshot);
+        }
     }
 
     void ResolveDestroyedObstacle(ObstacleChunk source)

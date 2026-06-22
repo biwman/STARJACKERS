@@ -17,7 +17,7 @@ MonoBehaviour:
     AppIdFusion: 
     AppIdChat: 
     AppIdVoice: 
-    AppVersion: 0.3
+    AppVersion: 0.6
     UseNameServer: 1
     FixedRegion: eu
     Server: 
@@ -284,6 +284,9 @@ MonoBehaviour:
   - RecordPathfinderHackProgressRpc
   - TeleportToMapInstanceRpc
   - PlayRiftWardenTrackingBeamRpc
+  - NotifyFinalDeathAndDestroySelf
+  - RecordCareerKillProgress
+  - PlayMilitaryVanEscapeAnimationRpc
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

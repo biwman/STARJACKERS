@@ -136,7 +136,7 @@ public static class RoundXpTracker
         if (!PhotonNetwork.IsMasterClient || attackerViewId <= 0 || victim == null || victim.photonView == null)
             return;
 
-        if (AstronautSurvivor.IsEnemyAstronaut(victim) || victim.IsNeutralRiderControlled)
+        if (AstronautSurvivor.IsEnemyAstronaut(victim))
             return;
 
         PhotonView attackerView = PhotonView.Find(attackerViewId);
@@ -146,6 +146,12 @@ public static class RoundXpTracker
         PlayerHealth attackerHealth = attackerView.GetComponent<PlayerHealth>();
         if (attackerHealth != null && attackerHealth.IsNeutralRiderControlled)
             return;
+
+        if (victim.IsNeutralRiderControlled)
+        {
+            NotifyCareerKillStats(attackerView, false, true);
+            return;
+        }
 
         bool killedHumanPlayer = !victim.IsBotControlled;
         if (killedHumanPlayer &&
@@ -175,6 +181,7 @@ public static class RoundXpTracker
 
         AddXp(attackerView.Owner, xp);
 
+        NotifyCareerKillStats(attackerView, killedHumanPlayer, false);
         NotifyPilotKillEffects(attackerView, killedHumanPlayer, killedBotKind);
     }
 
@@ -286,6 +293,14 @@ public static class RoundXpTracker
         attackerView.RPC(nameof(PlayerHealth.UnlockRoburPilotAfterHumanKill), attackerView.Owner);
         if (PilotCatalog.IsSelectedPilot(attackerView.Owner, PilotCatalog.RoburId))
             GetOrCreate(attackerView.Owner).DoubleXpUntil = Mathf.Max(GetOrCreate(attackerView.Owner).DoubleXpUntil, Time.time + 60f);
+    }
+
+    static void NotifyCareerKillStats(PhotonView attackerView, bool killedHumanPlayer, bool killedNeutralRaider)
+    {
+        if (attackerView == null || attackerView.Owner == null)
+            return;
+
+        attackerView.RPC(nameof(PlayerHealth.RecordCareerKillProgress), attackerView.Owner, killedHumanPlayer, killedNeutralRaider);
     }
 
     static bool IsAshComputerEnemyKill(EnemyBotKind killedBotKind)

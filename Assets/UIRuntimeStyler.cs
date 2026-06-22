@@ -19,6 +19,7 @@ public class UIRuntimeStyler : MonoBehaviour
     static Sprite cachedCraftingIconSprite;
     static Sprite cachedTraderIconSprite;
     static Sprite cachedInventoryIconSprite;
+    static Sprite cachedPlayerIconSprite;
     static Sprite cachedJoystickBoosterRingSprite;
     static Sprite cachedMovementJoystickDiscSprite;
     static Sprite cachedMovementJoystickGlowSprite;
@@ -81,6 +82,7 @@ public class UIRuntimeStyler : MonoBehaviour
         LoadRuntimeUiSprite("UI/icon_crafting", ref cachedCraftingIconSprite, "RuntimeCraftingIconSprite");
         LoadRuntimeUiSprite("UI/icon_trader", ref cachedTraderIconSprite, "RuntimeTraderIconSprite");
         LoadRuntimeUiSprite("UI/icon_inventory", ref cachedInventoryIconSprite, "RuntimeInventoryIconSprite");
+        LoadRuntimeUiAlphaSprite("UI/icon_player", ref cachedPlayerIconSprite, "RuntimePlayerIconSprite");
         GetShadedJoystickHandleSprite();
     }
 
@@ -209,6 +211,7 @@ public class UIRuntimeStyler : MonoBehaviour
             case "nav_crafting":
             case "nav_trader":
             case "nav_inventory":
+            case "nav_player":
             case "nav_back":
             case "nav_back_wide":
             case "skin_choice":
@@ -372,6 +375,9 @@ public class UIRuntimeStyler : MonoBehaviour
 
         if (name.Contains("profileinventorynavbutton"))
             return "nav_inventory";
+
+        if (name.Contains("profileplayernavbutton"))
+            return "nav_player";
 
         if (name.Contains("shopbutton"))
             return "nav_trader";
@@ -1345,7 +1351,7 @@ public class UIRuntimeStyler : MonoBehaviour
 
     static bool IsNavButtonRole(string role)
     {
-        return role == "nav_crafting" || role == "nav_trader" || role == "nav_inventory" || role == "nav_back" || role == "nav_back_wide";
+        return role == "nav_crafting" || role == "nav_trader" || role == "nav_inventory" || role == "nav_player" || role == "nav_back" || role == "nav_back_wide";
     }
 
     bool IsSceneObject(GameObject obj)
@@ -1539,6 +1545,8 @@ public class UIRuntimeStyler : MonoBehaviour
                 return LoadRuntimeUiSprite("UI/icon_trader", ref cachedTraderIconSprite, "RuntimeTraderIconSprite");
             case "nav_inventory":
                 return LoadRuntimeUiSprite("UI/icon_inventory", ref cachedInventoryIconSprite, "RuntimeInventoryIconSprite");
+            case "nav_player":
+                return LoadRuntimeUiAlphaSprite("UI/icon_player", ref cachedPlayerIconSprite, "RuntimePlayerIconSprite");
             default:
                 return null;
         }
@@ -1568,6 +1576,48 @@ public class UIRuntimeStyler : MonoBehaviour
                 float alpha = source.a * Mathf.Clamp01(1f - luminance);
                 outputPixels[i] = new Color(1f, 1f, 1f, alpha);
             }
+
+            maskTexture.SetPixels(outputPixels);
+            maskTexture.Apply(false, true);
+
+            cache = Sprite.Create(
+                maskTexture,
+                new Rect(0f, 0f, maskTexture.width, maskTexture.height),
+                new Vector2(0.5f, 0.5f),
+                100f);
+            cache.name = spriteName;
+            cache.hideFlags = HideFlags.HideAndDontSave;
+            return cache;
+        }
+        catch (System.ArgumentException)
+        {
+            Sprite fallback = Resources.Load<Sprite>(resourcePath);
+            if (fallback != null)
+                return fallback;
+
+            return null;
+        }
+    }
+
+    static Sprite LoadRuntimeUiAlphaSprite(string resourcePath, ref Sprite cache, string spriteName)
+    {
+        if (cache != null)
+            return cache;
+
+        Texture2D texture = Resources.Load<Texture2D>(resourcePath);
+        if (texture == null)
+            return null;
+
+        try
+        {
+            Texture2D maskTexture = new Texture2D(texture.width, texture.height, TextureFormat.RGBA32, false);
+            maskTexture.name = spriteName + "_Texture";
+            maskTexture.hideFlags = HideFlags.HideAndDontSave;
+
+            Color[] sourcePixels = texture.GetPixels();
+            Color[] outputPixels = new Color[sourcePixels.Length];
+            for (int i = 0; i < sourcePixels.Length; i++)
+                outputPixels[i] = new Color(1f, 1f, 1f, sourcePixels[i].a);
 
             maskTexture.SetPixels(outputPixels);
             maskTexture.Apply(false, true);
@@ -1994,15 +2044,36 @@ public static class RuntimeScrollbarStyler
         visibleSize = Mathf.Clamp01(visibleSize);
         normalizedPosition = Mathf.Clamp01(normalizedPosition);
 
-        scrollbar.size = visibleSize;
-        scrollbar.value = normalizedPosition;
-
         RectTransform handleRect = scrollbar.handleRect;
         if (handleRect == null)
+        {
+            if (!Mathf.Approximately(scrollbar.size, visibleSize))
+                scrollbar.size = visibleSize;
+
+            if (!Mathf.Approximately(scrollbar.value, normalizedPosition))
+                scrollbar.value = normalizedPosition;
+
             return;
+        }
 
         float clampedSize = Mathf.Clamp(visibleSize, 0.02f, 1f);
         float start = normalizedPosition * (1f - clampedSize);
+        Vector2 targetAnchorMin = new Vector2(0f, start);
+        Vector2 targetAnchorMax = new Vector2(1f, start + clampedSize);
+        if (Mathf.Approximately(scrollbar.size, visibleSize) &&
+            Mathf.Approximately(scrollbar.value, normalizedPosition) &&
+            (handleRect.anchorMin - targetAnchorMin).sqrMagnitude <= 0.000001f &&
+            (handleRect.anchorMax - targetAnchorMax).sqrMagnitude <= 0.000001f &&
+            handleRect.anchoredPosition.sqrMagnitude <= 0.000001f &&
+            handleRect.sizeDelta.sqrMagnitude <= 0.000001f &&
+            handleRect.offsetMin.sqrMagnitude <= 0.000001f &&
+            handleRect.offsetMax.sqrMagnitude <= 0.000001f)
+        {
+            return;
+        }
+
+        scrollbar.size = visibleSize;
+        scrollbar.value = normalizedPosition;
         handleRect.anchorMin = new Vector2(0f, start);
         handleRect.anchorMax = new Vector2(1f, start + clampedSize);
         handleRect.pivot = new Vector2(0.5f, 0.5f);
@@ -2273,11 +2344,6 @@ class RuntimeScrollbarHandleLengthController : MonoBehaviour
         Canvas.willRenderCanvases -= Apply;
     }
 
-    void LateUpdate()
-    {
-        Apply();
-    }
-
     void Apply()
     {
         if (scrollbar == null || !scrollbar.gameObject.activeInHierarchy)
@@ -2312,6 +2378,10 @@ class SaveRunButtonVisualController : MonoBehaviour, IPointerDownHandler, IPoint
     Color pressedColor;
     bool pointerDown;
     bool pointerInside;
+    bool hasAppliedState;
+    bool lastAppliedDisabled;
+    bool lastAppliedPressed;
+    bool lastAppliedHovered;
 
     public void Configure(Button targetButton, RectTransform visualRoot, RectTransform panel, RectTransform innerShade,
         RectTransform leftAccent, RectTransform rightAccent, RectTransform topAccent, RectTransform bottomAccent,
@@ -2367,11 +2437,17 @@ class SaveRunButtonVisualController : MonoBehaviour, IPointerDownHandler, IPoint
     {
         pointerDown = false;
         pointerInside = false;
+        ApplyStateImmediate();
     }
 
     void LateUpdate()
     {
-        ApplyStateImmediate();
+        if (button == null)
+            return;
+
+        bool disabled = !button.interactable;
+        if (!hasAppliedState || disabled != lastAppliedDisabled)
+            ApplyStateImmediate();
     }
 
     void ApplyStateImmediate()
@@ -2382,6 +2458,18 @@ class SaveRunButtonVisualController : MonoBehaviour, IPointerDownHandler, IPoint
         bool disabled = !button.interactable;
         bool pressed = !disabled && pointerDown;
         bool hovered = !disabled && pointerInside;
+        if (hasAppliedState &&
+            disabled == lastAppliedDisabled &&
+            pressed == lastAppliedPressed &&
+            hovered == lastAppliedHovered)
+        {
+            return;
+        }
+
+        hasAppliedState = true;
+        lastAppliedDisabled = disabled;
+        lastAppliedPressed = pressed;
+        lastAppliedHovered = hovered;
 
         if (visualRootRect != null)
             visualRootRect.localScale = pressed ? new Vector3(0.985f, 0.965f, 1f) : Vector3.one;
