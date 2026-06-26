@@ -1,6 +1,7 @@
 using Photon.Pun;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Profiling;
 using UnityEngine.SceneManagement;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -9,6 +10,18 @@ using UnityEditor;
 [ExecuteAlways]
 public class GameVisualTheme : MonoBehaviour
 {
+    struct RuntimeThemeTarget
+    {
+        public readonly GameObject Target;
+        public readonly EntityId Id;
+
+        public RuntimeThemeTarget(GameObject target, EntityId id)
+        {
+            Target = target;
+            Id = id;
+        }
+    }
+
     public const string WorldSortingLayerName = "Ground";
     public const int BackgroundSortingOrder = 0;
     public const int EndDisasterSortingOrder = 6;
@@ -41,8 +54,11 @@ public class GameVisualTheme : MonoBehaviour
     const float BackgroundTileWorldSize = 8f;
     const float DesktopRefreshInterval = 0.75f;
     const float RuntimeRefreshDelay = 0.08f;
+    const int RuntimeObjectRefreshBudgetPerFrame = 16;
 
     static GameVisualTheme instance;
+    static readonly ProfilerMarker ApplyFullThemeMarker = new ProfilerMarker("GameVisualTheme.ApplyFull");
+    static readonly ProfilerMarker ApplyObjectQueueMarker = new ProfilerMarker("GameVisualTheme.ApplyObjectQueue");
 
     Sprite[] shipSprites;
     Sprite[] wreckSprites;
@@ -80,8 +96,11 @@ public class GameVisualTheme : MonoBehaviour
     Sprite ancientPortalExtractionSprite;
     Sprite backgroundSprite;
     float nextRefreshTime;
+    float nextObjectRefreshTime;
     bool runtimeThemeDirty;
     bool runtimeReloadAssetsDirty;
+    readonly Queue<RuntimeThemeTarget> runtimeDirtyObjects = new Queue<RuntimeThemeTarget>();
+    readonly HashSet<EntityId> runtimeDirtyObjectIds = new HashSet<EntityId>();
     int lastRuntimeBackgroundIndex = int.MinValue;
     int lastRuntimeObstacleSizePercent = int.MinValue;
     bool lastRuntimeToxicBordersEnabled;
@@ -184,6 +203,26 @@ public class GameVisualTheme : MonoBehaviour
         instance.MarkRuntimeThemeDirty(reloadAssets);
     }
 
+    public static void RequestRuntimeRefresh(GameObject target, bool reloadAssets = false)
+    {
+        EnsureInstance();
+        if (instance == null)
+            return;
+
+        if (target == null || reloadAssets)
+        {
+            instance.MarkRuntimeThemeDirty(reloadAssets);
+            return;
+        }
+
+        instance.QueueRuntimeThemeObject(target, RuntimeRefreshDelay);
+    }
+
+    public static void RequestRuntimeRefresh(Component target, bool reloadAssets = false)
+    {
+        RequestRuntimeRefresh(target != null ? target.gameObject : null, reloadAssets);
+    }
+
 #if UNITY_EDITOR
     static void EnsureEditorInstance()
     {
@@ -247,22 +286,34 @@ public class GameVisualTheme : MonoBehaviour
 #endif
 
         RefreshRuntimeSettingsIfNeeded();
-        if (!runtimeThemeDirty || Time.unscaledTime < nextRefreshTime)
-            return;
-
-        runtimeThemeDirty = false;
-        if (runtimeReloadAssetsDirty)
+        if (runtimeThemeDirty)
         {
-            runtimeReloadAssetsDirty = false;
-            LoadAssets();
+            if (Time.unscaledTime < nextRefreshTime)
+                return;
+
+            runtimeThemeDirty = false;
+            ClearRuntimeThemeObjectQueue();
+            if (runtimeReloadAssetsDirty)
+            {
+                runtimeReloadAssetsDirty = false;
+                LoadAssets();
+            }
+
+            using (ApplyFullThemeMarker.Auto())
+            {
+                ApplyTheme();
+            }
+
+            nextRefreshTime = 0f;
+            return;
         }
 
-        ApplyTheme();
-        nextRefreshTime = 0f;
+        ProcessRuntimeThemeObjectQueue();
     }
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        ClearRuntimeThemeObjectQueue();
         LoadAssets();
         nextRefreshTime = 0f;
         ApplyTheme();
@@ -274,10 +325,133 @@ public class GameVisualTheme : MonoBehaviour
     {
         runtimeThemeDirty = true;
         runtimeReloadAssetsDirty |= reloadAssets;
+        ClearRuntimeThemeObjectQueue();
 
         float requestedRefreshTime = Time.unscaledTime + Mathf.Max(0f, delay);
         if (nextRefreshTime <= 0f || requestedRefreshTime < nextRefreshTime)
             nextRefreshTime = requestedRefreshTime;
+    }
+
+    void QueueRuntimeThemeObject(GameObject target, float delay)
+    {
+        if (target == null)
+            return;
+
+        if (!Application.isPlaying)
+        {
+#if UNITY_EDITOR
+            ApplyThemeInEditor();
+#else
+            LoadAssets();
+            ApplyTheme();
+#endif
+            return;
+        }
+
+        EntityId id = target.GetEntityId();
+        if (runtimeDirtyObjectIds.Add(id))
+            runtimeDirtyObjects.Enqueue(new RuntimeThemeTarget(target, id));
+
+        float requestedRefreshTime = Time.unscaledTime + Mathf.Max(0f, delay);
+        if (nextObjectRefreshTime <= 0f || requestedRefreshTime < nextObjectRefreshTime)
+            nextObjectRefreshTime = requestedRefreshTime;
+    }
+
+    void ClearRuntimeThemeObjectQueue()
+    {
+        runtimeDirtyObjects.Clear();
+        runtimeDirtyObjectIds.Clear();
+        nextObjectRefreshTime = 0f;
+    }
+
+    void ProcessRuntimeThemeObjectQueue()
+    {
+        if (runtimeDirtyObjects.Count == 0 || Time.unscaledTime < nextObjectRefreshTime)
+            return;
+
+        if (runtimeReloadAssetsDirty)
+        {
+            runtimeReloadAssetsDirty = false;
+            LoadAssets();
+        }
+
+        EnsureRuntimeAssetsLoaded();
+
+        using (ApplyObjectQueueMarker.Auto())
+        {
+            int budget = RuntimeObjectRefreshBudgetPerFrame;
+            while (budget > 0 && runtimeDirtyObjects.Count > 0)
+            {
+                RuntimeThemeTarget queuedTarget = runtimeDirtyObjects.Dequeue();
+                runtimeDirtyObjectIds.Remove(queuedTarget.Id);
+
+                GameObject target = queuedTarget.Target;
+                if (target == null || !target.activeInHierarchy)
+                    continue;
+
+                if (!ApplyThemeToObject(target))
+                {
+                    MarkRuntimeThemeDirty(false, 0f);
+                    return;
+                }
+
+                budget--;
+            }
+        }
+
+        nextObjectRefreshTime = runtimeDirtyObjects.Count > 0 ? Time.unscaledTime : 0f;
+    }
+
+    void EnsureRuntimeAssetsLoaded()
+    {
+        if (shipSprites == null ||
+            shipSprites.Length == 0 ||
+            treasureSprite == null ||
+            obstacleSprites == null ||
+            obstacleSprites.Length == 0 ||
+            portalExtractionSprite == null)
+        {
+            LoadAssets();
+        }
+    }
+
+    bool ApplyThemeToObject(GameObject target)
+    {
+        if (target == null)
+            return true;
+
+        PlayerHealth player = target.GetComponent<PlayerHealth>();
+        if (player != null)
+        {
+            ApplyPlayerVisualInternal(player);
+            return true;
+        }
+
+        Treasure treasure = target.GetComponent<Treasure>();
+        if (treasure != null)
+        {
+            ApplyTreasureVisualInternal(treasure);
+            return true;
+        }
+
+        ExtractionZone extractionZone = target.GetComponent<ExtractionZone>();
+        if (extractionZone != null)
+        {
+            ApplyExtractionZoneVisualInternal(extractionZone);
+            return true;
+        }
+
+        SpriteRenderer renderer = target.GetComponent<SpriteRenderer>();
+        if (renderer != null && IsObstacleVisualTarget(target))
+        {
+            ApplyObstacleVisualInternal(target, renderer);
+            return true;
+        }
+
+        if (target.GetComponent<DroppedCargoCrate>() != null)
+            return true;
+
+        return false;
     }
 
     void CaptureRuntimeSettingsSnapshot()
@@ -914,14 +1088,19 @@ public class GameVisualTheme : MonoBehaviour
                 continue;
 
             GameObject target = renderer.gameObject;
-            if (!target.name.StartsWith("Obstacle"))
-                continue;
-
-            if (target.GetComponent<PlayerHealth>() != null || target.GetComponent<Treasure>() != null)
+            if (!IsObstacleVisualTarget(target))
                 continue;
 
             ApplyObstacleVisualInternal(target, renderer);
         }
+    }
+
+    bool IsObstacleVisualTarget(GameObject target)
+    {
+        return target != null &&
+               target.name.StartsWith("Obstacle", System.StringComparison.Ordinal) &&
+               target.GetComponent<PlayerHealth>() == null &&
+               target.GetComponent<Treasure>() == null;
     }
 
     void ApplyObstacleVisualInternal(GameObject target)
@@ -1004,34 +1183,39 @@ public class GameVisualTheme : MonoBehaviour
         ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
         foreach (ExtractionZone zone in zones)
         {
-            if (zone == null)
-                continue;
-
-            string extractionType = MapInstanceService.TryGetExtractionTypeForObject(zone.gameObject, out string zoneExtractionType)
-                ? zoneExtractionType
-                : RoomSettings.GetExtractionType();
-            Sprite extractionSprite = GetExtractionZoneSprite(extractionType);
-            if (extractionSprite == null)
-                continue;
-
-            float targetSize = GetExtractionZoneTargetSize(extractionType);
-
-            SpriteRenderer renderer = zone.GetComponent<SpriteRenderer>();
-            if (renderer == null)
-                continue;
-
-            if (renderer.sprite != extractionSprite)
-            {
-                renderer.sprite = extractionSprite;
-            }
-            renderer.color = Color.white;
-            renderer.sortingLayerName = WorldSortingLayerName;
-            renderer.sortingOrder = ExtractionZoneSortingOrder;
-            FitSpriteToTargetSize(renderer, targetSize);
-            zone.RefreshInteractionCollider();
-            if (Application.isPlaying)
-                zone.RefreshExtractionVisual();
+            ApplyExtractionZoneVisualInternal(zone);
         }
+    }
+
+    void ApplyExtractionZoneVisualInternal(ExtractionZone zone)
+    {
+        if (zone == null)
+            return;
+
+        string extractionType = MapInstanceService.TryGetExtractionTypeForObject(zone.gameObject, out string zoneExtractionType)
+            ? zoneExtractionType
+            : RoomSettings.GetExtractionType();
+        Sprite extractionSprite = GetExtractionZoneSprite(extractionType);
+        if (extractionSprite == null)
+            return;
+
+        float targetSize = GetExtractionZoneTargetSize(extractionType);
+
+        SpriteRenderer renderer = zone.GetComponent<SpriteRenderer>();
+        if (renderer == null)
+            return;
+
+        if (renderer.sprite != extractionSprite)
+        {
+            renderer.sprite = extractionSprite;
+        }
+        renderer.color = Color.white;
+        renderer.sortingLayerName = WorldSortingLayerName;
+        renderer.sortingOrder = ExtractionZoneSortingOrder;
+        FitSpriteToTargetSize(renderer, targetSize);
+        zone.RefreshInteractionCollider();
+        if (Application.isPlaying)
+            zone.RefreshExtractionVisual();
     }
 
     Sprite GetExtractionZoneSprite(string extractionType)

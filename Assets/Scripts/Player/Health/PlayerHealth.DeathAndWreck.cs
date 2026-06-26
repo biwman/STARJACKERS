@@ -760,6 +760,10 @@ public partial class PlayerHealth : MonoBehaviourPun
         if (firingFriend != null)
             firingFriend.DeactivateForShipLoss();
 
+        PreservedAlphaSpecimenCompanionController alphaSpecimenCompanion = GetComponent<PreservedAlphaSpecimenCompanionController>();
+        if (alphaSpecimenCompanion != null)
+            alphaSpecimenCompanion.DeactivateForShipLoss();
+
         EngineThrusterVFX thruster = GetComponent<EngineThrusterVFX>();
         if (thruster != null)
             thruster.DisableAndClearTrails();
@@ -934,6 +938,10 @@ public partial class PlayerHealth : MonoBehaviourPun
         FiringFriendController firingFriend = GetComponent<FiringFriendController>();
         if (firingFriend != null)
             firingFriend.DeactivateForShipLoss();
+
+        PreservedAlphaSpecimenCompanionController alphaSpecimenCompanion = GetComponent<PreservedAlphaSpecimenCompanionController>();
+        if (alphaSpecimenCompanion != null)
+            alphaSpecimenCompanion.DeactivateForShipLoss();
 
         HealthBarUI healthBarUi = GetComponent<HealthBarUI>();
         if (healthBarUi != null)

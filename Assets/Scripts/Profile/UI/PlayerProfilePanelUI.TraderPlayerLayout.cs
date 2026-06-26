@@ -73,14 +73,14 @@ public partial class PlayerProfilePanelUI
             return;
 
         const float topY = -88f;
-        const float rowHeight = 42f;
+        const float rowHeight = 39f;
         for (int i = 0; i < PlayerCareerStatLabels.Length; i++)
         {
             float y = topY - i * rowHeight;
             if (i < playerStatLabelTexts.Length && playerStatLabelTexts[i] != null)
-                SetAnchoredRect(playerStatLabelTexts[i].rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-112f, y), new Vector2(520f, 34f));
+                SetAnchoredRect(playerStatLabelTexts[i].rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(-146f, y), new Vector2(450f, 34f));
             if (i < playerStatValueTexts.Length && playerStatValueTexts[i] != null)
-                SetAnchoredRect(playerStatValueTexts[i].rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(306f, y), new Vector2(160f, 34f));
+                SetAnchoredRect(playerStatValueTexts[i].rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(236f, y), new Vector2(300f, 34f));
         }
     }
 
@@ -112,6 +112,8 @@ public partial class PlayerProfilePanelUI
         SetPlayerStatValue(12, CountUnlockedShips(profile).ToString());
         List<string> uniqueQuestItemIds = GetUniqueQuestItemIdsInProfile(profile);
         SetPlayerStatValue(13, uniqueQuestItemIds.Count.ToString());
+        SetPlayerStatValue(14, GetFavoritePilotDisplayName(careerStats));
+        SetPlayerStatValue(15, GetFavoriteShipDisplayName(careerStats));
         RefreshPlayerQuestItems(uniqueQuestItemIds);
     }
 
@@ -126,6 +128,47 @@ public partial class PlayerProfilePanelUI
     string FormatAstronStat(int value)
     {
         return Mathf.Max(0, value) + " Astrons";
+    }
+
+    string GetFavoritePilotDisplayName(PlayerCareerStatsData careerStats)
+    {
+        string pilotId = GetFavoriteCareerStartCountId(careerStats != null ? careerStats.PilotStartCounts : null);
+        return string.IsNullOrWhiteSpace(pilotId)
+            ? "NONE YET"
+            : PilotCatalog.GetDefinition(pilotId).DisplayName;
+    }
+
+    string GetFavoriteShipDisplayName(PlayerCareerStatsData careerStats)
+    {
+        string shipTypeId = GetFavoriteCareerStartCountId(careerStats != null ? careerStats.ShipStartCounts : null);
+        if (string.IsNullOrWhiteSpace(shipTypeId) || !ShipCatalog.TryGetShipTypeFromId(shipTypeId, out ShipType shipType))
+            return "NONE YET";
+
+        return ShipCatalog.GetShipTypeDisplayName(shipType).ToUpperInvariant();
+    }
+
+    string GetFavoriteCareerStartCountId(PlayerCareerStartCountEntry[] entries)
+    {
+        if (entries == null || entries.Length == 0)
+            return string.Empty;
+
+        int bestCount = 0;
+        string bestId = string.Empty;
+        for (int i = 0; i < entries.Length; i++)
+        {
+            PlayerCareerStartCountEntry entry = entries[i];
+            if (entry == null)
+                continue;
+
+            int count = Mathf.Max(0, entry.Count);
+            if (count <= bestCount)
+                continue;
+
+            bestCount = count;
+            bestId = entry.Id;
+        }
+
+        return bestId;
     }
 
     int CountUnlockedMaps(PlayerProfileData profile)

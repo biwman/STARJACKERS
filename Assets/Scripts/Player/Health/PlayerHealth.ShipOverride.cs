@@ -103,7 +103,7 @@ public partial class PlayerHealth : MonoBehaviourPun
             GameVisualTheme.ApplyPlayerVisual(this);
         }
 
-        GameVisualTheme.RequestRuntimeRefresh();
+        GameVisualTheme.RequestRuntimeRefresh(this);
     }
 
     public bool TryRestoreShieldAuthority(float amount, bool playFullPowerAudio)

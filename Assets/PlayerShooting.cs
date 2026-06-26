@@ -232,6 +232,7 @@ public partial class PlayerShooting : MonoBehaviourPun
     float complexAmmoReloadStartedAt;
     float complexNextAmmoAt;
     float superCharge;
+    float invaderAssimilationAmmoDrainAccumulator;
     Coroutine astroCutterBeamRoutine;
     Joystick superJoystick;
     AdvancedShootInputZone advancedShootInputZone;

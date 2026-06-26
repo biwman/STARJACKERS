@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public sealed class BulletImpactVfx : MonoBehaviour
@@ -9,13 +10,17 @@ public sealed class BulletImpactVfx : MonoBehaviour
     const float RocketDuration = 0.46f;
     const float DefaultDuration = 0.26f;
     const float EffectZ = -0.35f;
+    const int MaxPooledInstances = 48;
 
     static Material sharedLineMaterial;
+    static readonly Queue<BulletImpactVfx> Pool = new Queue<BulletImpactVfx>(MaxPooledInstances);
 
     LineRenderer[] lines;
     float[] baseWidths;
     Color[] startColors;
     Color[] endColors;
+    readonly List<LineRenderer> pooledLines = new List<LineRenderer>(12);
+    int activeLineCount;
     float duration;
     float elapsed;
     float pulseRadius;
@@ -30,14 +35,33 @@ public sealed class BulletImpactVfx : MonoBehaviour
 
     public static void Spawn(string effectId, Vector3 position, Vector2 direction, float scale)
     {
-        GameObject root = new GameObject("BulletImpactVfx_" + (string.IsNullOrWhiteSpace(effectId) ? "default" : effectId));
-        root.transform.position = new Vector3(position.x, position.y, EffectZ);
-        BulletImpactVfx vfx = root.AddComponent<BulletImpactVfx>();
+        BulletImpactVfx vfx = GetInstance(effectId);
+        vfx.transform.position = new Vector3(position.x, position.y, EffectZ);
         vfx.Configure(effectId, direction, Mathf.Max(0.45f, scale));
+    }
+
+    static BulletImpactVfx GetInstance(string effectId)
+    {
+        while (Pool.Count > 0)
+        {
+            BulletImpactVfx pooled = Pool.Dequeue();
+            if (pooled == null)
+                continue;
+
+            pooled.gameObject.name = "BulletImpactVfx_" + (string.IsNullOrWhiteSpace(effectId) ? "default" : effectId);
+            pooled.gameObject.SetActive(true);
+            return pooled;
+        }
+
+        GameObject root = new GameObject("BulletImpactVfx_" + (string.IsNullOrWhiteSpace(effectId) ? "default" : effectId));
+        return root.AddComponent<BulletImpactVfx>();
     }
 
     void Configure(string effectId, Vector2 direction, float scale)
     {
+        elapsed = 0f;
+        expandPulse = false;
+        pulseRadius = 0f;
         sortingLayerId = ResolveForegroundSortingLayerId();
         sortingOrder = 6800;
         direction = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector2.up;
@@ -97,10 +121,7 @@ public sealed class BulletImpactVfx : MonoBehaviour
     void ConfigureRail(Vector2 direction, float scale)
     {
         duration = RailDuration;
-        lines = new LineRenderer[7];
-        baseWidths = new float[lines.Length];
-        startColors = new Color[lines.Length];
-        endColors = new Color[lines.Length];
+        BeginConfigure(7);
 
         AddLine(0, Vector2.zero, -direction * (0.58f * scale), 0.07f * scale, new Color(1f, 0.9f, 0.45f, 0.95f), new Color(1f, 0.18f, 0.02f, 0f));
         Vector2 tangent = new Vector2(-direction.y, direction.x);
@@ -118,10 +139,7 @@ public sealed class BulletImpactVfx : MonoBehaviour
         duration = IonDuration;
         expandPulse = true;
         pulseRadius = 0.22f * scale;
-        lines = new LineRenderer[7];
-        baseWidths = new float[lines.Length];
-        startColors = new Color[lines.Length];
-        endColors = new Color[lines.Length];
+        BeginConfigure(7);
 
         AddCircle(0, pulseRadius, 0.035f * scale, new Color(0.35f, 0.9f, 1f, 0.8f));
         Vector2 tangent = new Vector2(-direction.y, direction.x);
@@ -136,10 +154,7 @@ public sealed class BulletImpactVfx : MonoBehaviour
     void ConfigureGatling(Vector2 direction, float scale)
     {
         duration = GatlingDuration;
-        lines = new LineRenderer[3];
-        baseWidths = new float[lines.Length];
-        startColors = new Color[lines.Length];
-        endColors = new Color[lines.Length];
+        BeginConfigure(3);
 
         Vector2 tangent = new Vector2(-direction.y, direction.x);
         AddLine(0, -direction * 0.02f * scale, -direction * 0.24f * scale, 0.022f * scale, new Color(1f, 0.96f, 0.58f, 0.8f), new Color(1f, 0.32f, 0.04f, 0f));
@@ -154,10 +169,7 @@ public sealed class BulletImpactVfx : MonoBehaviour
     void ConfigureDefault(Vector2 direction, float scale)
     {
         duration = DefaultDuration;
-        lines = new LineRenderer[4];
-        baseWidths = new float[lines.Length];
-        startColors = new Color[lines.Length];
-        endColors = new Color[lines.Length];
+        BeginConfigure(4);
 
         for (int i = 0; i < lines.Length; i++)
         {
@@ -169,10 +181,7 @@ public sealed class BulletImpactVfx : MonoBehaviour
     void ConfigureCompactSpark(Vector2 direction, float scale, Color startColor, Color endColor)
     {
         duration = DefaultDuration * 0.82f;
-        lines = new LineRenderer[4];
-        baseWidths = new float[lines.Length];
-        startColors = new Color[lines.Length];
-        endColors = new Color[lines.Length];
+        BeginConfigure(4);
 
         Vector2 tangent = new Vector2(-direction.y, direction.x);
         AddLine(0, Vector2.zero, -direction * 0.24f * scale, 0.022f * scale, startColor, endColor);
@@ -189,10 +198,7 @@ public sealed class BulletImpactVfx : MonoBehaviour
         duration = ArtilleryDuration;
         expandPulse = true;
         pulseRadius = 0.36f * scale;
-        lines = new LineRenderer[12];
-        baseWidths = new float[lines.Length];
-        startColors = new Color[lines.Length];
-        endColors = new Color[lines.Length];
+        BeginConfigure(12);
 
         AddCircle(0, pulseRadius, 0.055f * scale, new Color(1f, 0.76f, 0.22f, 0.72f));
         AddCircle(1, pulseRadius * 0.42f, 0.17f * scale, new Color(1f, 0.94f, 0.64f, 0.9f));
@@ -218,10 +224,7 @@ public sealed class BulletImpactVfx : MonoBehaviour
         duration = RocketDuration;
         expandPulse = true;
         pulseRadius = 0.3f * scale;
-        lines = new LineRenderer[10];
-        baseWidths = new float[lines.Length];
-        startColors = new Color[lines.Length];
-        endColors = new Color[lines.Length];
+        BeginConfigure(10);
 
         AddCircle(0, pulseRadius, 0.052f * scale, new Color(1f, 0.82f, 0.26f, 0.76f));
         AddCircle(1, pulseRadius * 0.48f, 0.13f * scale, new Color(1f, 0.96f, 0.66f, 0.88f));
@@ -242,7 +245,8 @@ public sealed class BulletImpactVfx : MonoBehaviour
 
     void AddLine(int index, Vector2 localStart, Vector2 localEnd, float width, Color start, Color end)
     {
-        LineRenderer line = CreateLine("ImpactLine_" + index);
+        LineRenderer line = CreateLine(index, "ImpactLine_" + index);
+        line.loop = false;
         line.positionCount = 2;
         line.SetPosition(0, transform.position + (Vector3)localStart);
         line.SetPosition(1, transform.position + (Vector3)localEnd);
@@ -251,7 +255,7 @@ public sealed class BulletImpactVfx : MonoBehaviour
 
     void AddCircle(int index, float radius, float width, Color color)
     {
-        LineRenderer line = CreateLine("ImpactCircle_" + index);
+        LineRenderer line = CreateLine(index, "ImpactCircle_" + index);
         line.loop = true;
         line.positionCount = 28;
         for (int i = 0; i < line.positionCount; i++)
@@ -263,18 +267,63 @@ public sealed class BulletImpactVfx : MonoBehaviour
         StoreLine(index, line, width, color, new Color(color.r, color.g, color.b, 0f));
     }
 
-    LineRenderer CreateLine(string objectName)
+    void BeginConfigure(int lineCount)
     {
-        GameObject lineObject = new GameObject(objectName);
-        lineObject.transform.SetParent(transform, false);
+        activeLineCount = Mathf.Max(0, lineCount);
+        EnsureArrays(activeLineCount);
 
-        LineRenderer line = lineObject.AddComponent<LineRenderer>();
+        for (int i = 0; i < pooledLines.Count; i++)
+        {
+            LineRenderer line = pooledLines[i];
+            if (line == null)
+                continue;
+
+            bool active = i < activeLineCount;
+            line.enabled = active;
+            line.gameObject.SetActive(active);
+            if (!active)
+                line.positionCount = 0;
+        }
+    }
+
+    void EnsureArrays(int count)
+    {
+        if (lines == null || lines.Length < count)
+        {
+            lines = new LineRenderer[count];
+            baseWidths = new float[count];
+            startColors = new Color[count];
+            endColors = new Color[count];
+        }
+    }
+
+    LineRenderer CreateLine(int index, string objectName)
+    {
+        while (pooledLines.Count <= index)
+            pooledLines.Add(null);
+
+        LineRenderer line = pooledLines[index];
+        if (line == null)
+        {
+            GameObject lineObject = new GameObject(objectName);
+            lineObject.transform.SetParent(transform, false);
+            line = lineObject.AddComponent<LineRenderer>();
+            pooledLines[index] = line;
+        }
+
+        line.gameObject.name = objectName;
+        line.gameObject.SetActive(true);
+        line.enabled = true;
+        line.transform.SetParent(transform, false);
+        line.transform.localPosition = Vector3.zero;
+        line.transform.localRotation = Quaternion.identity;
+        line.transform.localScale = Vector3.one;
         line.useWorldSpace = true;
         line.alignment = LineAlignment.View;
         line.textureMode = LineTextureMode.Stretch;
         line.numCapVertices = 2;
         line.numCornerVertices = 2;
-        line.material = GetSharedLineMaterial();
+        line.sharedMaterial = GetSharedLineMaterial();
         line.sortingLayerID = sortingLayerId;
         line.sortingOrder = sortingOrder;
         return line;
@@ -296,7 +345,7 @@ public sealed class BulletImpactVfx : MonoBehaviour
         elapsed += Time.deltaTime;
         float t = Mathf.Clamp01(elapsed / Mathf.Max(0.001f, duration));
         float alpha = 1f - t;
-        for (int i = 0; i < lines.Length; i++)
+        for (int i = 0; i < activeLineCount; i++)
         {
             LineRenderer line = lines[i];
             if (line == null)
@@ -322,6 +371,28 @@ public sealed class BulletImpactVfx : MonoBehaviour
         }
 
         if (elapsed >= duration)
+            Release();
+    }
+
+    void Release()
+    {
+        for (int i = 0; i < pooledLines.Count; i++)
+        {
+            LineRenderer line = pooledLines[i];
+            if (line == null)
+                continue;
+
+            line.enabled = false;
+            line.positionCount = 0;
+            line.gameObject.SetActive(false);
+        }
+
+        activeLineCount = 0;
+        gameObject.SetActive(false);
+
+        if (Pool.Count < MaxPooledInstances)
+            Pool.Enqueue(this);
+        else
             Destroy(gameObject);
     }
 

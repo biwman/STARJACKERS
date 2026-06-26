@@ -18,6 +18,7 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
     const float MuzzleSideOffset = 0.18f;
     const float FireAngleTolerance = 10f;
     const float RotationSpeedDegreesPerSecond = 180f;
+    const float TargetRefreshInterval = 0.1f;
     const string BulletEffectId = "auto_turret";
     const string ContainerShipBulletEffectId = "container_auto_cannon";
     static readonly Color BulletColor = new Color(1f, 0.62f, 0.12f, 1f);
@@ -26,6 +27,11 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
     int shotsSinceBreak;
     float breakUntil;
     bool containerShipAutoCannon;
+    Transform cachedTarget;
+    float nextTargetRefreshTime;
+    Collider2D[] cachedOwnColliders;
+    Collider2D[] cachedOwnerColliders;
+    int cachedOwnerColliderViewId;
 
     protected override int MaxHp => 50;
     protected override int MaxShield => 50;
@@ -51,6 +57,10 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
     public void InitializeFromPhotonData()
     {
         containerShipAutoCannon = PlayerDeployableRuntime.IsContainerShipAutoCannonData(photonView != null ? photonView.InstantiationData : null);
+        cachedTarget = null;
+        cachedOwnColliders = null;
+        cachedOwnerColliders = null;
+        cachedOwnerColliderViewId = 0;
         InitializeCommon();
     }
 
@@ -62,7 +72,7 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
         if (!initialized || destroyed || !PhotonNetwork.IsMasterClient)
             return;
 
-        Transform target = FindNearestTarget();
+        Transform target = ResolveTarget();
         if (target == null)
             return;
 
@@ -99,6 +109,29 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
         }
     }
 
+    Transform ResolveTarget()
+    {
+        if (Time.time >= nextTargetRefreshTime || !IsCachedTargetValid(cachedTarget))
+        {
+            nextTargetRefreshTime = Time.time + TargetRefreshInterval;
+            cachedTarget = FindNearestTarget();
+        }
+
+        return cachedTarget;
+    }
+
+    bool IsCachedTargetValid(Transform target)
+    {
+        if (target == null)
+            return false;
+
+        PlayerHealth candidate = target.GetComponent<PlayerHealth>();
+        if (!IsValidTarget(candidate, ResolveOwnerActorNumber()))
+            return false;
+
+        return Vector2.Distance(transform.position, target.position) <= TargetRange;
+    }
+
     Transform FindNearestTarget()
     {
         int ownerActorNumber = ResolveOwnerActorNumber();
@@ -108,28 +141,8 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
         for (int i = 0; i < healths.Length; i++)
         {
             PlayerHealth candidate = healths[i];
-            if (candidate == null || candidate.IsWreck || candidate.IsEvacuationAnimating || candidate.photonView == null)
+            if (!IsValidTarget(candidate, ownerActorNumber))
                 continue;
-
-            if (candidate.photonView.ViewID == ownerShipViewId || candidate.GetComponent<LureBeaconDecoy>() != null)
-                continue;
-
-            if (containerShipAutoCannon)
-            {
-                if (!IsPlayerShipTarget(candidate))
-                    continue;
-            }
-            else
-            {
-                EnemyBot enemyBot = candidate.GetComponent<EnemyBot>();
-                bool hostile = enemyBot != null ||
-                               candidate.IsBotControlled ||
-                               candidate.IsNeutralRiderControlled ||
-                               HasDifferentPhotonOwner(candidate, ownerActorNumber) ||
-                               IsOtherPlayerShipTarget(candidate, ownerActorNumber);
-                if (!hostile)
-                    continue;
-            }
 
             float distance = Vector2.Distance(transform.position, candidate.transform.position);
             if (distance > TargetRange || distance >= bestDistance)
@@ -140,6 +153,25 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
         }
 
         return best;
+    }
+
+    bool IsValidTarget(PlayerHealth candidate, int ownerActorNumber)
+    {
+        if (candidate == null || candidate.IsWreck || candidate.IsEvacuationAnimating || candidate.photonView == null)
+            return false;
+
+        if (candidate.photonView.ViewID == ownerShipViewId || candidate.GetComponent<LureBeaconDecoy>() != null)
+            return false;
+
+        if (containerShipAutoCannon)
+            return IsPlayerShipTarget(candidate);
+
+        EnemyBot enemyBot = candidate.GetComponent<EnemyBot>();
+        return enemyBot != null ||
+               candidate.IsBotControlled ||
+               candidate.IsNeutralRiderControlled ||
+               HasDifferentPhotonOwner(candidate, ownerActorNumber) ||
+               IsOtherPlayerShipTarget(candidate, ownerActorNumber);
     }
 
     int ResolveOwnerActorNumber()
@@ -224,50 +256,50 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
             WeaponDeliveryMethod.DeployableTurret,
             WeaponDeliveryFlags.Autonomous | WeaponDeliveryFlags.Paired);
 
-        GameObject bullet = PhotonNetwork.Instantiate(
+        GameObject bullet = ProjectileSpawner.SpawnNetworkBullet(
             "Bullet",
             position,
             Quaternion.Euler(0f, 0f, angle),
-            0,
-            data);
+            data,
+            ownerShipViewId,
+            direction.normalized * BulletSpeed,
+            true);
 
         if (bullet == null)
             return;
 
-        Bullet bulletComponent = bullet.GetComponent<Bullet>();
-        if (bulletComponent != null)
-            bulletComponent.ownerViewID = ownerShipViewId;
-
-        Rigidbody2D bulletBody = bullet.GetComponent<Rigidbody2D>();
-        if (bulletBody != null)
-            bulletBody.linearVelocity = direction.normalized * BulletSpeed;
-
-        Collider2D bulletCollider = bullet.GetComponent<Collider2D>();
-        IgnoreBulletCollisions(bulletCollider);
+        IgnoreBulletCollisions(bullet);
     }
 
-    void IgnoreBulletCollisions(Collider2D bulletCollider)
+    void IgnoreBulletCollisions(GameObject bullet)
     {
-        if (bulletCollider == null)
+        if (bullet == null)
             return;
 
-        Collider2D[] ownColliders = GetComponentsInChildren<Collider2D>(true);
-        for (int i = 0; i < ownColliders.Length; i++)
-        {
-            if (ownColliders[i] != null)
-                Physics2D.IgnoreCollision(ownColliders[i], bulletCollider, true);
-        }
+        ProjectileSpawner.IgnoreCollisions(bullet, GetOwnColliders());
+        ProjectileSpawner.IgnoreCollisions(bullet, GetOwnerColliders());
+    }
 
-        PhotonView ownerView = ownerShipViewId > 0 ? PhotonView.Find(ownerShipViewId) : null;
-        if (ownerView == null)
-            return;
+    Collider2D[] GetOwnColliders()
+    {
+        if (cachedOwnColliders == null || cachedOwnColliders.Length == 0)
+            cachedOwnColliders = GetComponentsInChildren<Collider2D>(true);
 
-        Collider2D[] ownerColliders = ownerView.GetComponentsInChildren<Collider2D>(true);
-        for (int i = 0; i < ownerColliders.Length; i++)
-        {
-            if (ownerColliders[i] != null)
-                Physics2D.IgnoreCollision(ownerColliders[i], bulletCollider, true);
-        }
+        return cachedOwnColliders;
+    }
+
+    Collider2D[] GetOwnerColliders()
+    {
+        if (ownerShipViewId <= 0)
+            return null;
+
+        if (cachedOwnerColliders != null && cachedOwnerColliderViewId == ownerShipViewId)
+            return cachedOwnerColliders;
+
+        cachedOwnerColliderViewId = ownerShipViewId;
+        PhotonView ownerView = PhotonView.Find(ownerShipViewId);
+        cachedOwnerColliders = ownerView != null ? ownerView.GetComponentsInChildren<Collider2D>(true) : null;
+        return cachedOwnerColliders;
     }
 
     [PunRPC]

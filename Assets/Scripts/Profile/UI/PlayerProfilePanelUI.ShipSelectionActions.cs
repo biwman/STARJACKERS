@@ -461,7 +461,7 @@ public partial class PlayerProfilePanelUI
         SetShipStatCard(5, ShipStatLabels[5], "+" + definition.MaxBoostPercent + "%", NormalizeShipStat(definition.MaxBoostPercent, stat => stat.MaxBoostPercent));
         SetShipStatCard(6, ShipStatLabels[6], definition.CargoCapacity.ToString(), NormalizeShipStat(definition.CargoCapacity, stat => stat.CargoCapacity));
         SetShipStatCard(7, ShipStatLabels[7], definition.SafePocketSlots.ToString(), NormalizeSafePocketStat(definition.SafePocketSlots));
-        SetShipStatCard(8, ShipStatLabels[8], definition.BrakingDriftLevel.ToString(), NormalizeShipStat(definition.BrakingDriftLevel, stat => stat.BrakingDriftLevel));
+        SetShipStatCard(8, ShipStatLabels[8], definition.BrakingDriftLevel.ToString(), NormalizeBrakingDriftStat(definition.BrakingDriftLevel));
     }
 
     void SetShipStatCard(int index, string label, string valueText, float normalized)
@@ -522,6 +522,11 @@ public partial class PlayerProfilePanelUI
             return 1f;
 
         return Mathf.InverseLerp(min, max, value);
+    }
+
+    float NormalizeBrakingDriftStat(int brakingDriftLevel)
+    {
+        return 1f - NormalizeShipStat(brakingDriftLevel, stat => stat.BrakingDriftLevel);
     }
 
     float NormalizeSafePocketStat(int safePocketSlots)

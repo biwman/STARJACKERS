@@ -165,11 +165,13 @@ public partial class PlayerProfileService
             IsBusy = true;
             EnsureInventory();
             EnsureBlueprintUnlocks();
+            EnsureMissEnigmaUniqueItemRecoveries();
 
             var data = new Dictionary<string, object>
             {
                 [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
-                [CloudUnlockedBlueprintsKey] = SerializeBlueprintUnlocks(CurrentProfile.UnlockedBlueprintIds)
+                [CloudUnlockedBlueprintsKey] = SerializeBlueprintUnlocks(CurrentProfile.UnlockedBlueprintIds),
+                [CloudMissEnigmaRecoverableUniqueItemsKey] = SerializeMissEnigmaUniqueItemRecoveries(CurrentProfile.MissEnigmaRecoverableUniqueItemIds)
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -197,11 +199,13 @@ public partial class PlayerProfileService
             IsBusy = true;
             EnsureInventory();
             EnsureMissEnigmaBlueprintPurchases();
+            EnsureMissEnigmaUniqueItemRecoveries();
 
             var data = new Dictionary<string, object>
             {
                 [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
-                [CloudMissEnigmaPurchasedBlueprintsKey] = SerializeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds)
+                [CloudMissEnigmaPurchasedBlueprintsKey] = SerializeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds),
+                [CloudMissEnigmaRecoverableUniqueItemsKey] = SerializeMissEnigmaUniqueItemRecoveries(CurrentProfile.MissEnigmaRecoverableUniqueItemIds)
             };
 
             await RunCloudOperationWithRetryAsync(

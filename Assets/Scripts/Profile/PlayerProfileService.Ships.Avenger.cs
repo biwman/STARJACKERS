@@ -118,12 +118,14 @@ public partial class PlayerProfileService
         {
             IsBusy = true;
             EnsureInventory();
+            EnsureMissEnigmaUniqueItemRecoveries();
             CurrentProfile.AvengerTheftAttempt = NormalizeAvengerTheftAttempt(CurrentProfile.AvengerTheftAttempt);
 
             var data = new Dictionary<string, object>
             {
                 [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
-                [CloudAvengerTheftAttemptKey] = SerializeAvengerTheftAttempt(CurrentProfile.AvengerTheftAttempt)
+                [CloudAvengerTheftAttemptKey] = SerializeAvengerTheftAttempt(CurrentProfile.AvengerTheftAttempt),
+                [CloudMissEnigmaRecoverableUniqueItemsKey] = SerializeMissEnigmaUniqueItemRecoveries(CurrentProfile.MissEnigmaRecoverableUniqueItemIds)
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -151,6 +153,7 @@ public partial class PlayerProfileService
             IsBusy = true;
             EnsureInventory();
             EnsureShipUnlocks();
+            EnsureMissEnigmaUniqueItemRecoveries();
 
             var data = new Dictionary<string, object>
             {
@@ -162,7 +165,8 @@ public partial class PlayerProfileService
                 [CloudViperRecoveryProgressKey] = SerializeViperRecoveryProgress(CurrentProfile.ViperRecoveryProgress),
                 [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress),
                 [CloudBisonIndustrialPartsDeliveredKey] = CurrentProfile.BisonIndustrialPartsDelivered,
-                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered,
+                [CloudMissEnigmaRecoverableUniqueItemsKey] = SerializeMissEnigmaUniqueItemRecoveries(CurrentProfile.MissEnigmaRecoverableUniqueItemIds)
             };
 
             await RunCloudOperationWithRetryAsync(

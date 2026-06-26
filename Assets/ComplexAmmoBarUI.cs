@@ -10,6 +10,7 @@ public sealed class ComplexAmmoBarUI : MonoBehaviourPun
     const float SegmentWidth = 24f;
     const float SegmentHeight = 7f;
     const float SegmentGap = 4f;
+    const float ReloadProgressUiStep = 0.01f;
     static readonly Color LoadedFillColor = new Color(0.24f, 0.92f, 0.28f, 1f);
     static readonly Color ChargingFillColor = new Color(0.42f, 1f, 0.38f, 1f);
     static readonly Color EmptyBackgroundColor = new Color(0.03f, 0.05f, 0.08f, 0.82f);
@@ -31,6 +32,9 @@ public sealed class ComplexAmmoBarUI : MonoBehaviourPun
     Camera cachedCamera;
     readonly List<Segment> segments = new List<Segment>();
     int lastSegmentCount = -1;
+    int lastDisplayedAmmo = int.MinValue;
+    int lastReloadProgressStep = int.MinValue;
+    bool forceSegmentRefresh;
 
     void Start()
     {
@@ -47,7 +51,10 @@ public sealed class ComplexAmmoBarUI : MonoBehaviourPun
     void Update()
     {
         EnsureRoot();
-        RefreshVisibility();
+        bool visible = RefreshVisibility();
+        if (!visible)
+            return;
+
         RefreshLayout();
         RefreshSegments();
     }
@@ -79,14 +86,19 @@ public sealed class ComplexAmmoBarUI : MonoBehaviourPun
         rootRect.pivot = new Vector2(0.5f, 0.5f);
     }
 
-    void RefreshVisibility()
+    bool RefreshVisibility()
     {
         if (rootObject == null)
-            return;
+            return false;
 
         bool visible = shooting != null && shooting.IsComplexShootingActive && IsGameplayHudVisible();
         if (rootObject.activeSelf != visible)
+        {
             rootObject.SetActive(visible);
+            forceSegmentRefresh = true;
+        }
+
+        return visible;
     }
 
     void RefreshLayout()
@@ -117,10 +129,24 @@ public sealed class ComplexAmmoBarUI : MonoBehaviourPun
 
         int maxAmmo = Mathf.Max(0, shooting.MaxAmmo);
         if (maxAmmo != lastSegmentCount)
+        {
             RebuildSegments(maxAmmo);
+            forceSegmentRefresh = true;
+        }
 
         int currentAmmo = Mathf.Clamp(shooting.CurrentAmmo, 0, maxAmmo);
         float reloadProgress = shooting.ComplexAmmoReloadProgress;
+        int reloadProgressStep = Mathf.RoundToInt(Mathf.Clamp01(reloadProgress) / ReloadProgressUiStep);
+        if (!forceSegmentRefresh &&
+            currentAmmo == lastDisplayedAmmo &&
+            reloadProgressStep == lastReloadProgressStep)
+        {
+            return;
+        }
+
+        lastDisplayedAmmo = currentAmmo;
+        lastReloadProgressStep = reloadProgressStep;
+        forceSegmentRefresh = false;
 
         for (int i = 0; i < segments.Count; i++)
         {

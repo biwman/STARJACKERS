@@ -95,6 +95,7 @@ public partial class PlayerProfileService : MonoBehaviour
             InvaderImprintsRecovered = CurrentProfile != null ? NormalizeInvaderImprintsRecovered(CurrentProfile.InvaderImprintsRecovered, CurrentProfile.UnlockedShipIds) : 0,
             PathfinderResearchProgress = CurrentProfile != null ? NormalizePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress, CurrentProfile.UnlockedShipIds) : PathfinderResearchProgressData.Empty(),
             MissEnigmaPurchasedBlueprintIds = CurrentProfile != null ? NormalizeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds) : Array.Empty<string>(),
+            MissEnigmaRecoverableUniqueItemIds = CurrentProfile != null ? NormalizeMissEnigmaUniqueItemRecoveries(CurrentProfile.MissEnigmaRecoverableUniqueItemIds) : Array.Empty<string>(),
             PilotDroneKills = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotDroneKills) : 0,
             PilotSoldItemsAstrons = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotSoldItemsAstrons) : 0,
             PilotPirateBayReturns = CurrentProfile != null ? Mathf.Max(0, CurrentProfile.PilotPirateBayReturns) : 0,
@@ -110,6 +111,7 @@ public partial class PlayerProfileService : MonoBehaviour
         EnsureShipUnlocks();
         EnsureBlueprintUnlocks();
         EnsureMissEnigmaBlueprintPurchases();
+        EnsureMissEnigmaUniqueItemRecoveries();
         EnsureMapUnlockProgress();
         EnsureProjectProgress();
         EnsureCareerStats();
@@ -133,6 +135,7 @@ public partial class PlayerProfileService : MonoBehaviour
         EnsureShipUnlocks();
         EnsureBlueprintUnlocks();
         EnsureMissEnigmaBlueprintPurchases();
+        EnsureMissEnigmaUniqueItemRecoveries();
 
         var props = new ExitGames.Client.Photon.Hashtable
         {
@@ -179,6 +182,7 @@ public partial class PlayerProfileService : MonoBehaviour
                 InvaderImprintsRecovered = 0,
                 PathfinderResearchProgress = PathfinderResearchProgressData.Empty(),
                 MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
+                MissEnigmaRecoverableUniqueItemIds = Array.Empty<string>(),
                 PilotDroneKills = 0,
                 PilotSoldItemsAstrons = 0,
                 PilotPirateBayReturns = 0,
@@ -198,6 +202,7 @@ public partial class PlayerProfileService : MonoBehaviour
             EnsureShipUnlocks();
             EnsureBlueprintUnlocks();
             EnsureMissEnigmaBlueprintPurchases();
+            EnsureMissEnigmaUniqueItemRecoveries();
             EnsureMapUnlockProgress();
             EnsureProjectProgress();
             EnsureCareerStats();
@@ -221,6 +226,7 @@ public partial class PlayerProfileService : MonoBehaviour
                 [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered,
                 [CloudPathfinderResearchProgressKey] = SerializePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress),
                 [CloudMissEnigmaPurchasedBlueprintsKey] = SerializeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds),
+                [CloudMissEnigmaRecoverableUniqueItemsKey] = SerializeMissEnigmaUniqueItemRecoveries(CurrentProfile.MissEnigmaRecoverableUniqueItemIds),
                 [CloudPilotDroneKillsKey] = CurrentProfile.PilotDroneKills,
                 [CloudPilotSoldItemsAstronsKey] = CurrentProfile.PilotSoldItemsAstrons,
                 [CloudPilotPirateBayReturnsKey] = CurrentProfile.PilotPirateBayReturns,

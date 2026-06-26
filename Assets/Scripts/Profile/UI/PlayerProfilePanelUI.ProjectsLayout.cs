@@ -125,6 +125,31 @@ public partial class PlayerProfilePanelUI
         previewImage.preserveAspect = false;
         previewImage.raycastTarget = false;
 
+        GameObject lockedOverlayObject = FindOrCreateProfileChild(tileButton.gameObject, "ProjectTileLockedOverlay", typeof(RectTransform), typeof(Image));
+        Image lockedOverlay = lockedOverlayObject.GetComponent<Image>();
+        SetAnchoredRect(lockedOverlay.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        lockedOverlay.rectTransform.offsetMin = new Vector2(4f, 4f);
+        lockedOverlay.rectTransform.offsetMax = new Vector2(-4f, -4f);
+        lockedOverlay.color = new Color(0.02f, 0.025f, 0.03f, 0.72f);
+        lockedOverlay.raycastTarget = false;
+        lockedOverlayObject.transform.SetSiblingIndex(Mathf.Min(1, tileButton.transform.childCount - 1));
+
+        TMP_Text lockedText = lockedOverlayObject.transform.Find("ProjectTileLockedText")?.GetComponent<TMP_Text>();
+        if (lockedText == null)
+        {
+            lockedText = CreateText(lockedOverlayObject.transform, "ProjectTileLockedText", string.Empty, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(430f, 150f), 26f, TextAlignmentOptions.Center);
+            lockedText.raycastTarget = false;
+            lockedText.fontStyle = FontStyles.Bold;
+            lockedText.textWrappingMode = TextWrappingModes.Normal;
+            lockedText.enableAutoSizing = true;
+            lockedText.fontSizeMin = 17f;
+            lockedText.fontSizeMax = 26f;
+        }
+
+        SetAnchoredRect(lockedText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -12f), new Vector2(430f, 150f));
+        lockedText.color = new Color(0.9f, 0.92f, 0.95f, 0.96f);
+        lockedOverlayObject.SetActive(false);
+
         GameObject labelBackdropObject = FindOrCreateProfileChild(tileButton.gameObject, "ProjectTileLabelBackdrop", typeof(RectTransform), typeof(Image));
         Image labelBackdrop = labelBackdropObject.GetComponent<Image>();
         SetAnchoredRect(labelBackdrop.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), Vector2.zero, new Vector2(0f, 64f));
@@ -151,6 +176,25 @@ public partial class PlayerProfilePanelUI
         check.text = ProjectCompleteMarker;
         check.fontStyle = FontStyles.Bold;
         check.color = new Color(0.28f, 1f, 0.45f, 0.98f);
+    }
+
+    void SetProjectTileLockedState(Button tileButton, bool locked, string requirementText)
+    {
+        if (tileButton == null)
+            return;
+
+        Transform overlayTransform = tileButton.transform.Find("ProjectTileLockedOverlay");
+        if (overlayTransform == null)
+            return;
+
+        overlayTransform.gameObject.SetActive(locked);
+        if (!locked)
+            return;
+
+        overlayTransform.SetSiblingIndex(Mathf.Min(1, tileButton.transform.childCount - 1));
+        TMP_Text lockedText = overlayTransform.Find("ProjectTileLockedText")?.GetComponent<TMP_Text>();
+        if (lockedText != null)
+            lockedText.text = string.IsNullOrWhiteSpace(requirementText) ? "PROJECT LOCKED" : requirementText;
     }
 
     void SetProjectStageSelectionFrame(Button tab, bool selected)
@@ -232,18 +276,35 @@ public partial class PlayerProfilePanelUI
                     preview.color = preview.sprite != null ? Color.white : new Color(0.12f, 0.16f, 0.22f, 1f);
                 }
 
+                bool unlocked = !PlayerProfileService.HasInstance || PlayerProfileService.Instance.IsProjectUnlocked(project.Id);
                 bool complete = PlayerProfileService.HasInstance && PlayerProfileService.Instance.IsProjectComplete(project.Id);
-                tile.interactable = !inventoryActionInProgress;
+                string unlockRequirement = unlocked || !PlayerProfileService.HasInstance
+                    ? string.Empty
+                    : PlayerProfileService.Instance.GetProjectUnlockRequirementText(project.Id);
+                tile.interactable = !inventoryActionInProgress && unlocked;
                 Image image = tile.GetComponent<Image>();
                 if (image != null)
-                    image.color = complete ? new Color(0.18f, 0.18f, 0.18f, 0.92f) : new Color(0.1f, 0.16f, 0.24f, 0.96f);
+                {
+                    image.color = !unlocked
+                        ? new Color(0.08f, 0.08f, 0.09f, 0.96f)
+                        : complete ? new Color(0.18f, 0.18f, 0.18f, 0.92f) : new Color(0.1f, 0.16f, 0.24f, 0.96f);
+                }
 
                 TMP_Text check = tile.transform.Find("ProjectTileCheck")?.GetComponent<TMP_Text>();
                 if (check != null)
-                    check.gameObject.SetActive(complete);
+                    check.gameObject.SetActive(complete && unlocked);
 
-                if (preview != null && complete)
-                    preview.color = new Color(0.45f, 0.45f, 0.45f, 0.72f);
+                if (preview != null)
+                {
+                    if (!unlocked)
+                        preview.color = preview.sprite != null ? new Color(0.28f, 0.28f, 0.28f, 0.58f) : new Color(0.08f, 0.08f, 0.09f, 1f);
+                    else if (complete)
+                        preview.color = new Color(0.45f, 0.45f, 0.45f, 0.72f);
+                    else
+                        preview.color = preview.sprite != null ? Color.white : new Color(0.12f, 0.16f, 0.22f, 1f);
+                }
+
+                SetProjectTileLockedState(tile, !unlocked, unlockRequirement);
             }
 
             projectsDirty = false;
@@ -265,7 +326,8 @@ public partial class PlayerProfilePanelUI
         int stageCount = project.Stages != null ? project.Stages.Length : 0;
         selectedProjectStageIndex = Mathf.Clamp(selectedProjectStageIndex, 0, Mathf.Max(0, stageCount - 1));
         ProjectStageDefinition stage = stageCount > 0 ? project.Stages[selectedProjectStageIndex] : null;
-        bool stageUnlocked = PlayerProfileService.HasInstance && PlayerProfileService.Instance.IsProjectStageUnlocked(project.Id, selectedProjectStageIndex);
+        bool projectUnlocked = !PlayerProfileService.HasInstance || PlayerProfileService.Instance.IsProjectUnlocked(project.Id);
+        bool stageUnlocked = projectUnlocked && PlayerProfileService.HasInstance && PlayerProfileService.Instance.IsProjectStageUnlocked(project.Id, selectedProjectStageIndex);
         bool stageComplete = PlayerProfileService.HasInstance && PlayerProfileService.Instance.IsProjectStageComplete(project.Id, selectedProjectStageIndex);
         bool rewardClaimed = PlayerProfileService.HasInstance && PlayerProfileService.Instance.IsProjectStageRewardClaimed(project.Id, selectedProjectStageIndex);
 
@@ -286,7 +348,7 @@ public partial class PlayerProfilePanelUI
             if (!active)
                 continue;
 
-            bool unlocked = PlayerProfileService.HasInstance && PlayerProfileService.Instance.IsProjectStageUnlocked(project.Id, i);
+            bool unlocked = projectUnlocked && PlayerProfileService.HasInstance && PlayerProfileService.Instance.IsProjectStageUnlocked(project.Id, i);
             bool complete = PlayerProfileService.HasInstance && PlayerProfileService.Instance.IsProjectStageComplete(project.Id, i);
             bool selectedStage = i == selectedProjectStageIndex;
             TMP_Text text = tab.GetComponentInChildren<TMP_Text>(true);
@@ -298,7 +360,7 @@ public partial class PlayerProfilePanelUI
                     : Color.white;
             }
 
-            tab.interactable = !inventoryActionInProgress;
+            tab.interactable = !inventoryActionInProgress && projectUnlocked;
             Color normal = complete
                 ? new Color(0.62f, 1f, 0.42f, 1f)
                 : unlocked ? new Color(0.13f, 0.18f, 0.26f, 0.96f) : new Color(0.48f, 0.08f, 0.08f, 0.86f);
@@ -359,7 +421,7 @@ public partial class PlayerProfilePanelUI
 
         if (projectRewardClaimButton != null)
         {
-            projectRewardClaimButton.gameObject.SetActive(stageComplete && !rewardClaimed);
+            projectRewardClaimButton.gameObject.SetActive(projectUnlocked && stageComplete && !rewardClaimed);
             projectRewardClaimButton.interactable = !inventoryActionInProgress;
         }
 
@@ -470,7 +532,8 @@ public partial class PlayerProfilePanelUI
             ? stage.Steps[selectedProjectStepIndex]
             : null;
 
-        bool hasStep = step != null;
+        bool projectUnlocked = project != null && (!PlayerProfileService.HasInstance || PlayerProfileService.Instance.IsProjectUnlocked(project.Id));
+        bool hasStep = step != null && projectUnlocked;
         projectCommitPanelObject.SetActive(hasStep);
         if (!hasStep)
             return;

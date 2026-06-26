@@ -411,6 +411,17 @@ public static class PilotCatalog
         return string.Equals(RoomSettings.GetPlayerPilotId(player, JakeId), NormalizePilotId(pilotId), StringComparison.Ordinal);
     }
 
+    public static bool UsesFemaleChatVoice(Photon.Realtime.Player player)
+    {
+        return UsesFemaleChatVoice(RoomSettings.GetPlayerPilotId(player, JakeId));
+    }
+
+    public static bool UsesFemaleChatVoice(string pilotId)
+    {
+        string normalized = NormalizePilotId(pilotId);
+        return normalized == NovaId || normalized == AshId;
+    }
+
     public static string GetUnlockRequirementText(PlayerProfileData profile, string pilotId)
     {
         PilotDefinition definition = GetDefinition(pilotId);

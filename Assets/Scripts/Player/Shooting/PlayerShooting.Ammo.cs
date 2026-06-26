@@ -19,6 +19,49 @@ public partial class PlayerShooting
         }
     }
 
+    public int DrainInvaderAssimilationAmmo(float amount)
+    {
+        if (!photonView.IsMine || amount <= 0f || infiniteAmmo)
+            return 0;
+
+        invaderAssimilationAmmoDrainAccumulator += amount;
+        int requested = Mathf.FloorToInt(invaderAssimilationAmmoDrainAccumulator);
+        if (requested <= 0)
+            return 0;
+
+        int drained = 0;
+        if (IsComplexShootingActive)
+        {
+            ComplexWeaponRuntimeState state = GetActiveComplexWeaponState();
+            if (state != null && state.CurrentAmmo > 0)
+            {
+                drained = Mathf.Min(requested, state.CurrentAmmo);
+                state.CurrentAmmo = Mathf.Max(0, state.CurrentAmmo - drained);
+                if (state.CurrentAmmo <= 0 && state.NextAmmoAt <= 0f)
+                {
+                    state.AmmoReloadStartedAt = Time.time;
+                    state.NextAmmoAt = Time.time + GetAdjustedAmmoReloadTime(state.Profile, false);
+                }
+
+                SyncActiveComplexAmmoMirror();
+            }
+        }
+        else if (currentAmmo > 0)
+        {
+            drained = Mathf.Min(requested, currentAmmo);
+            currentAmmo = Mathf.Max(0, currentAmmo - drained);
+            if (currentAmmo <= 0)
+                StartReload(false);
+        }
+
+        if (drained > 0)
+            invaderAssimilationAmmoDrainAccumulator = Mathf.Max(0f, invaderAssimilationAmmoDrainAccumulator - drained);
+        else if (CurrentAmmo <= 0)
+            invaderAssimilationAmmoDrainAccumulator = Mathf.Min(invaderAssimilationAmmoDrainAccumulator, 0.95f);
+
+        return drained;
+    }
+
     void StartReload(bool playSound)
     {
         if (isReloading)
@@ -507,13 +550,16 @@ public partial class PlayerShooting
             };
         data = Bullet.AppendWeaponMetadata(data, simpleDamageType, simpleDeliveryMethod, simpleDeliveryFlags);
 
-        GameObject bullet = PhotonNetwork.Instantiate(
-            bulletPrefab.name,
+        Collider2D playerCollider = GetComponent<Collider2D>();
+        GameObject bullet = ProjectileSpawner.SpawnNetworkBullet(
+            bulletPrefab,
             spawnPos,
             Quaternion.identity,
-            0,
-            data
-        );
+            data,
+            ownerId,
+            direction * adjustedBulletSpeed,
+            true,
+            playerCollider);
 
         if (bullet == null)
         {
@@ -521,24 +567,11 @@ public partial class PlayerShooting
             return false;
         }
 
-        Bullet bulletComponent = bullet.GetComponent<Bullet>();
-        if (bulletComponent != null)
-            bulletComponent.ownerViewID = ownerId;
-
         Rigidbody2D rb = bullet.GetComponent<Rigidbody2D>();
-        if (rb != null)
-        {
-            rb.linearVelocity = direction * adjustedBulletSpeed;
-        }
-        else
+        if (rb == null)
         {
             Debug.LogError("Bullet is missing Rigidbody2D");
         }
-
-        Collider2D playerCollider = GetComponent<Collider2D>();
-        Collider2D bulletCollider = bullet.GetComponent<Collider2D>();
-        if (bulletCollider != null && playerCollider != null)
-            Physics2D.IgnoreCollision(bulletCollider, playerCollider);
 
         return true;
     }

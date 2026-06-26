@@ -306,6 +306,28 @@ public partial class PlayerProfilePanelUI
         int avengerCodesPrice = showAvengerCodesOffer
             ? PlayerProfileService.Instance.GetShopBuyPriceAstrons(InventoryItemCatalog.AvengerStartingCodesId)
             : 0;
+        PlayerProfileData profile = PlayerProfileService.Instance.CurrentProfile;
+        int astrons = profile != null ? profile.Astrons : 0;
+        List<ShopOfferViewModel> uniqueRecoveryOffers = new List<ShopOfferViewModel>();
+        string[] recoverableUniqueItemIds = PlayerProfileService.Instance.GetMissEnigmaRecoverableUniqueItemIds();
+        for (int i = 0; i < recoverableUniqueItemIds.Length; i++)
+        {
+            string itemId = recoverableUniqueItemIds[i];
+            InventoryItemDefinition definition = InventoryItemCatalog.GetDefinition(itemId);
+            if (definition == null)
+                continue;
+
+            int price = PlayerProfileService.Instance.GetShopBuyPriceAstrons(itemId);
+            if (price <= 0)
+                continue;
+
+            uniqueRecoveryOffers.Add(new ShopOfferViewModel
+            {
+                Definition = definition,
+                Price = price,
+                CanAfford = astrons >= price
+            });
+        }
 
         for (int i = 0; i < offers.Length; i++)
         {
@@ -335,7 +357,7 @@ public partial class PlayerProfilePanelUI
             });
         }
 
-        if (visibleOffers.Count == 0 && !showAvengerCodesOffer)
+        if (visibleOffers.Count == 0 && uniqueRecoveryOffers.Count == 0 && !showAvengerCodesOffer)
         {
             GameObject rowObject = GetOrCreateMissEnigmaEmptyRow();
             rowObject.transform.SetParent(shopContentRect, false);
@@ -348,11 +370,27 @@ public partial class PlayerProfilePanelUI
 
         if (showAvengerCodesOffer && avengerCodesPrice > 0)
         {
-            PlayerProfileData profile = PlayerProfileService.Instance.CurrentProfile;
             bool canAffordCodes = profile != null && profile.Astrons >= avengerCodesPrice;
             GameObject codesRow = CreateShopRow(shopRowObjects.Count, avengerCodesDefinition, avengerCodesPrice, canAffordCodes, null, 0, false);
             if (codesRow != null)
                 shopRowObjects.Add(codesRow);
+        }
+
+        SortShopOffers(uniqueRecoveryOffers);
+        for (int i = 0; i < uniqueRecoveryOffers.Count; i += 2)
+        {
+            ShopOfferViewModel leftOffer = uniqueRecoveryOffers[i];
+            ShopOfferViewModel rightOffer = i + 1 < uniqueRecoveryOffers.Count ? uniqueRecoveryOffers[i + 1] : null;
+            GameObject row = CreateShopRow(
+                shopRowObjects.Count,
+                leftOffer.Definition,
+                leftOffer.Price,
+                leftOffer.CanAfford,
+                rightOffer != null ? rightOffer.Definition : null,
+                rightOffer != null ? rightOffer.Price : 0,
+                rightOffer != null && rightOffer.CanAfford);
+            if (row != null)
+                shopRowObjects.Add(row);
         }
 
         SortMissEnigmaOffers(visibleOffers);

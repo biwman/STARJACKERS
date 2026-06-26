@@ -9,6 +9,7 @@ public class AudioManager : MonoBehaviour
 {
     const float SpatialMinDistance = 1.5f;
     const float SpatialMaxDistance = 18f;
+    const float ChatVoiceSpatialMaxDistance = 28f;
     const float ClickSoundCooldownSeconds = 0.055f;
     const string MenuMusicResourcePath = "Audio/Music/Abandoned Orbital Dock";
     const string ShipReturnMusicResourcePath = "Audio/Music/victory_orbit";
@@ -510,6 +511,16 @@ public class AudioManager : MonoBehaviour
     public void PlayRaiserRoundStart()
     {
         PlayOneShot(raiserRoundStartClip != null ? raiserRoundStartClip : alarmClip, 0.9f);
+    }
+
+    public void PlayChatVoiceAt(AudioClip clip, Vector3 worldPosition, float volumeScale)
+    {
+        PlaySpatialOneShot(clip, worldPosition, volumeScale, ChatVoiceSpatialMaxDistance);
+    }
+
+    public void PlayChatVoice(AudioClip clip, float volumeScale)
+    {
+        PlayOneShot(clip, volumeScale);
     }
 
     public void PlayMenuMusic()
@@ -1108,6 +1119,11 @@ public class AudioManager : MonoBehaviour
 
     void PlaySpatialOneShot(AudioClip clip, Vector3 worldPosition, float volumeScale)
     {
+        PlaySpatialOneShot(clip, worldPosition, volumeScale, SpatialMaxDistance);
+    }
+
+    void PlaySpatialOneShot(AudioClip clip, Vector3 worldPosition, float volumeScale, float maxDistance)
+    {
         if (clip == null || !TryReserveSpatialOneShotThisFrame())
             return;
 
@@ -1117,7 +1133,7 @@ public class AudioManager : MonoBehaviour
 
         source.Stop();
         source.transform.position = worldPosition;
-        ConfigureSpatialSource(source, volumeScale);
+        ConfigureSpatialSource(source, volumeScale, maxDistance);
         source.clip = clip;
         source.Play();
     }
@@ -1165,6 +1181,11 @@ public class AudioManager : MonoBehaviour
 
     public void ConfigureSpatialSource(AudioSource source, float volume)
     {
+        ConfigureSpatialSource(source, volume, SpatialMaxDistance);
+    }
+
+    void ConfigureSpatialSource(AudioSource source, float volume, float maxDistance)
+    {
         if (source == null)
             return;
 
@@ -1173,7 +1194,7 @@ public class AudioManager : MonoBehaviour
         source.spatialBlend = 1f;
         source.rolloffMode = AudioRolloffMode.Linear;
         source.minDistance = SpatialMinDistance;
-        source.maxDistance = SpatialMaxDistance;
+        source.maxDistance = Mathf.Max(SpatialMinDistance, maxDistance);
         source.dopplerLevel = 0f;
         source.spread = 0f;
         source.volume = volume;

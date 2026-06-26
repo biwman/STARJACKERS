@@ -364,7 +364,6 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
         }
 
         collectedCargoItemIds.Clear();
-        GameVisualTheme.RequestRuntimeRefresh();
     }
 
     bool IsCollectingTargetStillValid()
@@ -670,7 +669,7 @@ public class EnemyPirateBaseBehavior : EnemyBotBehaviorBase
 
         fighter.InitializeFromPhotonData();
         fighter.ForceCombatTarget(targetViewId);
-        GameVisualTheme.RequestRuntimeRefresh();
+        GameVisualTheme.RequestRuntimeRefresh(fighterObject);
     }
 
     int ResolveValidPlayerViewId(int viewId)

@@ -14,7 +14,10 @@ public partial class PlayerProfileService
         {
             int shipCapacity = GetActiveShipInventoryCapacity();
             StagePendingAstronautCargo(serializedAstronautCargo, CurrentProfile.Inventory.ShipSlots, shipSkinIndex, shipCapacity);
-            CurrentProfile.Inventory.SetShipSlots(BuildPostLossShipInventory(CurrentProfile.Inventory.ShipSlots, shipSkinIndex));
+            string[] preLossShipSlots = NormalizeShipSlots(CurrentProfile.Inventory.ShipSlots);
+            string[] postLossShipSlots = BuildPostLossShipInventory(CurrentProfile.Inventory.ShipSlots, shipSkinIndex);
+            RegisterMissEnigmaUniqueItemLosses(preLossShipSlots, postLossShipSlots);
+            CurrentProfile.Inventory.SetShipSlots(postLossShipSlots);
             changed = true;
         }
         else

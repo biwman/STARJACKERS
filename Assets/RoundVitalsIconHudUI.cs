@@ -22,6 +22,7 @@ public sealed class RoundVitalsIconHudUI : MonoBehaviourPun
     const float IconGap = 8f;
     const float GlyphSize = 124f;
     const float LegacyHideInterval = 0.5f;
+    const float LayoutRefreshInterval = 0.2f;
 
     static readonly Color PanelColor = new Color(0f, 0f, 0f, 0f);
     static readonly Color FrameColor = new Color(0.006f, 0.01f, 0.014f, 0.98f);
@@ -44,6 +45,7 @@ public sealed class RoundVitalsIconHudUI : MonoBehaviourPun
     Sprite shieldFrameSprite;
     bool isVisible = true;
     float nextLegacyHideTime;
+    float nextLayoutRefreshTime;
 
     sealed class VitalIconView
     {
@@ -51,6 +53,8 @@ public sealed class RoundVitalsIconHudUI : MonoBehaviourPun
         public RectTransform Rect;
         public Image Fill;
         public TMP_Text ValueText;
+        public int LastCurrent = int.MinValue;
+        public int LastMax = int.MinValue;
     }
 
     void Start()
@@ -80,7 +84,12 @@ public sealed class RoundVitalsIconHudUI : MonoBehaviourPun
             HideLegacyVitalBars();
         }
 
-        ApplyLayout();
+        if (Time.unscaledTime >= nextLayoutRefreshTime)
+        {
+            nextLayoutRefreshTime = Time.unscaledTime + LayoutRefreshInterval;
+            ApplyLayout();
+        }
+
         RefreshValues();
         UpdateVisibility();
     }
@@ -193,6 +202,9 @@ public sealed class RoundVitalsIconHudUI : MonoBehaviourPun
 
         hpView = EnsureVitalView(rootObject.transform, "VitalsHeart", heartSprite, heartFrameSprite, HpEmptyColor, HpGlowColor);
         shieldView = EnsureVitalView(rootObject.transform, "VitalsShield", shieldSprite, shieldFrameSprite, ShieldEmptyColor, ShieldGlowColor);
+        hpView.LastCurrent = int.MinValue;
+        shieldView.LastCurrent = int.MinValue;
+        nextLayoutRefreshTime = 0f;
 
         rootObject.transform.SetAsLastSibling();
     }
@@ -330,6 +342,12 @@ public sealed class RoundVitalsIconHudUI : MonoBehaviourPun
 
         int safeMax = Mathf.Max(1, max);
         int safeCurrent = Mathf.Clamp(current, 0, safeMax);
+        if (view.LastCurrent == safeCurrent && view.LastMax == safeMax)
+            return;
+
+        view.LastCurrent = safeCurrent;
+        view.LastMax = safeMax;
+
         float normalized = Mathf.Clamp01(safeCurrent / (float)safeMax);
 
         if (view.Fill != null)

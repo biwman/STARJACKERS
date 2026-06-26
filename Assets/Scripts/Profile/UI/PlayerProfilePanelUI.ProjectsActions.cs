@@ -50,6 +50,9 @@ public partial class PlayerProfilePanelUI
         if (project == null)
             return;
 
+        if (PlayerProfileService.HasInstance && !PlayerProfileService.Instance.IsProjectUnlocked(project.Id))
+            return;
+
         selectedProjectId = project.Id;
         selectedProjectStageIndex = ResolveInitialProjectStageIndex(project);
         selectedProjectStepIndex = -1;

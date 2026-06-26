@@ -139,6 +139,45 @@ public partial class PlayerHealth : MonoBehaviourPun
     }
 
     [PunRPC]
+    public void ApplyInvaderEnvironmentalDrainRpc(int shieldDmg, int hpDmg, int minimumHp, float impactX, float impactY)
+    {
+        if (!PhotonNetwork.IsMasterClient || IsDeployableDamageProxy() || IsWreck || isEvacuationAnimating)
+            return;
+
+        int previousHp = currentHP;
+        int previousShield = currentShield;
+        int shieldDamage = Mathf.Max(0, shieldDmg);
+        int hpDamage = Mathf.Max(0, hpDmg);
+
+        if (shieldDamage > 0 && currentShield > 0)
+            currentShield = Mathf.Max(0, currentShield - Mathf.Min(currentShield, shieldDamage));
+
+        if (hpDamage > 0 && currentHP > 0)
+        {
+            int safeMinimumHp = Mathf.Clamp(minimumHp, 1, Mathf.Max(1, maxHP));
+            currentHP = Mathf.Max(safeMinimumHp, currentHP - hpDamage);
+        }
+
+        if (currentHP == previousHp && currentShield == previousShield)
+            return;
+
+        TrackDamageTakenAndShieldBreak(previousHp, previousShield);
+        photonView.RPC(nameof(SyncVitals), RpcTarget.All, currentHP, currentShield);
+
+        if (previousShield > currentShield)
+        {
+            photonView.RPC(nameof(PlayShieldHitAudio), RpcTarget.All);
+            photonView.RPC(nameof(PlayShieldHitVisual), RpcTarget.All, impactX, impactY);
+        }
+
+        if (previousHp > currentHP)
+        {
+            photonView.RPC(nameof(PlayHpHitAudio), RpcTarget.All);
+            photonView.RPC(nameof(PlayHpHitVisual), RpcTarget.All, impactX, impactY);
+        }
+    }
+
+    [PunRPC]
     public void TakePilotDamageAt(int dmg, int attackerViewID, float impactX, float impactY, string damageSource)
     {
         WeaponHitContext hitContext = WeaponHitContext.FromDamageSource(damageSource);

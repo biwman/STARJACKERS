@@ -65,9 +65,9 @@ public partial class PlayerProfileService
         return CountItemInSlots(slots, capacity, InventoryItemCatalog.AvengerStartingCodesId) > 0;
     }
 
-    public static bool PlayerHasPirateSymbolInSafePocket(Photon.Realtime.Player player)
+    public static bool PlayerHasItemInSafePocket(Photon.Realtime.Player player, string itemId)
     {
-        if (player == null)
+        if (player == null || string.IsNullOrWhiteSpace(itemId))
             return false;
 
         string[] slots = GetPlayerShipInventorySlots(player);
@@ -79,11 +79,21 @@ public partial class PlayerProfileService
             if (!IsSafePocketIndex(shipSkinIndex, i))
                 continue;
 
-            if (string.Equals(slots[i], InventoryItemCatalog.PirateSymbolId, StringComparison.Ordinal))
+            if (string.Equals(slots[i], itemId, StringComparison.Ordinal))
                 return true;
         }
 
         return false;
+    }
+
+    public static bool PlayerHasPirateSymbolInSafePocket(Photon.Realtime.Player player)
+    {
+        return PlayerHasItemInSafePocket(player, InventoryItemCatalog.PirateSymbolId);
+    }
+
+    public static bool PlayerHasPreservedAlphaSpecimenInSafePocket(Photon.Realtime.Player player)
+    {
+        return PlayerHasItemInSafePocket(player, InventoryItemCatalog.PreservedAlphaSpecimenId);
     }
 
 

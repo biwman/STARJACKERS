@@ -162,7 +162,7 @@ public sealed class NeutralRiderManager : MonoBehaviour
 
         rider.InitializeFromPhotonData();
         ActorIdentity.Ensure(riderObject);
-        GameVisualTheme.RequestRuntimeRefresh();
+        GameVisualTheme.RequestRuntimeRefresh(riderObject);
         return true;
     }
 

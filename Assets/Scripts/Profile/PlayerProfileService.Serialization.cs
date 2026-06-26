@@ -315,4 +315,30 @@ public partial class PlayerProfileService
         }
     }
 
+    string SerializeMissEnigmaUniqueItemRecoveries(string[] itemIds)
+    {
+        UniqueItemRecoverySnapshot snapshot = new UniqueItemRecoverySnapshot
+        {
+            itemIds = NormalizeMissEnigmaUniqueItemRecoveries(itemIds)
+        };
+        return JsonUtility.ToJson(snapshot);
+    }
+
+    string[] DeserializeMissEnigmaUniqueItemRecoveries(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return Array.Empty<string>();
+
+        try
+        {
+            UniqueItemRecoverySnapshot snapshot = JsonUtility.FromJson<UniqueItemRecoverySnapshot>(json);
+            return NormalizeMissEnigmaUniqueItemRecoveries(snapshot != null ? snapshot.itemIds : null);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("Failed to deserialize Miss Enigma unique item recoveries: " + ex.Message);
+            return Array.Empty<string>();
+        }
+    }
+
 }

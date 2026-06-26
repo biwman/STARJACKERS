@@ -12,6 +12,9 @@ public class HealthBarUI : MonoBehaviourPun
     const float BarWidth = 440f;
     const float BarHeight = 42f;
     const float TopOffset = -24f;
+    static readonly Color LowHpColor = new Color(0.89f, 0.2f, 0.24f, 1f);
+    static readonly Color MidHpColor = new Color(0.95f, 0.75f, 0.2f, 1f);
+    static readonly Color HighHpColor = new Color(0.24f, 0.86f, 0.38f, 1f);
 
     Slider hpBar;
     RectTransform hpRect;
@@ -22,6 +25,8 @@ public class HealthBarUI : MonoBehaviourPun
     TextMeshProUGUI valueText;
     bool isVisible = true;
     PlayerHealth health;
+    int lastDisplayedHp = int.MinValue;
+    int lastDisplayedMaxHp = int.MinValue;
 
     void Start()
     {
@@ -38,8 +43,9 @@ public class HealthBarUI : MonoBehaviourPun
 
     void Update()
     {
-        UpdateVisibility();
-        RefreshVisuals();
+        bool visibilityChanged = UpdateVisibility();
+        if (isVisible || visibilityChanged)
+            RefreshVisuals(visibilityChanged);
     }
 
     void InitializeBar()
@@ -81,56 +87,61 @@ public class HealthBarUI : MonoBehaviourPun
         valueText = GetOrCreateText(ValueName, new Vector2(-12f, 0f), TextAlignmentOptions.Right, string.Empty);
     }
 
-    void RefreshVisuals()
+    void RefreshVisuals(bool force = false)
     {
         if (hpBar == null)
             return;
 
+        int maxHp = Mathf.Max(1, health != null ? health.maxHP : Mathf.RoundToInt(hpBar.maxValue));
+        int currentHp = Mathf.Clamp(health != null ? health.CurrentHP : Mathf.RoundToInt(hpBar.value), 0, maxHp);
+        if (!force && currentHp == lastDisplayedHp && maxHp == lastDisplayedMaxHp)
+            return;
+
+        lastDisplayedHp = currentHp;
+        lastDisplayedMaxHp = maxHp;
+
         if (health != null)
         {
-            hpBar.maxValue = Mathf.Max(1, health.maxHP);
-            hpBar.value = Mathf.Clamp(health.CurrentHP, 0, Mathf.RoundToInt(hpBar.maxValue));
+            hpBar.maxValue = maxHp;
+            hpBar.value = currentHp;
         }
 
-        float normalized = hpBar.maxValue > 0f ? hpBar.value / hpBar.maxValue : 0f;
+        float normalized = maxHp > 0 ? currentHp / (float)maxHp : 0f;
 
         if (valueText != null)
         {
-            valueText.text = Mathf.RoundToInt(hpBar.value) + " / " + Mathf.RoundToInt(hpBar.maxValue);
+            valueText.text = currentHp + " / " + maxHp;
         }
 
         if (fillImage == null)
             return;
 
-        Color low = new Color(0.89f, 0.2f, 0.24f, 1f);
-        Color mid = new Color(0.95f, 0.75f, 0.2f, 1f);
-        Color high = new Color(0.24f, 0.86f, 0.38f, 1f);
-
         if (normalized > 0.5f)
         {
             float t = Mathf.InverseLerp(0.5f, 1f, normalized);
-            fillImage.color = Color.Lerp(mid, high, t);
+            fillImage.color = Color.Lerp(MidHpColor, HighHpColor, t);
         }
         else
         {
             float t = Mathf.InverseLerp(0f, 0.5f, normalized);
-            fillImage.color = Color.Lerp(low, mid, t);
+            fillImage.color = Color.Lerp(LowHpColor, MidHpColor, t);
         }
 
         HideHandle();
     }
 
-    void UpdateVisibility()
+    bool UpdateVisibility()
     {
         if (hpBar == null)
-            return;
+            return false;
 
         bool shouldBeVisible = IsGameplayHudVisible();
         if (isVisible == shouldBeVisible)
-            return;
+            return false;
 
         isVisible = shouldBeVisible;
         hpBar.gameObject.SetActive(shouldBeVisible);
+        return true;
     }
 
     bool IsGameplayHudVisible()

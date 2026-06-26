@@ -1182,7 +1182,7 @@ public partial class PlayerProfilePanelUI
             SetShipSelectionStatCard(statLabels, statValues, statFills, 5, ShipStatLabels[5], "+" + definition.MaxBoostPercent + "%", NormalizeShipStat(definition.MaxBoostPercent, stat => stat.MaxBoostPercent));
             SetShipSelectionStatCard(statLabels, statValues, statFills, 6, ShipStatLabels[6], definition.CargoCapacity.ToString(), NormalizeShipStat(definition.CargoCapacity, stat => stat.CargoCapacity));
             SetShipSelectionStatCard(statLabels, statValues, statFills, 7, ShipStatLabels[7], definition.SafePocketSlots.ToString(), NormalizeSafePocketStat(definition.SafePocketSlots));
-            SetShipSelectionStatCard(statLabels, statValues, statFills, 8, ShipStatLabels[8], definition.BrakingDriftLevel.ToString(), NormalizeShipStat(definition.BrakingDriftLevel, stat => stat.BrakingDriftLevel));
+            SetShipSelectionStatCard(statLabels, statValues, statFills, 8, ShipStatLabels[8], definition.BrakingDriftLevel.ToString(), NormalizeBrakingDriftStat(definition.BrakingDriftLevel));
         }
 
         GameObject[] slotObjects = shipSelectionCardSlotObjects != null && cardIndex < shipSelectionCardSlotObjects.Length

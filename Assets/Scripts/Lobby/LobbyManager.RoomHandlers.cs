@@ -253,6 +253,52 @@ public partial class LobbyManager
         }
     }
 
+    async void OnDeveloperCheatUnlockProjectsClicked()
+    {
+        if (PlayerProfileService.Instance == null || developerCheatOverlayObject == null)
+            return;
+
+        try
+        {
+            RefreshDeveloperCheatOverlay("Unlocking projects...", true);
+            await PlayerProfileService.Instance.UnlockAllProjectsAsync();
+            PlayerProfilePanelUI.RefreshOpenPanel();
+            RefreshDeveloperCheatOverlay("All projects unlocked.");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Developer cheat unlock projects failed: " + ex);
+            RefreshDeveloperCheatOverlay("Could not unlock projects.");
+        }
+        finally
+        {
+            RefreshDeveloperCheatOverlay();
+        }
+    }
+
+    async void OnDeveloperCheatLockProjectsClicked()
+    {
+        if (PlayerProfileService.Instance == null || developerCheatOverlayObject == null)
+            return;
+
+        try
+        {
+            RefreshDeveloperCheatOverlay("Locking projects...", true);
+            await PlayerProfileService.Instance.LockAllProjectsAsync();
+            PlayerProfilePanelUI.RefreshOpenPanel();
+            RefreshDeveloperCheatOverlay("Project unlocks restored.");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Developer cheat lock projects failed: " + ex);
+            RefreshDeveloperCheatOverlay("Could not lock projects.");
+        }
+        finally
+        {
+            RefreshDeveloperCheatOverlay();
+        }
+    }
+
     void EnsureActiveRoomMapUnlockedAfterMapProgressChange()
     {
         if (!PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null)

@@ -104,24 +104,26 @@ public partial class LobbyManager
         developerCheatXpText.fontStyle = FontStyles.Normal;
         developerCheatXpText.color = new Color(0.74f, 0.92f, 1f, 1f);
 
-        developerCheatAddMoneyButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddMoneyButton", "ADD MONEY", new Vector2(0f, -238f), new Vector2(260f, 54f), new Color(0.5f, 0.22f, 0.18f, 1f), new Color(0.7f, 0.3f, 0.22f, 1f), OnDeveloperCheatAddMoneyClicked);
-        developerCheatAddXpButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddXpButton", "ADD XP", new Vector2(0f, -300f), new Vector2(260f, 54f), new Color(0.16f, 0.38f, 0.5f, 1f), new Color(0.22f, 0.52f, 0.7f, 1f), OnDeveloperCheatAddXpClicked);
-        developerCheatUnlockBlueprintsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatUnlockBlueprintsButton", "UNLOCK ALL BLUEPRINTS", new Vector2(0f, -362f), new Vector2(340f, 54f), new Color(0.12f, 0.42f, 0.46f, 1f), new Color(0.18f, 0.58f, 0.64f, 1f), OnDeveloperCheatUnlockBlueprintsClicked);
-        developerCheatLockBlueprintsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatLockBlueprintsButton", "LOCK ALL BLUEPRINTS", new Vector2(0f, -424f), new Vector2(340f, 54f), new Color(0.42f, 0.23f, 0.13f, 1f), new Color(0.58f, 0.34f, 0.18f, 1f), OnDeveloperCheatLockBlueprintsClicked);
-        developerCheatUnlockShipsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatUnlockShipsButton", "UNLOCK ALL SHIPS", new Vector2(0f, -486f), new Vector2(340f, 54f), new Color(0.14f, 0.34f, 0.48f, 1f), new Color(0.2f, 0.48f, 0.68f, 1f), OnDeveloperCheatUnlockShipsClicked);
-        developerCheatLockShipsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatLockShipsButton", "LOCK ALL SHIPS", new Vector2(0f, -548f), new Vector2(340f, 54f), new Color(0.34f, 0.22f, 0.34f, 1f), new Color(0.5f, 0.32f, 0.5f, 1f), OnDeveloperCheatLockShipsClicked);
-        developerCheatUnlockMapsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatUnlockMapsButton", "UNLOCK ALL MAPS", new Vector2(0f, -610f), new Vector2(340f, 54f), new Color(0.14f, 0.36f, 0.26f, 1f), new Color(0.2f, 0.54f, 0.38f, 1f), OnDeveloperCheatUnlockMapsClicked);
-        developerCheatLockMapsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatLockMapsButton", "LOCK ALL MAPS", new Vector2(0f, -672f), new Vector2(340f, 54f), new Color(0.36f, 0.28f, 0.16f, 1f), new Color(0.5f, 0.4f, 0.22f, 1f), OnDeveloperCheatLockMapsClicked);
-        developerCheatResetAccountButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatResetAccountButton", "RESET ACCOUNT", new Vector2(0f, -740f), new Vector2(260f, 54f), new Color(0.52f, 0.14f, 0.18f, 1f), new Color(0.72f, 0.2f, 0.25f, 1f), OnDeveloperCheatResetAccountClicked);
+        developerCheatAddMoneyButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddMoneyButton", "ADD MONEY", new Vector2(0f, -226f), new Vector2(260f, 54f), new Color(0.5f, 0.22f, 0.18f, 1f), new Color(0.7f, 0.3f, 0.22f, 1f), OnDeveloperCheatAddMoneyClicked);
+        developerCheatAddXpButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatAddXpButton", "ADD XP", new Vector2(0f, -282f), new Vector2(260f, 54f), new Color(0.16f, 0.38f, 0.5f, 1f), new Color(0.22f, 0.52f, 0.7f, 1f), OnDeveloperCheatAddXpClicked);
+        developerCheatUnlockBlueprintsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatUnlockBlueprintsButton", "UNLOCK ALL BLUEPRINTS", new Vector2(0f, -338f), new Vector2(340f, 54f), new Color(0.12f, 0.42f, 0.46f, 1f), new Color(0.18f, 0.58f, 0.64f, 1f), OnDeveloperCheatUnlockBlueprintsClicked);
+        developerCheatLockBlueprintsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatLockBlueprintsButton", "LOCK ALL BLUEPRINTS", new Vector2(0f, -394f), new Vector2(340f, 54f), new Color(0.42f, 0.23f, 0.13f, 1f), new Color(0.58f, 0.34f, 0.18f, 1f), OnDeveloperCheatLockBlueprintsClicked);
+        developerCheatUnlockShipsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatUnlockShipsButton", "UNLOCK ALL SHIPS", new Vector2(0f, -450f), new Vector2(340f, 54f), new Color(0.14f, 0.34f, 0.48f, 1f), new Color(0.2f, 0.48f, 0.68f, 1f), OnDeveloperCheatUnlockShipsClicked);
+        developerCheatLockShipsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatLockShipsButton", "LOCK ALL SHIPS", new Vector2(0f, -506f), new Vector2(340f, 54f), new Color(0.34f, 0.22f, 0.34f, 1f), new Color(0.5f, 0.32f, 0.5f, 1f), OnDeveloperCheatLockShipsClicked);
+        developerCheatUnlockMapsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatUnlockMapsButton", "UNLOCK ALL MAPS", new Vector2(0f, -562f), new Vector2(340f, 54f), new Color(0.14f, 0.36f, 0.26f, 1f), new Color(0.2f, 0.54f, 0.38f, 1f), OnDeveloperCheatUnlockMapsClicked);
+        developerCheatLockMapsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatLockMapsButton", "LOCK ALL MAPS", new Vector2(0f, -618f), new Vector2(340f, 54f), new Color(0.36f, 0.28f, 0.16f, 1f), new Color(0.5f, 0.4f, 0.22f, 1f), OnDeveloperCheatLockMapsClicked);
+        developerCheatUnlockProjectsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatUnlockProjectsButton", "UNLOCK ALL PROJECTS", new Vector2(0f, -674f), new Vector2(340f, 54f), new Color(0.18f, 0.32f, 0.42f, 1f), new Color(0.25f, 0.45f, 0.58f, 1f), OnDeveloperCheatUnlockProjectsClicked);
+        developerCheatLockProjectsButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatLockProjectsButton", "LOCK ALL PROJECTS", new Vector2(0f, -730f), new Vector2(340f, 54f), new Color(0.34f, 0.2f, 0.26f, 1f), new Color(0.5f, 0.3f, 0.38f, 1f), OnDeveloperCheatLockProjectsClicked);
+        developerCheatResetAccountButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatResetAccountButton", "RESET ACCOUNT", new Vector2(0f, -792f), new Vector2(260f, 54f), new Color(0.52f, 0.14f, 0.18f, 1f), new Color(0.72f, 0.2f, 0.25f, 1f), OnDeveloperCheatResetAccountClicked);
 
-        developerCheatStatusText = CreateStandaloneLabel(panel.transform, "CheatStatusText", string.Empty, new Vector2(60f, -810f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
+        developerCheatStatusText = CreateStandaloneLabel(panel.transform, "CheatStatusText", string.Empty, new Vector2(60f, -858f), new Vector2(500f, 28f), 17f, TextAlignmentOptions.Center);
         developerCheatStatusText.rectTransform.anchorMin = new Vector2(0.5f, 1f);
         developerCheatStatusText.rectTransform.anchorMax = new Vector2(0.5f, 1f);
         developerCheatStatusText.rectTransform.pivot = new Vector2(0.5f, 1f);
         developerCheatStatusText.fontStyle = FontStyles.Normal;
         developerCheatStatusText.color = new Color(0.74f, 0.86f, 0.94f, 0.96f);
 
-        developerCheatCloseButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatCloseButton", "CLOSE", new Vector2(0f, -858f), new Vector2(220f, 52f), new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f), HideDeveloperCheatOverlay);
+        developerCheatCloseButton = CreateLobbyOverlayButton(panel.transform, "LobbyDeveloperCheatCloseButton", "CLOSE", new Vector2(0f, -902f), new Vector2(220f, 52f), new Color(0.16f, 0.22f, 0.3f, 0.98f), new Color(0.22f, 0.3f, 0.4f, 1f), HideDeveloperCheatOverlay);
 
         CreateDeveloperCheatResetConfirm(overlayObject.transform);
 
@@ -159,7 +161,7 @@ public partial class LobbyManager
         title.rectTransform.anchorMax = new Vector2(0.5f, 1f);
         title.rectTransform.pivot = new Vector2(0.5f, 1f);
 
-        TMP_Text body = CreateStandaloneLabel(panel.transform, "LobbyDeveloperCheatResetText", "This will reset XP, level, Astrons to " + PlayerProfileService.DefaultStartingAstrons + ", inventory, equipment, blueprints, unlocked pilots and map progress. Continue?", new Vector2(40f, -102f), new Vector2(560f, 96f), 20f, TextAlignmentOptions.Center);
+        TMP_Text body = CreateStandaloneLabel(panel.transform, "LobbyDeveloperCheatResetText", "This will reset XP, level, Astrons to " + PlayerProfileService.DefaultStartingAstrons + ", inventory, equipment, blueprints, unlocked pilots, map progress and project progress. Continue?", new Vector2(40f, -102f), new Vector2(560f, 96f), 20f, TextAlignmentOptions.Center);
         body.rectTransform.anchorMin = new Vector2(0.5f, 1f);
         body.rectTransform.anchorMax = new Vector2(0.5f, 1f);
         body.rectTransform.pivot = new Vector2(0.5f, 1f);
@@ -268,6 +270,10 @@ public partial class LobbyManager
             developerCheatUnlockMapsButton.interactable = !busy;
         if (developerCheatLockMapsButton != null)
             developerCheatLockMapsButton.interactable = !busy;
+        if (developerCheatUnlockProjectsButton != null)
+            developerCheatUnlockProjectsButton.interactable = !busy;
+        if (developerCheatLockProjectsButton != null)
+            developerCheatLockProjectsButton.interactable = !busy;
         if (developerCheatResetAccountButton != null)
             developerCheatResetAccountButton.interactable = !busy;
         if (developerCheatResetConfirmYesButton != null)

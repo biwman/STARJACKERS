@@ -20,6 +20,18 @@ public partial class PlayerProfileService : MonoBehaviour
         return ProjectCatalog.IsProjectComplete(CurrentProfile.ProjectProgress, projectId);
     }
 
+    public bool IsProjectUnlocked(string projectId)
+    {
+        EnsureProjectProgress();
+        return ProjectCatalog.IsProjectUnlocked(CurrentProfile.ProjectProgress, projectId);
+    }
+
+    public string GetProjectUnlockRequirementText(string projectId)
+    {
+        EnsureProjectProgress();
+        return ProjectCatalog.GetProjectUnlockRequirementText(CurrentProfile.ProjectProgress, projectId);
+    }
+
     public bool IsProjectStageUnlocked(string projectId, int stageIndex)
     {
         EnsureProjectProgress();
@@ -66,6 +78,9 @@ public partial class PlayerProfileService : MonoBehaviour
         ProjectDefinition project = ProjectCatalog.Get(projectId);
         if (project == null || project.Stages == null || stageIndex < 0 || stageIndex >= project.Stages.Length)
             return ProjectCommitFailed(result, "Project not found.");
+
+        if (!ProjectCatalog.IsProjectUnlocked(CurrentProfile.ProjectProgress, projectId))
+            return ProjectCommitFailed(result, "Project locked. " + ProjectCatalog.GetProjectUnlockRequirementText(CurrentProfile.ProjectProgress, projectId));
 
         ProjectStageDefinition stage = project.Stages[stageIndex];
         if (stage == null || stage.Steps == null || stepIndex < 0 || stepIndex >= stage.Steps.Length)
@@ -137,6 +152,9 @@ public partial class PlayerProfileService : MonoBehaviour
         if (project == null || project.Stages == null || stageIndex < 0 || stageIndex >= project.Stages.Length || projectProgress == null)
             return ProjectCommitFailed(result, "Project not found.");
 
+        if (!ProjectCatalog.IsProjectUnlocked(CurrentProfile.ProjectProgress, projectId))
+            return ProjectCommitFailed(result, "Project locked. " + ProjectCatalog.GetProjectUnlockRequirementText(CurrentProfile.ProjectProgress, projectId));
+
         PlayerProjectStageProgress stageProgress = projectProgress.GetStage(stageIndex);
         if (stageProgress == null)
             return ProjectCommitFailed(result, "Stage not found.");
@@ -159,6 +177,53 @@ public partial class PlayerProfileService : MonoBehaviour
         return result;
     }
 
+    public async Task UnlockAllProjectsAsync()
+    {
+        await EnsureInitializedAsync();
+        EnsureProjectProgress();
+
+        if (CurrentProfile.ProjectProgress.CheatUnlockAllProjects)
+            return;
+
+        PlayerProjectProgressData previousProgress = CurrentProfile.ProjectProgress.Clone();
+        CurrentProfile.ProjectProgress.CheatUnlockAllProjects = true;
+
+        try
+        {
+            await SaveProjectProgressAsync("save unlock all projects cheat");
+        }
+        catch (Exception ex)
+        {
+            CurrentProfile.ProjectProgress = previousProgress;
+            Debug.LogError("PlayerProfileService unlock all projects cheat failed: " + ex);
+            throw;
+        }
+    }
+
+    public async Task LockAllProjectsAsync()
+    {
+        await EnsureInitializedAsync();
+        EnsureProjectProgress();
+
+        if (!CurrentProfile.ProjectProgress.CheatUnlockAllProjects)
+            return;
+
+        PlayerProjectProgressData previousProgress = CurrentProfile.ProjectProgress.Clone();
+        CurrentProfile.ProjectProgress.CheatUnlockAllProjects = false;
+        CurrentProfile.ProjectProgress = ProjectCatalog.NormalizeProgress(CurrentProfile.ProjectProgress);
+
+        try
+        {
+            await SaveProjectProgressAsync("save lock all projects cheat");
+        }
+        catch (Exception ex)
+        {
+            CurrentProfile.ProjectProgress = previousProgress;
+            Debug.LogError("PlayerProfileService lock all projects cheat failed: " + ex);
+            throw;
+        }
+    }
+
     async Task SaveProjectsInventoryAndAstronsAsync()
     {
         try
@@ -167,13 +232,15 @@ public partial class PlayerProfileService : MonoBehaviour
             EnsureInventory();
             EnsureProjectProgress();
             EnsureCareerStats();
+            EnsureMissEnigmaUniqueItemRecoveries();
 
             var data = new Dictionary<string, object>
             {
                 [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
                 [CloudAstronsKey] = CurrentProfile.Astrons,
                 [CloudProjectsKey] = SerializeProjectProgress(CurrentProfile.ProjectProgress),
-                [CloudCareerStatsKey] = SerializeCareerStats(CurrentProfile.CareerStats)
+                [CloudCareerStatsKey] = SerializeCareerStats(CurrentProfile.CareerStats),
+                [CloudMissEnigmaRecoverableUniqueItemsKey] = SerializeMissEnigmaUniqueItemRecoveries(CurrentProfile.MissEnigmaRecoverableUniqueItemIds)
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -186,6 +253,29 @@ public partial class PlayerProfileService : MonoBehaviour
         {
             Debug.LogError("PlayerProfileService project save failed: " + ex);
             throw;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    async Task SaveProjectProgressAsync(string operationName)
+    {
+        try
+        {
+            IsBusy = true;
+            EnsureProjectProgress();
+
+            var data = new Dictionary<string, object>
+            {
+                [CloudProjectsKey] = SerializeProjectProgress(CurrentProfile.ProjectProgress)
+            };
+
+            await RunCloudOperationWithRetryAsync(
+                () => CloudSaveService.Instance.Data.Player.SaveAsync(data),
+                operationName);
+            NotifyProfileChanged();
         }
         finally
         {

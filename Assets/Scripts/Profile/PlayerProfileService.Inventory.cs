@@ -82,6 +82,7 @@ public partial class PlayerProfileService
         long updatedSoldValue = (long)Mathf.Max(0, CurrentProfile.PilotSoldItemsAstrons) + value;
         CurrentProfile.PilotSoldItemsAstrons = updatedSoldValue > int.MaxValue ? int.MaxValue : (int)updatedSoldValue;
         CurrentProfile.CareerStats.AstronsEarned = AddClamped(CurrentProfile.CareerStats.AstronsEarned, value);
+        RegisterMissEnigmaUniqueItemLoss(soldItem);
 
         await SaveInventoryAndAstronsAsync();
         return true;
@@ -126,6 +127,7 @@ public partial class PlayerProfileService
         }
 
         CurrentProfile.Inventory = workingInventory;
+        RegisterMissEnigmaUniqueItemLoss(sourceItem);
         await SaveInventoryOnlyAsync();
         return true;
     }
@@ -245,6 +247,7 @@ public partial class PlayerProfileService
         if (string.IsNullOrWhiteSpace(removedItem))
             return null;
 
+        RegisterMissEnigmaUniqueItemLoss(removedItem);
         if (string.Equals(removedItem, InventoryItemCatalog.ShipPrototypeDocumentationId, StringComparison.Ordinal))
         {
             CurrentProfile.PathfinderResearchProgress = PathfinderResearchProgressData.Empty();
@@ -277,6 +280,7 @@ public partial class PlayerProfileService
             return null;
 
         CurrentProfile.Inventory.ShipSlots[slotIndex] = null;
+        RegisterMissEnigmaUniqueItemLoss(removedItem);
         MarkInventoryChangedDeferred();
         return removedItem;
     }
@@ -302,6 +306,7 @@ public partial class PlayerProfileService
             return null;
 
         CurrentProfile.Inventory.ShipSlots[slotIndex] = null;
+        RegisterMissEnigmaUniqueItemLoss(removedItem);
         MarkInventoryChangedDeferred();
         return removedItem;
     }
@@ -327,6 +332,7 @@ public partial class PlayerProfileService
             return null;
 
         CurrentProfile.Inventory.ShipSlots[index] = newItemId;
+        RegisterMissEnigmaUniqueItemLoss(replacedItem);
         MarkInventoryChangedDeferred();
         return replacedItem;
     }
@@ -482,10 +488,12 @@ public partial class PlayerProfileService
         {
             IsBusy = true;
             EnsureInventory();
+            EnsureMissEnigmaUniqueItemRecoveries();
 
             var data = new Dictionary<string, object>
             {
-                [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory)
+                [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
+                [CloudMissEnigmaRecoverableUniqueItemsKey] = SerializeMissEnigmaUniqueItemRecoveries(CurrentProfile.MissEnigmaRecoverableUniqueItemIds)
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -566,6 +574,7 @@ public partial class PlayerProfileService
             ArrowLicenseProgress = ArrowLicenseProgressData.Empty(),
             PathfinderResearchProgress = PathfinderResearchProgressData.Empty(),
             MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
+            MissEnigmaRecoverableUniqueItemIds = Array.Empty<string>(),
             PilotDroneKills = 0,
             PilotSoldItemsAstrons = 0,
             PilotPirateBayReturns = 0,

@@ -29,6 +29,7 @@ public partial class PlayerProfileService
     const string CloudInvaderImprintsRecoveredKey = "profile_invader_imprints_recovered";
     const string CloudPathfinderResearchProgressKey = "profile_pathfinder_research_progress";
     const string CloudMissEnigmaPurchasedBlueprintsKey = "profile_miss_enigma_purchased_blueprints";
+    const string CloudMissEnigmaRecoverableUniqueItemsKey = "profile_miss_enigma_recoverable_unique_items";
     const string CloudPilotDroneKillsKey = "profile_pilot_drone_kills";
     const string CloudPilotSoldItemsAstronsKey = "profile_pilot_sold_items_astrons";
     const string CloudPilotPirateBayReturnsKey = "profile_pilot_pirate_bay_returns";
@@ -140,6 +141,7 @@ public partial class PlayerProfileService
             CloudInvaderImprintsRecoveredKey,
             CloudPathfinderResearchProgressKey,
             CloudMissEnigmaPurchasedBlueprintsKey,
+            CloudMissEnigmaRecoverableUniqueItemsKey,
             CloudPilotDroneKillsKey,
             CloudPilotSoldItemsAstronsKey,
             CloudPilotPirateBayReturnsKey,
@@ -171,6 +173,7 @@ public partial class PlayerProfileService
         int invaderImprintsRecovered = 0;
         PathfinderResearchProgressData pathfinderResearchProgress = PathfinderResearchProgressData.Empty();
         string[] missEnigmaPurchasedBlueprintIds = Array.Empty<string>();
+        string[] missEnigmaRecoverableUniqueItemIds = Array.Empty<string>();
         int pilotDroneKills = 0;
         int pilotSoldItemsAstrons = 0;
         int pilotPirateBayReturns = 0;
@@ -234,6 +237,9 @@ public partial class PlayerProfileService
             if (data.TryGetValue(CloudMissEnigmaPurchasedBlueprintsKey, out Item missEnigmaPurchasedBlueprintsItem) && missEnigmaPurchasedBlueprintsItem?.Value != null)
                 missEnigmaPurchasedBlueprintIds = DeserializeMissEnigmaBlueprintPurchases(missEnigmaPurchasedBlueprintsItem.Value.GetAsString());
 
+            if (data.TryGetValue(CloudMissEnigmaRecoverableUniqueItemsKey, out Item missEnigmaRecoverableUniqueItemsItem) && missEnigmaRecoverableUniqueItemsItem?.Value != null)
+                missEnigmaRecoverableUniqueItemIds = DeserializeMissEnigmaUniqueItemRecoveries(missEnigmaRecoverableUniqueItemsItem.Value.GetAsString());
+
             if (data.TryGetValue(CloudPilotDroneKillsKey, out Item droneKillsItem) && droneKillsItem?.Value != null)
                 pilotDroneKills = Mathf.Max(0, droneKillsItem.Value.GetAs<int>());
 
@@ -284,6 +290,7 @@ public partial class PlayerProfileService
             InvaderImprintsRecovered = NormalizeInvaderImprintsRecovered(invaderImprintsRecovered, unlockedShipIds),
             PathfinderResearchProgress = NormalizePathfinderResearchProgress(pathfinderResearchProgress, unlockedShipIds),
             MissEnigmaPurchasedBlueprintIds = NormalizeMissEnigmaBlueprintPurchases(missEnigmaPurchasedBlueprintIds),
+            MissEnigmaRecoverableUniqueItemIds = NormalizeMissEnigmaUniqueItemRecoveries(missEnigmaRecoverableUniqueItemIds),
             PilotDroneKills = pilotDroneKills,
             PilotSoldItemsAstrons = pilotSoldItemsAstrons,
             PilotPirateBayReturns = pilotPirateBayReturns,
@@ -299,6 +306,7 @@ public partial class PlayerProfileService
         EnsureShipUnlocks();
         EnsureBlueprintUnlocks();
         EnsureMissEnigmaBlueprintPurchases();
+        EnsureMissEnigmaUniqueItemRecoveries();
         EnsureMapUnlockProgress();
         EnsureProjectProgress();
         EnsureCareerStats();
@@ -320,6 +328,7 @@ public partial class PlayerProfileService
             EnsureShipUnlocks();
             EnsureBlueprintUnlocks();
             EnsureMissEnigmaBlueprintPurchases();
+            EnsureMissEnigmaUniqueItemRecoveries();
             EnsureMapUnlockProgress();
             EnsureProjectProgress();
             EnsureCareerStats();
@@ -343,6 +352,7 @@ public partial class PlayerProfileService
                 [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered,
                 [CloudPathfinderResearchProgressKey] = SerializePathfinderResearchProgress(CurrentProfile.PathfinderResearchProgress),
                 [CloudMissEnigmaPurchasedBlueprintsKey] = SerializeMissEnigmaBlueprintPurchases(CurrentProfile.MissEnigmaPurchasedBlueprintIds),
+                [CloudMissEnigmaRecoverableUniqueItemsKey] = SerializeMissEnigmaUniqueItemRecoveries(CurrentProfile.MissEnigmaRecoverableUniqueItemIds),
                 [CloudPilotDroneKillsKey] = CurrentProfile.PilotDroneKills,
                 [CloudPilotSoldItemsAstronsKey] = CurrentProfile.PilotSoldItemsAstrons,
                 [CloudPilotPirateBayReturnsKey] = CurrentProfile.PilotPirateBayReturns,

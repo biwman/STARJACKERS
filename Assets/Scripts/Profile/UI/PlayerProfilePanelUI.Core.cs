@@ -344,6 +344,8 @@ public partial class PlayerProfilePanelUI
         saveAndRunButton = CreateButton(panelObject.transform, "SaveAndRunButton", "PLAY", new Vector2(224f, -800f), new Vector2(108f, 108f), OnSaveAndRunClicked);
         ApplySaveAndRunButtonStyle();
         statusText = CreateText(panelObject.transform, "ProfileStatusText", string.Empty, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(320f, 24f), 16f, TextAlignmentOptions.Center);
+        versionText = CreateText(panelObject.transform, "ProfileVersionText", GetVersionLabel(), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(16f, 14f), new Vector2(260f, 24f), 15f, TextAlignmentOptions.Left);
+        ConfigureVersionText();
 
         CreateProfileScreenScaffolding();
         RebuildProfileScreenHierarchy();
@@ -351,6 +353,40 @@ public partial class PlayerProfilePanelUI
         CreatePilotSelectionView(panelObject.transform);
         SwitchToScreen(ProfileScreen.Home, false);
         UIRuntimeStyler.RefreshStyles();
+    }
+
+    string GetVersionLabel()
+    {
+        string version = Application.version;
+        if (string.IsNullOrWhiteSpace(version))
+            version = "unknown";
+
+        return "Version: " + version;
+    }
+
+    void ConfigureVersionText()
+    {
+        if (versionText == null)
+            return;
+
+        versionText.text = GetVersionLabel();
+        versionText.fontStyle = FontStyles.Normal;
+        versionText.fontSize = 15f;
+        versionText.color = new Color(0.82f, 0.88f, 0.96f, 0.82f);
+        versionText.raycastTarget = false;
+        versionText.textWrappingMode = TextWrappingModes.NoWrap;
+        versionText.overflowMode = TextOverflowModes.Truncate;
+        versionText.characterSpacing = 0f;
+
+        RectTransform rect = versionText.rectTransform;
+        if (rect == null)
+            return;
+
+        rect.anchorMin = new Vector2(0f, 0f);
+        rect.anchorMax = new Vector2(0f, 0f);
+        rect.pivot = new Vector2(0f, 0f);
+        rect.anchoredPosition = new Vector2(16f, 14f);
+        rect.sizeDelta = new Vector2(260f, 24f);
     }
 
     GameObject CreateSectionRoot(string name, Transform parent)

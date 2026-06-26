@@ -235,7 +235,6 @@ public class EnemyBotManager : MonoBehaviour
         if (spawnedAny)
         {
             SetSpawnedCount(definition.Kind, spawnedTotal);
-            GameVisualTheme.RequestRuntimeRefresh();
         }
 
         if (!RoomSettings.GetEnemyRespawnEnabled(definition.Kind))
@@ -268,8 +267,6 @@ public class EnemyBotManager : MonoBehaviour
         }
 
         SetSpawnedCount(definition.Kind, spawnBase + spawnedSuccessCount);
-        if (spawnedSuccessCount > 0)
-            GameVisualTheme.RequestRuntimeRefresh();
     }
 
     void HandleRescueShipSpawn(EnemyBotDefinition definition, double currentStartTime)
@@ -316,7 +313,6 @@ public class EnemyBotManager : MonoBehaviour
         if (spawnedAny)
         {
             SetSpawnedCount(definition.Kind, spawnedTotal);
-            GameVisualTheme.RequestRuntimeRefresh();
         }
 
         if (!RoomSettings.GetEnemyRespawnEnabled(definition.Kind))
@@ -349,8 +345,6 @@ public class EnemyBotManager : MonoBehaviour
         }
 
         SetSpawnedCount(definition.Kind, spawnBase + spawnedSuccessCount);
-        if (spawnedSuccessCount > 0)
-            GameVisualTheme.RequestRuntimeRefresh();
     }
 
     void HandleMilitaryVanSpawn(EnemyBotDefinition definition, double currentStartTime)
@@ -447,7 +441,6 @@ public class EnemyBotManager : MonoBehaviour
         if (spawned > 0)
         {
             SetSpawnedCount(definition.Kind, GetSpawnedCount(definition.Kind) + spawned);
-            GameVisualTheme.RequestRuntimeRefresh();
         }
 
         return spawned;
@@ -618,6 +611,8 @@ public class EnemyBotManager : MonoBehaviour
             {
                 StartCoroutine(PlayRescueShipIncomingAfterBootstrap(bot.photonView.ViewID, spawn));
             }
+
+            GameVisualTheme.RequestRuntimeRefresh(botObject);
         }
 
         return botObject != null;

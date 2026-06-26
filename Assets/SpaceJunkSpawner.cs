@@ -181,13 +181,14 @@ public sealed class SpaceJunkSpawner : MonoBehaviourPun
                 continue;
 
             string itemId = SpaceJunkItemIds[Random.Range(0, SpaceJunkItemIds.Length)];
-            PhotonNetwork.Instantiate("TreasureNetwork", new Vector3(position.x, position.y, 0f), Quaternion.identity, 0, new object[] { itemId });
+            GameObject treasureObject = PhotonNetwork.Instantiate("TreasureNetwork", new Vector3(position.x, position.y, 0f), Quaternion.identity, 0, new object[] { itemId });
+            if (treasureObject != null)
+                GameVisualTheme.RequestRuntimeRefresh(treasureObject);
+
             spawnedPositions.Add(position);
         }
 
         Random.state = previousState;
-        if (spawnedPositions.Count > 0)
-            GameVisualTheme.RequestRuntimeRefresh();
     }
 
     int RollTargetCount(string density)

@@ -82,6 +82,9 @@ public partial class PlayerShooting
         if (GetComponent<FiringFriendController>() == null)
             gameObject.AddComponent<FiringFriendController>();
 
+        if (GetComponent<PreservedAlphaSpecimenCompanionController>() == null)
+            gameObject.AddComponent<PreservedAlphaSpecimenCompanionController>();
+
         if (GetComponent<GuidanceSystemOverlay>() == null)
             gameObject.AddComponent<GuidanceSystemOverlay>();
 

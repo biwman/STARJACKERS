@@ -26,6 +26,8 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
     const float MapEdgeMargin = 2.4f;
     const float PatrolTurnIntervalMin = 1.2f;
     const float PatrolTurnIntervalMax = 2.4f;
+    const float AlphaSpecimenFleeRadius = 7.2f;
+    const float AlphaSpecimenFleeSpeedMultiplier = 1.18f;
 
     readonly HashSet<int> damagedThisDash = new HashSet<int>();
 
@@ -44,6 +46,7 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
     float nextChargeTime;
     float modeStartedAt;
     float orbitDirection = 1f;
+    int retaliationTargetViewId;
     MantaMode mode = MantaMode.Patrol;
 
     public override void Initialize(EnemyBot owner)
@@ -104,6 +107,9 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
             return;
 
         currentTarget = attackerView.transform;
+        if (EnemySpaceAnimalAlphaSpecimenUtility.IsProtectedPlayer(attackerHealth))
+            retaliationTargetViewId = attackerView.ViewID;
+
         nextTargetRefreshTime = Time.time + 0.35f;
         nextChargeTime = Mathf.Min(nextChargeTime, Time.time + 0.25f);
         if (mode == MantaMode.Patrol)
@@ -113,6 +119,9 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
     void TickPatrolOrStalk()
     {
         SetAnimationSpeed(1f);
+
+        if (TryTickAlphaSpecimenFlee())
+            return;
 
         if (currentTarget != null)
         {
@@ -224,10 +233,47 @@ public class EnemySpaceMantaBehavior : EnemyBotBehaviorBase
     Transform ResolveTarget()
     {
         float allowedRange = currentTarget != null ? movement.DisengageRadius : movement.DetectionRadius;
-        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, allowedRange, true, true))
+        if (EnemyTargetingUtility.IsTargetValid(currentTarget, health, rb.position, allowedRange, true, true, CanPassivelyTargetPlayer))
             return currentTarget;
 
-        return EnemyTargetingUtility.FindClosestTarget(rb.position, health, movement.DetectionRadius, true, true);
+        return EnemyTargetingUtility.FindClosestTarget(rb.position, health, movement.DetectionRadius, true, true, CanPassivelyTargetPlayer);
+    }
+
+    bool CanPassivelyTargetPlayer(PlayerHealth candidate)
+    {
+        return EnemySpaceAnimalAlphaSpecimenUtility.CanMantaPassivelyTarget(candidate, retaliationTargetViewId);
+    }
+
+    bool TryTickAlphaSpecimenFlee()
+    {
+        PlayerHealth protectedPlayer = EnemySpaceAnimalAlphaSpecimenUtility.FindClosestProtectedPlayer(
+            rb.position,
+            health,
+            AlphaSpecimenFleeRadius,
+            true,
+            retaliationTargetViewId);
+        if (protectedPlayer == null)
+            return false;
+
+        currentTarget = null;
+        mode = MantaMode.Patrol;
+        nextChargeTime = Mathf.Max(nextChargeTime, Time.time + 0.75f);
+
+        Vector2 away = rb.position - (Vector2)protectedPlayer.transform.position;
+        if (away.sqrMagnitude <= 0.001f)
+            away = rb.linearVelocity.sqrMagnitude > 0.001f ? rb.linearVelocity.normalized : -(Vector2)transform.up;
+
+        Vector2 desired = ApplyAvoidance(ApplyMapEdgeSteering(away.normalized));
+        if (desired.sqrMagnitude <= 0.001f)
+            desired = away.normalized;
+
+        SetAnimationSpeed(1.35f);
+        rb.linearVelocity = Vector2.Lerp(
+            rb.linearVelocity,
+            desired.normalized * (bot.EffectiveMoveSpeed * AlphaSpecimenFleeSpeedMultiplier),
+            0.22f);
+        RotateNoseToward(desired);
+        return true;
     }
 
     Vector2 ResolvePatrolDirection()

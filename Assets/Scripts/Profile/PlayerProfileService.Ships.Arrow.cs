@@ -302,13 +302,15 @@ public partial class PlayerProfileService
             IsBusy = true;
             EnsureInventory();
             EnsureShipUnlocks();
+            EnsureMissEnigmaUniqueItemRecoveries();
 
             var data = new Dictionary<string, object>
             {
                 [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
                 [CloudUnlockedShipsKey] = SerializeShipUnlocks(CurrentProfile.UnlockedShipIds),
                 [CloudArrowLicenseProgressKey] = SerializeArrowLicenseProgress(CurrentProfile.ArrowLicenseProgress),
-                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered
+                [CloudInvaderImprintsRecoveredKey] = CurrentProfile.InvaderImprintsRecovered,
+                [CloudMissEnigmaRecoverableUniqueItemsKey] = SerializeMissEnigmaUniqueItemRecoveries(CurrentProfile.MissEnigmaRecoverableUniqueItemIds)
             };
 
             await RunCloudOperationWithRetryAsync(

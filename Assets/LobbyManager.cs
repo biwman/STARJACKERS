@@ -521,6 +521,8 @@ public partial class LobbyManager : MonoBehaviourPunCallbacks
     Button developerCheatLockShipsButton;
     Button developerCheatUnlockMapsButton;
     Button developerCheatLockMapsButton;
+    Button developerCheatUnlockProjectsButton;
+    Button developerCheatLockProjectsButton;
     Button developerCheatResetAccountButton;
     Button developerCheatCloseButton;
     GameObject developerCheatResetConfirmObject;

@@ -84,11 +84,13 @@ public partial class PlayerProfileService
         {
             IsBusy = true;
             EnsureInventory();
+            EnsureMissEnigmaUniqueItemRecoveries();
 
             var data = new Dictionary<string, object>
             {
                 [CloudShipSkinKey] = CurrentProfile.ShipSkinIndex,
-                [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory)
+                [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
+                [CloudMissEnigmaRecoverableUniqueItemsKey] = SerializeMissEnigmaUniqueItemRecoveries(CurrentProfile.MissEnigmaRecoverableUniqueItemIds)
             };
 
             await RunCloudOperationWithRetryAsync(

@@ -23,6 +23,23 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
     const float SyncSeconds = 8f;
     const float AssimilationRequiredSeconds = 45f;
     const float AssimilationFieldRadius = 5.4f;
+    const float FalseRiftShieldDamageRatio = 0.72f;
+    const float RiftClusterRadius = 7.2f;
+    const float RiftMinSeparation = 4.6f;
+    const float ResonanceRequiredSeconds = 10.5f;
+    const float ResonanceNodeMinDistance = 14f;
+    const float ResonanceNodeMaxDistance = 24f;
+    const float ResonanceBandHalfWidth = 2.35f;
+    const float ResonancePushAcceleration = 1.85f;
+    const float ResonanceResetDriftDuration = 2.35f;
+    const float ResonanceRequiredSpeed = 1.15f;
+    const float AssimilationBoosterDrainSeconds = 8f;
+    const float AssimilationAmmoDrainSeconds = 9f;
+    const float AssimilationShieldDrainPerSecond = 50f / 13f;
+    const float AssimilationHpDrainSeconds = 15f;
+    const float AssimilationFullHpDamageRatio = 0.7f;
+    const float EscortFormFollowDistance = 2.4f;
+    const float EscortFormMaxExtractionDistance = 9.5f;
     const string PersistentHintOwnerKey = "invader-invasion-plot";
     const string EchoGuardMarker = "invader_plot_echo_guard";
 
@@ -35,12 +52,21 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
     const string DangerPhaseKey = "invaderPlot.runtime.dangerPhase";
     const string RiftXKey = "invaderPlot.runtime.riftX";
     const string RiftYKey = "invaderPlot.runtime.riftY";
+    const string Rift2XKey = "invaderPlot.runtime.rift2X";
+    const string Rift2YKey = "invaderPlot.runtime.rift2Y";
+    const string Rift3XKey = "invaderPlot.runtime.rift3X";
+    const string Rift3YKey = "invaderPlot.runtime.rift3Y";
+    const string TrueRiftIndexKey = "invaderPlot.runtime.trueRiftIndex";
+    const string Rift1ConsumedKey = "invaderPlot.runtime.rift1Consumed";
+    const string Rift2ConsumedKey = "invaderPlot.runtime.rift2Consumed";
+    const string Rift3ConsumedKey = "invaderPlot.runtime.rift3Consumed";
     const string Node1XKey = "invaderPlot.runtime.node1X";
     const string Node1YKey = "invaderPlot.runtime.node1Y";
     const string Node2XKey = "invaderPlot.runtime.node2X";
     const string Node2YKey = "invaderPlot.runtime.node2Y";
     const string Node1DoneKey = "invaderPlot.runtime.node1Done";
     const string Node2DoneKey = "invaderPlot.runtime.node2Done";
+    const string ResonanceSecondsKey = "invaderPlot.runtime.resonanceSeconds";
     const string FieldXKey = "invaderPlot.runtime.fieldX";
     const string FieldYKey = "invaderPlot.runtime.fieldY";
     const string FieldSecondsKey = "invaderPlot.runtime.fieldSeconds";
@@ -55,9 +81,19 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
     int localAnnouncementStage;
     double visualStartTime = double.MinValue;
     int visualStage;
+    string visualStateSignature = string.Empty;
     float nextScanTime;
+    float localResonanceSeconds;
+    float nextResonanceSyncTime;
+    bool localWasInResonanceBand;
+    float localLastResonanceProjection = -1f;
     float localAssimilationSeconds;
     float nextAssimilationSyncTime;
+    float localShieldDrainAccumulator;
+    float localHpDrainAccumulator;
+    Vector2 localEscortFormPosition;
+    bool localEscortFormInitialized;
+    float nextEscortSyncTime;
     Coroutine localUseRoutine;
     int localUsePlayerViewId;
     InvaderPlotUseAction localUseAction;
@@ -74,10 +110,17 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
         public bool ObjectiveConsumed;
         public int DangerPhase;
         public Vector2 RiftPosition;
+        public Vector2 Rift2Position;
+        public Vector2 Rift3Position;
+        public int TrueRiftIndex;
+        public bool Rift1Consumed;
+        public bool Rift2Consumed;
+        public bool Rift3Consumed;
         public Vector2 Node1Position;
         public Vector2 Node2Position;
         public bool Node1Done;
         public bool Node2Done;
+        public float ResonanceSeconds;
         public Vector2 FieldPosition;
         public float FieldSeconds;
         public Vector2 ShellPosition;
@@ -211,7 +254,17 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
             handledStartTime = currentStartTime;
             localAnnouncementStartTime = double.MinValue;
             localAnnouncementStage = 0;
+            localResonanceSeconds = 0f;
+            nextResonanceSyncTime = 0f;
+            localWasInResonanceBand = false;
+            localLastResonanceProjection = -1f;
             localAssimilationSeconds = 0f;
+            nextAssimilationSyncTime = 0f;
+            localShieldDrainAccumulator = 0f;
+            localHpDrainAccumulator = 0f;
+            localEscortFormPosition = Vector2.zero;
+            localEscortFormInitialized = false;
+            nextEscortSyncTime = 0f;
             CancelLocalUse(false);
             ClearLocalVisuals();
             RoundAnnouncementUI.ClearPersistentHint(PersistentHintOwnerKey);
@@ -252,13 +305,9 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
             return;
 
         Vector2 anchor = ResolveObjectiveSpawnPosition();
-        Vector2 nodeOffset = UnityEngine.Random.insideUnitCircle.normalized;
-        if (nodeOffset.sqrMagnitude < 0.001f)
-            nodeOffset = Vector2.right;
-
-        Vector2 nodePerp = new Vector2(-nodeOffset.y, nodeOffset.x);
-        Vector2 node1 = ClampToMapBounds(anchor + nodeOffset * 4.2f + nodePerp * 1.6f);
-        Vector2 node2 = ClampToMapBounds(anchor - nodeOffset * 4.2f - nodePerp * 1.6f);
+        int trueRiftIndex = UnityEngine.Random.Range(1, 4);
+        ResolveRiftPositions(anchor, out Vector2 rift1, out Vector2 rift2, out Vector2 rift3);
+        ResolveResonanceNodePositions(anchor, out Vector2 node1, out Vector2 node2);
 
         PhotonHashtable props = new PhotonHashtable
         {
@@ -269,14 +318,23 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
             [ObjectiveActorKey] = 0,
             [ObjectiveConsumedKey] = false,
             [DangerPhaseKey] = 0,
-            [RiftXKey] = anchor.x,
-            [RiftYKey] = anchor.y,
+            [RiftXKey] = rift1.x,
+            [RiftYKey] = rift1.y,
+            [Rift2XKey] = rift2.x,
+            [Rift2YKey] = rift2.y,
+            [Rift3XKey] = rift3.x,
+            [Rift3YKey] = rift3.y,
+            [TrueRiftIndexKey] = trueRiftIndex,
+            [Rift1ConsumedKey] = false,
+            [Rift2ConsumedKey] = false,
+            [Rift3ConsumedKey] = false,
             [Node1XKey] = node1.x,
             [Node1YKey] = node1.y,
             [Node2XKey] = node2.x,
             [Node2YKey] = node2.y,
             [Node1DoneKey] = false,
             [Node2DoneKey] = false,
+            [ResonanceSecondsKey] = 0f,
             [FieldXKey] = anchor.x,
             [FieldYKey] = anchor.y,
             [FieldSecondsKey] = 0f,
@@ -322,30 +380,12 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
             return false;
 
         Vector2 playerPosition = player.transform.position;
-        if (state.Stage == 1 && !state.ObjectiveDone && IsWithinUseRange(playerPosition, state.RiftPosition))
+        if (state.Stage == 1 && !state.ObjectiveDone && TryGetUsableRiftIndex(state, playerPosition, out int riftIndex))
         {
             action = InvaderPlotUseAction.Contact;
+            nodeIndex = riftIndex;
             requiredSeconds = ContactSeconds;
             return true;
-        }
-
-        if (state.Stage == 2 && !state.ObjectiveDone)
-        {
-            if (!state.Node1Done && IsWithinUseRange(playerPosition, state.Node1Position))
-            {
-                action = InvaderPlotUseAction.Stabilize;
-                nodeIndex = 1;
-                requiredSeconds = StabilizeSeconds;
-                return true;
-            }
-
-            if (!state.Node2Done && IsWithinUseRange(playerPosition, state.Node2Position))
-            {
-                action = InvaderPlotUseAction.Stabilize;
-                nodeIndex = 2;
-                requiredSeconds = StabilizeSeconds;
-                return true;
-            }
         }
 
         if (state.Stage == 4 && !state.ObjectiveDone && IsWithinUseRange(playerPosition, state.ShellPosition))
@@ -424,32 +464,29 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
 
         if (state.Stage == 1 && action == InvaderPlotUseAction.Contact)
         {
-            props[ObjectiveDoneKey] = true;
-            props[ObjectiveActorKey] = actorNumber;
-            RoundAnnouncementUI.Show("Alien imprint stabilized. Escape to preserve it.", 3.2f);
-        }
-        else if (state.Stage == 2 && action == InvaderPlotUseAction.Stabilize)
-        {
-            bool node1Done = state.Node1Done || nodeIndex == 1;
-            bool node2Done = state.Node2Done || nodeIndex == 2;
-            props[Node1DoneKey] = node1Done;
-            props[Node2DoneKey] = node2Done;
-            if (node1Done && node2Done)
+            int safeRiftIndex = Mathf.Clamp(nodeIndex, 1, 3);
+            if (safeRiftIndex == state.TrueRiftIndex)
             {
                 props[ObjectiveDoneKey] = true;
                 props[ObjectiveActorKey] = actorNumber;
-                RoundAnnouncementUI.Show("Resonance stabilized. Escape to preserve it.", 3.2f);
+                RoundAnnouncementUI.Show("Alien imprint stabilized. Escape to preserve it.", 3.2f);
             }
             else
             {
-                RoundAnnouncementUI.Show("Resonance node stabilized.", 2.4f);
+                props[GetRiftConsumedKey(safeRiftIndex)] = true;
+                ApplyFalseRiftBurst(player, GetRiftPosition(state, safeRiftIndex));
+                RoundAnnouncementUI.Show("FIND THE TRUE RIFT", 2.8f);
             }
         }
         else if (state.Stage == 4 && action == InvaderPlotUseAction.Sync)
         {
             props[ObjectiveDoneKey] = true;
             props[ObjectiveActorKey] = actorNumber;
-            RoundAnnouncementUI.Show("Invader shell synchronized. Escape to preserve it.", 3.2f);
+            props[ShellXKey] = player.transform.position.x;
+            props[ShellYKey] = player.transform.position.y;
+            localEscortFormPosition = player.transform.position;
+            localEscortFormInitialized = true;
+            RoundAnnouncementUI.Show("HELP THIS INVADER FORM TO ESCAPE FROM THIS AREA", 3.6f);
         }
 
         if (props.Count > 0)
@@ -461,17 +498,35 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
         if (!ShipUnlockPlotCoordinator.IsActivePlot(ShipUnlockPlotType.Invader))
             return;
 
-        if (!TryReadState(out PlotState state) || state.Stage != 3 || state.ObjectiveDone)
+        if (!TryReadState(out PlotState state))
             return;
 
         PlayerHealth localPlayer = GetLocalRoundPlayer();
         if (!IsPlayerEligibleForLocalInteraction(localPlayer) || !IsTargetPlayer(localPlayer, state))
             return;
 
+        if (state.Stage == 2)
+        {
+            TickLocalResonanceBandStage(localPlayer, state);
+            return;
+        }
+
+        if (state.Stage == 4)
+        {
+            TickLocalEscortStage(localPlayer, state);
+            return;
+        }
+
+        if (state.Stage != 3 || state.ObjectiveDone)
+            return;
+
         localAssimilationSeconds = Mathf.Max(localAssimilationSeconds, state.FieldSeconds);
         float distance = Vector2.Distance(localPlayer.transform.position, state.FieldPosition);
         if (distance > AssimilationFieldRadius)
             return;
+
+        InvaderAssimilationSparksVfx.Attach(localPlayer.gameObject);
+        ApplyAssimilationDrain(localPlayer, Time.deltaTime);
 
         localAssimilationSeconds = Mathf.Clamp(
             localAssimilationSeconds + Time.deltaTime,
@@ -500,6 +555,192 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
         }
     }
 
+    void TickLocalResonanceBandStage(PlayerHealth localPlayer, PlotState state)
+    {
+        if (state.ObjectiveDone)
+            return;
+
+        localResonanceSeconds = Mathf.Max(localResonanceSeconds, state.ResonanceSeconds);
+        Rigidbody2D body = localPlayer.GetComponent<Rigidbody2D>();
+        bool inBand = TryGetResonanceBandInfo(
+            localPlayer.transform.position,
+            state.Node1Position,
+            state.Node2Position,
+            out float projection,
+            out float signedDistance,
+            out Vector2 direction,
+            out Vector2 perpendicular);
+
+        if (!inBand)
+        {
+            ResetLocalResonanceProgressIfNeeded(localPlayer, state, perpendicular, signedDistance);
+            return;
+        }
+
+        float sideSign = Mathf.Abs(signedDistance) > 0.05f ? Mathf.Sign(signedDistance) : Mathf.Sign(Mathf.Sin(Time.time * 3.7f));
+        Vector2 outward = perpendicular * (Mathf.Approximately(sideSign, 0f) ? 1f : sideSign);
+        if (body != null && body.simulated)
+            body.linearVelocity += outward * ResonancePushAcceleration * Time.deltaTime;
+
+        float speedAlongBand = 0f;
+        if (body != null)
+            speedAlongBand = Mathf.Abs(Vector2.Dot(body.linearVelocity, direction));
+
+        bool movingAlongBand = speedAlongBand >= ResonanceRequiredSpeed ||
+                               (localLastResonanceProjection >= 0f && Mathf.Abs(projection - localLastResonanceProjection) >= 0.012f);
+        localLastResonanceProjection = projection;
+        localWasInResonanceBand = true;
+
+        if (!movingAlongBand)
+            return;
+
+        localResonanceSeconds = Mathf.Clamp(localResonanceSeconds + Time.deltaTime, 0f, ResonanceRequiredSeconds);
+        if (Time.time >= nextResonanceSyncTime)
+        {
+            nextResonanceSyncTime = Time.time + 0.35f;
+            PhotonNetwork.CurrentRoom.SetCustomProperties(new PhotonHashtable
+            {
+                [ResonanceSecondsKey] = localResonanceSeconds
+            });
+        }
+
+        if (localResonanceSeconds >= ResonanceRequiredSeconds)
+        {
+            int actorNumber = localPlayer.photonView.Owner != null ? localPlayer.photonView.Owner.ActorNumber : 0;
+            PhotonNetwork.CurrentRoom.SetCustomProperties(new PhotonHashtable
+            {
+                [ResonanceSecondsKey] = ResonanceRequiredSeconds,
+                [Node1DoneKey] = true,
+                [Node2DoneKey] = true,
+                [ObjectiveDoneKey] = true,
+                [ObjectiveActorKey] = actorNumber
+            });
+            RoundAnnouncementUI.Show("Resonance path stabilized. Escape to preserve it.", 3.2f);
+        }
+    }
+
+    void ResetLocalResonanceProgressIfNeeded(PlayerHealth localPlayer, PlotState state, Vector2 fallbackPerpendicular, float signedDistance)
+    {
+        if (localResonanceSeconds <= 0.05f && state.ResonanceSeconds <= 0.05f && !localWasInResonanceBand)
+            return;
+
+        Vector2 resetDirection = fallbackPerpendicular.sqrMagnitude > 0.001f
+            ? fallbackPerpendicular.normalized * (Mathf.Abs(signedDistance) > 0.05f ? Mathf.Sign(signedDistance) : 1f)
+            : UnityEngine.Random.insideUnitCircle.normalized;
+        if (resetDirection.sqrMagnitude < 0.001f)
+            resetDirection = Vector2.right;
+
+        localResonanceSeconds = 0f;
+        localWasInResonanceBand = false;
+        localLastResonanceProjection = -1f;
+        nextResonanceSyncTime = Time.time + 0.35f;
+
+        PlayerMovement movement = localPlayer.GetComponent<PlayerMovement>();
+        if (movement != null)
+            movement.ApplyInvaderResonanceDrift(ResonanceResetDriftDuration, resetDirection.normalized * 2.8f);
+
+        PhotonNetwork.CurrentRoom.SetCustomProperties(new PhotonHashtable
+        {
+            [ResonanceSecondsKey] = 0f
+        });
+        RoundAnnouncementUI.Show("Resonance path lost.", 1.8f);
+    }
+
+    void ApplyAssimilationDrain(PlayerHealth localPlayer, float deltaTime)
+    {
+        if (deltaTime <= 0f)
+            return;
+
+        PlayerMovement movement = localPlayer.GetComponent<PlayerMovement>();
+        if (movement != null && movement.DrainInvaderAssimilationBooster(deltaTime / AssimilationBoosterDrainSeconds) > 0.0001f)
+            return;
+
+        PlayerShooting shooting = localPlayer.GetComponent<PlayerShooting>();
+        if (shooting != null)
+        {
+            float ammoDrainPerSecond = Mathf.Max(1f, shooting.MaxAmmo / AssimilationAmmoDrainSeconds);
+            if (shooting.DrainInvaderAssimilationAmmo(ammoDrainPerSecond * deltaTime) > 0)
+                return;
+        }
+
+        if (localPlayer.CurrentShield > 0)
+        {
+            localShieldDrainAccumulator += AssimilationShieldDrainPerSecond * deltaTime;
+            int shieldDamage = Mathf.FloorToInt(localShieldDrainAccumulator);
+            if (shieldDamage > 0)
+            {
+                localShieldDrainAccumulator -= shieldDamage;
+                RequestInvaderDrain(localPlayer, shieldDamage, 0);
+            }
+
+            return;
+        }
+
+        int minimumHp = Mathf.Max(1, Mathf.RoundToInt(localPlayer.maxHP * 0.02f));
+        if (localPlayer.CurrentHP <= minimumHp)
+            return;
+
+        float hpDrainPerSecond = Mathf.Max(1f, localPlayer.maxHP * AssimilationFullHpDamageRatio / AssimilationHpDrainSeconds);
+        localHpDrainAccumulator += hpDrainPerSecond * deltaTime;
+        int hpDamage = Mathf.FloorToInt(localHpDrainAccumulator);
+        if (hpDamage > 0)
+        {
+            localHpDrainAccumulator -= hpDamage;
+            RequestInvaderDrain(localPlayer, 0, hpDamage);
+        }
+    }
+
+    void RequestInvaderDrain(PlayerHealth player, int shieldDamage, int hpDamage)
+    {
+        if (player == null || player.photonView == null)
+            return;
+
+        int minimumHp = Mathf.Max(1, Mathf.RoundToInt(player.maxHP * 0.02f));
+        Vector2 impact = player.transform.position;
+        player.photonView.RPC(
+            nameof(PlayerHealth.ApplyInvaderEnvironmentalDrainRpc),
+            RpcTarget.MasterClient,
+            Mathf.Max(0, shieldDamage),
+            Mathf.Max(0, hpDamage),
+            minimumHp,
+            impact.x,
+            impact.y);
+    }
+
+    void TickLocalEscortStage(PlayerHealth localPlayer, PlotState state)
+    {
+        if (!state.ObjectiveDone || state.ObjectiveConsumed)
+        {
+            localEscortFormInitialized = false;
+            return;
+        }
+
+        Rigidbody2D body = localPlayer.GetComponent<Rigidbody2D>();
+        Vector2 playerPosition = localPlayer.transform.position;
+        Vector2 velocity = body != null ? body.linearVelocity : Vector2.zero;
+        Vector2 behind = velocity.sqrMagnitude > 0.05f ? -velocity.normalized : -(Vector2)localPlayer.transform.up;
+        if (behind.sqrMagnitude < 0.001f)
+            behind = Vector2.down;
+
+        Vector2 desired = playerPosition + behind.normalized * EscortFormFollowDistance;
+        if (!localEscortFormInitialized)
+        {
+            localEscortFormPosition = state.ShellPosition.sqrMagnitude > 0.001f ? state.ShellPosition : desired;
+            localEscortFormInitialized = true;
+        }
+
+        localEscortFormPosition = Vector2.Lerp(localEscortFormPosition, desired, 1f - Mathf.Exp(-Time.deltaTime * 4.2f));
+        if (Time.time >= nextEscortSyncTime)
+        {
+            nextEscortSyncTime = Time.time + 0.28f;
+            PhotonNetwork.CurrentRoom.SetCustomProperties(new PhotonHashtable
+            {
+                [ShellXKey] = localEscortFormPosition.x,
+                [ShellYKey] = localEscortFormPosition.y
+            });
+        }
+    }
+
     bool TryCompleteStageOnEvacuationInternal(PlayerHealth player, out int completedStage)
     {
         completedStage = 0;
@@ -511,6 +752,9 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
 
         int actorNumber = player.photonView.Owner != null ? player.photonView.Owner.ActorNumber : 0;
         if (actorNumber <= 0 || actorNumber != state.ObjectiveActorNumber || actorNumber != state.TargetActorNumber)
+            return false;
+
+        if (!IsStage4EscortCloseEnough(player, state))
             return false;
 
         completedStage = Mathf.Clamp(state.Stage, 1, PlayerProfileService.InvaderImprintsRequired);
@@ -599,33 +843,90 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
 
     void EnsureLocalVisuals(PlotState state)
     {
-        if (visualStartTime == state.StartTime && visualStage == state.Stage)
+        string signature = BuildVisualStateSignature(state);
+        if (visualStartTime == state.StartTime && visualStage == state.Stage && string.Equals(visualStateSignature, signature, StringComparison.Ordinal))
             return;
 
         ClearLocalVisuals();
         visualStartTime = state.StartTime;
         visualStage = state.Stage;
+        visualStateSignature = signature;
 
         switch (state.Stage)
         {
             case 1:
-                AddSpriteVisual("AlienSignalRift", "Visuals/Invader/alien_signal_rift", "Assets/Resources/Visuals/Invader/alien_signal_rift.png", state.RiftPosition, 3.8f, new Color(0.76f, 1f, 0.9f, 0.95f), 22, true);
-                AddEchoVisuals(state.RiftPosition, 2);
+                AddRiftVisuals(state);
                 break;
             case 2:
+                AddResonanceBandVisual(state.Node1Position, state.Node2Position);
                 AddSpriteVisual("ResonanceNodeA", "Visuals/Invader/resonance_node", "Assets/Resources/Visuals/Invader/resonance_node.png", state.Node1Position, 1.9f, state.Node1Done ? new Color(0.55f, 1f, 0.74f, 0.62f) : Color.white, 22, !state.Node1Done);
                 AddSpriteVisual("ResonanceNodeB", "Visuals/Invader/resonance_node", "Assets/Resources/Visuals/Invader/resonance_node.png", state.Node2Position, 1.9f, state.Node2Done ? new Color(0.55f, 1f, 0.74f, 0.62f) : Color.white, 22, !state.Node2Done);
                 AddEchoVisuals((state.Node1Position + state.Node2Position) * 0.5f, 3);
                 break;
             case 3:
                 AddSpriteVisual("AssimilationField", "Visuals/Invader/assimilation_field", "Assets/Resources/Visuals/Invader/assimilation_field.png", state.FieldPosition, AssimilationFieldRadius * 2f, new Color(0.68f, 1f, 0.84f, 0.46f), 18, true);
+                AddAssimilationFieldVisual(state.FieldPosition);
                 AddEchoVisuals(state.FieldPosition, 4);
                 break;
             case 4:
-                AddSpriteVisual("InvaderShell", "Visuals/Invader/invader_shell", "Assets/Resources/Visuals/Invader/invader_shell.png", state.ShellPosition, 2.6f, Color.white, 22, true);
-                AddEchoVisuals(state.ShellPosition, 5);
+                if (state.ObjectiveDone)
+                {
+                    AddInvaderEscortVisual(state);
+                }
+                else
+                {
+                    AddSpriteVisual("InvaderShell", "Visuals/Invader/invader_shell", "Assets/Resources/Visuals/Invader/invader_shell.png", state.ShellPosition, 2.6f, Color.white, 22, true);
+                    AddEchoVisuals(state.ShellPosition, 5);
+                }
                 break;
         }
+    }
+
+    string BuildVisualStateSignature(PlotState state)
+    {
+        return state.Stage + ":" +
+               state.ObjectiveDone + ":" +
+               state.ObjectiveConsumed + ":" +
+               state.Rift1Consumed + ":" +
+               state.Rift2Consumed + ":" +
+               state.Rift3Consumed;
+    }
+
+    void AddRiftVisuals(PlotState state)
+    {
+        for (int i = 1; i <= 3; i++)
+        {
+            if (IsRiftConsumed(state, i))
+                continue;
+
+            Vector2 position = GetRiftPosition(state, i);
+            AddSpriteVisual("AlienSignalRift" + i, "Visuals/Invader/alien_signal_rift", "Assets/Resources/Visuals/Invader/alien_signal_rift.png", position, 3.8f, new Color(0.76f, 1f, 0.9f, 0.95f), 22, true);
+            AddEchoVisuals(position, 1);
+        }
+    }
+
+    void AddResonanceBandVisual(Vector2 node1, Vector2 node2)
+    {
+        GameObject visual = new GameObject("InvaderResonanceBandVisual");
+        InvaderResonanceBandVisual band = visual.AddComponent<InvaderResonanceBandVisual>();
+        band.Configure(node1, node2, ResonanceBandHalfWidth);
+        visualObjects.Add(visual);
+    }
+
+    void AddAssimilationFieldVisual(Vector2 center)
+    {
+        GameObject visual = new GameObject("InvaderAssimilationFieldVisual");
+        InvaderAssimilationFieldVisual field = visual.AddComponent<InvaderAssimilationFieldVisual>();
+        field.Configure(center, AssimilationFieldRadius);
+        visualObjects.Add(visual);
+    }
+
+    void AddInvaderEscortVisual(PlotState state)
+    {
+        GameObject visual = new GameObject("InvaderEscortFormVisual");
+        InvaderEscortFormVisual escort = visual.AddComponent<InvaderEscortFormVisual>();
+        escort.Configure(state.TargetActorNumber, state.ShellPosition);
+        visualObjects.Add(visual);
     }
 
     void AddEchoVisuals(Vector2 center, int count)
@@ -670,7 +971,7 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
         switch (stage)
         {
             case 1: return "Unknown alien signal detected in local space.";
-            case 2: return "Resonance nodes are phasing into this sector.";
+            case 2: return "Resonance corridor is phasing between alien nodes.";
             case 3: return "Assimilation field is active. Survive the exposure.";
             case 4: return "Dormant Invader shell detected. Synchronize before escape.";
             default: return string.Empty;
@@ -688,17 +989,21 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
 
         if (state.ObjectiveDone)
         {
-            RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "Escape through Extraction Zone to secure alien imprint");
+            if (state.Stage == 4)
+                RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "HELP THIS INVADER FORM TO ESCAPE FROM THIS AREA");
+            else
+                RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "Escape through Extraction Zone to secure alien imprint");
             return;
         }
 
         switch (state.Stage)
         {
             case 1:
-                RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "CONTACT the alien rift, then escape through Extraction Zone");
+                RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "CONTACT the true alien rift, then escape");
                 break;
             case 2:
-                RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "STABILIZE both resonance nodes without shooting, then escape");
+                int resonanceSeconds = Mathf.FloorToInt(Mathf.Max(localResonanceSeconds, state.ResonanceSeconds));
+                RoundAnnouncementUI.SetPersistentHint(PersistentHintOwnerKey, "Fly inside Resonance Band: " + resonanceSeconds + "/" + Mathf.RoundToInt(ResonanceRequiredSeconds) + "s");
                 break;
             case 3:
                 int seconds = Mathf.FloorToInt(Mathf.Max(localAssimilationSeconds, state.FieldSeconds));
@@ -717,7 +1022,7 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
     {
         switch (state.Stage)
         {
-            case 1: return state.RiftPosition;
+            case 1: return GetRiftPosition(state, state.TrueRiftIndex);
             case 2: return (state.Node1Position + state.Node2Position) * 0.5f;
             case 3: return state.FieldPosition;
             case 4: return state.ShellPosition;
@@ -743,6 +1048,65 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
         }
 
         return new Vector2(halfX * 0.22f, -halfY * 0.18f);
+    }
+
+    void ResolveRiftPositions(Vector2 anchor, out Vector2 rift1, out Vector2 rift2, out Vector2 rift3)
+    {
+        Vector2 baseDirection = UnityEngine.Random.insideUnitCircle.normalized;
+        if (baseDirection.sqrMagnitude < 0.001f)
+            baseDirection = Vector2.right;
+
+        rift1 = ClampToMapBounds(anchor + baseDirection * RiftClusterRadius);
+        rift2 = ClampToMapBounds(anchor + (Vector2)(Quaternion.Euler(0f, 0f, 122f) * baseDirection) * RiftClusterRadius);
+        rift3 = ClampToMapBounds(anchor + (Vector2)(Quaternion.Euler(0f, 0f, 244f) * baseDirection) * RiftClusterRadius);
+
+        if (Vector2.Distance(rift1, rift2) < RiftMinSeparation ||
+            Vector2.Distance(rift1, rift3) < RiftMinSeparation ||
+            Vector2.Distance(rift2, rift3) < RiftMinSeparation)
+        {
+            rift1 = ClampToMapBounds(anchor + Vector2.right * RiftClusterRadius);
+            rift2 = ClampToMapBounds(anchor + new Vector2(-0.48f, 0.88f) * RiftClusterRadius);
+            rift3 = ClampToMapBounds(anchor + new Vector2(-0.48f, -0.88f) * RiftClusterRadius);
+        }
+    }
+
+    void ResolveResonanceNodePositions(Vector2 anchor, out Vector2 node1, out Vector2 node2)
+    {
+        Vector2 mapSize = RoomSettings.GetEnemyNavigableMapDimensions();
+        float halfX = Mathf.Max(7f, mapSize.x * 0.5f - 5f);
+        float halfY = Mathf.Max(7f, mapSize.y * 0.5f - 5f);
+        float maxDistance = Mathf.Min(ResonanceNodeMaxDistance, Mathf.Max(ResonanceNodeMinDistance, Mathf.Min(halfX, halfY) * 1.35f));
+        ExtractionZone[] zones = FindObjectsByType<ExtractionZone>(FindObjectsInactive.Exclude);
+
+        for (int attempt = 0; attempt < 72; attempt++)
+        {
+            Vector2 direction = UnityEngine.Random.insideUnitCircle.normalized;
+            if (direction.sqrMagnitude < 0.001f)
+                direction = Vector2.right;
+
+            float distance = UnityEngine.Random.Range(ResonanceNodeMinDistance, maxDistance);
+            Vector2 center = ClampToMapBounds(anchor + UnityEngine.Random.insideUnitCircle * 3.8f);
+            Vector2 candidate1 = ClampToMapBounds(center + direction * distance * 0.5f);
+            Vector2 candidate2 = ClampToMapBounds(center - direction * distance * 0.5f);
+            float actualDistance = Vector2.Distance(candidate1, candidate2);
+            if (actualDistance < ResonanceNodeMinDistance)
+                continue;
+
+            if (!IsFarEnoughFromExtractionZones(candidate1, zones, 9f) ||
+                !IsFarEnoughFromExtractionZones(candidate2, zones, 9f))
+            {
+                continue;
+            }
+
+            node1 = candidate1;
+            node2 = candidate2;
+            return;
+        }
+
+        Vector2 fallbackDirection = Mathf.Abs(anchor.x) > Mathf.Abs(anchor.y) ? Vector2.up : Vector2.right;
+        float fallbackDistance = Mathf.Clamp(Mathf.Min(halfX, halfY) * 1.15f, ResonanceNodeMinDistance, maxDistance);
+        node1 = ClampToMapBounds(anchor + fallbackDirection * fallbackDistance * 0.5f);
+        node2 = ClampToMapBounds(anchor - fallbackDirection * fallbackDistance * 0.5f);
     }
 
     bool IsFarEnoughFromExtractionZones(Vector2 candidate, ExtractionZone[] zones, float minDistance)
@@ -784,10 +1148,17 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
             ObjectiveConsumed = props.TryGetValue(ObjectiveConsumedKey, out object consumedValue) && consumedValue is bool consumed && consumed,
             DangerPhase = props.TryGetValue(DangerPhaseKey, out object dangerValue) && TryConvertToInt(dangerValue, out int danger) ? danger : 0,
             RiftPosition = new Vector2(ReadFloat(props, RiftXKey), ReadFloat(props, RiftYKey)),
+            Rift2Position = new Vector2(ReadFloat(props, Rift2XKey), ReadFloat(props, Rift2YKey)),
+            Rift3Position = new Vector2(ReadFloat(props, Rift3XKey), ReadFloat(props, Rift3YKey)),
+            TrueRiftIndex = props.TryGetValue(TrueRiftIndexKey, out object trueRiftValue) && TryConvertToInt(trueRiftValue, out int trueRiftIndex) ? Mathf.Clamp(trueRiftIndex, 1, 3) : 1,
+            Rift1Consumed = props.TryGetValue(Rift1ConsumedKey, out object rift1ConsumedValue) && rift1ConsumedValue is bool rift1Consumed && rift1Consumed,
+            Rift2Consumed = props.TryGetValue(Rift2ConsumedKey, out object rift2ConsumedValue) && rift2ConsumedValue is bool rift2Consumed && rift2Consumed,
+            Rift3Consumed = props.TryGetValue(Rift3ConsumedKey, out object rift3ConsumedValue) && rift3ConsumedValue is bool rift3Consumed && rift3Consumed,
             Node1Position = new Vector2(ReadFloat(props, Node1XKey), ReadFloat(props, Node1YKey)),
             Node2Position = new Vector2(ReadFloat(props, Node2XKey), ReadFloat(props, Node2YKey)),
             Node1Done = props.TryGetValue(Node1DoneKey, out object node1Value) && node1Value is bool node1Done && node1Done,
             Node2Done = props.TryGetValue(Node2DoneKey, out object node2Value) && node2Value is bool node2Done && node2Done,
+            ResonanceSeconds = props.TryGetValue(ResonanceSecondsKey, out object resonanceValue) && TryConvertToFloat(resonanceValue, out float resonanceSeconds) ? Mathf.Clamp(resonanceSeconds, 0f, ResonanceRequiredSeconds) : 0f,
             FieldPosition = new Vector2(ReadFloat(props, FieldXKey), ReadFloat(props, FieldYKey)),
             FieldSeconds = props.TryGetValue(FieldSecondsKey, out object fieldValue) && TryConvertToFloat(fieldValue, out float fieldSeconds) ? Mathf.Clamp(fieldSeconds, 0f, AssimilationRequiredSeconds) : 0f,
             ShellPosition = new Vector2(ReadFloat(props, ShellXKey), ReadFloat(props, ShellYKey))
@@ -816,9 +1187,115 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
         return player.photonView.Owner.ActorNumber == state.TargetActorNumber;
     }
 
+    bool TryGetUsableRiftIndex(PlotState state, Vector2 playerPosition, out int riftIndex)
+    {
+        for (int i = 1; i <= 3; i++)
+        {
+            if (IsRiftConsumed(state, i))
+                continue;
+
+            if (IsWithinUseRange(playerPosition, GetRiftPosition(state, i)))
+            {
+                riftIndex = i;
+                return true;
+            }
+        }
+
+        riftIndex = 0;
+        return false;
+    }
+
+    static bool IsRiftConsumed(PlotState state, int index)
+    {
+        switch (index)
+        {
+            case 1: return state.Rift1Consumed;
+            case 2: return state.Rift2Consumed;
+            case 3: return state.Rift3Consumed;
+            default: return true;
+        }
+    }
+
+    static Vector2 GetRiftPosition(PlotState state, int index)
+    {
+        switch (index)
+        {
+            case 2: return state.Rift2Position;
+            case 3: return state.Rift3Position;
+            default: return state.RiftPosition;
+        }
+    }
+
+    static string GetRiftConsumedKey(int index)
+    {
+        switch (index)
+        {
+            case 2: return Rift2ConsumedKey;
+            case 3: return Rift3ConsumedKey;
+            default: return Rift1ConsumedKey;
+        }
+    }
+
+    void ApplyFalseRiftBurst(PlayerHealth player, Vector2 riftPosition)
+    {
+        if (player == null || player.photonView == null)
+            return;
+
+        int shieldDamage = Mathf.Max(28, Mathf.CeilToInt(player.MaxShield * FalseRiftShieldDamageRatio));
+        player.photonView.RPC(
+            nameof(PlayerHealth.ApplyInvaderEnvironmentalDrainRpc),
+            RpcTarget.MasterClient,
+            shieldDamage,
+            0,
+            Mathf.Max(1, Mathf.RoundToInt(player.maxHP * 0.02f)),
+            riftPosition.x,
+            riftPosition.y);
+
+        ArtifactActivationFlashVfx.Spawn(new Vector3(riftPosition.x, riftPosition.y, 0f), 2.8f);
+    }
+
     bool IsWithinUseRange(Vector2 playerPosition, Vector2 objectivePosition)
     {
         return Vector2.Distance(playerPosition, objectivePosition) <= UseRange;
+    }
+
+    bool TryGetResonanceBandInfo(
+        Vector2 playerPosition,
+        Vector2 node1,
+        Vector2 node2,
+        out float projection,
+        out float signedDistance,
+        out Vector2 direction,
+        out Vector2 perpendicular)
+    {
+        Vector2 segment = node2 - node1;
+        float length = segment.magnitude;
+        if (length <= 0.001f)
+        {
+            projection = 0f;
+            signedDistance = 0f;
+            direction = Vector2.right;
+            perpendicular = Vector2.up;
+            return false;
+        }
+
+        direction = segment / length;
+        perpendicular = new Vector2(-direction.y, direction.x);
+        Vector2 fromStart = playerPosition - node1;
+        projection = Vector2.Dot(fromStart, direction) / length;
+        signedDistance = Vector2.Dot(fromStart, perpendicular);
+        return projection >= 0f && projection <= 1f && Mathf.Abs(signedDistance) <= ResonanceBandHalfWidth;
+    }
+
+    bool IsStage4EscortCloseEnough(PlayerHealth player, PlotState state)
+    {
+        if (state.Stage != 4)
+            return true;
+
+        if (!state.ObjectiveDone)
+            return false;
+
+        return Vector2.Distance(player.transform.position, state.ShellPosition) <= EscortFormMaxExtractionDistance;
     }
 
     PlayerHealth GetLocalRoundPlayer()
@@ -873,7 +1350,18 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
         localAnnouncementStage = 0;
         visualStartTime = double.MinValue;
         visualStage = 0;
+        visualStateSignature = string.Empty;
+        localResonanceSeconds = 0f;
+        nextResonanceSyncTime = 0f;
+        localWasInResonanceBand = false;
+        localLastResonanceProjection = -1f;
         localAssimilationSeconds = 0f;
+        nextAssimilationSyncTime = 0f;
+        localShieldDrainAccumulator = 0f;
+        localHpDrainAccumulator = 0f;
+        localEscortFormPosition = Vector2.zero;
+        localEscortFormInitialized = false;
+        nextEscortSyncTime = 0f;
         CancelLocalUse(false);
         ClearLocalVisuals();
         RoundAnnouncementUI.ClearPersistentHint(PersistentHintOwnerKey);
@@ -890,6 +1378,7 @@ public sealed class InvaderInvasionPlotController : MonoBehaviour
         visualObjects.Clear();
         visualStartTime = double.MinValue;
         visualStage = 0;
+        visualStateSignature = string.Empty;
     }
 
     static bool IsRoundStarted(out double currentStartTime)
@@ -1044,6 +1533,374 @@ public sealed class InvaderObjectivePulse : MonoBehaviour
         {
             float alpha = Mathf.Clamp01(baseColor.a * (0.82f + Mathf.Sin(Time.time * 3.1f + phase) * 0.18f));
             spriteRenderer.color = new Color(baseColor.r, baseColor.g, baseColor.b, alpha);
+        }
+    }
+}
+
+static class InvaderPlotVfxUtility
+{
+    static Material lineMaterial;
+    static Sprite glowSprite;
+
+    public static Material LineMaterial
+    {
+        get
+        {
+            if (lineMaterial != null)
+                return lineMaterial;
+
+            lineMaterial = new Material(Shader.Find("Sprites/Default"))
+            {
+                name = "InvaderPlotVfxMaterial",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            lineMaterial.renderQueue = 5000;
+            return lineMaterial;
+        }
+    }
+
+    public static Sprite GlowSprite
+    {
+        get
+        {
+            if (glowSprite != null)
+                return glowSprite;
+
+            const int size = 96;
+            Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "InvaderPlotGlowTexture",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = (x + 0.5f - size * 0.5f) / (size * 0.5f);
+                    float dy = (y + 0.5f - size * 0.5f) / (size * 0.5f);
+                    float distance = Mathf.Sqrt(dx * dx + dy * dy);
+                    float alpha = Mathf.Clamp01(1f - distance);
+                    alpha = alpha * alpha * (1f - Mathf.Clamp01(distance * 0.25f));
+                    texture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+                }
+            }
+
+            texture.Apply(false, true);
+            glowSprite = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), size);
+            glowSprite.name = "InvaderPlotGlowSprite";
+            glowSprite.hideFlags = HideFlags.HideAndDontSave;
+            return glowSprite;
+        }
+    }
+
+    public static LineRenderer CreateLine(Transform parent, string name, float width, int order, bool loop = false)
+    {
+        GameObject lineObject = new GameObject(name);
+        if (parent != null)
+            lineObject.transform.SetParent(parent, false);
+
+        LineRenderer line = lineObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.alignment = LineAlignment.View;
+        line.material = LineMaterial;
+        line.textureMode = LineTextureMode.Stretch;
+        line.numCapVertices = 12;
+        line.numCornerVertices = 8;
+        line.widthMultiplier = width;
+        line.loop = loop;
+        line.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        line.sortingOrder = order;
+        return line;
+    }
+
+    public static void SetCircle(LineRenderer line, Vector2 center, float radius, Color color, int segments, float wobble)
+    {
+        if (line == null)
+            return;
+
+        int safeSegments = Mathf.Max(16, segments);
+        line.enabled = color.a > 0.001f;
+        line.startColor = color;
+        line.endColor = color;
+        line.positionCount = safeSegments;
+        for (int i = 0; i < safeSegments; i++)
+        {
+            float angle = i / (float)safeSegments * Mathf.PI * 2f;
+            float localRadius = radius * (1f + Mathf.Sin(angle * 4f + Time.time * 2.1f) * wobble);
+            line.SetPosition(i, new Vector3(center.x + Mathf.Cos(angle) * localRadius, center.y + Mathf.Sin(angle) * localRadius, -0.07f));
+        }
+    }
+}
+
+public sealed class InvaderResonanceBandVisual : MonoBehaviour
+{
+    LineRenderer bandGlow;
+    LineRenderer bandCore;
+    LineRenderer edgeA;
+    LineRenderer edgeB;
+    Vector2 node1;
+    Vector2 node2;
+    float halfWidth;
+
+    public void Configure(Vector2 start, Vector2 end, float width)
+    {
+        node1 = start;
+        node2 = end;
+        halfWidth = Mathf.Max(0.5f, width);
+    }
+
+    void Awake()
+    {
+        bandGlow = InvaderPlotVfxUtility.CreateLine(transform, "ResonanceBandGlow", 2.2f, 17);
+        bandCore = InvaderPlotVfxUtility.CreateLine(transform, "ResonanceBandCore", 0.28f, 20);
+        edgeA = InvaderPlotVfxUtility.CreateLine(transform, "ResonanceBandEdgeA", 0.08f, 21);
+        edgeB = InvaderPlotVfxUtility.CreateLine(transform, "ResonanceBandEdgeB", 0.08f, 21);
+    }
+
+    void Update()
+    {
+        Vector2 segment = node2 - node1;
+        if (segment.sqrMagnitude < 0.001f)
+            return;
+
+        Vector2 direction = segment.normalized;
+        Vector2 perpendicular = new Vector2(-direction.y, direction.x);
+        float pulse = 0.5f + Mathf.Sin(Time.time * 3.6f) * 0.5f;
+        SetLine(bandGlow, node1, node2, new Color(0.38f, 1f, 0.78f, 0.18f + pulse * 0.1f), halfWidth * 2f);
+        SetLine(bandCore, node1, node2, new Color(0.78f, 1f, 0.92f, 0.72f), 0.18f + pulse * 0.08f);
+        SetLine(edgeA, node1 + perpendicular * halfWidth, node2 + perpendicular * halfWidth, new Color(0.48f, 1f, 0.82f, 0.58f), 0.08f);
+        SetLine(edgeB, node1 - perpendicular * halfWidth, node2 - perpendicular * halfWidth, new Color(0.48f, 1f, 0.82f, 0.58f), 0.08f);
+    }
+
+    void SetLine(LineRenderer line, Vector2 start, Vector2 end, Color color, float width)
+    {
+        if (line == null)
+            return;
+
+        line.widthMultiplier = width;
+        line.startColor = color;
+        line.endColor = new Color(color.r, color.g, color.b, color.a * 0.62f);
+        line.positionCount = 2;
+        line.SetPosition(0, new Vector3(start.x, start.y, -0.08f));
+        line.SetPosition(1, new Vector3(end.x, end.y, -0.08f));
+    }
+}
+
+public sealed class InvaderAssimilationFieldVisual : MonoBehaviour
+{
+    LineRenderer outerRing;
+    LineRenderer innerRing;
+    LineRenderer pulseRing;
+    SpriteRenderer glow;
+    Vector2 center;
+    float radius;
+
+    public void Configure(Vector2 fieldCenter, float fieldRadius)
+    {
+        center = fieldCenter;
+        radius = Mathf.Max(1f, fieldRadius);
+        transform.position = new Vector3(center.x, center.y, -0.09f);
+    }
+
+    void Awake()
+    {
+        outerRing = InvaderPlotVfxUtility.CreateLine(transform, "AssimilationOuterRing", 0.12f, 23, true);
+        innerRing = InvaderPlotVfxUtility.CreateLine(transform, "AssimilationInnerRing", 0.07f, 24, true);
+        pulseRing = InvaderPlotVfxUtility.CreateLine(transform, "AssimilationPulseRing", 0.16f, 25, true);
+
+        GameObject glowObject = new GameObject("AssimilationFieldGlow");
+        glowObject.transform.SetParent(transform, false);
+        glow = glowObject.AddComponent<SpriteRenderer>();
+        glow.sprite = InvaderPlotVfxUtility.GlowSprite;
+        glow.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        glow.sortingOrder = 16;
+    }
+
+    void Update()
+    {
+        float pulse = 0.5f + Mathf.Sin(Time.time * 2.2f) * 0.5f;
+        InvaderPlotVfxUtility.SetCircle(outerRing, center, radius * (1f + pulse * 0.04f), new Color(0.42f, 1f, 0.76f, 0.72f), 96, 0.018f);
+        InvaderPlotVfxUtility.SetCircle(innerRing, center, radius * 0.62f, new Color(0.72f, 1f, 0.9f, 0.45f), 72, 0.045f);
+        InvaderPlotVfxUtility.SetCircle(pulseRing, center, Mathf.Lerp(radius * 0.18f, radius * 0.92f, pulse), new Color(0.2f, 1f, 0.62f, 0.18f + 0.28f * (1f - pulse)), 72, 0.02f);
+
+        if (glow != null)
+        {
+            float size = radius * (2.25f + pulse * 0.18f);
+            glow.transform.localScale = new Vector3(size, size, 1f);
+            glow.color = new Color(0.26f, 1f, 0.72f, 0.12f + pulse * 0.07f);
+        }
+    }
+}
+
+public sealed class InvaderAssimilationSparksVfx : MonoBehaviour
+{
+    const int SparkCount = 8;
+    const float KeepAliveSeconds = 0.18f;
+
+    readonly LineRenderer[] sparks = new LineRenderer[SparkCount];
+    readonly float[] phases = new float[SparkCount];
+    float keepAliveUntil;
+
+    public static void Attach(GameObject target)
+    {
+        if (!RoomSettings.AreVisualEffectsEnabled() || target == null)
+            return;
+
+        InvaderAssimilationSparksVfx vfx = target.GetComponent<InvaderAssimilationSparksVfx>();
+        if (vfx == null)
+            vfx = target.AddComponent<InvaderAssimilationSparksVfx>();
+
+        vfx.keepAliveUntil = Time.time + KeepAliveSeconds;
+    }
+
+    void Awake()
+    {
+        for (int i = 0; i < sparks.Length; i++)
+        {
+            sparks[i] = InvaderPlotVfxUtility.CreateLine(transform, "AssimilationSpark" + i, 0.045f, 44);
+            phases[i] = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
+        }
+    }
+
+    void Update()
+    {
+        if (Time.time > keepAliveUntil)
+        {
+            Destroy(this);
+            return;
+        }
+
+        Vector2 center = transform.position;
+        for (int i = 0; i < sparks.Length; i++)
+        {
+            float angle = phases[i] + Time.time * (1.8f + i * 0.09f);
+            float radius = 0.55f + Mathf.Sin(Time.time * 4.1f + phases[i]) * 0.18f + (i % 3) * 0.12f;
+            Vector2 start = center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+            Vector2 tangent = new Vector2(-Mathf.Sin(angle), Mathf.Cos(angle));
+            Vector2 end = start + tangent * (0.22f + (i % 2) * 0.14f);
+            Color color = new Color(0.55f, 1f, 0.82f, 0.42f + Mathf.Sin(Time.time * 5f + phases[i]) * 0.18f);
+            sparks[i].startColor = color;
+            sparks[i].endColor = new Color(0.9f, 1f, 0.92f, 0f);
+            sparks[i].positionCount = 2;
+            sparks[i].SetPosition(0, new Vector3(start.x, start.y, -0.11f));
+            sparks[i].SetPosition(1, new Vector3(end.x, end.y, -0.11f));
+        }
+    }
+
+    void OnDestroy()
+    {
+        for (int i = 0; i < sparks.Length; i++)
+        {
+            if (sparks[i] != null)
+                Destroy(sparks[i].gameObject);
+        }
+    }
+}
+
+public sealed class InvaderEscortFormVisual : MonoBehaviour
+{
+    SpriteRenderer shellRenderer;
+    SpriteRenderer glowRenderer;
+    LineRenderer tetherLine;
+    int targetActorNumber;
+    Vector2 formPosition;
+    PlayerHealth targetPlayer;
+    float nextTargetResolveTime;
+
+    public void Configure(int actorNumber, Vector2 initialPosition)
+    {
+        targetActorNumber = actorNumber;
+        formPosition = initialPosition;
+        transform.position = new Vector3(formPosition.x, formPosition.y, -0.1f);
+    }
+
+    void Awake()
+    {
+        GameObject glowObject = new GameObject("InvaderEscortGlow");
+        glowObject.transform.SetParent(transform, false);
+        glowRenderer = glowObject.AddComponent<SpriteRenderer>();
+        glowRenderer.sprite = InvaderPlotVfxUtility.GlowSprite;
+        glowRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        glowRenderer.sortingOrder = 19;
+
+        GameObject shellObject = new GameObject("InvaderEscortShell");
+        shellObject.transform.SetParent(transform, false);
+        shellRenderer = shellObject.AddComponent<SpriteRenderer>();
+        shellRenderer.sprite = RuntimeSpriteUtility.LoadSprite(
+            ShipCatalog.GetShipSkinResourcePath(ShipCatalog.InvaderCamoSkinIndex),
+            ShipCatalog.GetShipSkinEditorResourcePath(ShipCatalog.InvaderCamoSkinIndex));
+        shellRenderer.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
+        shellRenderer.sortingOrder = 26;
+        RuntimeSpriteUtility.FitRenderer(shellRenderer, GameVisualTheme.PlayerTargetSize * 0.95f);
+
+        tetherLine = InvaderPlotVfxUtility.CreateLine(transform, "InvaderEscortTether", 0.08f, 18);
+    }
+
+    void Update()
+    {
+        ResolveTarget();
+        Vector2 desired = formPosition;
+        if (targetPlayer != null)
+        {
+            Rigidbody2D body = targetPlayer.GetComponent<Rigidbody2D>();
+            Vector2 velocity = body != null ? body.linearVelocity : Vector2.zero;
+            Vector2 behind = velocity.sqrMagnitude > 0.05f ? -velocity.normalized : -(Vector2)targetPlayer.transform.up;
+            if (behind.sqrMagnitude < 0.001f)
+                behind = Vector2.down;
+
+            desired = (Vector2)targetPlayer.transform.position + behind.normalized * 2.4f;
+        }
+
+        formPosition = Vector2.Lerp(formPosition, desired, 1f - Mathf.Exp(-Time.deltaTime * 3.6f));
+        transform.position = new Vector3(formPosition.x, formPosition.y, -0.1f);
+        float pulse = 0.5f + Mathf.Sin(Time.time * 3.2f) * 0.5f;
+
+        if (shellRenderer != null)
+        {
+            shellRenderer.color = new Color(0.62f, 1f, 0.86f, 0.38f + pulse * 0.18f);
+            shellRenderer.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(Time.time * 1.6f) * 8f);
+        }
+
+        if (glowRenderer != null)
+        {
+            float scale = 2.6f + pulse * 0.32f;
+            glowRenderer.transform.localScale = new Vector3(scale, scale, 1f);
+            glowRenderer.color = new Color(0.3f, 1f, 0.72f, 0.18f + pulse * 0.08f);
+        }
+
+        if (tetherLine != null && targetPlayer != null)
+        {
+            Vector2 target = targetPlayer.transform.position;
+            tetherLine.startColor = new Color(0.42f, 1f, 0.76f, 0.36f);
+            tetherLine.endColor = new Color(0.42f, 1f, 0.76f, 0f);
+            tetherLine.positionCount = 2;
+            tetherLine.SetPosition(0, new Vector3(formPosition.x, formPosition.y, -0.12f));
+            tetherLine.SetPosition(1, new Vector3(target.x, target.y, -0.12f));
+        }
+    }
+
+    void ResolveTarget()
+    {
+        if (targetPlayer != null && targetPlayer.photonView != null && targetPlayer.photonView.Owner != null && targetPlayer.photonView.Owner.ActorNumber == targetActorNumber)
+            return;
+
+        if (Time.time < nextTargetResolveTime)
+            return;
+
+        nextTargetResolveTime = Time.time + 0.4f;
+        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        for (int i = 0; i < players.Length; i++)
+        {
+            PlayerHealth candidate = players[i];
+            if (candidate != null &&
+                candidate.photonView != null &&
+                candidate.photonView.Owner != null &&
+                candidate.photonView.Owner.ActorNumber == targetActorNumber)
+            {
+                targetPlayer = candidate;
+                return;
+            }
         }
     }
 }

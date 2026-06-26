@@ -797,6 +797,7 @@ public sealed class AstronautKillMeButtonUI : MonoBehaviour
     const string RootName = "AstronautKillMeButtonUI";
     const string ButtonName = "AstronautKillMeButton";
     const string ButtonTextName = "AstronautKillMeButtonText";
+    const float FallbackAstronautScanInterval = 0.25f;
     static readonly Color NormalColor = new Color(0.45f, 0.04f, 0.08f, 0.98f);
     static readonly Color HighlightedColor = new Color(0.62f, 0.07f, 0.12f, 1f);
     static readonly Color PressedColor = new Color(0.29f, 0.02f, 0.05f, 1f);
@@ -807,6 +808,8 @@ public sealed class AstronautKillMeButtonUI : MonoBehaviour
     Button killButton;
     TextMeshProUGUI buttonText;
     PlayerHealth targetHealth;
+    Canvas cachedCanvas;
+    float nextFallbackAstronautScanTime;
     int pendingRequestViewId = -1;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -853,6 +856,8 @@ public sealed class AstronautKillMeButtonUI : MonoBehaviour
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         targetHealth = null;
+        cachedCanvas = null;
+        nextFallbackAstronautScanTime = 0f;
         pendingRequestViewId = -1;
         Refresh();
     }
@@ -897,6 +902,9 @@ public sealed class AstronautKillMeButtonUI : MonoBehaviour
 
     PlayerHealth ResolveLocalAstronaut()
     {
+        if (IsUsableLocalAstronaut(targetHealth))
+            return targetHealth;
+
         if (PhotonNetwork.LocalPlayer != null && PhotonNetwork.LocalPlayer.TagObject is GameObject taggedObject)
         {
             PlayerHealth taggedHealth = taggedObject.GetComponent<PlayerHealth>();
@@ -904,7 +912,11 @@ public sealed class AstronautKillMeButtonUI : MonoBehaviour
                 return taggedHealth;
         }
 
-        PlayerHealth[] players = FindObjectsByType<PlayerHealth>(FindObjectsInactive.Exclude);
+        if (Time.unscaledTime < nextFallbackAstronautScanTime)
+            return null;
+
+        nextFallbackAstronautScanTime = Time.unscaledTime + FallbackAstronautScanInterval;
+        PlayerHealth[] players = RuntimeSceneQueryCache.GetPlayers();
         for (int i = 0; i < players.Length; i++)
         {
             if (IsUsableLocalAstronaut(players[i]))
@@ -949,15 +961,22 @@ public sealed class AstronautKillMeButtonUI : MonoBehaviour
 
     Canvas ResolveCanvas()
     {
+        if (cachedCanvas != null && cachedCanvas.isActiveAndEnabled)
+            return cachedCanvas;
+
         GameObject canvasObject = GameObject.Find("Canvas");
         if (canvasObject != null)
         {
             Canvas namedCanvas = canvasObject.GetComponent<Canvas>();
             if (namedCanvas != null)
-                return namedCanvas;
+            {
+                cachedCanvas = namedCanvas;
+                return cachedCanvas;
+            }
         }
 
-        return FindAnyObjectByType<Canvas>();
+        cachedCanvas = FindAnyObjectByType<Canvas>();
+        return cachedCanvas;
     }
 
     void EnsureButton(Transform parent)

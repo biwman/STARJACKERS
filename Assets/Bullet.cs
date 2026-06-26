@@ -1,7 +1,6 @@
 using ExitGames.Client.Photon;
 using Photon.Pun;
 using Photon.Realtime;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Profiling;
@@ -74,12 +73,15 @@ public class Bullet : MonoBehaviourPun
     SpriteRenderer plasmaOuterRenderer;
     LineRenderer rocketTrailLine;
     SpriteRenderer rocketProjectileRenderer;
+    SpriteRenderer rocketSpriteGlowRenderer;
     SpriteRenderer projectileGlowRenderer;
     SpriteRenderer pilotBreachGlowRenderer;
     AudioSource rocketLoopSource;
     float rocketProjectileWorldLength = RocketProjectileBaseWorldLength;
     Rigidbody2D cachedRigidbody;
     Collider2D cachedCollider;
+    CircleCollider2D cachedCircleCollider;
+    SpriteRenderer cachedSpriteRenderer;
     PhotonView cachedOwnerView;
     PlayerShooting cachedOwnerShooting;
     EnemyBot cachedOwnerBot;
@@ -89,11 +91,34 @@ public class Bullet : MonoBehaviourPun
     int cachedHomingTargetViewId;
     bool hasResolvedOwnerShooting;
     bool hasResolvedOwnerBot;
+    readonly List<Collider2D> ignoredCollisionColliders = new List<Collider2D>(16);
+    Vector3 defaultLocalScale;
+    int defaultDamage;
+    int defaultOwnerViewID;
+    float defaultRangeMultiplier;
+    float defaultFallbackPlayerLength;
+    float defaultSafetyLifetime;
+    float defaultMinimumWorldRadius;
+    RigidbodyType2D defaultBodyType;
+    bool defaultBodySimulated;
+    CollisionDetectionMode2D defaultCollisionDetectionMode;
+    RigidbodyInterpolation2D defaultInterpolation;
+    float defaultBodyMass;
+    float defaultLinearDamping;
+    float defaultAngularDamping;
+    float defaultCircleRadius;
+    bool defaultCircleEnabled;
+    Sprite defaultSprite;
+    Color defaultSpriteColor;
+    bool defaultSpriteEnabled;
+    float despawnAt;
+    bool activeColliderRegistered;
 
     public static void PrewarmRoundAssets()
     {
         PrewarmSpriteTexture(LoadRocketProjectileSprite());
         GetProjectileLineMaterial();
+        ProjectilePunPrefabPool.PrewarmProjectiles("Bullet");
     }
 
     public static object[] AppendWeaponMetadata(
@@ -119,6 +144,40 @@ public class Bullet : MonoBehaviourPun
     {
         cachedRigidbody = GetComponent<Rigidbody2D>();
         cachedCollider = GetComponent<Collider2D>();
+        cachedCircleCollider = cachedCollider as CircleCollider2D ?? GetComponent<CircleCollider2D>();
+        cachedSpriteRenderer = GetComponent<SpriteRenderer>();
+
+        defaultLocalScale = transform.localScale;
+        defaultDamage = damage;
+        defaultOwnerViewID = ownerViewID;
+        defaultRangeMultiplier = rangeMultiplier;
+        defaultFallbackPlayerLength = fallbackPlayerLength;
+        defaultSafetyLifetime = safetyLifetime;
+        defaultMinimumWorldRadius = minimumWorldRadius;
+
+        if (cachedRigidbody != null)
+        {
+            defaultBodyType = cachedRigidbody.bodyType;
+            defaultBodySimulated = cachedRigidbody.simulated;
+            defaultCollisionDetectionMode = cachedRigidbody.collisionDetectionMode;
+            defaultInterpolation = cachedRigidbody.interpolation;
+            defaultBodyMass = cachedRigidbody.mass;
+            defaultLinearDamping = cachedRigidbody.linearDamping;
+            defaultAngularDamping = cachedRigidbody.angularDamping;
+        }
+
+        if (cachedCircleCollider != null)
+        {
+            defaultCircleRadius = cachedCircleCollider.radius;
+            defaultCircleEnabled = cachedCircleCollider.enabled;
+        }
+
+        if (cachedSpriteRenderer != null)
+        {
+            defaultSprite = cachedSpriteRenderer.sprite;
+            defaultSpriteColor = cachedSpriteRenderer.color;
+            defaultSpriteEnabled = cachedSpriteRenderer.enabled;
+        }
     }
 
     PhotonView GetCachedOwnerView()
@@ -178,8 +237,19 @@ public class Bullet : MonoBehaviourPun
         return cachedHomingTargetHealth;
     }
 
-    void Start()
+    void OnEnable()
     {
+        InitializeForActivation();
+    }
+
+    void OnDisable()
+    {
+        CleanupForDeactivation();
+    }
+
+    void InitializeForActivation()
+    {
+        ResetRuntimeState();
         ApplyPhotonConfig();
         ApplyVisualConfig();
 
@@ -193,47 +263,8 @@ public class Bullet : MonoBehaviourPun
             gameObject.AddComponent<HideInNebulaTarget>();
         }
 
-        Rigidbody2D rb = cachedRigidbody;
-        if (rb != null)
-        {
-            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-            rb.interpolation = RigidbodyInterpolation2D.Interpolate;
-            rb.mass = 0.005f * RoomSettings.GetBulletPushMultiplier();
-            rb.linearDamping = 0f;
-            rb.angularDamping = 0f;
-            if (isArcProjectile)
-            {
-                rb.bodyType = RigidbodyType2D.Kinematic;
-                rb.simulated = false;
-            }
-        }
-
-        CircleCollider2D collider2D = GetComponent<CircleCollider2D>();
-        if (collider2D != null)
-        {
-            if (isArcProjectile)
-                collider2D.enabled = false;
-
-            float worldRadius = GetWorldRadius(collider2D);
-            if (worldRadius < minimumWorldRadius)
-            {
-                SetWorldRadius(collider2D, minimumWorldRadius);
-            }
-
-            for (int i = ActiveBulletColliders.Count - 1; i >= 0; i--)
-            {
-                Collider2D other = ActiveBulletColliders[i];
-                if (other == null)
-                {
-                    ActiveBulletColliders.RemoveAt(i);
-                    continue;
-                }
-
-                Physics2D.IgnoreCollision(collider2D, other, true);
-            }
-
-            ActiveBulletColliders.Add(collider2D);
-        }
+        ConfigureRigidbodyForActivation();
+        ConfigureColliderForActivation();
 
         if (maxTravelDistance <= 0f)
         {
@@ -243,7 +274,7 @@ public class Bullet : MonoBehaviourPun
         if (isRocketProjectile)
             StartRocketLoopAudio();
 
-        StartCoroutine(DestroyAfterSafetyLifetime());
+        despawnAt = Time.time + Mathf.Max(0.05f, safetyLifetime);
     }
 
     void Update()
@@ -260,6 +291,16 @@ public class Bullet : MonoBehaviourPun
         if (isArcProjectile)
         {
             UpdateArcProjectileVisual();
+            return;
+        }
+
+        if (Time.time >= despawnAt)
+        {
+            if (isRocketProjectile)
+                DetonateRocket(transform.position, GetTravelDirection());
+            else
+                DestroyBullet();
+
             return;
         }
 
@@ -330,9 +371,8 @@ public class Bullet : MonoBehaviourPun
         LureBeaconDecoy beacon = collision.gameObject.GetComponentInParent<LureBeaconDecoy>();
         if (beacon != null && !CanDamageBeacon(beacon))
         {
-            Collider2D bulletCollider = cachedCollider;
-            if (bulletCollider != null && collision.collider != null)
-                Physics2D.IgnoreCollision(bulletCollider, collision.collider);
+            if (collision.collider != null)
+                IgnoreCollisionWith(collision.collider);
 
             return;
         }
@@ -365,9 +405,8 @@ public class Bullet : MonoBehaviourPun
 
     void IgnoreCollision(Collision2D collision)
     {
-        Collider2D bulletCollider = cachedCollider;
-        if (bulletCollider != null && collision != null && collision.collider != null)
-            Physics2D.IgnoreCollision(bulletCollider, collision.collider);
+        if (collision != null && collision.collider != null)
+            IgnoreCollisionWith(collision.collider);
     }
 
     void UpdateArcProjectileVisual()
@@ -779,32 +818,6 @@ public class Bullet : MonoBehaviourPun
         hitBody.AddForce(impulse, ForceMode2D.Impulse);
     }
 
-    IEnumerator DestroyAfterSafetyLifetime()
-    {
-        yield return new WaitForSeconds(safetyLifetime);
-
-        if (this == null || gameObject == null)
-            yield break;
-
-        if (isRocketProjectile && photonView != null && photonView.IsMine)
-        {
-            DetonateRocket(transform.position, GetTravelDirection());
-            yield break;
-        }
-
-        if (PhotonNetwork.IsConnected && photonView != null)
-        {
-            if (photonView.IsMine)
-            {
-                PhotonNetwork.Destroy(gameObject);
-            }
-        }
-        else
-        {
-            Destroy(gameObject);
-        }
-    }
-
     void UpdateRocketGuidance()
     {
         Rigidbody2D rb = cachedRigidbody;
@@ -877,15 +890,22 @@ public class Bullet : MonoBehaviourPun
 
     void StartRocketLoopAudio()
     {
-        AudioClip clip = AudioManager.Instance.RocketFlyLoopClip;
-        if (clip == null || rocketLoopSource != null)
+        AudioManager audioManager = AudioManager.Instance;
+        if (audioManager == null)
             return;
 
-        rocketLoopSource = gameObject.AddComponent<AudioSource>();
-        AudioManager.Instance.ConfigureSpatialSource(rocketLoopSource, 0.34f);
+        AudioClip clip = audioManager.RocketFlyLoopClip;
+        if (clip == null)
+            return;
+
+        if (rocketLoopSource == null)
+            rocketLoopSource = gameObject.AddComponent<AudioSource>();
+
+        audioManager.ConfigureSpatialSource(rocketLoopSource, 0.34f);
         rocketLoopSource.clip = clip;
         rocketLoopSource.loop = true;
-        rocketLoopSource.Play();
+        if (!rocketLoopSource.isPlaying)
+            rocketLoopSource.Play();
     }
 
     void StopRocketLoopAudio()
@@ -896,13 +916,312 @@ public class Bullet : MonoBehaviourPun
 
     void OnDestroy()
     {
-        StopRocketLoopAudio();
+        CleanupForDeactivation();
+    }
 
+    public void IgnoreCollisionWith(Collider2D other)
+    {
+        Collider2D bulletCollider = cachedCollider;
+        if (bulletCollider == null || other == null || other == bulletCollider)
+            return;
+
+        Physics2D.IgnoreCollision(bulletCollider, other, true);
+        if (!ignoredCollisionColliders.Contains(other))
+            ignoredCollisionColliders.Add(other);
+    }
+
+    public void IgnoreCollisionsWith(Collider2D[] colliders)
+    {
+        if (colliders == null)
+            return;
+
+        for (int i = 0; i < colliders.Length; i++)
+            IgnoreCollisionWith(colliders[i]);
+    }
+
+    void ResetRuntimeState()
+    {
+        damage = defaultDamage;
+        ownerViewID = defaultOwnerViewID;
+        rangeMultiplier = defaultRangeMultiplier;
+        fallbackPlayerLength = defaultFallbackPlayerLength;
+        safetyLifetime = defaultSafetyLifetime;
+        minimumWorldRadius = defaultMinimumWorldRadius;
+        visualScaleMultiplier = 1f;
+        visualColor = defaultSpriteColor;
+        destroyRequested = false;
+        useDamageProfile = false;
+        shieldDamage = 0;
+        hpDamage = 0;
+        pierces = false;
+        areaDamageRadius = 0f;
+        hitEffectId = string.Empty;
+        damageType = WeaponDamageType.None;
+        deliveryMethod = WeaponDeliveryMethod.None;
+        deliveryFlags = WeaponDeliveryFlags.None;
+        isArcProjectile = false;
+        isRocketProjectile = false;
+        pilotBreachProjectile = false;
+        canDamageOwnerInArea = false;
+        homingTargetViewId = 0;
+        homingTurnRateDegrees = 145f;
+        rocketSpeed = 0f;
+        arcTargetPosition = transform.position;
+        arcHeight = 1f;
+        arcTravelDuration = 1f;
+        arcImpactTriggered = false;
+        damagedViewIds.Clear();
+        rocketProjectileWorldLength = RocketProjectileBaseWorldLength;
+        despawnAt = 0f;
+
+        cachedOwnerView = null;
+        cachedOwnerShooting = null;
+        cachedOwnerBot = null;
+        cachedHomingTargetView = null;
+        cachedHomingTargetHealth = null;
+        cachedOwnerViewId = 0;
+        cachedHomingTargetViewId = 0;
+        hasResolvedOwnerShooting = false;
+        hasResolvedOwnerBot = false;
+
+        transform.localScale = defaultLocalScale;
+        ResetCoreVisual();
+        ResetPhysicsToDefaults();
+    }
+
+    void ConfigureRigidbodyForActivation()
+    {
+        Rigidbody2D rb = cachedRigidbody;
+        if (rb == null)
+            return;
+
+        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+        rb.mass = 0.005f * RoomSettings.GetBulletPushMultiplier();
+        rb.linearDamping = 0f;
+        rb.angularDamping = 0f;
+        rb.linearVelocity = Vector2.zero;
+        rb.angularVelocity = 0f;
+        rb.bodyType = defaultBodyType;
+        rb.simulated = defaultBodySimulated;
+
+        if (isArcProjectile)
+        {
+            rb.bodyType = RigidbodyType2D.Kinematic;
+            rb.simulated = false;
+        }
+    }
+
+    void ConfigureColliderForActivation()
+    {
+        CircleCollider2D collider2D = cachedCircleCollider;
+        if (collider2D == null)
+            return;
+
+        collider2D.enabled = defaultCircleEnabled;
+        collider2D.radius = defaultCircleRadius;
+
+        if (isArcProjectile)
+            collider2D.enabled = false;
+
+        float worldRadius = GetWorldRadius(collider2D);
+        if (worldRadius < minimumWorldRadius)
+            SetWorldRadius(collider2D, minimumWorldRadius);
+
+        RegisterActiveBulletCollider(collider2D);
+    }
+
+    void RegisterActiveBulletCollider(Collider2D collider2D)
+    {
+        if (collider2D == null || activeColliderRegistered)
+            return;
+
+        for (int i = ActiveBulletColliders.Count - 1; i >= 0; i--)
+        {
+            Collider2D other = ActiveBulletColliders[i];
+            if (other == null)
+            {
+                ActiveBulletColliders.RemoveAt(i);
+                continue;
+            }
+
+            if (other != collider2D)
+                IgnoreCollisionWith(other);
+        }
+
+        ActiveBulletColliders.Add(collider2D);
+        activeColliderRegistered = true;
+    }
+
+    void CleanupForDeactivation()
+    {
+        UnregisterActiveBulletCollider();
+        RestoreIgnoredCollisions();
+        StopRocketLoopAudio();
+        DestroyRuntimeVisuals();
+        ResetCoreVisual();
+        ResetPhysicsToDefaults();
+    }
+
+    void UnregisterActiveBulletCollider()
+    {
         Collider2D collider2D = cachedCollider;
         if (collider2D != null)
-        {
             ActiveBulletColliders.Remove(collider2D);
+
+        activeColliderRegistered = false;
+    }
+
+    void RestoreIgnoredCollisions()
+    {
+        Collider2D bulletCollider = cachedCollider;
+        if (bulletCollider != null)
+        {
+            for (int i = 0; i < ignoredCollisionColliders.Count; i++)
+            {
+                Collider2D other = ignoredCollisionColliders[i];
+                if (other != null)
+                    Physics2D.IgnoreCollision(bulletCollider, other, false);
+            }
         }
+
+        ignoredCollisionColliders.Clear();
+    }
+
+    void ResetCoreVisual()
+    {
+        if (cachedSpriteRenderer == null)
+            return;
+
+        cachedSpriteRenderer.sprite = defaultSprite;
+        cachedSpriteRenderer.color = defaultSpriteColor;
+        cachedSpriteRenderer.enabled = defaultSpriteEnabled;
+    }
+
+    void ResetPhysicsToDefaults()
+    {
+        Rigidbody2D rb = cachedRigidbody;
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+            rb.bodyType = defaultBodyType;
+            rb.simulated = defaultBodySimulated;
+            rb.collisionDetectionMode = defaultCollisionDetectionMode;
+            rb.interpolation = defaultInterpolation;
+            rb.mass = defaultBodyMass;
+            rb.linearDamping = defaultLinearDamping;
+            rb.angularDamping = defaultAngularDamping;
+        }
+
+        if (cachedCircleCollider != null)
+        {
+            cachedCircleCollider.radius = defaultCircleRadius;
+            cachedCircleCollider.enabled = defaultCircleEnabled;
+        }
+    }
+
+    void DestroyRuntimeVisuals()
+    {
+        DestroyLineRenderers(ref railSegments);
+        DestroyLineRenderers(ref ionBoltLines);
+        DestroyLineRenderers(ref pirateFighterStreakLines);
+        DestroyLineRenderers(ref autoTurretBoltLines);
+        DestroyLineRenderers(ref gatlingTracerLines);
+        DestroyLineRenderers(ref compactBoltLines);
+        DestroyLineRenderers(ref pilotBreachTraceLines);
+        DestroySpriteRenderer(ref pilotBreachGlowRenderer);
+        DestroySpriteRenderer(ref projectileGlowRenderer);
+        DestroySpriteRenderer(ref plasmaInnerRenderer);
+        DestroySpriteRenderer(ref plasmaOuterRenderer);
+        DestroySpriteRenderer(ref rocketSpriteGlowRenderer);
+        DestroySpriteRenderer(ref rocketProjectileRenderer);
+        DestroyLineRenderer(ref rocketTrailLine);
+    }
+
+    void DestroyLineRenderers(ref LineRenderer[] lines)
+    {
+        DisableLineRenderers(lines);
+    }
+
+    void DestroyLineRenderer(ref LineRenderer line)
+    {
+        if (line != null)
+        {
+            line.enabled = false;
+            line.positionCount = 0;
+        }
+    }
+
+    void DestroySpriteRenderer(ref SpriteRenderer renderer)
+    {
+        if (renderer != null && renderer != cachedSpriteRenderer)
+        {
+            renderer.enabled = false;
+        }
+
+        renderer = null;
+    }
+
+    void DisableLineRenderers(LineRenderer[] lines)
+    {
+        if (lines == null)
+            return;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            LineRenderer line = lines[i];
+            if (line == null)
+                continue;
+
+            line.enabled = false;
+            line.positionCount = 0;
+        }
+    }
+
+    LineRenderer EnsureRuntimeLine(ref LineRenderer[] lines, int count, int index, string objectName)
+    {
+        if (count <= 0 || index < 0 || index >= count)
+            return null;
+
+        if (lines == null || lines.Length != count)
+        {
+            DisableLineRenderers(lines);
+            lines = new LineRenderer[count];
+        }
+
+        LineRenderer line = lines[index];
+        if (line == null)
+        {
+            Transform existing = transform.Find(objectName);
+            line = existing != null ? existing.GetComponent<LineRenderer>() : null;
+        }
+
+        if (line == null)
+        {
+            GameObject lineObject = new GameObject(objectName);
+            lineObject.transform.SetParent(transform, false);
+            line = lineObject.AddComponent<LineRenderer>();
+        }
+
+        if (line.transform.parent != transform)
+            line.transform.SetParent(transform, false);
+
+        line.gameObject.name = objectName;
+        line.enabled = true;
+        line.transform.localPosition = Vector3.zero;
+        line.transform.localRotation = Quaternion.identity;
+        line.transform.localScale = Vector3.one;
+        lines[index] = line;
+        return line;
+    }
+
+    void DestroyRuntimeObject(GameObject runtimeObject)
+    {
+        if (runtimeObject == null || runtimeObject == gameObject)
+            return;
+
+        Destroy(runtimeObject);
     }
 
     void ApplyPhotonConfig()
@@ -1278,16 +1597,27 @@ public class Bullet : MonoBehaviourPun
             EnsureProjectileGlow(coreRenderer, "RocketGlow", new Color(1f, 0.35f, 0.06f, 0.38f), 1.7f);
         }
 
-        if (rocketTrailLine != null)
-            return;
-
         SpriteRenderer sortingRenderer = rocketProjectileRenderer != null ? rocketProjectileRenderer : coreRenderer;
-        GameObject trailObject = new GameObject("RocketEngineTrail");
-        trailObject.transform.SetParent(transform, false);
-        rocketTrailLine = trailObject.AddComponent<LineRenderer>();
+        if (rocketTrailLine == null)
+        {
+            Transform existingTrail = transform.Find("RocketEngineTrail");
+            rocketTrailLine = existingTrail != null ? existingTrail.GetComponent<LineRenderer>() : null;
+        }
+
+        if (rocketTrailLine == null)
+        {
+            GameObject trailObject = new GameObject("RocketEngineTrail");
+            trailObject.transform.SetParent(transform, false);
+            rocketTrailLine = trailObject.AddComponent<LineRenderer>();
+        }
+
+        if (rocketTrailLine.transform.parent != transform)
+            rocketTrailLine.transform.SetParent(transform, false);
+
         EngineTrailVisualUtility.ConfigureLineBase(rocketTrailLine);
         rocketTrailLine.useWorldSpace = true;
         rocketTrailLine.positionCount = 2;
+        rocketTrailLine.enabled = true;
         rocketTrailLine.textureMode = LineTextureMode.Stretch;
         rocketTrailLine.alignment = LineAlignment.View;
         rocketTrailLine.numCapVertices = 3;
@@ -1359,56 +1689,70 @@ public class Bullet : MonoBehaviourPun
 
     void EnsureRocketSpriteGlow(SpriteRenderer spriteRenderer)
     {
-        if (spriteRenderer == null || spriteRenderer.sprite == null || spriteRenderer.transform.Find("RocketSpriteGlow") != null)
+        if (spriteRenderer == null || spriteRenderer.sprite == null)
             return;
 
-        GameObject glowObject = new GameObject("RocketSpriteGlow");
-        glowObject.transform.SetParent(spriteRenderer.transform, false);
-        glowObject.transform.localPosition = Vector3.zero;
-        glowObject.transform.localRotation = Quaternion.identity;
-        glowObject.transform.localScale = Vector3.one * 1.16f;
+        Transform glowTransform = spriteRenderer.transform.Find("RocketSpriteGlow");
+        SpriteRenderer glowRenderer = glowTransform != null ? glowTransform.GetComponent<SpriteRenderer>() : null;
+        if (glowRenderer == null)
+        {
+            GameObject glowObject = new GameObject("RocketSpriteGlow");
+            glowObject.transform.SetParent(spriteRenderer.transform, false);
+            glowTransform = glowObject.transform;
+            glowRenderer = glowObject.AddComponent<SpriteRenderer>();
+        }
 
-        SpriteRenderer glowRenderer = glowObject.AddComponent<SpriteRenderer>();
+        glowTransform.localPosition = Vector3.zero;
+        glowTransform.localRotation = Quaternion.identity;
+        glowTransform.localScale = Vector3.one * 1.16f;
         glowRenderer.sprite = spriteRenderer.sprite;
         glowRenderer.color = new Color(1f, 0.46f, 0.08f, 0.2f);
         glowRenderer.sortingLayerID = spriteRenderer.sortingLayerID;
         glowRenderer.sortingOrder = spriteRenderer.sortingOrder - 1;
+        glowRenderer.enabled = true;
+        rocketSpriteGlowRenderer = glowRenderer;
     }
 
     void EnsureProjectileGlow(SpriteRenderer coreRenderer, string objectName, Color glowColor, float scale)
     {
-        if (coreRenderer == null || coreRenderer.sprite == null || transform.Find(objectName) != null)
+        if (coreRenderer == null || coreRenderer.sprite == null)
             return;
 
-        GameObject glowObject = new GameObject(objectName);
-        glowObject.transform.SetParent(transform, false);
-        glowObject.transform.localPosition = Vector3.zero;
-        glowObject.transform.localRotation = Quaternion.identity;
-        glowObject.transform.localScale = Vector3.one * scale;
+        Transform glowTransform = transform.Find(objectName);
+        SpriteRenderer glowRenderer = glowTransform != null ? glowTransform.GetComponent<SpriteRenderer>() : null;
+        if (glowRenderer == null)
+        {
+            GameObject glowObject = new GameObject(objectName);
+            glowObject.transform.SetParent(transform, false);
+            glowTransform = glowObject.transform;
+            glowRenderer = glowObject.AddComponent<SpriteRenderer>();
+        }
 
-        SpriteRenderer glowRenderer = glowObject.AddComponent<SpriteRenderer>();
+        glowTransform.localPosition = Vector3.zero;
+        glowTransform.localRotation = Quaternion.identity;
+        glowTransform.localScale = Vector3.one * scale;
         glowRenderer.sprite = coreRenderer.sprite;
         glowRenderer.color = glowColor;
         glowRenderer.sortingLayerID = coreRenderer.sortingLayerID;
         glowRenderer.sortingOrder = coreRenderer.sortingOrder - 1;
+        glowRenderer.enabled = true;
         projectileGlowRenderer = glowRenderer;
     }
 
     void EnsurePilotBreachProjectileVisual(SpriteRenderer coreRenderer)
     {
-        if (!pilotBreachProjectile || pilotBreachTraceLines != null)
+        if (!pilotBreachProjectile)
             return;
 
         SpriteRenderer referenceRenderer = rocketProjectileRenderer != null ? rocketProjectileRenderer : coreRenderer;
         EnsurePilotBreachGlow(referenceRenderer);
 
-        pilotBreachTraceLines = new LineRenderer[PilotBreachTraceCount];
-        for (int i = 0; i < pilotBreachTraceLines.Length; i++)
+        for (int i = 0; i < PilotBreachTraceCount; i++)
         {
-            GameObject lineObject = new GameObject("PilotBreachTrace_" + i);
-            lineObject.transform.SetParent(transform, false);
+            LineRenderer line = EnsureRuntimeLine(ref pilotBreachTraceLines, PilotBreachTraceCount, i, "PilotBreachTrace_" + i);
+            if (line == null)
+                continue;
 
-            LineRenderer line = lineObject.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
             line.positionCount = 2;
             line.textureMode = LineTextureMode.Stretch;
@@ -1430,8 +1774,6 @@ public class Bullet : MonoBehaviourPun
                 line.sortingLayerName = GameVisualTheme.WorldSortingLayerName;
                 line.sortingOrder = GameVisualTheme.PlayerSortingOrder + 6;
             }
-
-            pilotBreachTraceLines[i] = line;
         }
 
         UpdatePilotBreachProjectileVisual();
@@ -1443,38 +1785,35 @@ public class Bullet : MonoBehaviourPun
             return;
 
         Transform existing = referenceRenderer.transform.Find("PilotBreachGlow");
-        if (existing != null)
+        SpriteRenderer glowRenderer = existing != null ? existing.GetComponent<SpriteRenderer>() : null;
+        if (glowRenderer == null)
         {
-            pilotBreachGlowRenderer = existing.GetComponent<SpriteRenderer>();
-            return;
+            GameObject glowObject = new GameObject("PilotBreachGlow");
+            glowObject.transform.SetParent(referenceRenderer.transform, false);
+            existing = glowObject.transform;
+            glowRenderer = glowObject.AddComponent<SpriteRenderer>();
         }
 
-        GameObject glowObject = new GameObject("PilotBreachGlow");
-        glowObject.transform.SetParent(referenceRenderer.transform, false);
-        glowObject.transform.localPosition = Vector3.zero;
-        glowObject.transform.localRotation = Quaternion.identity;
-        glowObject.transform.localScale = Vector3.one * 1.34f;
-
-        SpriteRenderer glowRenderer = glowObject.AddComponent<SpriteRenderer>();
+        existing.localPosition = Vector3.zero;
+        existing.localRotation = Quaternion.identity;
+        existing.localScale = Vector3.one * 1.34f;
         glowRenderer.sprite = referenceRenderer.sprite;
         glowRenderer.color = new Color(1f, 0.92f, 0.36f, 0.36f);
         glowRenderer.sortingLayerID = referenceRenderer.sortingLayerID;
         glowRenderer.sortingOrder = referenceRenderer.sortingOrder + 5;
+        glowRenderer.enabled = true;
         pilotBreachGlowRenderer = glowRenderer;
     }
 
     void EnsureRailProjectileVisual(SpriteRenderer coreRenderer)
     {
-        if (railSegments != null && railSegments.Length > 0)
-            return;
-
-        railSegments = new LineRenderer[3];
-        for (int i = 0; i < railSegments.Length; i++)
+        const int segmentCount = 3;
+        for (int i = 0; i < segmentCount; i++)
         {
-            GameObject segmentObject = new GameObject("RailProjectileSegment_" + i);
-            segmentObject.transform.SetParent(transform, false);
+            LineRenderer line = EnsureRuntimeLine(ref railSegments, segmentCount, i, "RailProjectileSegment_" + i);
+            if (line == null)
+                continue;
 
-            LineRenderer line = segmentObject.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
             line.positionCount = 2;
             line.textureMode = LineTextureMode.Stretch;
@@ -1491,8 +1830,6 @@ public class Bullet : MonoBehaviourPun
                 line.sortingOrder = coreRenderer.sortingOrder + 2;
                 coreRenderer.color = new Color(coreRenderer.color.r, coreRenderer.color.g, coreRenderer.color.b, 0.08f);
             }
-
-            railSegments[i] = line;
         }
 
         UpdateStyledProjectileVisuals();
@@ -1613,16 +1950,13 @@ public class Bullet : MonoBehaviourPun
 
     void EnsureIonProjectileVisual(SpriteRenderer coreRenderer)
     {
-        if (ionBoltLines != null && ionBoltLines.Length > 0)
-            return;
-
-        ionBoltLines = new LineRenderer[3];
-        for (int i = 0; i < ionBoltLines.Length; i++)
+        const int lineCount = 3;
+        for (int i = 0; i < lineCount; i++)
         {
-            GameObject lineObject = new GameObject("IonBoltLine_" + i);
-            lineObject.transform.SetParent(transform, false);
+            LineRenderer line = EnsureRuntimeLine(ref ionBoltLines, lineCount, i, "IonBoltLine_" + i);
+            if (line == null)
+                continue;
 
-            LineRenderer line = lineObject.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
             line.positionCount = 2;
             line.textureMode = LineTextureMode.Stretch;
@@ -1638,8 +1972,6 @@ public class Bullet : MonoBehaviourPun
                 line.sortingLayerID = coreRenderer.sortingLayerID;
                 line.sortingOrder = coreRenderer.sortingOrder + (i == 0 ? 3 : 2);
             }
-
-            ionBoltLines[i] = line;
         }
 
         if (coreRenderer != null)
@@ -1674,17 +2006,14 @@ public class Bullet : MonoBehaviourPun
 
     void EnsurePirateFighterProjectileVisual(SpriteRenderer coreRenderer)
     {
-        if (pirateFighterStreakLines != null && pirateFighterStreakLines.Length > 0)
-            return;
-
         bool redProjectile = IsPirateFighterRedProjectile();
-        pirateFighterStreakLines = new LineRenderer[2];
-        for (int i = 0; i < pirateFighterStreakLines.Length; i++)
+        const int lineCount = 2;
+        for (int i = 0; i < lineCount; i++)
         {
-            GameObject lineObject = new GameObject("PirateFighterBolt_" + i);
-            lineObject.transform.SetParent(transform, false);
+            LineRenderer line = EnsureRuntimeLine(ref pirateFighterStreakLines, lineCount, i, "PirateFighterBolt_" + i);
+            if (line == null)
+                continue;
 
-            LineRenderer line = lineObject.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
             line.positionCount = 2;
             line.textureMode = LineTextureMode.Stretch;
@@ -1700,8 +2029,6 @@ public class Bullet : MonoBehaviourPun
                 line.sortingLayerID = coreRenderer.sortingLayerID;
                 line.sortingOrder = coreRenderer.sortingOrder + (i == 0 ? 3 : 2);
             }
-
-            pirateFighterStreakLines[i] = line;
         }
 
         if (coreRenderer != null)
@@ -1753,22 +2080,19 @@ public class Bullet : MonoBehaviourPun
 
     void EnsureAutoTurretProjectileVisual(SpriteRenderer coreRenderer)
     {
-        if (autoTurretBoltLines != null && autoTurretBoltLines.Length > 0)
-            return;
-
         if (coreRenderer != null)
         {
             coreRenderer.color = new Color(1f, 0.92f, 0.42f, 0.98f);
             EnsureProjectileGlow(coreRenderer, "AutoTurretBoltGlow", new Color(1f, 0.34f, 0.04f, 0.48f), 2.25f);
         }
 
-        autoTurretBoltLines = new LineRenderer[3];
-        for (int i = 0; i < autoTurretBoltLines.Length; i++)
+        const int lineCount = 3;
+        for (int i = 0; i < lineCount; i++)
         {
-            GameObject lineObject = new GameObject("AutoTurretBolt_" + i);
-            lineObject.transform.SetParent(transform, false);
+            LineRenderer line = EnsureRuntimeLine(ref autoTurretBoltLines, lineCount, i, "AutoTurretBolt_" + i);
+            if (line == null)
+                continue;
 
-            LineRenderer line = lineObject.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
             line.positionCount = 2;
             line.textureMode = LineTextureMode.Stretch;
@@ -1788,8 +2112,6 @@ public class Bullet : MonoBehaviourPun
                 line.sortingLayerID = coreRenderer.sortingLayerID;
                 line.sortingOrder = coreRenderer.sortingOrder + (i == 0 ? 3 : 2);
             }
-
-            autoTurretBoltLines[i] = line;
         }
 
         UpdateAutoTurretProjectileVisual();
@@ -1821,22 +2143,19 @@ public class Bullet : MonoBehaviourPun
 
     void EnsureGatlingProjectileVisual(SpriteRenderer coreRenderer)
     {
-        if (gatlingTracerLines != null && gatlingTracerLines.Length > 0)
-            return;
-
         if (coreRenderer != null)
         {
             coreRenderer.color = new Color(1f, 0.86f, 0.42f, 0.78f);
             EnsureProjectileGlow(coreRenderer, "GatlingRoundGlow", new Color(1f, 0.5f, 0.08f, 0.24f), 1.75f);
         }
 
-        gatlingTracerLines = new LineRenderer[2];
-        for (int i = 0; i < gatlingTracerLines.Length; i++)
+        const int lineCount = 2;
+        for (int i = 0; i < lineCount; i++)
         {
-            GameObject lineObject = new GameObject("GatlingTracer_" + i);
-            lineObject.transform.SetParent(transform, false);
+            LineRenderer line = EnsureRuntimeLine(ref gatlingTracerLines, lineCount, i, "GatlingTracer_" + i);
+            if (line == null)
+                continue;
 
-            LineRenderer line = lineObject.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
             line.positionCount = 2;
             line.textureMode = LineTextureMode.Stretch;
@@ -1856,8 +2175,6 @@ public class Bullet : MonoBehaviourPun
                 line.sortingLayerID = coreRenderer.sortingLayerID;
                 line.sortingOrder = coreRenderer.sortingOrder + (i == 0 ? 3 : 2);
             }
-
-            gatlingTracerLines[i] = line;
         }
 
         UpdateGatlingProjectileVisual();
@@ -1865,9 +2182,6 @@ public class Bullet : MonoBehaviourPun
 
     void EnsureCompactBoltProjectileVisual(SpriteRenderer coreRenderer)
     {
-        if (compactBoltLines != null && compactBoltLines.Length > 0)
-            return;
-
         if (coreRenderer != null)
         {
             coreRenderer.color = ResolveCompactBoltCoreColor();
@@ -1875,13 +2189,13 @@ public class Bullet : MonoBehaviourPun
         }
 
         int lineCount = ResolveCompactBoltLineCount();
-        compactBoltLines = new LineRenderer[lineCount];
-        for (int i = 0; i < compactBoltLines.Length; i++)
+        string objectPrefix = ResolveCompactBoltObjectPrefix();
+        for (int i = 0; i < lineCount; i++)
         {
-            GameObject lineObject = new GameObject(ResolveCompactBoltObjectPrefix() + "_" + i);
-            lineObject.transform.SetParent(transform, false);
+            LineRenderer line = EnsureRuntimeLine(ref compactBoltLines, lineCount, i, objectPrefix + "_" + i);
+            if (line == null)
+                continue;
 
-            LineRenderer line = lineObject.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
             line.positionCount = 2;
             line.textureMode = LineTextureMode.Stretch;
@@ -1897,8 +2211,6 @@ public class Bullet : MonoBehaviourPun
                 line.sortingLayerID = coreRenderer.sortingLayerID;
                 line.sortingOrder = coreRenderer.sortingOrder + (i == 0 ? 4 : 3);
             }
-
-            compactBoltLines[i] = line;
         }
 
         UpdateCompactBoltProjectileVisual();
@@ -2376,5 +2688,303 @@ public sealed class BulletImpactVfxEventRouter : MonoBehaviour, IOnEventCallback
             return intValue;
 
         return 0f;
+    }
+}
+
+public sealed class ProjectilePunPrefabPool : IPunPrefabPool
+{
+    const int DefaultPrewarmCount = 48;
+    const int MaxRetainedPerPrefab = 128;
+    const string PoolRootName = "ProjectilePunPrefabPool";
+
+    static ProjectilePunPrefabPool installedPool;
+
+    readonly IPunPrefabPool fallbackPool;
+    readonly Dictionary<string, Stack<GameObject>> pooledProjectiles = new Dictionary<string, Stack<GameObject>>();
+    readonly Dictionary<string, bool> projectilePrefabCache = new Dictionary<string, bool>();
+    Transform poolRoot;
+
+    ProjectilePunPrefabPool(IPunPrefabPool fallbackPool)
+    {
+        this.fallbackPool = fallbackPool ?? new DefaultPool();
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    static void InstallOnLoad()
+    {
+        Install();
+    }
+
+    public static ProjectilePunPrefabPool Install()
+    {
+        if (PhotonNetwork.PrefabPool is ProjectilePunPrefabPool existing)
+        {
+            installedPool = existing;
+            return existing;
+        }
+
+        installedPool = new ProjectilePunPrefabPool(PhotonNetwork.PrefabPool);
+        PhotonNetwork.PrefabPool = installedPool;
+        return installedPool;
+    }
+
+    public static void PrewarmProjectiles(string prefabId, int count = DefaultPrewarmCount)
+    {
+        ProjectilePunPrefabPool pool = Install();
+        pool.Prewarm(prefabId, count);
+    }
+
+    public GameObject Instantiate(string prefabId, Vector3 position, Quaternion rotation)
+    {
+        if (!IsProjectilePrefab(prefabId))
+            return InstantiateWithFallback(prefabId, position, rotation, false);
+
+        if (pooledProjectiles.TryGetValue(prefabId, out Stack<GameObject> stack))
+        {
+            while (stack.Count > 0)
+            {
+                GameObject pooled = stack.Pop();
+                if (pooled == null)
+                    continue;
+
+                pooled.transform.SetParent(null, false);
+                pooled.transform.SetPositionAndRotation(position, rotation);
+                MarkInstance(pooled, prefabId, true);
+                return pooled;
+            }
+        }
+
+        return InstantiateWithFallback(prefabId, position, rotation, true);
+    }
+
+    public void Destroy(GameObject gameObject)
+    {
+        if (gameObject == null)
+            return;
+
+        PooledPhotonPrefabInstance marker = gameObject.GetComponent<PooledPhotonPrefabInstance>();
+        if (marker == null || !marker.IsProjectile || string.IsNullOrEmpty(marker.PrefabId))
+        {
+            fallbackPool.Destroy(gameObject);
+            return;
+        }
+
+        Stack<GameObject> stack = GetStack(marker.PrefabId);
+        if (stack.Count >= MaxRetainedPerPrefab)
+        {
+            fallbackPool.Destroy(gameObject);
+            return;
+        }
+
+        EnsurePoolRoot();
+        gameObject.SetActive(false);
+        gameObject.transform.SetParent(poolRoot, false);
+        stack.Push(gameObject);
+    }
+
+    void Prewarm(string prefabId, int count)
+    {
+        if (string.IsNullOrWhiteSpace(prefabId) || count <= 0 || !IsProjectilePrefab(prefabId))
+            return;
+
+        Stack<GameObject> stack = GetStack(prefabId);
+        int missing = Mathf.Max(0, count - stack.Count);
+        for (int i = 0; i < missing; i++)
+        {
+            GameObject instance = InstantiateWithFallback(prefabId, Vector3.zero, Quaternion.identity, true);
+            if (instance == null)
+                break;
+
+            Destroy(instance);
+        }
+    }
+
+    GameObject InstantiateWithFallback(string prefabId, Vector3 position, Quaternion rotation, bool projectile)
+    {
+        GameObject instance = fallbackPool.Instantiate(prefabId, position, rotation);
+        if (instance != null)
+            MarkInstance(instance, prefabId, projectile);
+
+        return instance;
+    }
+
+    void MarkInstance(GameObject instance, string prefabId, bool projectile)
+    {
+        if (instance == null)
+            return;
+
+        PooledPhotonPrefabInstance marker = instance.GetComponent<PooledPhotonPrefabInstance>();
+        if (marker == null)
+            marker = instance.AddComponent<PooledPhotonPrefabInstance>();
+
+        marker.PrefabId = prefabId;
+        marker.IsProjectile = projectile;
+    }
+
+    bool IsProjectilePrefab(string prefabId)
+    {
+        if (string.IsNullOrWhiteSpace(prefabId))
+            return false;
+
+        if (projectilePrefabCache.TryGetValue(prefabId, out bool cached))
+            return cached;
+
+        if (string.Equals(prefabId, "Bullet", System.StringComparison.Ordinal))
+        {
+            projectilePrefabCache[prefabId] = true;
+            return true;
+        }
+
+        GameObject prefab = Resources.Load<GameObject>(prefabId);
+        bool isProjectile = prefab != null && prefab.GetComponent<Bullet>() != null;
+        projectilePrefabCache[prefabId] = isProjectile;
+        return isProjectile;
+    }
+
+    Stack<GameObject> GetStack(string prefabId)
+    {
+        if (!pooledProjectiles.TryGetValue(prefabId, out Stack<GameObject> stack))
+        {
+            stack = new Stack<GameObject>(DefaultPrewarmCount);
+            pooledProjectiles[prefabId] = stack;
+        }
+
+        return stack;
+    }
+
+    void EnsurePoolRoot()
+    {
+        if (poolRoot != null)
+            return;
+
+        GameObject existing = GameObject.Find(PoolRootName);
+        if (existing != null)
+        {
+            poolRoot = existing.transform;
+            return;
+        }
+
+        GameObject root = new GameObject(PoolRootName);
+        Object.DontDestroyOnLoad(root);
+        poolRoot = root.transform;
+    }
+}
+
+public sealed class PooledPhotonPrefabInstance : MonoBehaviour
+{
+    public string PrefabId;
+    public bool IsProjectile;
+}
+
+public static class ProjectileSpawner
+{
+    public static GameObject SpawnNetworkBullet(
+        GameObject bulletPrefab,
+        Vector3 position,
+        Quaternion rotation,
+        object[] data,
+        int ownerViewId,
+        Vector2 velocity,
+        bool applyVelocity,
+        Collider2D ignoredCollider = null)
+    {
+        if (bulletPrefab == null)
+            return null;
+
+        return SpawnNetworkBullet(
+            bulletPrefab.name,
+            position,
+            rotation,
+            data,
+            ownerViewId,
+            velocity,
+            applyVelocity,
+            ignoredCollider);
+    }
+
+    public static GameObject SpawnNetworkBullet(
+        string prefabName,
+        Vector3 position,
+        Quaternion rotation,
+        object[] data,
+        int ownerViewId,
+        Vector2 velocity,
+        bool applyVelocity,
+        Collider2D ignoredCollider = null)
+    {
+        if (string.IsNullOrWhiteSpace(prefabName))
+            return null;
+
+        ProjectilePunPrefabPool.Install();
+        GameObject bullet = PhotonNetwork.Instantiate(prefabName, position, rotation, 0, data);
+        ConfigureSpawnedBullet(bullet, ownerViewId, velocity, applyVelocity, ignoredCollider);
+        return bullet;
+    }
+
+    public static void ConfigureSpawnedBullet(
+        GameObject bullet,
+        int ownerViewId,
+        Vector2 velocity,
+        bool applyVelocity,
+        Collider2D ignoredCollider = null)
+    {
+        if (bullet == null)
+            return;
+
+        Bullet bulletComponent = bullet.GetComponent<Bullet>();
+        if (bulletComponent != null)
+        {
+            bulletComponent.ownerViewID = ownerViewId;
+            if (ignoredCollider != null)
+                bulletComponent.IgnoreCollisionWith(ignoredCollider);
+        }
+
+        if (!applyVelocity)
+            return;
+
+        Rigidbody2D rb = bullet.GetComponent<Rigidbody2D>();
+        if (rb != null)
+            rb.linearVelocity = velocity;
+    }
+
+    public static void IgnoreCollisions(GameObject projectile, Collider2D[] colliders)
+    {
+        if (projectile == null || colliders == null)
+            return;
+
+        Bullet bullet = projectile.GetComponent<Bullet>();
+        if (bullet != null)
+        {
+            bullet.IgnoreCollisionsWith(colliders);
+            return;
+        }
+
+        Collider2D projectileCollider = projectile.GetComponent<Collider2D>();
+        if (projectileCollider == null)
+            return;
+
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Collider2D collider = colliders[i];
+            if (collider != null)
+                Physics2D.IgnoreCollision(collider, projectileCollider, true);
+        }
+    }
+
+    public static void IgnoreCollision(GameObject projectile, Collider2D collider)
+    {
+        if (projectile == null || collider == null)
+            return;
+
+        Bullet bullet = projectile.GetComponent<Bullet>();
+        if (bullet != null)
+        {
+            bullet.IgnoreCollisionWith(collider);
+            return;
+        }
+
+        Collider2D projectileCollider = projectile.GetComponent<Collider2D>();
+        if (projectileCollider != null)
+            Physics2D.IgnoreCollision(projectileCollider, collider, true);
     }
 }

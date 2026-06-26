@@ -102,6 +102,7 @@ public partial class PlayerProfilePanelUI
         if (panelObject == null)
             return;
 
+        RestoreProfileHangarSceneVfxTargets();
         ApplyPanelBackgroundForCurrentScreen();
         LayoutTopBar();
         LayoutRightActions();
@@ -123,6 +124,8 @@ public partial class PlayerProfilePanelUI
         bool showProjectDetails = currentScreen == ProfileScreen.ProjectDetails;
         bool showFullscreenSelection = showShipSelection || showPilotSelection;
         bool showSharedNavigation = !showFullscreenSelection || showPilotSelection;
+        bool showLargeHangarScene = showHome || showCrafting || showTrader || showPlayer;
+        ApplyProfileHangarSceneBaseBackground(showLargeHangarScene, showInventory);
 
         if (homeViewRootObject != null)
             homeViewRootObject.SetActive(showHome);
@@ -250,6 +253,11 @@ public partial class PlayerProfilePanelUI
             traderFuturePanelObject.SetActive(showTrader);
         if (statusText != null)
             statusText.gameObject.SetActive((!showHome && !showProjects && !showProjectDetails) || NetworkManager.SessionRequested || !string.IsNullOrWhiteSpace(statusText.text));
+        if (versionText != null)
+        {
+            ConfigureVersionText();
+            versionText.gameObject.SetActive(true);
+        }
 
         if (splashShowing)
         {
@@ -281,8 +289,11 @@ public partial class PlayerProfilePanelUI
                 shipWorkspaceRootObject.SetActive(false);
             if (storageViewRootObject != null)
                 storageViewRootObject.SetActive(false);
+            SetProfileHangarSceneVfxActive(false);
             if (statusText != null)
                 statusText.gameObject.SetActive(false);
+            if (versionText != null)
+                versionText.gameObject.SetActive(false);
             splashScreenObject.transform.SetAsLastSibling();
             return;
         }
@@ -294,12 +305,23 @@ public partial class PlayerProfilePanelUI
         LayoutCraftingScreen();
         LayoutTraderScreen();
         LayoutPlayerScreen();
+        RefreshProfileHangarSceneVfxLayout(showLargeHangarScene, showInventory);
         RefreshEquipmentSlotPreview();
         ApplyShipWorkspaceScreenMode(showHome || showInventory);
         EnsureShipPreviewBackgroundHidden();
         ApplyItemPreviewLayout();
+        EnsureVersionTextLayering();
         EnsureStatusTextLayering();
         EnsureProfileModalLayering();
+    }
+
+    void EnsureVersionTextLayering()
+    {
+        if (panelObject == null || versionText == null || !versionText.gameObject.activeSelf)
+            return;
+
+        versionText.transform.SetParent(panelObject.transform, false);
+        versionText.transform.SetAsLastSibling();
     }
 
     void EnsureStatusTextLayering()
@@ -469,6 +491,12 @@ public partial class PlayerProfilePanelUI
                 image.color = new Color(1f, 1f, 1f, 0f);
                 image.enabled = true;
                 image.raycastTarget = currentScreen == ProfileScreen.Home || currentScreen == ProfileScreen.Inventory;
+                continue;
+            }
+
+            if (child.name == "ShipSoftShadow")
+            {
+                image.raycastTarget = false;
                 continue;
             }
 

@@ -99,7 +99,7 @@ public class ExtractionZone : MonoBehaviourPun
         cachedMessageObject = FindExtractionMessage();
         HideLegacyExtractionMessage();
 
-        GameVisualTheme.RequestRuntimeRefresh();
+        GameVisualTheme.RequestRuntimeRefresh(this);
     }
 
     void LateUpdate()

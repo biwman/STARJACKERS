@@ -95,7 +95,7 @@ public partial class PlayerProfilePanelUI
         UIRuntimeStyler.PrewarmRuntimeSprites();
         InventoryItemCatalog.PrewarmIcons();
 
-        LoadStandaloneSprite("STAR_RAIDERS_screen.png");
+        LoadStandaloneSprite("STARJACKERS_screen.png");
         LoadStandaloneSprite("hangar1_2D.png");
         LoadStandaloneSprite("hangar1_2D_przesuniety.png");
         LoadStandaloneSprite("PROJECTS_SCREEN.png");
@@ -135,7 +135,7 @@ public partial class PlayerProfilePanelUI
     {
         string resourcesPath = fileName switch
         {
-            "STAR_RAIDERS_screen.png" => "STAR_RAIDERS_screen",
+            "STARJACKERS_screen.png" => "STARJACKERS_screen",
             "hangar1_2D.png" => "UI/hangar1_2D_profile",
             "hangar1_2D_przesuniety.png" => "UI/hangar1_2D_przesuniety_profile",
             "ship1.png" => "Visuals/Ships/ship1_resource",
@@ -151,7 +151,7 @@ public partial class PlayerProfilePanelUI
 
         string editorResourcePath = fileName switch
         {
-            "STAR_RAIDERS_screen.png" => "Assets/Resources/STAR_RAIDERS_screen.png",
+            "STARJACKERS_screen.png" => "Assets/Resources/STARJACKERS_screen.png",
             "hangar1_2D.png" => "Assets/Resources/UI/hangar1_2D_profile.png",
             "hangar1_2D_przesuniety.png" => "Assets/Resources/UI/hangar1_2D_przesuniety_profile.png",
             "ship1.png" => "Assets/Resources/Visuals/Ships/ship1_resource.png",

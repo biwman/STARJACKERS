@@ -269,7 +269,9 @@ public partial class PlayerProfilePanelUI : MonoBehaviour
         "Maps unlocked",
         "Pilots unlocked",
         "Ships unlocked",
-        "Unique items found"
+        "Unique items found",
+        "Favorit Pilot",
+        "Favorit Ship"
     };
     static readonly Vector2 PilotSelectionLeftPosition = new Vector2(-560f, -190f);
     static readonly Vector2 PilotSelectionCenterPosition = new Vector2(0f, -162f);
@@ -319,7 +321,7 @@ public partial class PlayerProfilePanelUI : MonoBehaviour
             "UI/Traders/resources_trader",
             "Assets/Resources/UI/Traders/resources_trader.png",
             "Assets/resources_trader.png",
-            false),
+            true),
         new TraderDefinition(
             TraderShopKind.MissEnigma,
             "ENIGMA",
@@ -340,6 +342,7 @@ public partial class PlayerProfilePanelUI : MonoBehaviour
     TMP_InputField nicknameInput;
     TMP_Text accountText;
     TMP_Text statusText;
+    TMP_Text versionText;
     TMP_Text gamesPlayedText;
     TMP_Text totalXpText;
     TMP_Text astronsText;

@@ -259,6 +259,22 @@ public class PathfinderResearchStationResult
 }
 
 [Serializable]
+public class PlayerCareerStartCountEntry
+{
+    public string Id;
+    public int Count;
+
+    public PlayerCareerStartCountEntry Clone()
+    {
+        return new PlayerCareerStartCountEntry
+        {
+            Id = Id,
+            Count = Count
+        };
+    }
+}
+
+[Serializable]
 public class PlayerCareerStatsData
 {
     public int ShipEscapes;
@@ -270,6 +286,8 @@ public class PlayerCareerStatsData
     public int HumanPlayerKills;
     public int AstronsEarned;
     public int HighestLootReturnedAstrons;
+    public PlayerCareerStartCountEntry[] ShipStartCounts;
+    public PlayerCareerStartCountEntry[] PilotStartCounts;
 
     public static PlayerCareerStatsData Empty()
     {
@@ -288,8 +306,22 @@ public class PlayerCareerStatsData
             NeutralRaiderKills = NeutralRaiderKills,
             HumanPlayerKills = HumanPlayerKills,
             AstronsEarned = AstronsEarned,
-            HighestLootReturnedAstrons = HighestLootReturnedAstrons
+            HighestLootReturnedAstrons = HighestLootReturnedAstrons,
+            ShipStartCounts = CloneStartCounts(ShipStartCounts),
+            PilotStartCounts = CloneStartCounts(PilotStartCounts)
         };
+    }
+
+    static PlayerCareerStartCountEntry[] CloneStartCounts(PlayerCareerStartCountEntry[] source)
+    {
+        if (source == null || source.Length == 0)
+            return Array.Empty<PlayerCareerStartCountEntry>();
+
+        PlayerCareerStartCountEntry[] clone = new PlayerCareerStartCountEntry[source.Length];
+        for (int i = 0; i < source.Length; i++)
+            clone[i] = source[i] != null ? source[i].Clone() : null;
+
+        return clone;
     }
 }
 
@@ -313,6 +345,7 @@ public class PlayerProfileData
     public int InvaderImprintsRecovered;
     public PathfinderResearchProgressData PathfinderResearchProgress;
     public string[] MissEnigmaPurchasedBlueprintIds;
+    public string[] MissEnigmaRecoverableUniqueItemIds;
     public int PilotDroneKills;
     public int PilotSoldItemsAstrons;
     public int PilotPirateBayReturns;
@@ -344,6 +377,7 @@ public class PlayerProfileData
             InvaderImprintsRecovered = 0,
             PathfinderResearchProgress = PathfinderResearchProgressData.Empty(),
             MissEnigmaPurchasedBlueprintIds = Array.Empty<string>(),
+            MissEnigmaRecoverableUniqueItemIds = Array.Empty<string>(),
             PilotDroneKills = 0,
             PilotSoldItemsAstrons = 0,
             PilotPirateBayReturns = 0,
@@ -456,6 +490,12 @@ public class BlueprintUnlockSnapshot
 public class BlueprintPurchaseSnapshot
 {
     public string[] blueprintIds;
+}
+
+[Serializable]
+public class UniqueItemRecoverySnapshot
+{
+    public string[] itemIds;
 }
 
 [Serializable]

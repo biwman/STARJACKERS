@@ -688,7 +688,7 @@ public sealed class MapTravelService : MonoBehaviourPunCallbacks
         List<Vector2> positions = ParsePositions(GetRoomString(MapInstanceService.HiddenDimensionExtractionLayoutKey));
         for (int i = 0; i < positions.Count; i++)
         {
-            PhotonNetwork.Instantiate(
+            GameObject zoneObject = PhotonNetwork.Instantiate(
                 "ExtractionZone",
                 new Vector3(positions[i].x, positions[i].y, 0f),
                 Quaternion.identity,
@@ -699,10 +699,9 @@ public sealed class MapTravelService : MonoBehaviourPunCallbacks
                     MapInstanceService.HiddenDimensionInstanceId,
                     RoomSettings.ExtractionTypeAncientPortal
                 });
+            if (zoneObject != null)
+                GameVisualTheme.RequestRuntimeRefresh(zoneObject);
         }
-
-        if (positions.Count > 0)
-            GameVisualTheme.RequestRuntimeRefresh();
     }
 
     IEnumerator SpawnHiddenTreasuresRoutine()
@@ -726,7 +725,10 @@ public sealed class MapTravelService : MonoBehaviourPunCallbacks
             }
 
             string itemId = parts[2];
-            PhotonNetwork.Instantiate("TreasureNetwork", new Vector3(x, y, 0f), Quaternion.identity, 0, new object[] { itemId });
+            GameObject treasureObject = PhotonNetwork.Instantiate("TreasureNetwork", new Vector3(x, y, 0f), Quaternion.identity, 0, new object[] { itemId });
+            if (treasureObject != null)
+                GameVisualTheme.RequestRuntimeRefresh(treasureObject);
+
             spawnedThisFrame++;
             if (spawnedThisFrame >= HiddenNetworkSpawnsPerFrame)
             {
@@ -768,12 +770,15 @@ public sealed class MapTravelService : MonoBehaviourPunCallbacks
                 variantIndex = InventoryItemCatalog.NormalizeAlienSecretVariantIndex(parsedVariant);
 
             string alienSecretItemId = InventoryItemCatalog.GetAlienSecretItemId(variantIndex);
-            PhotonNetwork.Instantiate(
+            GameObject treasureObject = PhotonNetwork.Instantiate(
                 "TreasureNetwork",
                 new Vector3(x, y, 0f),
                 Quaternion.identity,
                 0,
                 new object[] { alienSecretItemId, variantIndex });
+            if (treasureObject != null)
+                GameVisualTheme.RequestRuntimeRefresh(treasureObject);
+
             spawnedThisFrame++;
             if (spawnedThisFrame >= HiddenNetworkSpawnsPerFrame)
             {
@@ -902,6 +907,9 @@ public sealed class MapTravelService : MonoBehaviourPunCallbacks
             new object[] { definition.InstantiationMarker });
 
         BootstrapHiddenEnemy(botObject);
+        if (botObject != null)
+            GameVisualTheme.RequestRuntimeRefresh(botObject);
+
         return botObject;
     }
 

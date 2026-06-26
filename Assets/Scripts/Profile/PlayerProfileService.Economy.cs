@@ -32,13 +32,15 @@ public partial class PlayerProfileService
             EnsureInventory();
             EnsurePilotDefaults();
             EnsureCareerStats();
+            EnsureMissEnigmaUniqueItemRecoveries();
 
             var data = new Dictionary<string, object>
             {
                 [CloudInventoryKey] = SerializeInventory(CurrentProfile.Inventory),
                 [CloudAstronsKey] = CurrentProfile.Astrons,
                 [CloudPilotSoldItemsAstronsKey] = CurrentProfile.PilotSoldItemsAstrons,
-                [CloudCareerStatsKey] = SerializeCareerStats(CurrentProfile.CareerStats)
+                [CloudCareerStatsKey] = SerializeCareerStats(CurrentProfile.CareerStats),
+                [CloudMissEnigmaRecoverableUniqueItemsKey] = SerializeMissEnigmaUniqueItemRecoveries(CurrentProfile.MissEnigmaRecoverableUniqueItemIds)
             };
 
             await RunCloudOperationWithRetryAsync(

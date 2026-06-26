@@ -1,10 +1,17 @@
+using System;
 using UnityEngine;
 
 public static class EnemyTargetingUtility
 {
     const float BeaconPriorityRangeMultiplier = 1.9f;
 
-    public static Transform FindClosestTarget(Vector2 origin, PlayerHealth observerHealth, float maxDistance, bool requireNebulaVisibility, bool includeEnemyAstronauts = false)
+    public static Transform FindClosestTarget(
+        Vector2 origin,
+        PlayerHealth observerHealth,
+        float maxDistance,
+        bool requireNebulaVisibility,
+        bool includeEnemyAstronauts = false,
+        Func<PlayerHealth, bool> playerFilter = null)
     {
         Transform bestBeaconTarget = null;
         float bestBeaconDistance = float.MaxValue;
@@ -28,12 +35,24 @@ public static class EnemyTargetingUtility
 
         Transform bestDeployableTarget = null;
         float bestDeployableDistance = float.MaxValue;
+        Transform bestDeferredDeployableTarget = null;
+        float bestDeferredDeployableDistance = float.MaxValue;
         foreach (PlayerDeployableBase deployable in PlayerDeployableBase.GetActiveDeployables())
         {
             if (!IsValidDeployableTarget(deployable, origin, maxDistance))
                 continue;
 
             float distance = Vector2.Distance(origin, deployable.transform.position);
+            if (IsDeferredDeployableTarget(deployable))
+            {
+                if (distance >= bestDeferredDeployableDistance)
+                    continue;
+
+                bestDeferredDeployableDistance = distance;
+                bestDeferredDeployableTarget = deployable.transform;
+                continue;
+            }
+
             if (distance >= bestDeployableDistance)
                 continue;
 
@@ -51,7 +70,7 @@ public static class EnemyTargetingUtility
         for (int i = 0; i < players.Length; i++)
         {
             PlayerHealth candidate = players[i];
-            if (!IsValidPlayerTarget(candidate, observerHealth, origin, maxDistance, requireNebulaVisibility, includeEnemyAstronauts))
+            if (!IsValidPlayerTarget(candidate, observerHealth, origin, maxDistance, requireNebulaVisibility, includeEnemyAstronauts, playerFilter))
                 continue;
 
             float distance = Vector2.Distance(origin, candidate.transform.position);
@@ -62,10 +81,17 @@ public static class EnemyTargetingUtility
             bestTarget = candidate.transform;
         }
 
-        return bestTarget;
+        return bestTarget != null ? bestTarget : bestDeferredDeployableTarget;
     }
 
-    public static bool IsTargetValid(Transform target, PlayerHealth observerHealth, Vector2 origin, float maxDistance, bool requireNebulaVisibility, bool includeEnemyAstronauts = false)
+    public static bool IsTargetValid(
+        Transform target,
+        PlayerHealth observerHealth,
+        Vector2 origin,
+        float maxDistance,
+        bool requireNebulaVisibility,
+        bool includeEnemyAstronauts = false,
+        Func<PlayerHealth, bool> playerFilter = null)
     {
         if (target == null)
             return false;
@@ -76,10 +102,10 @@ public static class EnemyTargetingUtility
             if (IsAnyBeaconAvailable(origin, maxDistance * BeaconPriorityRangeMultiplier))
                 return false;
 
-            if (IsAnyDeployableAvailable(origin, maxDistance))
+            if (IsAnyImmediateDeployableAvailable(origin, maxDistance))
                 return false;
 
-            return IsValidPlayerTarget(player, observerHealth, origin, maxDistance, requireNebulaVisibility, includeEnemyAstronauts);
+            return IsValidPlayerTarget(player, observerHealth, origin, maxDistance, requireNebulaVisibility, includeEnemyAstronauts, playerFilter);
         }
 
         PlayerDeployableBase deployable = target.GetComponent<PlayerDeployableBase>();
@@ -88,7 +114,16 @@ public static class EnemyTargetingUtility
             if (IsAnyBeaconAvailable(origin, maxDistance * BeaconPriorityRangeMultiplier))
                 return false;
 
-            return IsValidDeployableTarget(deployable, origin, maxDistance);
+            if (!IsValidDeployableTarget(deployable, origin, maxDistance))
+                return false;
+
+            if (!IsDeferredDeployableTarget(deployable))
+                return true;
+
+            if (IsAnyImmediateDeployableAvailable(origin, maxDistance))
+                return false;
+
+            return !IsAnyPlayerTargetAvailable(origin, observerHealth, maxDistance, requireNebulaVisibility, includeEnemyAstronauts, playerFilter);
         }
 
         LureBeaconDecoy beacon = target.GetComponent<LureBeaconDecoy>();
@@ -100,7 +135,14 @@ public static class EnemyTargetingUtility
         return FindClosestTarget(origin, observerHealth, radius, false) != null;
     }
 
-    static bool IsValidPlayerTarget(PlayerHealth candidate, PlayerHealth observerHealth, Vector2 origin, float maxDistance, bool requireNebulaVisibility, bool includeEnemyAstronauts)
+    static bool IsValidPlayerTarget(
+        PlayerHealth candidate,
+        PlayerHealth observerHealth,
+        Vector2 origin,
+        float maxDistance,
+        bool requireNebulaVisibility,
+        bool includeEnemyAstronauts,
+        Func<PlayerHealth, bool> playerFilter)
     {
         if (candidate == null || !candidate.gameObject.activeInHierarchy || candidate == observerHealth || candidate.IsWreck || candidate.IsBotControlled || candidate.IsEvacuationAnimating)
             return false;
@@ -116,6 +158,9 @@ public static class EnemyTargetingUtility
         }
 
         if (candidate.GetComponent<LureBeaconDecoy>() != null)
+            return false;
+
+        if (playerFilter != null && !playerFilter(candidate))
             return false;
 
         if (!MapInstanceService.IsSameInstance(origin, candidate.transform.position))
@@ -157,6 +202,11 @@ public static class EnemyTargetingUtility
         return Vector2.Distance(origin, deployable.transform.position) <= maxDistance;
     }
 
+    static bool IsDeferredDeployableTarget(PlayerDeployableBase deployable)
+    {
+        return deployable is IndustrialPartsHaulable;
+    }
+
     static bool IsAnyBeaconAvailable(Vector2 origin, float maxDistance)
     {
         foreach (LureBeaconDecoy beacon in LureBeaconDecoy.GetActiveBeacons())
@@ -168,11 +218,32 @@ public static class EnemyTargetingUtility
         return false;
     }
 
-    static bool IsAnyDeployableAvailable(Vector2 origin, float maxDistance)
+    static bool IsAnyImmediateDeployableAvailable(Vector2 origin, float maxDistance)
     {
         foreach (PlayerDeployableBase deployable in PlayerDeployableBase.GetActiveDeployables())
         {
+            if (IsDeferredDeployableTarget(deployable))
+                continue;
+
             if (IsValidDeployableTarget(deployable, origin, maxDistance))
+                return true;
+        }
+
+        return false;
+    }
+
+    static bool IsAnyPlayerTargetAvailable(
+        Vector2 origin,
+        PlayerHealth observerHealth,
+        float maxDistance,
+        bool requireNebulaVisibility,
+        bool includeEnemyAstronauts,
+        Func<PlayerHealth, bool> playerFilter)
+    {
+        PlayerHealth[] players = RuntimeSceneQueryCache.GetPlayers();
+        for (int i = 0; i < players.Length; i++)
+        {
+            if (IsValidPlayerTarget(players[i], observerHealth, origin, maxDistance, requireNebulaVisibility, includeEnemyAstronauts, playerFilter))
                 return true;
         }
 

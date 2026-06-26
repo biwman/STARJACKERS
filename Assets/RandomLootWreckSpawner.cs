@@ -183,14 +183,15 @@ public sealed class RandomLootWreckSpawner : MonoBehaviourPun
                 continue;
 
             string itemId = InventoryItemCatalog.GetRandomLootWreckItemId(Random.Range(0, InventoryItemCatalog.RandomLootWreckVariantCount));
-            PhotonNetwork.Instantiate("TreasureNetwork", new Vector3(position.x, position.y, 0f), Quaternion.identity, 0, new object[] { itemId });
+            GameObject treasureObject = PhotonNetwork.Instantiate("TreasureNetwork", new Vector3(position.x, position.y, 0f), Quaternion.identity, 0, new object[] { itemId });
+            if (treasureObject != null)
+                GameVisualTheme.RequestRuntimeRefresh(treasureObject);
+
             spawnedPositions.Add(position);
             spawnedThisPass++;
         }
 
         Random.state = previousState;
-        if (spawnedThisPass > 0)
-            GameVisualTheme.RequestRuntimeRefresh();
     }
 
     List<Vector2> GetExistingRandomLootWreckPositions()

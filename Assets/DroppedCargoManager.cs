@@ -109,7 +109,7 @@ public class DroppedCargoManager : MonoBehaviourPunCallbacks
                 crate.InitializeFromPhotonData();
             }
 
-            GameVisualTheme.RequestRuntimeRefresh();
+            GameVisualTheme.RequestRuntimeRefresh(crateObject);
         }
     }
 

@@ -109,29 +109,19 @@ public partial class PlayerShooting
             profile.DeliveryMethod,
             profile.DeliveryFlags);
 
-        GameObject bullet = PhotonNetwork.Instantiate(
-            bulletPrefab.name,
+        Collider2D playerCollider = GetComponent<Collider2D>();
+        GameObject bullet = ProjectileSpawner.SpawnNetworkBullet(
+            bulletPrefab,
             spawnPos,
             Quaternion.identity,
-            0,
-            data
-        );
+            data,
+            ownerId,
+            direction.normalized * projectileSpeed,
+            !isArcProjectile,
+            playerCollider);
 
         if (bullet == null)
             return false;
-
-        Bullet bulletComponent = bullet.GetComponent<Bullet>();
-        if (bulletComponent != null)
-            bulletComponent.ownerViewID = ownerId;
-
-        Rigidbody2D rb = bullet.GetComponent<Rigidbody2D>();
-        if (rb != null && !isArcProjectile)
-            rb.linearVelocity = direction.normalized * projectileSpeed;
-
-        Collider2D playerCollider = GetComponent<Collider2D>();
-        Collider2D bulletCollider = bullet.GetComponent<Collider2D>();
-        if (bulletCollider != null && playerCollider != null)
-            Physics2D.IgnoreCollision(bulletCollider, playerCollider);
 
         return true;
     }

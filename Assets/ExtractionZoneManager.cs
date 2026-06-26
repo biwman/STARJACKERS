@@ -147,10 +147,10 @@ public class ExtractionZoneManager : MonoBehaviourPunCallbacks
 
         foreach (Vector2 position in positions)
         {
-            PhotonNetwork.Instantiate("ExtractionZone", new Vector3(position.x, position.y, 0f), Quaternion.identity);
+            GameObject zoneObject = PhotonNetwork.Instantiate("ExtractionZone", new Vector3(position.x, position.y, 0f), Quaternion.identity);
+            if (zoneObject != null)
+                GameVisualTheme.RequestRuntimeRefresh(zoneObject);
         }
-
-        GameVisualTheme.RequestRuntimeRefresh();
     }
 
     void DestroyRuntimeZones()

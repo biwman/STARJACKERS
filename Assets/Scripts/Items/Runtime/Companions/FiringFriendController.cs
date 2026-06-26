@@ -25,6 +25,11 @@ public sealed class FiringFriendController : MonoBehaviourPun
 
     PlayerHealth health;
     SpriteRenderer visualRenderer;
+    SpriteRenderer cachedOwnerRenderer;
+    Collider2D cachedOwnerCollider;
+    Collider2D[] cachedOwnerColliders;
+    Camera cachedCamera;
+    float cachedOwnerLength = -1f;
     float nextScanTime;
     float nextShotTime;
     float reloadUntil;
@@ -39,6 +44,7 @@ public sealed class FiringFriendController : MonoBehaviourPun
     void Start()
     {
         health = GetComponent<PlayerHealth>();
+        CacheOwnerShape();
         EnsureVisual();
     }
 
@@ -231,26 +237,19 @@ public sealed class FiringFriendController : MonoBehaviourPun
             WeaponDeliveryMethod.CompanionDrone,
             WeaponDeliveryFlags.Autonomous | WeaponDeliveryFlags.MultiStream);
 
-        GameObject bullet = PhotonNetwork.Instantiate(
+        GameObject bullet = ProjectileSpawner.SpawnNetworkBullet(
             "Bullet",
             new Vector3(muzzle.x, muzzle.y, 0f),
             Quaternion.Euler(0f, 0f, angle),
-            0,
-            data);
+            data,
+            ownerId,
+            direction * BulletSpeed,
+            true);
 
         if (bullet == null)
             return;
 
-        Bullet bulletComponent = bullet.GetComponent<Bullet>();
-        if (bulletComponent != null)
-            bulletComponent.ownerViewID = ownerId;
-
-        Rigidbody2D bulletBody = bullet.GetComponent<Rigidbody2D>();
-        if (bulletBody != null)
-            bulletBody.linearVelocity = direction * BulletSpeed;
-
-        Collider2D bulletCollider = bullet.GetComponent<Collider2D>();
-        IgnoreOwnerCollisions(bulletCollider);
+        IgnoreOwnerCollisions(bullet);
 
         if (photonView != null)
             photonView.RPC(nameof(PlayFiringFriendShotRpc), RpcTarget.All, muzzle.x, muzzle.y, transform.position.z, direction.x, direction.y);
@@ -274,7 +273,7 @@ public sealed class FiringFriendController : MonoBehaviourPun
     float ResolveEffectiveTargetRange()
     {
         float range = MaxConfiguredRange;
-        Camera mainCamera = Camera.main;
+        Camera mainCamera = ResolveCamera();
         if (mainCamera != null && mainCamera.orthographic)
         {
             float halfVertical = mainCamera.orthographicSize;
@@ -285,17 +284,43 @@ public sealed class FiringFriendController : MonoBehaviourPun
         return Mathf.Max(0.75f, range);
     }
 
+    Camera ResolveCamera()
+    {
+        if (cachedCamera != null && cachedCamera.isActiveAndEnabled)
+            return cachedCamera;
+
+        cachedCamera = Camera.main;
+        return cachedCamera;
+    }
+
     float ResolveOwnerLength()
     {
-        SpriteRenderer ownerRenderer = GetComponentInChildren<SpriteRenderer>();
-        if (ownerRenderer != null)
-            return Mathf.Max(0.25f, Mathf.Max(ownerRenderer.bounds.size.x, ownerRenderer.bounds.size.y));
+        if (cachedOwnerLength > 0f)
+            return cachedOwnerLength;
 
-        Collider2D ownerCollider = GetComponentInChildren<Collider2D>();
-        if (ownerCollider != null)
-            return Mathf.Max(0.25f, Mathf.Max(ownerCollider.bounds.size.x, ownerCollider.bounds.size.y));
+        CacheOwnerShape();
+        return cachedOwnerLength > 0f ? cachedOwnerLength : 1f;
+    }
 
-        return 1f;
+    void CacheOwnerShape()
+    {
+        cachedOwnerColliders = GetComponentsInChildren<Collider2D>(true);
+        cachedOwnerRenderer = GetComponentInChildren<SpriteRenderer>();
+        cachedOwnerCollider = GetComponentInChildren<Collider2D>();
+
+        if (cachedOwnerRenderer != null)
+        {
+            cachedOwnerLength = Mathf.Max(0.25f, Mathf.Max(cachedOwnerRenderer.bounds.size.x, cachedOwnerRenderer.bounds.size.y));
+            return;
+        }
+
+        if (cachedOwnerCollider != null)
+        {
+            cachedOwnerLength = Mathf.Max(0.25f, Mathf.Max(cachedOwnerCollider.bounds.size.x, cachedOwnerCollider.bounds.size.y));
+            return;
+        }
+
+        cachedOwnerLength = 1f;
     }
 
     Vector2 ResolveMuzzleOrigin()
@@ -303,18 +328,15 @@ public sealed class FiringFriendController : MonoBehaviourPun
         return visualRenderer != null ? (Vector2)visualRenderer.transform.position : (Vector2)transform.position;
     }
 
-    void IgnoreOwnerCollisions(Collider2D bulletCollider)
+    void IgnoreOwnerCollisions(GameObject bullet)
     {
-        if (bulletCollider == null)
+        if (bullet == null)
             return;
 
-        Collider2D[] ownerColliders = GetComponentsInChildren<Collider2D>(true);
-        for (int i = 0; i < ownerColliders.Length; i++)
-        {
-            Collider2D ownerCollider = ownerColliders[i];
-            if (ownerCollider != null)
-                Physics2D.IgnoreCollision(ownerCollider, bulletCollider, true);
-        }
+        if (cachedOwnerColliders == null || cachedOwnerColliders.Length == 0)
+            CacheOwnerShape();
+
+        ProjectileSpawner.IgnoreCollisions(bullet, cachedOwnerColliders);
     }
 
     void EnsureVisual()

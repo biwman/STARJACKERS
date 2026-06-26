@@ -21,6 +21,13 @@ public class GadgetButtonUI : MonoBehaviourPun
         public Image Icon;
         public TextMeshProUGUI Label;
         public TextMeshProUGUI Charges;
+        public int LastRemaining = int.MinValue;
+        public int LastMax = int.MinValue;
+        public bool LastCanUse;
+        public bool LastDepleted;
+        public bool HasLastState;
+        public Sprite LastIcon;
+        public string LastLabel;
     }
 
     const string GadgetButtonRootName = "GadgetButtonsRoot";
@@ -28,6 +35,8 @@ public class GadgetButtonUI : MonoBehaviourPun
     const float GadgetButtonBaseOffsetY = 392f;
     const float GadgetButtonPitch = 126f;
     const float GadgetButtonTopPadding = 24f;
+    const float LayoutRefreshInterval = 0.25f;
+    const float StateRefreshInterval = 0.1f;
     static Sprite circularButtonSprite;
 
     PlayerShooting shooting;
@@ -37,6 +46,10 @@ public class GadgetButtonUI : MonoBehaviourPun
     RectTransform shootJoystickRect;
     readonly List<GadgetButtonWidget> widgets = new List<GadgetButtonWidget>();
     string lastWidgetSignature = string.Empty;
+    float nextLayoutRefreshTime;
+    float nextStateRefreshTime;
+    bool forceLayoutRefresh;
+    bool forceStateRefresh = true;
 
     void Start()
     {
@@ -49,14 +62,27 @@ public class GadgetButtonUI : MonoBehaviourPun
         }
 
         RebuildButtonsIfNeeded();
-        RefreshState();
+        RefreshRuntimeLayout();
+        RefreshState(true);
     }
 
     void Update()
     {
         RebuildButtonsIfNeeded();
-        RefreshRuntimeLayout();
-        RefreshState();
+
+        if (forceLayoutRefresh || Time.unscaledTime >= nextLayoutRefreshTime)
+        {
+            nextLayoutRefreshTime = Time.unscaledTime + LayoutRefreshInterval;
+            forceLayoutRefresh = false;
+            RefreshRuntimeLayout();
+        }
+
+        if (forceStateRefresh || Time.unscaledTime >= nextStateRefreshTime)
+        {
+            nextStateRefreshTime = Time.unscaledTime + StateRefreshInterval;
+            RefreshState(forceStateRefresh);
+            forceStateRefresh = false;
+        }
     }
 
     void OnDestroy()
@@ -77,6 +103,8 @@ public class GadgetButtonUI : MonoBehaviourPun
         DestroyAllButtons();
         CreateButtons(itemIds);
         lastWidgetSignature = signature;
+        forceLayoutRefresh = true;
+        forceStateRefresh = true;
     }
 
     void CreateButtons(IReadOnlyList<string> itemIds)
@@ -292,7 +320,7 @@ public class GadgetButtonUI : MonoBehaviourPun
         trigger.triggers.Add(entry);
     }
 
-    void RefreshState()
+    void RefreshState(bool force = false)
     {
         if (shooting == null)
             return;
@@ -310,10 +338,32 @@ public class GadgetButtonUI : MonoBehaviourPun
             int max = shooting.GetMaxGadgetCharges(widget.ItemId);
             bool canUse = shooting.CanUseGadget(widget.ItemId);
             bool depleted = max > 0 && remaining <= 0;
+            Sprite icon = shooting.GetGadgetIcon(widget.ItemId);
+            string label = shooting.GetGadgetButtonLabel(widget.ItemId);
 
-            widget.Icon.sprite = shooting.GetGadgetIcon(widget.ItemId);
-            widget.Icon.enabled = widget.Icon.sprite != null;
-            widget.Label.text = shooting.GetGadgetButtonLabel(widget.ItemId);
+            if (!force &&
+                widget.HasLastState &&
+                widget.LastRemaining == remaining &&
+                widget.LastMax == max &&
+                widget.LastCanUse == canUse &&
+                widget.LastDepleted == depleted &&
+                widget.LastIcon == icon &&
+                string.Equals(widget.LastLabel, label, System.StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            widget.HasLastState = true;
+            widget.LastRemaining = remaining;
+            widget.LastMax = max;
+            widget.LastCanUse = canUse;
+            widget.LastDepleted = depleted;
+            widget.LastIcon = icon;
+            widget.LastLabel = label;
+
+            widget.Icon.sprite = icon;
+            widget.Icon.enabled = icon != null;
+            widget.Label.text = label;
             widget.Charges.text = max > 0 ? remaining.ToString() : string.Empty;
 
             widget.Button.interactable = canUse;
@@ -352,6 +402,8 @@ public class GadgetButtonUI : MonoBehaviourPun
 
         widgets.Clear();
         lastWidgetSignature = string.Empty;
+        forceLayoutRefresh = true;
+        forceStateRefresh = true;
 
         if (rootObject != null)
         {

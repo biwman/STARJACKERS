@@ -806,6 +806,8 @@ public sealed class IndustrialPartsHaulable : PlayerDeployableBase
     protected override string SpriteResourcePath => ResourcePaths[Mathf.Clamp(variantIndex, 0, ResourcePaths.Length - 1)];
     protected override string EditorSpritePath => EditorPaths[Mathf.Clamp(variantIndex, 0, EditorPaths.Length - 1)];
     public bool IsMissionResolved => destroyed || evacuating;
+    public bool IsBeingHauled => haulerViewId > 0 && !IsMissionResolved;
+    public override bool CanBeTargetedByEnemyBots => CanBeTargeted && !IsComputerOwnedDeployable && IsBeingHauled;
 
     public void InitializeFromPhotonData()
     {

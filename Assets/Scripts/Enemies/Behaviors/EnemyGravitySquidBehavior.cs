@@ -31,6 +31,10 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
     const float MapEdgeMargin = 2.6f;
     const float PatrolTurnIntervalMin = 1.2f;
     const float PatrolTurnIntervalMax = 2.3f;
+    const float AlphaSpecimenTetherRange = 3.15f;
+    const float AlphaSpecimenBreakDistance = 4.6f;
+    const float AlphaSpecimenPreferredDistance = 2.75f;
+    const float AlphaSpecimenOrbitDistance = 2.05f;
 
     Rigidbody2D rb;
     PhotonView view;
@@ -127,7 +131,7 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
         {
             Vector2 toTarget = (Vector2)currentTarget.position - rb.position;
             float distance = toTarget.magnitude;
-            if (distance > 0.001f && distance <= ResolveTetherRange() && Time.time >= nextAttackTime)
+            if (distance > 0.001f && distance <= ResolveTetherRangeForTarget(currentTarget) && Time.time >= nextAttackTime)
             {
                 BeginWindup(currentTarget);
                 return;
@@ -179,7 +183,7 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
     void TickWindup()
     {
         SetAnimationSpeed(1.65f);
-        if (!IsActiveTargetStillValid(ResolveTetherRange() + 1.5f))
+        if (!IsActiveTargetStillValid(ResolveActiveTetherRange() + ResolveActiveWindupGraceDistance()))
         {
             BeginRecovery();
             return;
@@ -209,7 +213,7 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
     void TickChannel()
     {
         SetAnimationSpeed(2.05f);
-        if (!IsActiveTargetStillValid(BreakDistance))
+        if (!IsActiveTargetStillValid(ResolveActiveBreakDistance()))
         {
             BeginRecovery();
             return;
@@ -311,10 +315,13 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
             : new Vector2(toward.y, -toward.x);
         float wave = Mathf.Sin(Time.time * 1.15f + (view != null ? view.ViewID : 1) * 0.17f) * 0.14f;
 
-        if (distance > movement.PreferredDistance)
+        float preferredDistance = ResolvePreferredDistanceForTarget(currentTarget);
+        float orbitDistance = ResolveOrbitDistanceForTarget(currentTarget);
+
+        if (distance > preferredDistance)
             return (toward * 0.74f + tangent * (0.34f + wave)).normalized;
 
-        if (distance < movement.OrbitDistance)
+        if (distance < orbitDistance)
             return (-toward * 0.62f + tangent * 0.72f).normalized;
 
         return (tangent * 0.9f + toward * 0.1f).normalized;
@@ -335,10 +342,13 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
             ? new Vector2(-toward.y, toward.x)
             : new Vector2(toward.y, -toward.x);
 
-        if (distance > movement.PreferredDistance + 1.2f)
+        float preferredDistance = ResolvePreferredDistanceForTarget(target);
+        float orbitDistance = ResolveOrbitDistanceForTarget(target);
+
+        if (distance > preferredDistance + 0.65f)
             return (toward * 0.36f + tangent * 0.24f).normalized;
 
-        if (distance < movement.OrbitDistance)
+        if (distance < orbitDistance)
             return (-toward * 0.54f + tangent * 0.32f).normalized;
 
         return (tangent * 0.42f + toward * 0.05f).normalized;
@@ -545,6 +555,47 @@ public class EnemyGravitySquidBehavior : EnemyBotBehaviorBase
     float ResolveTetherRange()
     {
         return weapon != null && weapon.Range > 0f ? weapon.Range : Mathf.Max(8f, movement.ShootDistance);
+    }
+
+    float ResolveTetherRangeForTarget(Transform target)
+    {
+        return EnemySpaceAnimalAlphaSpecimenUtility.IsProtectedPlayerTarget(target)
+            ? AlphaSpecimenTetherRange
+            : ResolveTetherRange();
+    }
+
+    float ResolveActiveTetherRange()
+    {
+        Transform target = ResolveActiveTargetTransform();
+        return ResolveTetherRangeForTarget(target);
+    }
+
+    float ResolveActiveBreakDistance()
+    {
+        Transform target = ResolveActiveTargetTransform();
+        return EnemySpaceAnimalAlphaSpecimenUtility.IsProtectedPlayerTarget(target)
+            ? AlphaSpecimenBreakDistance
+            : BreakDistance;
+    }
+
+    float ResolveActiveWindupGraceDistance()
+    {
+        Transform target = ResolveActiveTargetTransform();
+        return EnemySpaceAnimalAlphaSpecimenUtility.IsProtectedPlayerTarget(target) ? 0.55f : 1.5f;
+    }
+
+    float ResolvePreferredDistanceForTarget(Transform target)
+    {
+        return EnemySpaceAnimalAlphaSpecimenUtility.IsProtectedPlayerTarget(target)
+            ? AlphaSpecimenPreferredDistance
+            : movement.PreferredDistance;
+    }
+
+    float ResolveOrbitDistanceForTarget(Transform target)
+    {
+        return EnemySpaceAnimalAlphaSpecimenUtility.IsProtectedPlayerTarget(target)
+            ? AlphaSpecimenOrbitDistance
+            : movement.OrbitDistance;
     }
 
     float ResolveTetherCooldown()

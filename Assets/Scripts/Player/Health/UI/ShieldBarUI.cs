@@ -14,6 +14,8 @@ public class ShieldBarUI : MonoBehaviourPun
     const float BarWidth = 440f;
     const float BarHeight = 42f;
     const float VerticalSpacing = 48f;
+    static readonly Color LowShieldColor = new Color(0.08f, 0.36f, 0.88f, 1f);
+    static readonly Color HighShieldColor = new Color(0.34f, 0.96f, 1f, 1f);
 
     PlayerHealth health;
     Slider shieldBar;
@@ -25,6 +27,9 @@ public class ShieldBarUI : MonoBehaviourPun
     TMPro.TextMeshProUGUI labelText;
     TMPro.TextMeshProUGUI valueText;
     bool isVisible = true;
+    int lastDisplayedShield = int.MinValue;
+    int lastDisplayedMaxShield = int.MinValue;
+    Vector2 lastHpAnchoredPosition = new Vector2(float.NaN, float.NaN);
 
     void Start()
     {
@@ -48,8 +53,9 @@ public class ShieldBarUI : MonoBehaviourPun
             RefreshBar();
         }
 
-        UpdateVisibility();
-        RefreshBar();
+        bool visibilityChanged = UpdateVisibility();
+        if (isVisible || visibilityChanged)
+            RefreshBar(visibilityChanged);
     }
 
     void OnDestroy()
@@ -105,30 +111,38 @@ public class ShieldBarUI : MonoBehaviourPun
         valueText = CreateText(clone.transform, ShieldValueName, new Vector2(-12f, 0f), TMPro.TextAlignmentOptions.Right, string.Empty);
     }
 
-    void RefreshBar()
+    void RefreshBar(bool force = false)
     {
         if (health == null || shieldBar == null)
             return;
 
-        ApplyLayout();
+        ApplyLayoutIfNeeded(force);
 
-        shieldBar.maxValue = health.MaxShield;
-        shieldBar.value = health.CurrentShield;
+        int maxShield = Mathf.Max(0, health.MaxShield);
+        int currentShield = Mathf.Clamp(health.CurrentShield, 0, Mathf.Max(1, maxShield));
+        if (!force && currentShield == lastDisplayedShield && maxShield == lastDisplayedMaxShield)
+            return;
+
+        lastDisplayedShield = currentShield;
+        lastDisplayedMaxShield = maxShield;
+
+        shieldBar.maxValue = maxShield;
+        shieldBar.value = currentShield;
 
         if (valueText != null)
-            valueText.text = health.CurrentShield + " / " + health.MaxShield;
+            valueText.text = currentShield + " / " + maxShield;
 
-        float normalized = shieldBar.maxValue > 0f ? shieldBar.value / shieldBar.maxValue : 0f;
+        float normalized = maxShield > 0 ? currentShield / (float)maxShield : 0f;
         if (fillImage != null)
-            fillImage.color = Color.Lerp(new Color(0.08f, 0.36f, 0.88f, 1f), new Color(0.34f, 0.96f, 1f, 1f), normalized);
+            fillImage.color = Color.Lerp(LowShieldColor, HighShieldColor, normalized);
 
         HideHandle();
     }
 
-    void UpdateVisibility()
+    bool UpdateVisibility()
     {
         if (shieldBar == null)
-            return;
+            return false;
 
         bool shouldBeVisible = health != null &&
                                health.MaxShield > 0 &&
@@ -137,13 +151,14 @@ public class ShieldBarUI : MonoBehaviourPun
                                value is bool started &&
                                GameplayHudVisibility.IsGameplayHudVisible(started);
         if (isVisible == shouldBeVisible)
-            return;
+            return false;
 
         isVisible = shouldBeVisible;
         shieldBar.gameObject.SetActive(shouldBeVisible);
+        return true;
     }
 
-    void ApplyLayout()
+    void ApplyLayoutIfNeeded(bool force = false)
     {
         if (shieldRect == null)
             return;
@@ -153,6 +168,9 @@ public class ShieldBarUI : MonoBehaviourPun
             GameObject hpBarObject = GameObject.Find("HP_Bar");
             hpRect = hpBarObject != null ? hpBarObject.GetComponent<RectTransform>() : null;
         }
+
+        if (!force && hpRect != null && lastHpAnchoredPosition == hpRect.anchoredPosition)
+            return;
 
         ApplyLayout(hpRect);
     }
@@ -164,6 +182,7 @@ public class ShieldBarUI : MonoBehaviourPun
 
         shieldRect.sizeDelta = new Vector2(BarWidth, BarHeight);
         shieldRect.anchoredPosition = hpRect.anchoredPosition + new Vector2(0f, -VerticalSpacing);
+        lastHpAnchoredPosition = hpRect.anchoredPosition;
     }
 
     TMPro.TextMeshProUGUI CreateText(Transform parent, string objectName, Vector2 anchoredPosition, TMPro.TextAlignmentOptions alignment, string initialText)

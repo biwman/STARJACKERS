@@ -146,13 +146,14 @@ public partial class PlayerProfilePanelUI
         switch (kind)
         {
             case TraderShopKind.IronJoe:
-                return definition.Category == InventoryItemCategory.Weapon ||
-                    definition.Category == InventoryItemCategory.Shield ||
-                    definition.Category == InventoryItemCategory.Engine;
+                return definition.Category == InventoryItemCategory.Weapon;
             case TraderShopKind.MissGadget:
                 return definition.Category == InventoryItemCategory.Gadget ||
                     definition.Category == InventoryItemCategory.Support ||
                     definition.Category == InventoryItemCategory.Rescue;
+            case TraderShopKind.DirtySam:
+                return definition.Category == InventoryItemCategory.Shield ||
+                    definition.Category == InventoryItemCategory.Engine;
             default:
                 return false;
         }

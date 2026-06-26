@@ -9,16 +9,20 @@ public partial class PlayerProfileService
     public async Task RecordGameStartedAsync()
     {
         await EnsureInitializedAsync();
+        EnsurePilotDefaults();
+        EnsureCareerStats();
 
         try
         {
             IsBusy = true;
             ClearPendingAstronautCargo();
             CurrentProfile.GamesPlayed = Mathf.Max(0, CurrentProfile.GamesPlayed + 1);
+            RecordCurrentRoundStartSelection();
 
             var data = new Dictionary<string, object>
             {
-                [CloudGamesPlayedKey] = CurrentProfile.GamesPlayed
+                [CloudGamesPlayedKey] = CurrentProfile.GamesPlayed,
+                [CloudCareerStatsKey] = SerializeCareerStats(CurrentProfile.CareerStats)
             };
 
             await RunCloudOperationWithRetryAsync(
@@ -254,6 +258,116 @@ public partial class PlayerProfileService
         normalized.HumanPlayerKills = Mathf.Max(0, normalized.HumanPlayerKills);
         normalized.AstronsEarned = Mathf.Max(0, normalized.AstronsEarned);
         normalized.HighestLootReturnedAstrons = Mathf.Max(0, normalized.HighestLootReturnedAstrons);
+        normalized.ShipStartCounts = NormalizeCareerStartCounts(normalized.ShipStartCounts, NormalizeShipStartCountId);
+        normalized.PilotStartCounts = NormalizeCareerStartCounts(normalized.PilotStartCounts, NormalizePilotStartCountId);
         return normalized;
+    }
+
+    void RecordCurrentRoundStartSelection()
+    {
+        if (CurrentProfile == null)
+            return;
+
+        EnsureCareerStats();
+
+        int shipSkinIndex = Mathf.Clamp(CurrentProfile.ShipSkinIndex, 0, ShipCatalog.MaxShipSkinIndex);
+        string shipTypeId = ShipCatalog.GetShipTypeId(ShipCatalog.GetShipTypeFromSkinIndex(shipSkinIndex));
+        string pilotId = PilotCatalog.NormalizePilotId(CurrentProfile.SelectedPilotId);
+
+        CurrentProfile.CareerStats.ShipStartCounts = AddCareerStartCount(
+            CurrentProfile.CareerStats.ShipStartCounts,
+            shipTypeId,
+            NormalizeShipStartCountId);
+        CurrentProfile.CareerStats.PilotStartCounts = AddCareerStartCount(
+            CurrentProfile.CareerStats.PilotStartCounts,
+            pilotId,
+            NormalizePilotStartCountId);
+        CurrentProfile.CareerStats = NormalizeCareerStats(CurrentProfile.CareerStats);
+    }
+
+    static PlayerCareerStartCountEntry[] AddCareerStartCount(
+        PlayerCareerStartCountEntry[] entries,
+        string id,
+        Func<string, string> normalizeId)
+    {
+        PlayerCareerStartCountEntry[] normalized = NormalizeCareerStartCounts(entries, normalizeId);
+        string normalizedId = normalizeId != null ? normalizeId(id) : string.Empty;
+        if (string.IsNullOrWhiteSpace(normalizedId))
+            return normalized;
+
+        for (int i = 0; i < normalized.Length; i++)
+        {
+            if (!string.Equals(normalized[i].Id, normalizedId, StringComparison.Ordinal))
+                continue;
+
+            normalized[i].Count = AddClamped(normalized[i].Count, 1);
+            return NormalizeCareerStartCounts(normalized, normalizeId);
+        }
+
+        PlayerCareerStartCountEntry[] expanded = new PlayerCareerStartCountEntry[normalized.Length + 1];
+        Array.Copy(normalized, expanded, normalized.Length);
+        expanded[expanded.Length - 1] = new PlayerCareerStartCountEntry
+        {
+            Id = normalizedId,
+            Count = 1
+        };
+
+        return NormalizeCareerStartCounts(expanded, normalizeId);
+    }
+
+    static PlayerCareerStartCountEntry[] NormalizeCareerStartCounts(
+        PlayerCareerStartCountEntry[] entries,
+        Func<string, string> normalizeId)
+    {
+        if (entries == null || entries.Length == 0 || normalizeId == null)
+            return Array.Empty<PlayerCareerStartCountEntry>();
+
+        Dictionary<string, int> countsById = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (int i = 0; i < entries.Length; i++)
+        {
+            PlayerCareerStartCountEntry entry = entries[i];
+            if (entry == null)
+                continue;
+
+            string normalizedId = normalizeId(entry.Id);
+            if (string.IsNullOrWhiteSpace(normalizedId))
+                continue;
+
+            int count = Mathf.Max(0, entry.Count);
+            if (count <= 0)
+                continue;
+
+            countsById.TryGetValue(normalizedId, out int currentCount);
+            countsById[normalizedId] = AddClamped(currentCount, count);
+        }
+
+        if (countsById.Count == 0)
+            return Array.Empty<PlayerCareerStartCountEntry>();
+
+        PlayerCareerStartCountEntry[] normalized = new PlayerCareerStartCountEntry[countsById.Count];
+        int index = 0;
+        foreach (KeyValuePair<string, int> pair in countsById)
+        {
+            normalized[index++] = new PlayerCareerStartCountEntry
+            {
+                Id = pair.Key,
+                Count = pair.Value
+            };
+        }
+
+        Array.Sort(normalized, (left, right) => string.Compare(left.Id, right.Id, StringComparison.Ordinal));
+        return normalized;
+    }
+
+    static string NormalizeShipStartCountId(string shipTypeId)
+    {
+        return ShipCatalog.NormalizeShipTypeId(shipTypeId);
+    }
+
+    static string NormalizePilotStartCountId(string pilotId)
+    {
+        return PilotCatalog.IsValidPilotId(pilotId)
+            ? PilotCatalog.NormalizePilotId(pilotId)
+            : string.Empty;
     }
 }

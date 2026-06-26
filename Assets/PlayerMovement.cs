@@ -51,6 +51,7 @@ public class PlayerMovement : MonoBehaviourPun
     float pilotSpeedBoostUntil = -1f;
     float superBoosterUntil = -1f;
     Vector2 superBoosterDirection = Vector2.up;
+    float invaderResonanceDriftUntil = -1f;
     const float BaseTurnDegreesPerSecond = 1080f;
     const float AccelerationResponsiveness = 18f;
     const float LowSpeedBrakeResponsiveness = 7.4f;
@@ -1299,6 +1300,8 @@ public class PlayerMovement : MonoBehaviourPun
         float response = 1f / slowdown;
         if (equippedAfterburnerStabilizerCount > 0)
             response = Mathf.Lerp(response, 1f, Mathf.Clamp01(0.38f * equippedAfterburnerStabilizerCount));
+        if (Time.time < invaderResonanceDriftUntil)
+            response *= 0.42f;
 
         return response;
     }
@@ -1529,6 +1532,37 @@ public class PlayerMovement : MonoBehaviourPun
         boosterExhausted = boosterLimit <= 0.001f;
         boosterRecoveryDelayTimer = 0f;
         continuousBoosterTime = 0f;
+    }
+
+    public float DrainInvaderAssimilationBooster(float normalizedAmount)
+    {
+        if (!photonView.IsMine || normalizedAmount <= 0f || GetComponent<EnemyBot>() != null || NeutralRiderController.IsNeutralRider(gameObject) || GetComponent<AstronautSurvivor>() != null)
+            return 0f;
+
+        ShipDamageState damageState = GetComponent<ShipDamageState>();
+        if (damageState != null && damageState.IsBoosterDisabled())
+            return 0f;
+
+        float previousCharge = boosterCharge;
+        boosterCharge = Mathf.Max(0f, boosterCharge - normalizedAmount);
+        if (boosterCharge <= 0.001f)
+        {
+            boosterExhausted = true;
+            boosterRecoveryDelayTimer = GetCurrentBoosterRecoveryDelay();
+        }
+
+        PublishAdvancedBoosterVisualState();
+        return Mathf.Max(0f, previousCharge - boosterCharge);
+    }
+
+    public void ApplyInvaderResonanceDrift(float duration, Vector2 impulse)
+    {
+        if (!photonView.IsMine || GetComponent<EnemyBot>() != null || NeutralRiderController.IsNeutralRider(gameObject) || GetComponent<AstronautSurvivor>() != null)
+            return;
+
+        invaderResonanceDriftUntil = Mathf.Max(invaderResonanceDriftUntil, Time.time + Mathf.Max(0f, duration));
+        if (rb != null && impulse.sqrMagnitude > 0.0001f)
+            rb.AddForce(Vector2.ClampMagnitude(impulse, 5.5f), ForceMode2D.Impulse);
     }
 
     void RefreshPilotSpeedBoost()

@@ -301,6 +301,15 @@ public static class InventoryItemCatalog
     public const string ArrowRaceTokenDeepSpaceId = "arrow_race_token_deep_space";
     public const string ArrowRaceTokenPirateBayId = "arrow_race_token_pirate_bay";
 
+    static readonly string[] MissEnigmaRecoverableUniqueItemIds =
+    {
+        AlienTransmitterId,
+        AncientGateKeyId,
+        PreservedAlphaSpecimenId,
+        PirateSymbolId,
+        ShipPrototypeDocumentationId
+    };
+
     static readonly Dictionary<string, InventoryItemDefinition> Definitions = BuildDefinitions();
     static bool iconsPrewarmed;
 
@@ -444,6 +453,27 @@ public static class InventoryItemCatalog
             ArrowRaceTokenDeepSpaceId,
             ArrowRaceTokenPirateBayId
         };
+    }
+
+    public static bool IsMissEnigmaRecoverableUniqueItem(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        for (int i = 0; i < MissEnigmaRecoverableUniqueItemIds.Length; i++)
+        {
+            if (string.Equals(MissEnigmaRecoverableUniqueItemIds[i], itemId, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
+    public static string[] GetMissEnigmaRecoverableUniqueItemIds()
+    {
+        string[] itemIds = new string[MissEnigmaRecoverableUniqueItemIds.Length];
+        Array.Copy(MissEnigmaRecoverableUniqueItemIds, itemIds, itemIds.Length);
+        return itemIds;
     }
 
     public static bool IsTrackedValuableCargo(string itemId)
@@ -2426,7 +2456,7 @@ public static class InventoryItemCatalog
                 Id = PreservedAlphaSpecimenId,
                 DisplayName = "Preserved Alpha Specimen",
                 ShortLabel = "PAS",
-                Description = "A juvenile alpha-class space creature preserved inside a frost-covered cryo-vault. Its folded wings twitch faintly whenever the life monitor catches an impossible pulse.",
+                Description = "A juvenile alpha-class space creature preserved inside a frost-covered cryo-vault. When carried in a safe pocket, a tiny Space Manta shadows the ship and unsettles space animals.",
                 ItemType = InventoryItemType.Quest,
                 Category = InventoryItemCategory.QuestItem,
                 Rarity = InventoryItemRarity.Legendary,

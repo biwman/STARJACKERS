@@ -12,11 +12,13 @@ public sealed class RoundChatCommandUI : MonoBehaviourPun
         public readonly string Text;
         public readonly string IconResourcePath;
         public readonly string LightIconResourcePath;
+        public readonly string VoiceResourcePath;
 
-        public ChatCommandDefinition(string text, string iconResourcePath)
+        public ChatCommandDefinition(string text, string iconResourcePath, string voiceResourcePath)
         {
             Text = text;
             IconResourcePath = iconResourcePath;
+            VoiceResourcePath = voiceResourcePath;
             LightIconResourcePath = iconResourcePath
                 .Replace("chat_command_v8_", "chat_command_light_v8_")
                 .Replace("chat_command_v6_", "chat_command_light_v6_")
@@ -37,32 +39,35 @@ public sealed class RoundChatCommandUI : MonoBehaviourPun
     const float BubbleDuration = 3f;
     const float NearbyBroadcastDistance = 28f;
     const float ShipBubbleWorldOffset = 1.35f;
+    const float ChatVoiceVolume = 0.92f;
 
     static readonly ChatCommandDefinition[] Commands =
     {
-        new ChatCommandDefinition("DONT SHOOT", "UI/Chat/chat_command_v8_00_dont_shoot"),
-        new ChatCommandDefinition("DROP YOUR CARGO", "UI/Chat/chat_command_v8_01_drop_your_cargo"),
-        new ChatCommandDefinition("IM FRIENDLY", "UI/Chat/chat_command_v8_02_im_friendly"),
-        new ChatCommandDefinition("HELP ME", "UI/Chat/chat_command_v8_03_help_me"),
-        new ChatCommandDefinition("YOU WILL NOT ESCAPE", "UI/Chat/chat_command_v8_04_you_will_not_escape"),
-        new ChatCommandDefinition("RESISTANCE IS FUTILE", "UI/Chat/chat_command_v8_05_resistance_is_futile"),
-        new ChatCommandDefinition("STOP", "UI/Chat/chat_command_v8_06_stop"),
-        new ChatCommandDefinition("LOW ON HEALTH", "UI/Chat/chat_command_v8_07_low_on_health"),
-        new ChatCommandDefinition("CARGO FULL", "UI/Chat/chat_command_v8_08_cargo_full"),
-        new ChatCommandDefinition("LETS GO", "UI/Chat/chat_command_v8_09_lets_go"),
-        new ChatCommandDefinition("ENEMIES NEARBY", "UI/Chat/chat_command_v8_10_enemies_nearby"),
-        new ChatCommandDefinition("GOOD SHOOT", "UI/Chat/chat_command_v8_11_good_shoot"),
-        new ChatCommandDefinition("WHERE TO?", "UI/Chat/chat_command_v8_12_where_to"),
-        new ChatCommandDefinition("DIE!", "UI/Chat/chat_command_v8_13_die"),
-        new ChatCommandDefinition("GOOD GAME", "UI/Chat/chat_command_v8_14_good_game"),
-        new ChatCommandDefinition("WATCH THIS", "UI/Chat/chat_command_v8_15_watch_this"),
-        new ChatCommandDefinition("FOLLOW ME", "UI/Chat/chat_command_v8_16_follow_me"),
-        new ChatCommandDefinition("ROGER THAT!", "UI/Chat/chat_command_v8_17_roger_that"),
-        new ChatCommandDefinition("WANNA TRADE?", "UI/Chat/chat_command_v8_18_wanna_trade")
+        new ChatCommandDefinition("DONT SHOOT", "UI/Chat/chat_command_v8_00_dont_shoot", "Audio/Chat/chat_voice_00_dont_shoot"),
+        new ChatCommandDefinition("DROP YOUR CARGO", "UI/Chat/chat_command_v8_01_drop_your_cargo", "Audio/Chat/chat_voice_01_drop_your_cargo"),
+        new ChatCommandDefinition("IM FRIENDLY", "UI/Chat/chat_command_v8_02_im_friendly", "Audio/Chat/chat_voice_02_im_friendly"),
+        new ChatCommandDefinition("HELP ME", "UI/Chat/chat_command_v8_03_help_me", "Audio/Chat/chat_voice_03_help_me"),
+        new ChatCommandDefinition("YOU WILL NOT ESCAPE", "UI/Chat/chat_command_v8_04_you_will_not_escape", "Audio/Chat/chat_voice_04_you_will_not_escape"),
+        new ChatCommandDefinition("RESISTANCE IS FUTILE", "UI/Chat/chat_command_v8_05_resistance_is_futile", "Audio/Chat/chat_voice_05_resistance_is_futile"),
+        new ChatCommandDefinition("STOP", "UI/Chat/chat_command_v8_06_stop", "Audio/Chat/chat_voice_06_stop"),
+        new ChatCommandDefinition("LOW ON HEALTH", "UI/Chat/chat_command_v8_07_low_on_health", "Audio/Chat/chat_voice_07_low_on_health"),
+        new ChatCommandDefinition("CARGO FULL", "UI/Chat/chat_command_v8_08_cargo_full", "Audio/Chat/chat_voice_08_cargo_full"),
+        new ChatCommandDefinition("LETS GO", "UI/Chat/chat_command_v8_09_lets_go", "Audio/Chat/chat_voice_09_lets_go"),
+        new ChatCommandDefinition("ENEMIES NEARBY", "UI/Chat/chat_command_v8_10_enemies_nearby", "Audio/Chat/chat_voice_10_enemies_nearby"),
+        new ChatCommandDefinition("GOOD SHOOT", "UI/Chat/chat_command_v8_11_good_shoot", "Audio/Chat/chat_voice_11_good_shoot"),
+        new ChatCommandDefinition("WHERE TO?", "UI/Chat/chat_command_v8_12_where_to", "Audio/Chat/chat_voice_12_where_to"),
+        new ChatCommandDefinition("DIE!", "UI/Chat/chat_command_v8_13_die", "Audio/Chat/chat_voice_13_die"),
+        new ChatCommandDefinition("GOOD GAME", "UI/Chat/chat_command_v8_14_good_game", "Audio/Chat/chat_voice_14_good_game"),
+        new ChatCommandDefinition("WATCH THIS", "UI/Chat/chat_command_v8_15_watch_this", "Audio/Chat/chat_voice_15_watch_this"),
+        new ChatCommandDefinition("FOLLOW ME", "UI/Chat/chat_command_v8_16_follow_me", "Audio/Chat/chat_voice_16_follow_me"),
+        new ChatCommandDefinition("ROGER THAT!", "UI/Chat/chat_command_v8_17_roger_that", "Audio/Chat/chat_voice_17_roger_that"),
+        new ChatCommandDefinition("WANNA TRADE?", "UI/Chat/chat_command_v8_18_wanna_trade", "Audio/Chat/chat_voice_18_wanna_trade")
     };
 
     static readonly Sprite[] commandSpriteCache = new Sprite[Commands.Length];
     static readonly Sprite[] commandLightSpriteCache = new Sprite[Commands.Length];
+    static readonly AudioClip[] commandVoiceClipCache = new AudioClip[Commands.Length];
+    static readonly AudioClip[] commandFemaleVoiceClipCache = new AudioClip[Commands.Length];
     static readonly Dictionary<string, Sprite> portraitSpriteCache = new Dictionary<string, Sprite>(StringComparer.Ordinal);
     static Sprite chatButtonSprite;
     static Sprite circleSprite;
@@ -410,6 +415,7 @@ public sealed class RoundChatCommandUI : MonoBehaviourPun
 
         ChatCommandDefinition command = Commands[commandIndex];
         ShowWorldBubble(commandIndex);
+        PlayCommandVoice(commandIndex);
 
         if (photonView != null && photonView.IsMine)
         {
@@ -434,6 +440,23 @@ public sealed class RoundChatCommandUI : MonoBehaviourPun
             return false;
 
         return Vector2.Distance(localHealth.transform.position, transform.position) <= NearbyBroadcastDistance;
+    }
+
+    void PlayCommandVoice(int commandIndex)
+    {
+        bool useFemaleVoice = photonView != null && PilotCatalog.UsesFemaleChatVoice(photonView.Owner);
+        AudioClip voiceClip = GetCommandVoiceClip(commandIndex, useFemaleVoice);
+        if (voiceClip == null)
+            return;
+
+        if (photonView != null && photonView.IsMine)
+        {
+            AudioManager.Instance.PlayChatVoice(voiceClip, ChatVoiceVolume);
+            return;
+        }
+
+        Vector3 voicePosition = transform.position + Vector3.up * ShipBubbleWorldOffset;
+        AudioManager.Instance.PlayChatVoiceAt(voiceClip, voicePosition, ChatVoiceVolume);
     }
 
     static PlayerHealth FindLocalPlayerHealth()
@@ -744,6 +767,41 @@ public sealed class RoundChatCommandUI : MonoBehaviourPun
         return commandLightSpriteCache[commandIndex] != null
             ? commandLightSpriteCache[commandIndex]
             : GetCommandSprite(commandIndex);
+    }
+
+    static AudioClip GetCommandVoiceClip(int commandIndex, bool useFemaleVoice)
+    {
+        if (!IsValidCommand(commandIndex))
+            return null;
+
+        if (useFemaleVoice)
+        {
+            if (commandFemaleVoiceClipCache[commandIndex] == null)
+            {
+                string femaleVoiceResourcePath = GetFemaleVoiceResourcePath(Commands[commandIndex].VoiceResourcePath);
+                if (!string.IsNullOrWhiteSpace(femaleVoiceResourcePath))
+                    commandFemaleVoiceClipCache[commandIndex] = Resources.Load<AudioClip>(femaleVoiceResourcePath);
+            }
+
+            if (commandFemaleVoiceClipCache[commandIndex] != null)
+                return commandFemaleVoiceClipCache[commandIndex];
+        }
+
+        if (commandVoiceClipCache[commandIndex] == null)
+        {
+            string voiceResourcePath = Commands[commandIndex].VoiceResourcePath;
+            if (!string.IsNullOrWhiteSpace(voiceResourcePath))
+                commandVoiceClipCache[commandIndex] = Resources.Load<AudioClip>(voiceResourcePath);
+        }
+
+        return commandVoiceClipCache[commandIndex];
+    }
+
+    static string GetFemaleVoiceResourcePath(string maleVoiceResourcePath)
+    {
+        return string.IsNullOrWhiteSpace(maleVoiceResourcePath)
+            ? null
+            : maleVoiceResourcePath.Replace("Audio/Chat/chat_voice_", "Audio/Chat/chat_voice_female_");
     }
 
     static Sprite LoadSpriteFromResources(string resourcesPath)

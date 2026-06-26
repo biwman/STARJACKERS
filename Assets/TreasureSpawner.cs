@@ -95,17 +95,17 @@ public class TreasureSpawner : MonoBehaviourPun
             Collider2D hit = Physics2D.OverlapCircle(pos2D, 1f);
             if (hit == null)
             {
-                PhotonNetwork.Instantiate("TreasureNetwork", new Vector3(x, y, 0f), Quaternion.identity, 0, new object[] { RollTreasureItemId() });
+                GameObject treasureObject = PhotonNetwork.Instantiate("TreasureNetwork", new Vector3(x, y, 0f), Quaternion.identity, 0, new object[] { RollTreasureItemId() });
+                if (treasureObject != null)
+                    GameVisualTheme.RequestRuntimeRefresh(treasureObject);
+
                 treasurePositions.Add(pos2D);
                 spawned++;
             }
         }
 
-        int radioactiveSpawned = SpawnRadioactiveTreasures(obstaclePositions, extractionPositions, nebulaPositions);
-        int alienSecretsSpawned = SpawnAlienSecrets(obstaclePositions, extractionPositions, nebulaPositions, treasurePositions);
-
-        if (spawned + radioactiveSpawned + alienSecretsSpawned > 0)
-            GameVisualTheme.RequestRuntimeRefresh();
+        SpawnRadioactiveTreasures(obstaclePositions, extractionPositions, nebulaPositions);
+        SpawnAlienSecrets(obstaclePositions, extractionPositions, nebulaPositions, treasurePositions);
     }
 
     int SpawnAlienSecrets(List<Vector2> obstaclePositions, List<Vector2> extractionPositions, List<Vector2> nebulaPositions, List<Vector2> treasurePositions)
@@ -141,12 +141,15 @@ public class TreasureSpawner : MonoBehaviourPun
 
             int variantIndex = Random.Range(0, InventoryItemCatalog.AlienSecretVariantCount);
             string alienSecretItemId = InventoryItemCatalog.GetAlienSecretItemId(variantIndex);
-            PhotonNetwork.Instantiate(
+            GameObject treasureObject = PhotonNetwork.Instantiate(
                 "TreasureNetwork",
                 new Vector3(x, y, 0f),
                 Quaternion.identity,
                 0,
                 new object[] { alienSecretItemId, variantIndex });
+            if (treasureObject != null)
+                GameVisualTheme.RequestRuntimeRefresh(treasureObject);
+
             treasurePositions.Add(pos2D);
             spawned++;
         }
@@ -181,7 +184,10 @@ public class TreasureSpawner : MonoBehaviourPun
             Collider2D hit = Physics2D.OverlapCircle(pos2D, 1f);
             if (hit == null)
             {
-                PhotonNetwork.Instantiate("TreasureNetwork", new Vector3(x, y, 0f), Quaternion.identity, 0, new object[] { InventoryItemCatalog.RadioactiveTreasureId });
+                GameObject treasureObject = PhotonNetwork.Instantiate("TreasureNetwork", new Vector3(x, y, 0f), Quaternion.identity, 0, new object[] { InventoryItemCatalog.RadioactiveTreasureId });
+                if (treasureObject != null)
+                    GameVisualTheme.RequestRuntimeRefresh(treasureObject);
+
                 spawned++;
             }
         }

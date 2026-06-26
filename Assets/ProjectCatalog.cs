@@ -11,6 +11,22 @@ public enum ProjectRequirementKind
     AnyShield
 }
 
+public enum ProjectUnlockRequirementKind
+{
+    ProjectStageUnlocked,
+    ProjectComplete,
+    AnyProjectComplete
+}
+
+[Serializable]
+public sealed class ProjectUnlockRequirementDefinition
+{
+    public ProjectUnlockRequirementKind Kind;
+    public string ProjectId;
+    public int StageIndex;
+    public string RequirementText;
+}
+
 [Serializable]
 public sealed class ProjectRewardDefinition
 {
@@ -102,6 +118,7 @@ public sealed class ProjectDefinition
     public string Description;
     public string TileResourcePath;
     public string BackgroundResourcePath;
+    public ProjectUnlockRequirementDefinition[] UnlockRequirements;
     public ProjectStageDefinition[] Stages;
 }
 
@@ -185,6 +202,62 @@ public static class ProjectCatalog
         return completed;
     }
 
+    public static bool IsProjectUnlocked(PlayerProjectProgressData progress, string projectId)
+    {
+        ProjectDefinition project = Get(projectId);
+        if (project == null)
+            return false;
+
+        PlayerProjectProgressData normalized = NormalizeProgress(progress);
+        if (normalized.CheatUnlockAllProjects)
+            return true;
+
+        ProjectUnlockRequirementDefinition[] requirements = project.UnlockRequirements;
+        if (requirements == null || requirements.Length == 0)
+            return true;
+
+        for (int i = 0; i < requirements.Length; i++)
+        {
+            if (!IsUnlockRequirementSatisfied(requirements[i], normalized))
+                return false;
+        }
+
+        return true;
+    }
+
+    public static string GetProjectUnlockRequirementText(PlayerProjectProgressData progress, string projectId)
+    {
+        ProjectDefinition project = Get(projectId);
+        if (project == null)
+            return "PROJECT NOT FOUND";
+
+        PlayerProjectProgressData normalized = NormalizeProgress(progress);
+        if (IsProjectUnlocked(normalized, projectId))
+            return string.Empty;
+
+        ProjectUnlockRequirementDefinition[] requirements = project.UnlockRequirements;
+        if (requirements == null || requirements.Length == 0)
+            return string.Empty;
+
+        List<string> missingRequirements = new List<string>();
+        for (int i = 0; i < requirements.Length; i++)
+        {
+            ProjectUnlockRequirementDefinition requirement = requirements[i];
+            if (IsUnlockRequirementSatisfied(requirement, normalized))
+                continue;
+
+            string text = requirement != null && !string.IsNullOrWhiteSpace(requirement.RequirementText)
+                ? requirement.RequirementText
+                : BuildDefaultUnlockRequirementText(requirement);
+            if (!string.IsNullOrWhiteSpace(text))
+                missingRequirements.Add(text);
+        }
+
+        return missingRequirements.Count > 0
+            ? string.Join("\n", missingRequirements)
+            : "PROJECT LOCKED";
+    }
+
     public static bool IsStageUnlocked(PlayerProjectProgressData progress, string projectId, int stageIndex)
     {
         ProjectDefinition project = Get(projectId);
@@ -219,6 +292,44 @@ public static class ProjectCatalog
         }
 
         return stage.Steps.Length > 0;
+    }
+
+    static bool IsUnlockRequirementSatisfied(ProjectUnlockRequirementDefinition requirement, PlayerProjectProgressData progress)
+    {
+        if (requirement == null)
+            return true;
+
+        switch (requirement.Kind)
+        {
+            case ProjectUnlockRequirementKind.ProjectStageUnlocked:
+                return IsStageUnlocked(progress, requirement.ProjectId, requirement.StageIndex);
+            case ProjectUnlockRequirementKind.ProjectComplete:
+                return IsProjectComplete(progress, requirement.ProjectId);
+            case ProjectUnlockRequirementKind.AnyProjectComplete:
+                return CountCompletedProjects(progress) > 0;
+            default:
+                return false;
+        }
+    }
+
+    static string BuildDefaultUnlockRequirementText(ProjectUnlockRequirementDefinition requirement)
+    {
+        if (requirement == null)
+            return string.Empty;
+
+        ProjectDefinition project = Get(requirement.ProjectId);
+        string projectName = project != null ? project.DisplayName : "REQUIRED PROJECT";
+        switch (requirement.Kind)
+        {
+            case ProjectUnlockRequirementKind.ProjectStageUnlocked:
+                return "REACH " + projectName + " STAGE " + Mathf.Max(1, requirement.StageIndex + 1);
+            case ProjectUnlockRequirementKind.ProjectComplete:
+                return "COMPLETE " + projectName;
+            case ProjectUnlockRequirementKind.AnyProjectComplete:
+                return "COMPLETE ANY PROJECT";
+            default:
+                return "PROJECT LOCKED";
+        }
     }
 
     static PlayerProjectProgressEntry NormalizeProjectEntry(ProjectDefinition project, PlayerProjectProgressEntry source)
@@ -313,6 +424,10 @@ public static class ProjectCatalog
                 Description = "The raider powered down his ship's main lights and drifted silently in the shadow of a large asteroid. Ahead of him, deep inside the red-orange glow of the nebula, the battle raged on. Engine trails cut across the darkness between drifting rocks, while flashes of cannon fire reflected across his cockpit like distant storms over an ocean.\n\nHe wasn't a soldier. He hauled spare parts between colonies near Mars, sometimes food and medical supplies to mining stations beyond Jupiter. He stayed away from wars. Wars usually meant inspections, debts, or bodies floating in the vacuum.\n\nBut this felt different.\n\nA few minutes earlier, he had intercepted part of a damaged transmission. No one was asking for reinforcements or ammunition. They were talking about a discovery - something unique and valuable buried inside one of the asteroids.\n\nThe raider glanced at the radar display. One side of the battle was desperately trying to escort a ship carrying something out of the combat zone. The opposing fleet had thrown everything they had after it.\n\nNo matter who wins, there will be plenty of wrecks left to scavenge...",
                 TileResourcePath = "SPACE_MAYHEM",
                 BackgroundResourcePath = "SPACE_MAYHEM",
+                UnlockRequirements = new[]
+                {
+                    StageUnlocked(SupplyToSurviveId, 2, "REACH SUPPLY TO SURVIVE STAGE 3")
+                },
                 Stages = new[]
                 {
                     Stage("stage_1", "STAGE 1",
@@ -340,6 +455,10 @@ public static class ProjectCatalog
                 Description = "The message arrived without a sender, burned into the ship's console in a neat line of red text: pay the silence, or everyone you love hears what you carried through the blockade.\n\nThe pirates knew the raider's route, his debts, and the names of the people waiting for him back home. They could ruin him with one transmission. They could also make him rich with one quiet introduction.\n\nTheir offer was simple. Move money. Move locked cases. Move military gear no customs officer should ever see. In return, the raider would get access to stolen schematics, black-market contacts, and a final mark of trust from the pirate families.\n\nNo signatures. No witnesses. No heroes.\n\nOnly OMERTA.",
                 TileResourcePath = "omerta_screen",
                 BackgroundResourcePath = "omerta_screen",
+                UnlockRequirements = new[]
+                {
+                    AnyProjectComplete("COMPLETE ANY PROJECT")
+                },
                 Stages = new[]
                 {
                     Stage("stage_1", "FIRST PAYMENT",
@@ -368,6 +487,10 @@ public static class ProjectCatalog
                 Description = "The first fragment looked worthless: a shard of cold alien glass drifting between asteroids. Then the station receivers began repeating a signal nobody had transmitted.\n\nA retired xenolinguist offered the raider a quiet contract. Bring more fragments, keep them away from pirates, and do not let corporate survey ships know the signal exists. Each recovered secret adds a new stroke to a star map older than any colony chart.\n\nBy the time the pattern becomes clear, the raider is no longer collecting relics. He is assembling a key for a gate that should have stayed silent.",
                 TileResourcePath = "ALIEN_SECRETS_PROJECT",
                 BackgroundResourcePath = "ALIEN_SECRETS_PROJECT",
+                UnlockRequirements = new[]
+                {
+                    ProjectComplete(SpaceMayhemId, "COMPLETE SPACE MAYHEM")
+                },
                 Stages = new[]
                 {
                     Stage("stage_1", "LOST SIGNAL",
@@ -393,6 +516,10 @@ public static class ProjectCatalog
                 Description = "The stall sign promises premium spacefarer provisions, but nobody at Cryoshade Meats talks like a cook. They pay too well for bone dust, tissue scraps, and the dark organic remains left behind by cosmic animals.\n\nAt first the job is simple: hunt the beasts, chill the samples, deliver the cargo before it spoils. Then the buyers start asking which creature screamed, which one shed light after death, and whether any specimen was small enough to fit inside a portable cryo-vault.\n\nCryoshade is not stocking a kitchen. Someone is searching for a rare alpha-class space animal, and the raider is about to deliver it alive enough to matter.",
                 TileResourcePath = "CRYOSHADE_MEATS_PROJECT",
                 BackgroundResourcePath = "CRYOSHADE_MEATS_PROJECT",
+                UnlockRequirements = new[]
+                {
+                    AnyProjectComplete("COMPLETE ANY PROJECT")
+                },
                 Stages = new[]
                 {
                     Stage("stage_1", "FRESH SAMPLE",
@@ -413,6 +540,36 @@ public static class ProjectCatalog
                         Exact("animal_remains", "Space Animal Remains", InventoryItemCatalog.SpaceAnimalRemainsId, 15))
                 }
             }
+        };
+    }
+
+    static ProjectUnlockRequirementDefinition StageUnlocked(string projectId, int stageIndex, string requirementText)
+    {
+        return new ProjectUnlockRequirementDefinition
+        {
+            Kind = ProjectUnlockRequirementKind.ProjectStageUnlocked,
+            ProjectId = projectId,
+            StageIndex = Mathf.Max(0, stageIndex),
+            RequirementText = requirementText
+        };
+    }
+
+    static ProjectUnlockRequirementDefinition ProjectComplete(string projectId, string requirementText)
+    {
+        return new ProjectUnlockRequirementDefinition
+        {
+            Kind = ProjectUnlockRequirementKind.ProjectComplete,
+            ProjectId = projectId,
+            RequirementText = requirementText
+        };
+    }
+
+    static ProjectUnlockRequirementDefinition AnyProjectComplete(string requirementText)
+    {
+        return new ProjectUnlockRequirementDefinition
+        {
+            Kind = ProjectUnlockRequirementKind.AnyProjectComplete,
+            RequirementText = requirementText
         };
     }
 
@@ -519,6 +676,7 @@ public static class ProjectCatalog
 public sealed class PlayerProjectProgressData
 {
     public PlayerProjectProgressEntry[] Entries;
+    public bool CheatUnlockAllProjects;
 
     public PlayerProjectProgressData Clone()
     {
@@ -529,7 +687,11 @@ public sealed class PlayerProjectProgressData
         for (int i = 0; i < clonedEntries.Length; i++)
             clonedEntries[i] = Entries[i]?.Clone();
 
-        return new PlayerProjectProgressData { Entries = clonedEntries };
+        return new PlayerProjectProgressData
+        {
+            Entries = clonedEntries,
+            CheatUnlockAllProjects = CheatUnlockAllProjects
+        };
     }
 }
 

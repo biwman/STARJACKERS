@@ -1021,7 +1021,7 @@ public partial class PlayerProfilePanelUI
         splashScreenImage.color = Color.white;
         splashScreenImage.preserveAspect = false;
         splashScreenImage.raycastTarget = false;
-        splashScreenImage.sprite = LoadStandaloneSprite("STAR_RAIDERS_screen.png");
+        splashScreenImage.sprite = LoadStandaloneSprite("STARJACKERS_screen.png");
 
         if (!splashShownOnce)
         {

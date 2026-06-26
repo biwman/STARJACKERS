@@ -285,6 +285,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     public static void ReturnToSessionBrowserFromRound()
     {
         RememberCurrentLobbySettings();
+        ProfileHangarSceneVfx.RequestNewSceneProfileForNextMenu();
 
         SessionRequested = true;
         if (instance == null)
@@ -308,6 +309,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public static void MarkCurrentRoundEndedForLocalPlayer(string outcome = null)
     {
+        ProfileHangarSceneVfx.RequestNewSceneProfileForNextMenu();
+
         if (PhotonNetwork.CurrentRoom == null)
             return;
 
@@ -1875,8 +1878,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     void SpawnPlayer()
     {
         Vector3 spawnPos = GetSpawnPosition();
-        PhotonNetwork.Instantiate("Player", spawnPos, Quaternion.identity);
-        GameVisualTheme.RequestRuntimeRefresh();
+        GameObject playerObject = PhotonNetwork.Instantiate("Player", spawnPos, Quaternion.identity);
+        if (playerObject != null)
+            GameVisualTheme.RequestRuntimeRefresh(playerObject);
     }
 
     public void RestoreRoomStateAfterSceneLoad()
