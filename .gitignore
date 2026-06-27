@@ -16,6 +16,8 @@ UserSettings/
 .utmp/
 *.apk
 *.aab
+*.symbols.zip
+*-IL2CPP.symbols.zip
 *.slnx
 *.sln
 *.svd

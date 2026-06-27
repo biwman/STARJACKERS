@@ -640,6 +640,24 @@ public partial class LobbyManager
             changed = true;
         }
 
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.DiagnosticsGcEnabledKey))
+        {
+            props[RoomSettings.DiagnosticsGcEnabledKey] = RoomSettings.DefaultDiagnosticsGcEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.DiagnosticsSceneCountsEnabledKey))
+        {
+            props[RoomSettings.DiagnosticsSceneCountsEnabledKey] = RoomSettings.DefaultDiagnosticsSceneCountsEnabled;
+            changed = true;
+        }
+
+        if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.DiagnosticsNetworkEnabledKey))
+        {
+            props[RoomSettings.DiagnosticsNetworkEnabledKey] = RoomSettings.DefaultDiagnosticsNetworkEnabled;
+            changed = true;
+        }
+
         if (!PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey(RoomSettings.NeutralRidersEnabledKey))
         {
             props[RoomSettings.NeutralRidersEnabledKey] = LobbyMapCatalog.AreNeutralRidersEnabledByDefault(RoomSettings.GetSelectedLobbyMapId());

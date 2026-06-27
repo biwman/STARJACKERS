@@ -107,6 +107,9 @@ public static class RoomSettings
     public const string CollectKeepAliveRangeBonusPercentKey = "collectKeepAliveRangeBonusPercent";
     public const string HapticsEnabledKey = "hapticsEnabled";
     public const string FpsCounterEnabledKey = "fpsCounterEnabled";
+    public const string DiagnosticsGcEnabledKey = "diagnostics.gcEnabled";
+    public const string DiagnosticsSceneCountsEnabledKey = "diagnostics.sceneCountsEnabled";
+    public const string DiagnosticsNetworkEnabledKey = "diagnostics.networkEnabled";
     public const string NeutralRidersEnabledKey = "neutralRiders.enabled";
     public const string NeutralRidersCountKey = "neutralRiders.count";
     public const string NeutralRidersAggressionKey = "neutralRiders.aggression";
@@ -238,6 +241,9 @@ public static class RoomSettings
     public const int DefaultCollectKeepAliveRangeBonusPercent = 50;
     public const bool DefaultHapticsEnabled = true;
     public const bool DefaultFpsCounterEnabled = false;
+    public const bool DefaultDiagnosticsGcEnabled = false;
+    public const bool DefaultDiagnosticsSceneCountsEnabled = false;
+    public const bool DefaultDiagnosticsNetworkEnabled = false;
     public const bool DefaultNeutralRidersEnabled = false;
     public const int DefaultNeutralRidersCount = 2;
     public const string NeutralRiderAggressionLow = "low";
@@ -869,14 +875,30 @@ public static class RoomSettings
 
     public static bool IsFpsCounterEnabled()
     {
-        if (PhotonNetwork.CurrentRoom != null &&
-            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(FpsCounterEnabledKey, out object value) &&
-            value is bool enabled)
-        {
-            return enabled;
-        }
+        return GetBool(FpsCounterEnabledKey, DefaultFpsCounterEnabled);
+    }
 
-        return DefaultFpsCounterEnabled;
+    public static bool IsDiagnosticsGcEnabled()
+    {
+        return GetBool(DiagnosticsGcEnabledKey, DefaultDiagnosticsGcEnabled);
+    }
+
+    public static bool IsDiagnosticsSceneCountsEnabled()
+    {
+        return GetBool(DiagnosticsSceneCountsEnabledKey, DefaultDiagnosticsSceneCountsEnabled);
+    }
+
+    public static bool IsDiagnosticsNetworkEnabled()
+    {
+        return GetBool(DiagnosticsNetworkEnabledKey, DefaultDiagnosticsNetworkEnabled);
+    }
+
+    public static bool IsAnyDiagnosticsOverlayEnabled()
+    {
+        return IsFpsCounterEnabled() ||
+            IsDiagnosticsGcEnabled() ||
+            IsDiagnosticsSceneCountsEnabled() ||
+            IsDiagnosticsNetworkEnabled();
     }
 
     public static bool AreNeutralRidersEnabled()
@@ -2314,6 +2336,18 @@ public static class RoomSettings
             PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(key, out object value))
         {
             return Mathf.Clamp(ConvertToInt(value, defaultValue), min, max);
+        }
+
+        return defaultValue;
+    }
+
+    static bool GetBool(string key, bool defaultValue)
+    {
+        if (PhotonNetwork.CurrentRoom != null &&
+            PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(key, out object value) &&
+            value is bool enabled)
+        {
+            return enabled;
         }
 
         return defaultValue;

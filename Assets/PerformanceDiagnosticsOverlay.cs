@@ -28,6 +28,7 @@ public sealed class PerformanceDiagnosticsOverlay : MonoBehaviour
     long lastPhotonIncomingMessages;
     long lastPhotonTotalMessages;
     bool hasPhotonSample;
+    bool trafficStatsEnabledByOverlay;
 
     int framesSinceLastSample;
     int currentFps;
@@ -74,7 +75,6 @@ public sealed class PerformanceDiagnosticsOverlay : MonoBehaviour
         instance = this;
         DontDestroyOnLoad(gameObject);
         CreateUi();
-        StartGcRecorder();
         ApplyVisibility();
     }
 
@@ -83,6 +83,8 @@ public sealed class PerformanceDiagnosticsOverlay : MonoBehaviour
         if (gcAllocatedRecorder.Valid)
             gcAllocatedRecorder.Dispose();
 
+        SetPhotonTrafficStatsEnabled(false);
+
         if (instance == this)
             instance = null;
     }
@@ -90,12 +92,29 @@ public sealed class PerformanceDiagnosticsOverlay : MonoBehaviour
     void Update()
     {
         ApplyVisibility();
-        if (canvas == null || !canvas.enabled)
+        bool visible = canvas != null && canvas.enabled;
+        bool fpsEnabled = visible && RoomSettings.IsFpsCounterEnabled();
+        bool gcEnabled = visible && RoomSettings.IsDiagnosticsGcEnabled();
+        bool sceneCountsEnabled = visible && RoomSettings.IsDiagnosticsSceneCountsEnabled();
+        bool networkEnabled = visible && RoomSettings.IsDiagnosticsNetworkEnabled();
+
+        SetGcRecorderEnabled(gcEnabled);
+        SetPhotonTrafficStatsEnabled(networkEnabled);
+
+        if (!visible)
             return;
 
-        float deltaTime = Mathf.Max(Time.unscaledDeltaTime, 0.0001f);
-        framesSinceLastSample++;
-        accumulatedFrameTime += deltaTime;
+        if (fpsEnabled)
+        {
+            float deltaTime = Mathf.Max(Time.unscaledDeltaTime, 0.0001f);
+            framesSinceLastSample++;
+            accumulatedFrameTime += deltaTime;
+        }
+        else
+        {
+            framesSinceLastSample = 0;
+            accumulatedFrameTime = 0f;
+        }
 
         if (Time.unscaledTime >= nextStatsRefreshTime)
         {
@@ -104,10 +123,26 @@ public sealed class PerformanceDiagnosticsOverlay : MonoBehaviour
                 ? Mathf.Max(0.001f, now - lastStatsRefreshTime)
                 : StatsRefreshInterval;
             lastStatsRefreshTime = now;
-            CollectFrameStats(sampleInterval);
-            CollectSceneStats(sampleInterval);
-            CollectPhotonStats();
-            RenderText();
+
+            if (fpsEnabled)
+                CollectFrameStats(sampleInterval);
+
+            if (gcEnabled)
+                CollectGcStats();
+            else
+                gcAllocatedBytes = 0L;
+
+            if (sceneCountsEnabled)
+                CollectSceneStats();
+            else
+                ClearSceneStats();
+
+            if (networkEnabled)
+                CollectNetworkStats(sampleInterval);
+            else
+                ClearNetworkStats();
+
+            RenderText(fpsEnabled, gcEnabled, sceneCountsEnabled, networkEnabled);
             nextStatsRefreshTime = now + StatsRefreshInterval;
         }
     }
@@ -172,17 +207,23 @@ public sealed class PerformanceDiagnosticsOverlay : MonoBehaviour
         text.fontSharedMaterial = reference.fontSharedMaterial;
     }
 
-    void StartGcRecorder()
+    void SetGcRecorderEnabled(bool enabled)
     {
-        if (gcAllocatedRecorder.Valid)
-            return;
+        if (enabled)
+        {
+            if (!gcAllocatedRecorder.Valid)
+                gcAllocatedRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame");
 
-        gcAllocatedRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame");
+            return;
+        }
+
+        if (gcAllocatedRecorder.Valid)
+            gcAllocatedRecorder.Dispose();
     }
 
     void ApplyVisibility()
     {
-        bool shouldShow = RoomSettings.IsFpsCounterEnabled();
+        bool shouldShow = RoomSettings.IsAnyDiagnosticsOverlayEnabled();
         if (canvas != null && canvas.enabled != shouldShow)
         {
             canvas.enabled = shouldShow;
@@ -192,6 +233,11 @@ public sealed class PerformanceDiagnosticsOverlay : MonoBehaviour
                 motionSnapshotsSentSinceLastSample = 0;
                 ResetFrameStats(Time.unscaledTime);
                 TryApplyReferenceFont();
+            }
+            else
+            {
+                SetGcRecorderEnabled(false);
+                SetPhotonTrafficStatsEnabled(false);
             }
         }
     }
@@ -213,7 +259,12 @@ public sealed class PerformanceDiagnosticsOverlay : MonoBehaviour
         accumulatedFrameTime = 0f;
     }
 
-    void CollectSceneStats(float sampleInterval)
+    void CollectGcStats()
+    {
+        gcAllocatedBytes = gcAllocatedRecorder.Valid ? gcAllocatedRecorder.LastValue : 0L;
+    }
+
+    void CollectSceneStats()
     {
         obstacleChunks = CountActive<ObstacleChunk>();
         movingObjects = CountActive<MovingSpaceObject>();
@@ -224,12 +275,38 @@ public sealed class PerformanceDiagnosticsOverlay : MonoBehaviour
         enemyBots = CountActive<EnemyBot>();
         photonViews = CountActive<PhotonView>();
         rigidbodies2D = CountActive<Rigidbody2D>();
+    }
 
+    void ClearSceneStats()
+    {
+        obstacleChunks = 0;
+        movingObjects = 0;
+        treasures = 0;
+        droppedCargo = 0;
+        shipWrecks = 0;
+        bullets = 0;
+        enemyBots = 0;
+        photonViews = 0;
+        rigidbodies2D = 0;
+    }
+
+    void CollectNetworkStats(float sampleInterval)
+    {
         int snapshots = motionSnapshotsSentSinceLastSample;
         motionSnapshotsSentSinceLastSample = 0;
         motionSnapshotsPerSecond = Mathf.RoundToInt(snapshots / Mathf.Max(0.001f, sampleInterval));
 
-        gcAllocatedBytes = gcAllocatedRecorder.Valid ? gcAllocatedRecorder.LastValue : 0L;
+        CollectPhotonStats();
+    }
+
+    void ClearNetworkStats()
+    {
+        motionSnapshotsSentSinceLastSample = 0;
+        motionSnapshotsPerSecond = 0;
+        photonOutgoingPerSecond = 0;
+        photonIncomingPerSecond = 0;
+        photonTotalPerSecond = 0;
+        ResetPhotonSample();
     }
 
     void CollectPhotonStats()
@@ -238,16 +315,17 @@ public sealed class PerformanceDiagnosticsOverlay : MonoBehaviour
         photonIncomingPerSecond = 0;
         photonTotalPerSecond = 0;
 
-        if (!PhotonNetwork.IsConnected || PhotonNetwork.NetworkingClient == null || PhotonNetwork.NetworkingClient.LoadBalancingPeer == null)
+        LoadBalancingPeer peer = GetPhotonPeer();
+        if (peer == null)
         {
             ResetPhotonSample();
             return;
         }
 
-        LoadBalancingPeer peer = PhotonNetwork.NetworkingClient.LoadBalancingPeer;
         if (!peer.TrafficStatsEnabled)
         {
             peer.TrafficStatsEnabled = true;
+            trafficStatsEnabledByOverlay = true;
             ResetPhotonSample();
         }
 
@@ -274,6 +352,27 @@ public sealed class PerformanceDiagnosticsOverlay : MonoBehaviour
         lastPhotonTotalMessages = stats.TotalMessageCount;
     }
 
+    void SetPhotonTrafficStatsEnabled(bool enabled)
+    {
+        if (enabled)
+            return;
+
+        LoadBalancingPeer peer = GetPhotonPeer();
+        if (trafficStatsEnabledByOverlay && peer != null)
+            peer.TrafficStatsEnabled = false;
+
+        trafficStatsEnabledByOverlay = false;
+        ResetPhotonSample();
+    }
+
+    static LoadBalancingPeer GetPhotonPeer()
+    {
+        if (!PhotonNetwork.IsConnected || PhotonNetwork.NetworkingClient == null)
+            return null;
+
+        return PhotonNetwork.NetworkingClient.LoadBalancingPeer;
+    }
+
     void ResetPhotonSample()
     {
         hasPhotonSample = false;
@@ -283,40 +382,69 @@ public sealed class PerformanceDiagnosticsOverlay : MonoBehaviour
         lastPhotonTotalMessages = 0L;
     }
 
-    void RenderText()
+    void RenderText(bool fpsEnabled, bool gcEnabled, bool sceneCountsEnabled, bool networkEnabled)
     {
         if (text == null)
             return;
 
         builder.Length = 0;
         builder.AppendLine("PERF DIAGNOSTICS");
-        builder.Append("FPS: ").Append(currentFps).Append("   Frame: ").Append(currentFrameMs.ToString("0.0")).AppendLine(" ms");
-        builder.Append("GC/frame: ").AppendLine(FormatBytes(gcAllocatedBytes));
-        builder.Append("Role: ").Append(PhotonNetwork.IsMasterClient ? "HOST" : "CLIENT");
-        builder.Append("   Players: ").Append(PhotonNetwork.CurrentRoom != null ? PhotonNetwork.CurrentRoom.PlayerCount : 0).AppendLine();
-        builder.Append("Map: ").Append(RoomSettings.GetMapSizeMode()).Append("   Moving: ").Append(RoomSettings.GetMovingObjectsMode()).AppendLine();
-        builder.AppendLine();
-        builder.Append("Moving objects: ").Append(movingObjects).AppendLine();
-        builder.Append("Obstacle chunks: ").Append(obstacleChunks).AppendLine();
-        builder.Append("Treasures: ").Append(treasures).AppendLine();
-        builder.Append("Dropped cargo: ").Append(droppedCargo).AppendLine();
-        builder.Append("Ship wrecks: ").Append(shipWrecks).AppendLine();
-        builder.Append("Bullets: ").Append(bullets).AppendLine();
-        builder.Append("Enemy bots: ").Append(enemyBots).AppendLine();
-        builder.Append("Rigidbody2D: ").Append(rigidbodies2D).AppendLine();
-        builder.Append("PhotonView: ").Append(photonViews).AppendLine();
-        builder.AppendLine();
-        builder.Append("Motion snapshots/s: ").Append(motionSnapshotsPerSecond).AppendLine();
-        builder.Append("Photon msg/s out: ").Append(photonOutgoingPerSecond).AppendLine();
-        builder.Append("Photon msg/s in: ").Append(photonIncomingPerSecond).AppendLine();
-        builder.Append("Photon msg/s total: ").Append(photonTotalPerSecond).AppendLine();
 
-        if (PhotonNetwork.IsConnected && PhotonNetwork.NetworkingClient != null && PhotonNetwork.NetworkingClient.LoadBalancingPeer != null)
+        bool wroteSection = false;
+        if (fpsEnabled)
         {
-            LoadBalancingPeer peer = PhotonNetwork.NetworkingClient.LoadBalancingPeer;
-            builder.Append("Ping: ").Append(peer.RoundTripTime).Append(" ms");
-            builder.Append("   Resent: ").Append(peer.ResentReliableCommands);
+            builder.Append("FPS: ").Append(currentFps).Append("   Frame: ").Append(currentFrameMs.ToString("0.0")).AppendLine(" ms");
+            wroteSection = true;
         }
+
+        if (gcEnabled)
+        {
+            builder.Append("GC/frame: ").AppendLine(FormatBytes(gcAllocatedBytes));
+            wroteSection = true;
+        }
+
+        if (sceneCountsEnabled)
+        {
+            if (wroteSection)
+                builder.AppendLine();
+
+            builder.Append("Moving objects: ").Append(movingObjects).AppendLine();
+            builder.Append("Obstacle chunks: ").Append(obstacleChunks).AppendLine();
+            builder.Append("Treasures: ").Append(treasures).AppendLine();
+            builder.Append("Dropped cargo: ").Append(droppedCargo).AppendLine();
+            builder.Append("Ship wrecks: ").Append(shipWrecks).AppendLine();
+            builder.Append("Bullets: ").Append(bullets).AppendLine();
+            builder.Append("Enemy bots: ").Append(enemyBots).AppendLine();
+            builder.Append("Rigidbody2D: ").Append(rigidbodies2D).AppendLine();
+            builder.Append("PhotonView: ").Append(photonViews).AppendLine();
+            wroteSection = true;
+        }
+
+        if (networkEnabled)
+        {
+            if (wroteSection)
+                builder.AppendLine();
+
+            builder.Append("Role: ").Append(PhotonNetwork.IsMasterClient ? "HOST" : "CLIENT");
+            builder.Append("   Players: ").Append(PhotonNetwork.CurrentRoom != null ? PhotonNetwork.CurrentRoom.PlayerCount : 0).AppendLine();
+            builder.Append("Map: ").Append(RoomSettings.GetMapSizeMode()).Append("   Moving: ").Append(RoomSettings.GetMovingObjectsMode()).AppendLine();
+            builder.Append("Motion snapshots/s: ").Append(motionSnapshotsPerSecond).AppendLine();
+            builder.Append("Photon msg/s out: ").Append(photonOutgoingPerSecond).AppendLine();
+            builder.Append("Photon msg/s in: ").Append(photonIncomingPerSecond).AppendLine();
+            builder.Append("Photon msg/s total: ").Append(photonTotalPerSecond).AppendLine();
+
+            LoadBalancingPeer peer = GetPhotonPeer();
+            if (peer != null)
+            {
+                builder.Append("Ping: ").Append(peer.RoundTripTime).Append(" ms");
+                builder.Append("   Resent: ").Append(peer.ResentReliableCommands);
+            }
+
+            wroteSection = true;
+        }
+
+        if (!wroteSection)
+            builder.Append("No diagnostic modules enabled.");
 
         text.text = builder.ToString();
     }

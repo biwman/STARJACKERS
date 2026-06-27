@@ -121,6 +121,9 @@ public partial class LobbyManager
         collectKeepAliveRangeBonusSettingButton = EnsureSettingButton(ref collectKeepAliveRangeBonusSettingText, collectKeepAliveRangeBonusSettingButton, "CollectKeepAliveRangeBonusSettingButton", "CollectKeepAliveRangeBonusSettingText", Vector2.zero, CycleCollectKeepAliveRangeBonus);
         hapticsSettingButton = EnsureSettingButton(ref hapticsSettingText, hapticsSettingButton, "HapticsSettingButton", "HapticsSettingText", Vector2.zero, CycleHapticsEnabled);
         fpsCounterSettingButton = EnsureSettingButton(ref fpsCounterSettingText, fpsCounterSettingButton, "FpsCounterSettingButton", "FpsCounterSettingText", Vector2.zero, CycleFpsCounterEnabled);
+        diagnosticsGcSettingButton = EnsureSettingButton(ref diagnosticsGcSettingText, diagnosticsGcSettingButton, "DiagnosticsGcSettingButton", "DiagnosticsGcSettingText", Vector2.zero, CycleDiagnosticsGcEnabled);
+        diagnosticsSceneCountsSettingButton = EnsureSettingButton(ref diagnosticsSceneCountsSettingText, diagnosticsSceneCountsSettingButton, "DiagnosticsSceneCountsSettingButton", "DiagnosticsSceneCountsSettingText", Vector2.zero, CycleDiagnosticsSceneCountsEnabled);
+        diagnosticsNetworkSettingButton = EnsureSettingButton(ref diagnosticsNetworkSettingText, diagnosticsNetworkSettingButton, "DiagnosticsNetworkSettingButton", "DiagnosticsNetworkSettingText", Vector2.zero, CycleDiagnosticsNetworkEnabled);
         neutralRidersEnabledSettingButton = EnsureSettingButton(ref neutralRidersEnabledSettingText, neutralRidersEnabledSettingButton, "NeutralRidersEnabledSettingButton", "NeutralRidersEnabledSettingText", Vector2.zero, CycleNeutralRidersEnabled);
         neutralRidersCountSettingButton = EnsureSettingButton(ref neutralRidersCountSettingText, neutralRidersCountSettingButton, "NeutralRidersCountSettingButton", "NeutralRidersCountSettingText", Vector2.zero, CycleNeutralRiderCount);
         neutralRidersAggressionSettingButton = EnsureSettingButton(ref neutralRidersAggressionSettingText, neutralRidersAggressionSettingButton, "NeutralRidersAggressionSettingButton", "NeutralRidersAggressionSettingText", Vector2.zero, CycleNeutralRiderAggression);
@@ -217,6 +220,9 @@ public partial class LobbyManager
         AttachLeftSectionButton(neutralRidersAggressionSettingButton, "NEUTRAL RIDERS");
 
         AttachLeftSectionButton(fpsCounterSettingButton, "DIAGNOSTICS");
+        AttachLeftSectionButton(diagnosticsGcSettingButton, "DIAGNOSTICS");
+        AttachLeftSectionButton(diagnosticsSceneCountsSettingButton, "DIAGNOSTICS");
+        AttachLeftSectionButton(diagnosticsNetworkSettingButton, "DIAGNOSTICS");
 
         LayoutLeftSectionButtons();
         EnsureEnemySettingsUiExists();

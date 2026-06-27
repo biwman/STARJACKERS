@@ -557,6 +557,9 @@ public partial class LobbyManager
                changedProps.ContainsKey(RoomSettings.CollectKeepAliveRangeBonusPercentKey) ||
                changedProps.ContainsKey(RoomSettings.HapticsEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.FpsCounterEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.DiagnosticsGcEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.DiagnosticsSceneCountsEnabledKey) ||
+               changedProps.ContainsKey(RoomSettings.DiagnosticsNetworkEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.NeutralRidersEnabledKey) ||
                changedProps.ContainsKey(RoomSettings.NeutralRidersCountKey) ||
                changedProps.ContainsKey(RoomSettings.NeutralRidersAggressionKey) ||

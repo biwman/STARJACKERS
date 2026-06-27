@@ -224,7 +224,16 @@ public partial class LobbyManager
             hapticsSettingText.text = "HAPTICS: " + (RoomSettings.AreHapticsEnabled() ? "ON" : "OFF");
 
         if (fpsCounterSettingText != null)
-            fpsCounterSettingText.text = "FPS COUNTER: " + (RoomSettings.IsFpsCounterEnabled() ? "YES" : "NO");
+            fpsCounterSettingText.text = "FPS METER: " + (RoomSettings.IsFpsCounterEnabled() ? "ON" : "OFF");
+
+        if (diagnosticsGcSettingText != null)
+            diagnosticsGcSettingText.text = "GC METER: " + (RoomSettings.IsDiagnosticsGcEnabled() ? "ON" : "OFF");
+
+        if (diagnosticsSceneCountsSettingText != null)
+            diagnosticsSceneCountsSettingText.text = "SCENE COUNTS: " + (RoomSettings.IsDiagnosticsSceneCountsEnabled() ? "ON" : "OFF");
+
+        if (diagnosticsNetworkSettingText != null)
+            diagnosticsNetworkSettingText.text = "NETWORK METER: " + (RoomSettings.IsDiagnosticsNetworkEnabled() ? "ON" : "OFF");
 
         if (neutralRidersEnabledSettingText != null)
             neutralRidersEnabledSettingText.text = "NEUTRAL RIDERS: " + (RoomSettings.AreNeutralRidersEnabled() ? "ON" : "OFF");
@@ -309,6 +318,9 @@ public partial class LobbyManager
         SetSettingButtonState(enemyAttackCooldownMultiplierSettingButton, isHost);
         SetSettingButtonState(hapticsSettingButton, isHost);
         SetSettingButtonState(fpsCounterSettingButton, isHost);
+        SetSettingButtonState(diagnosticsGcSettingButton, isHost);
+        SetSettingButtonState(diagnosticsSceneCountsSettingButton, isHost);
+        SetSettingButtonState(diagnosticsNetworkSettingButton, isHost);
         SetSettingButtonState(neutralRidersEnabledSettingButton, isHost);
         SetSettingButtonState(neutralRidersCountSettingButton, isHost);
         SetSettingButtonState(neutralRidersAggressionSettingButton, isHost);

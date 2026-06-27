@@ -27,9 +27,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     const string EmptyLayoutSentinel = "__empty__";
     const float PlayerSpawnClearanceRadius = 2.85f;
     const float PlayerSpawnLayoutClearance = 4.25f;
-    const string PhotonUserIdPrefsKey = "BrawlRaiders.PhotonUserId.v1";
-    const string RememberedLobbySettingsPrefsKey = "BrawlRaiders.LastLobbySettings.v2";
-    const string FinishedRoundsPrefsKey = "BrawlRaiders.FinishedRounds.v1";
+    const string PhotonUserIdPrefsKey = "Starjackers.PhotonUserId.v1";
+    const string RememberedLobbySettingsPrefsKey = "Starjackers.LastLobbySettings.v2";
+    const string FinishedRoundsPrefsKey = "Starjackers.FinishedRounds.v1";
+    const string LegacyPhotonUserIdPrefsKey = "BrawlRaiders.PhotonUserId.v1";
+    const string LegacyRememberedLobbySettingsPrefsKey = "BrawlRaiders.LastLobbySettings.v2";
+    const string LegacyFinishedRoundsPrefsKey = "BrawlRaiders.FinishedRounds.v1";
     const string RandomRoundRulesBrowserLabel = "Round rules: random";
     const int MaxRememberedFinishedRounds = 64;
 
@@ -124,6 +127,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     };
 
     static NetworkManager instance;
+    static bool legacyPlayerPrefsMigrationChecked;
 
     readonly Dictionary<string, RoomInfo> roomListCache = new Dictionary<string, RoomInfo>(StringComparer.Ordinal);
 
@@ -381,9 +385,34 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         PlayerPrefs.Save();
     }
 
+    static void EnsureLegacyPlayerPrefsMigrated()
+    {
+        if (legacyPlayerPrefsMigrationChecked)
+            return;
+
+        legacyPlayerPrefsMigrationChecked = true;
+        bool migrated = false;
+        migrated |= TryMigrateStringPlayerPref(LegacyPhotonUserIdPrefsKey, PhotonUserIdPrefsKey);
+        migrated |= TryMigrateStringPlayerPref(LegacyRememberedLobbySettingsPrefsKey, RememberedLobbySettingsPrefsKey);
+        migrated |= TryMigrateStringPlayerPref(LegacyFinishedRoundsPrefsKey, FinishedRoundsPrefsKey);
+
+        if (migrated)
+            PlayerPrefs.Save();
+    }
+
+    static bool TryMigrateStringPlayerPref(string legacyKey, string currentKey)
+    {
+        if (PlayerPrefs.HasKey(currentKey) || !PlayerPrefs.HasKey(legacyKey))
+            return false;
+
+        PlayerPrefs.SetString(currentKey, PlayerPrefs.GetString(legacyKey, string.Empty));
+        return true;
+    }
+
     void Awake()
     {
         instance = this;
+        EnsureLegacyPlayerPrefsMigrated();
         EnsurePhotonConnectionSettings();
     }
 
@@ -408,6 +437,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     string GetOrCreatePhotonUserId()
     {
+        EnsureLegacyPlayerPrefsMigrated();
         string storedUserId = PlayerPrefs.GetString(PhotonUserIdPrefsKey, string.Empty);
         if (!string.IsNullOrWhiteSpace(storedUserId))
             return storedUserId;
@@ -1071,6 +1101,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             [RoomSettings.BackgroundObjectKey] = RoomSettings.DefaultBackgroundObject,
             [RoomSettings.HapticsEnabledKey] = RoomSettings.DefaultHapticsEnabled,
             [RoomSettings.FpsCounterEnabledKey] = RoomSettings.DefaultFpsCounterEnabled,
+            [RoomSettings.DiagnosticsGcEnabledKey] = RoomSettings.DefaultDiagnosticsGcEnabled,
+            [RoomSettings.DiagnosticsSceneCountsEnabledKey] = RoomSettings.DefaultDiagnosticsSceneCountsEnabled,
+            [RoomSettings.DiagnosticsNetworkEnabledKey] = RoomSettings.DefaultDiagnosticsNetworkEnabled,
             [RoomSettings.NeutralRidersEnabledKey] = RoomSettings.DefaultNeutralRidersEnabled,
             [RoomSettings.NeutralRidersCountKey] = RoomSettings.DefaultNeutralRidersCount,
             [RoomSettings.NeutralRidersAggressionKey] = RoomSettings.DefaultNeutralRiderAggression,
@@ -1123,6 +1156,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     static HashSet<string> ApplyRememberedLobbySettings(Hashtable props)
     {
         HashSet<string> appliedKeys = new HashSet<string>(StringComparer.Ordinal);
+        EnsureLegacyPlayerPrefsMigrated();
         if (props == null || !PlayerPrefs.HasKey(RememberedLobbySettingsPrefsKey))
             return appliedKeys;
 
@@ -1427,6 +1461,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
             case RoomSettings.TreasureWeightFactorKey:
             case RoomSettings.HapticsEnabledKey:
             case RoomSettings.FpsCounterEnabledKey:
+            case RoomSettings.DiagnosticsGcEnabledKey:
+            case RoomSettings.DiagnosticsSceneCountsEnabledKey:
+            case RoomSettings.DiagnosticsNetworkEnabledKey:
             case RoomSettings.NeutralRidersEnabledKey:
             case RoomSettings.NeutralRidersCountKey:
             case RoomSettings.NeutralRidersAggressionKey:
@@ -1807,6 +1844,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     static FinishedRoundRoomsData LoadFinishedRoundsData()
     {
+        EnsureLegacyPlayerPrefsMigrated();
         if (!PlayerPrefs.HasKey(FinishedRoundsPrefsKey))
             return new FinishedRoundRoomsData { entries = Array.Empty<FinishedRoundRoomEntry>() };
 

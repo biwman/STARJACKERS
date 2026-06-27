@@ -890,11 +890,31 @@ public partial class LobbyManager
 
     void CycleFpsCounterEnabled()
     {
+        ToggleDiagnosticsSetting(RoomSettings.FpsCounterEnabledKey, RoomSettings.IsFpsCounterEnabled());
+    }
+
+    void CycleDiagnosticsGcEnabled()
+    {
+        ToggleDiagnosticsSetting(RoomSettings.DiagnosticsGcEnabledKey, RoomSettings.IsDiagnosticsGcEnabled());
+    }
+
+    void CycleDiagnosticsSceneCountsEnabled()
+    {
+        ToggleDiagnosticsSetting(RoomSettings.DiagnosticsSceneCountsEnabledKey, RoomSettings.IsDiagnosticsSceneCountsEnabled());
+    }
+
+    void CycleDiagnosticsNetworkEnabled()
+    {
+        ToggleDiagnosticsSetting(RoomSettings.DiagnosticsNetworkEnabledKey, RoomSettings.IsDiagnosticsNetworkEnabled());
+    }
+
+    void ToggleDiagnosticsSetting(string key, bool currentValue)
+    {
         if (!PhotonNetwork.IsMasterClient || PhotonNetwork.CurrentRoom == null)
             return;
 
         Hashtable props = new Hashtable();
-        props[RoomSettings.FpsCounterEnabledKey] = !RoomSettings.IsFpsCounterEnabled();
+        props[key] = !currentValue;
         PhotonNetwork.CurrentRoom.SetCustomProperties(props);
         RefreshHostSettingsUi();
     }

@@ -359,6 +359,9 @@ public partial class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text collectKeepAliveRangeBonusSettingText;
     public TMP_Text hapticsSettingText;
     public TMP_Text fpsCounterSettingText;
+    public TMP_Text diagnosticsGcSettingText;
+    public TMP_Text diagnosticsSceneCountsSettingText;
+    public TMP_Text diagnosticsNetworkSettingText;
     public TMP_Text neutralRidersEnabledSettingText;
     public TMP_Text neutralRidersCountSettingText;
     public TMP_Text neutralRidersAggressionSettingText;
@@ -441,6 +444,9 @@ public partial class LobbyManager : MonoBehaviourPunCallbacks
     public Button collectKeepAliveRangeBonusSettingButton;
     public Button hapticsSettingButton;
     public Button fpsCounterSettingButton;
+    public Button diagnosticsGcSettingButton;
+    public Button diagnosticsSceneCountsSettingButton;
+    public Button diagnosticsNetworkSettingButton;
     public Button neutralRidersEnabledSettingButton;
     public Button neutralRidersCountSettingButton;
     public Button neutralRidersAggressionSettingButton;

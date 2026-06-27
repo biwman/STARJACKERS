@@ -25,9 +25,17 @@ public class MovingSpaceObject : MonoBehaviour
     const float MaxBoundaryAngularSpeed = 48f;
     const float CollisionSpinFlipThreshold = 0.85f;
     const float CollisionSpinFlipChance = 0.45f;
-    const float SnapshotInterval = 0.09f;
+    const float HighSnapshotInterval = 0.09f;
+    const float BalancedSnapshotInterval = 0.12f;
+    const float LowSnapshotInterval = 0.16f;
+    const float SnapshotPositionDelta = 0.035f;
+    const float SnapshotVelocityDelta = 0.04f;
+    const float SnapshotRotationDelta = 1.25f;
+    const float SnapshotAngularVelocityDelta = 2.5f;
+    const float MinSnapshotHeartbeatInterval = 0.36f;
     const float RemoteSmoothing = 16f;
     const float RemotePredictionMaxOffset = 1.1f;
+    const float RemotePredictionMaxTime = 0.24f;
     const float PushBoostDuration = 0.55f;
     const float TreasurePushMaxSpeed = 6.2f;
     const float ContainerPushMaxSpeed = 4.2f;
@@ -45,14 +53,21 @@ public class MovingSpaceObject : MonoBehaviour
     float speedMultiplier = 1f;
     float baseAngularSpeed;
     float nextSnapshotTime;
+    float lastBroadcastTime;
     bool isAuthority;
     bool movingEnabled;
     bool translateEnabled;
     bool rotateEnabled;
+    bool hasBroadcastSnapshot;
+    Vector2 lastBroadcastPosition;
+    Vector2 lastBroadcastVelocity;
+    float lastBroadcastRotation;
+    float lastBroadcastAngularVelocity;
     Vector2 networkPosition;
     Vector2 networkVelocity;
     float networkRotation;
     float networkAngularVelocity;
+    float lastNetworkStateTime;
     bool hasNetworkState;
     Vector2 predictedLocalOffset;
     bool configured;
@@ -117,6 +132,7 @@ public class MovingSpaceObject : MonoBehaviour
         EnsureRigidBody();
         ConfigureMotionFromId(id);
         ApplySimulationMode();
+        ResetSnapshotTracking();
 
         ObjectsById[stableId] = this;
         configured = true;
@@ -324,8 +340,9 @@ public class MovingSpaceObject : MonoBehaviour
         if (!isAuthority || rb == null || string.IsNullOrWhiteSpace(stableId))
             return;
 
-        nextSnapshotTime = Time.time + SnapshotInterval;
-        SpaceObjectMotionSync.BroadcastState(stableId, rb.position, rb.linearVelocity, rb.rotation, rb.angularVelocity);
+        float now = Time.time;
+        nextSnapshotTime = now + GetSnapshotInterval();
+        BroadcastSnapshot(now);
     }
 
     public void ApplyNetworkState(Vector2 position, Vector2 velocity, float rotation, float angularVelocity)
@@ -337,6 +354,7 @@ public class MovingSpaceObject : MonoBehaviour
         networkVelocity = velocity;
         networkRotation = rotation;
         networkAngularVelocity = angularVelocity;
+        lastNetworkStateTime = Time.time;
         hasNetworkState = true;
         predictedLocalOffset *= 0.35f;
 
@@ -379,6 +397,7 @@ public class MovingSpaceObject : MonoBehaviour
         networkVelocity = velocity;
         networkRotation = rotation;
         networkAngularVelocity = angularVelocity;
+        lastNetworkStateTime = Time.time;
         hasNetworkState = true;
     }
 
@@ -602,11 +621,19 @@ public class MovingSpaceObject : MonoBehaviour
 
     void BroadcastSnapshotIfNeeded()
     {
-        if (!PhotonNetwork.IsConnected || Time.time < nextSnapshotTime || rb == null)
+        if (!PhotonNetwork.IsConnected || rb == null || string.IsNullOrWhiteSpace(stableId))
             return;
 
-        nextSnapshotTime = Time.time + SnapshotInterval;
-        SpaceObjectMotionSync.BroadcastState(stableId, rb.position, rb.linearVelocity, rb.rotation, rb.angularVelocity);
+        float now = Time.time;
+        float interval = GetSnapshotInterval();
+        if (now < nextSnapshotTime)
+            return;
+
+        nextSnapshotTime = now + interval;
+        if (!ShouldBroadcastSnapshot(now, interval))
+            return;
+
+        BroadcastSnapshot(now);
     }
 
     void FollowAuthoritySnapshot()
@@ -615,7 +642,8 @@ public class MovingSpaceObject : MonoBehaviour
             return;
 
         predictedLocalOffset = Vector2.Lerp(predictedLocalOffset, Vector2.zero, 1f - Mathf.Exp(-8f * Time.fixedDeltaTime));
-        Vector2 predictedPosition = networkPosition + networkVelocity * SnapshotInterval + predictedLocalOffset;
+        float predictionTime = Mathf.Clamp(Time.time - lastNetworkStateTime, 0f, RemotePredictionMaxTime);
+        Vector2 predictedPosition = networkPosition + networkVelocity * predictionTime + predictedLocalOffset;
         float smoothing = 1f - Mathf.Exp(-RemoteSmoothing * Time.fixedDeltaTime);
 
         if (Vector2.Distance(rb.position, predictedPosition) > 1.6f)
@@ -628,6 +656,78 @@ public class MovingSpaceObject : MonoBehaviour
         float nextRotation = Mathf.LerpAngle(rb.rotation, networkRotation, smoothing);
         rb.MovePosition(nextPosition);
         rb.MoveRotation(nextRotation);
+    }
+
+    void ResetSnapshotTracking()
+    {
+        hasBroadcastSnapshot = false;
+        lastBroadcastTime = 0f;
+        nextSnapshotTime = Time.time + GetSnapshotStagger();
+    }
+
+    void BroadcastSnapshot(float now)
+    {
+        SpaceObjectMotionSync.BroadcastState(stableId, rb.position, rb.linearVelocity, rb.rotation, rb.angularVelocity);
+        RememberBroadcastSnapshot(now);
+    }
+
+    void RememberBroadcastSnapshot(float now)
+    {
+        hasBroadcastSnapshot = true;
+        lastBroadcastTime = now;
+        lastBroadcastPosition = rb.position;
+        lastBroadcastVelocity = rb.linearVelocity;
+        lastBroadcastRotation = rb.rotation;
+        lastBroadcastAngularVelocity = rb.angularVelocity;
+    }
+
+    bool ShouldBroadcastSnapshot(float now, float interval)
+    {
+        if (!hasBroadcastSnapshot)
+            return true;
+
+        float heartbeatInterval = Mathf.Max(interval * 3f, MinSnapshotHeartbeatInterval);
+        if (now - lastBroadcastTime >= heartbeatInterval)
+            return true;
+
+        if ((rb.position - lastBroadcastPosition).sqrMagnitude >= SnapshotPositionDelta * SnapshotPositionDelta)
+            return true;
+
+        if ((rb.linearVelocity - lastBroadcastVelocity).sqrMagnitude >= SnapshotVelocityDelta * SnapshotVelocityDelta)
+            return true;
+
+        if (Mathf.Abs(Mathf.DeltaAngle(lastBroadcastRotation, rb.rotation)) >= SnapshotRotationDelta)
+            return true;
+
+        return Mathf.Abs(rb.angularVelocity - lastBroadcastAngularVelocity) >= SnapshotAngularVelocityDelta;
+    }
+
+    static float GetSnapshotInterval()
+    {
+        if (!Application.isMobilePlatform)
+            return HighSnapshotInterval;
+
+        switch (MobilePerformanceSettings.CurrentProfile)
+        {
+            case MobilePerformanceProfile.Low:
+                return LowSnapshotInterval;
+            case MobilePerformanceProfile.Balanced:
+                return BalancedSnapshotInterval;
+            default:
+                return HighSnapshotInterval;
+        }
+    }
+
+    float GetSnapshotStagger()
+    {
+        if (string.IsNullOrWhiteSpace(stableId))
+            return 0f;
+
+        unchecked
+        {
+            uint hash = (uint)stableId.GetHashCode();
+            return (hash % 1000) / 1000f * GetSnapshotInterval();
+        }
     }
 
     void TryFlipSpinOnCollision(Collision2D collision)
