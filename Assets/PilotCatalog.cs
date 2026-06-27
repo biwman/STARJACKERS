@@ -115,7 +115,7 @@ public static class PilotCatalog
 
     static readonly PilotDefinition RoburDefinition = new PilotDefinition(
         RoburId,
-        "ROBUR",
+        "ROBOR",
         "UI/Pilots/pilot_03",
         "Assets/Resources/UI/Pilots/pilot_03.png",
         "Assets/pilot_03.png",

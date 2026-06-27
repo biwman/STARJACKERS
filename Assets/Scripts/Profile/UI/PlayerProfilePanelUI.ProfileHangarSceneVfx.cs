@@ -19,6 +19,9 @@ public partial class PlayerProfilePanelUI
         if (profileHangarSceneVfxObject == null)
             return;
 
+        if (profileHangarSceneVfxObject.activeSelf == active)
+            return;
+
         if (!active)
             RestoreProfileHangarSceneVfxTargets();
 
@@ -51,7 +54,7 @@ public partial class PlayerProfilePanelUI
         if (profileHangarSceneVfxObject == null || profileHangarSceneVfx == null)
             return;
 
-        profileHangarSceneVfxObject.SetActive(true);
+        SetProfileHangarSceneVfxActive(true);
         profileHangarSceneVfxObject.transform.SetAsFirstSibling();
         profileHangarSceneVfx.Configure(
             showInventory ? ProfileHangarSceneVfx.DisplayMode.Inventory : ProfileHangarSceneVfx.DisplayMode.Home,

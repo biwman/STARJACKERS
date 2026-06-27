@@ -95,7 +95,7 @@ public partial class PlayerProfileService
 
             if (UnityServices.State != ServicesInitializationState.Initialized)
             {
-                await UnityServices.InitializeAsync();
+                await StarjackersUnityServices.InitializeAsync();
             }
 
             if (!AuthenticationService.Instance.IsSignedIn)

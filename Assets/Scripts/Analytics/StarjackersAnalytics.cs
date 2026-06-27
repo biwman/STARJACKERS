@@ -8,7 +8,6 @@ using UnityEngine.UnityConsent;
 
 public static class StarjackersAnalytics
 {
-    const string EnvironmentName = "production";
     const string ConsentPlayerPrefsKey = "starjackers.analytics_consent";
     const string LegacyConsentPlayerPrefsKey = "brawl_raiders.analytics_consent";
     const int ConsentUnset = -1;
@@ -39,12 +38,7 @@ public static class StarjackersAnalytics
 
         try
         {
-            if (UnityServices.State != ServicesInitializationState.Initialized)
-            {
-                InitializationOptions options = new InitializationOptions()
-                    .SetEnvironmentName(EnvironmentName);
-                await UnityServices.InitializeAsync(options);
-            }
+            await StarjackersUnityServices.InitializeAsync();
 
             ConsentStatus consentStatus = GetStoredConsentStatus();
             ApplyConsent(consentStatus);
@@ -58,7 +52,7 @@ public static class StarjackersAnalytics
 
             RecordSessionStarted();
             AnalyticsService.Instance.Flush();
-            Debug.Log("StarjackersAnalytics: analytics initialized for '" + EnvironmentName + "' and session start event queued.");
+            Debug.Log("StarjackersAnalytics: analytics initialized and session start event queued.");
         }
         catch (Exception ex)
         {
@@ -172,5 +166,39 @@ public static class StarjackersAnalytics
             AnalyticsIntent = analyticsConsent,
             AdsIntent = ConsentStatus.Denied
         });
+    }
+}
+
+public static class StarjackersUnityServices
+{
+    const string EnvironmentName = "production";
+
+    static Task initializationTask;
+
+    public static Task InitializeAsync()
+    {
+        if (UnityServices.State == ServicesInitializationState.Initialized)
+            return Task.CompletedTask;
+
+        initializationTask ??= InitializeInternalAsync();
+        return initializationTask;
+    }
+
+    static async Task InitializeInternalAsync()
+    {
+        try
+        {
+            if (UnityServices.State != ServicesInitializationState.Initialized)
+            {
+                InitializationOptions options = new InitializationOptions()
+                    .SetEnvironmentName(EnvironmentName);
+                await UnityServices.InitializeAsync(options);
+            }
+        }
+        catch
+        {
+            initializationTask = null;
+            throw;
+        }
     }
 }
