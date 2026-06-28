@@ -131,7 +131,7 @@ public partial class TreasureCollector
             if (avengerBase != null)
                 return UseActionType.AvengerBoard;
 
-            PlayerRepairDocking repairDocking = GetComponent<PlayerRepairDocking>();
+            PlayerRepairDocking repairDocking = GetCachedPlayerRepairDocking();
             RepairBay repairBay = RepairBay.FindClosestUsable(transform.position);
             SpaceFactory spaceFactory = SpaceFactory.FindClosestUsable(transform.position);
             ScienceStation scienceStation = ScienceStation.FindClosestUsable(transform.position);
@@ -145,7 +145,7 @@ public partial class TreasureCollector
 
         if (!astronautMode)
         {
-            PlayerHealth playerHealth = GetComponent<PlayerHealth>();
+            PlayerHealth playerHealth = GetCachedPlayerHealth();
             if (BisonIndustrialPlotController.CanDropHaul(playerHealth))
                 return UseActionType.Drop;
             if (BisonIndustrialPlotController.CanStartHaul(playerHealth))
@@ -189,11 +189,12 @@ public partial class TreasureCollector
         if (isCollecting)
             return UseActionType.Collect;
 
-        if (!astronautMode && BisonIndustrialPlotController.IsHaulChargeInProgress(GetComponent<PlayerHealth>()))
+        PlayerHealth playerHealth = !astronautMode ? GetCachedPlayerHealth() : null;
+        if (!astronautMode && BisonIndustrialPlotController.IsHaulChargeInProgress(playerHealth))
             return UseActionType.Haul;
 
         if (!astronautMode &&
-            InvaderInvasionPlotController.TryGetUseChargeProgress(GetComponent<PlayerHealth>(), out _, out InvaderPlotUseAction invaderAction))
+            InvaderInvasionPlotController.TryGetUseChargeProgress(playerHealth, out _, out InvaderPlotUseAction invaderAction))
         {
             return ConvertInvaderUseAction(invaderAction);
         }
@@ -252,16 +253,8 @@ public partial class TreasureCollector
 
     bool PlayerHasAlienTransmitter(Photon.Realtime.Player player)
     {
-        string[] slots = PlayerProfileService.GetPlayerShipInventorySlots(player);
-        int capacity = PlayerProfileService.GetPlayerShipInventoryCapacity(player);
-        int limit = Mathf.Clamp(capacity, 0, slots != null ? slots.Length : 0);
-        for (int i = 0; i < limit; i++)
-        {
-            if (string.Equals(slots[i], InventoryItemCatalog.AlienTransmitterId, System.StringComparison.Ordinal))
-                return true;
-        }
-
-        return false;
+        RefreshLoadoutCacheIfNeeded(player);
+        return cachedHasAlienTransmitter;
     }
 
 
@@ -269,6 +262,7 @@ public partial class TreasureCollector
     {
         UseActionType actionType = ResolveUseActionType();
         SetUseButtonState(actionType != UseActionType.None, actionType);
+        nextUseActionRefreshTime = Time.unscaledTime + GetUseActionRefreshInterval();
     }
 
     void SetUseButtonState(bool available, UseActionType actionType)
@@ -349,10 +343,14 @@ public partial class TreasureCollector
         if (!photonView.IsMine)
             return;
 
-        if (BisonIndustrialPlotController.TryGetHaulChargeProgress(GetComponent<PlayerHealth>(), out float progress))
+        PlayerHealth playerHealth = GetCachedPlayerHealth();
+        if (BisonIndustrialPlotController.TryGetHaulChargeProgress(playerHealth, out float progress))
+        {
             SetUseProgress(progress, true);
+            return;
+        }
 
-        if (InvaderInvasionPlotController.TryGetUseChargeProgress(GetComponent<PlayerHealth>(), out float invaderProgress, out _))
+        if (InvaderInvasionPlotController.TryGetUseChargeProgress(playerHealth, out float invaderProgress, out _))
             SetUseProgress(invaderProgress, true);
     }
 

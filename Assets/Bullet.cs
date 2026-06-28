@@ -941,6 +941,8 @@ public class Bullet : MonoBehaviourPun
 
     void ResetRuntimeState()
     {
+        DestroyRuntimeVisuals();
+
         damage = defaultDamage;
         ownerViewID = defaultOwnerViewID;
         rangeMultiplier = defaultRangeMultiplier;
@@ -1137,6 +1139,33 @@ public class Bullet : MonoBehaviourPun
         DestroySpriteRenderer(ref rocketSpriteGlowRenderer);
         DestroySpriteRenderer(ref rocketProjectileRenderer);
         DestroyLineRenderer(ref rocketTrailLine);
+        DisableRuntimeChildVisuals();
+    }
+
+    void DisableRuntimeChildVisuals()
+    {
+        for (int i = 0; i < transform.childCount; i++)
+            DisableRuntimeVisualBranch(transform.GetChild(i));
+    }
+
+    void DisableRuntimeVisualBranch(Transform branch)
+    {
+        if (branch == null)
+            return;
+
+        SpriteRenderer spriteRenderer = branch.GetComponent<SpriteRenderer>();
+        if (spriteRenderer != null && spriteRenderer != cachedSpriteRenderer)
+            spriteRenderer.enabled = false;
+
+        LineRenderer lineRenderer = branch.GetComponent<LineRenderer>();
+        if (lineRenderer != null)
+        {
+            lineRenderer.enabled = false;
+            lineRenderer.positionCount = 0;
+        }
+
+        for (int i = 0; i < branch.childCount; i++)
+            DisableRuntimeVisualBranch(branch.GetChild(i));
     }
 
     void DestroyLineRenderers(ref LineRenderer[] lines)

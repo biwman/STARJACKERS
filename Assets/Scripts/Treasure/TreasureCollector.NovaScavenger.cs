@@ -124,7 +124,7 @@ public partial class TreasureCollector
         if (ReservedRandomLootWrecks.TryGetValue(viewId, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
             return false;
 
-        string rewardItemId = RollRandomLootWreckReward();
+        string rewardItemId = InventoryItemCatalog.RollRandomLootWreckReward();
         if (string.IsNullOrWhiteSpace(rewardItemId))
             return false;
 

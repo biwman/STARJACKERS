@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 public class RoundPilotHudUI : MonoBehaviourPun
 {
-    const string RootName = "RoundPilotHud";
+    public const string RootName = "RoundPilotHud";
     const string PilotPanelName = "RoundPilotHudPilotPanel";
     const string PilotPortraitName = "RoundPilotHudPilotPortrait";
     const string DamageIconsName = "RoundPilotHudDamageIcons";

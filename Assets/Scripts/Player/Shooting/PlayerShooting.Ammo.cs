@@ -289,7 +289,7 @@ public partial class PlayerShooting
             return TryDeployGadgetMine();
 
         if (string.Equals(itemId, InventoryItemCatalog.SpaceBombId, StringComparison.Ordinal))
-            return NewItemsRuntime.TryDeploySpaceBomb(this);
+            return false;
 
         if (string.Equals(itemId, InventoryItemCatalog.StasisBuoyId, StringComparison.Ordinal))
             return NewItemsRuntime.TryDeployStasisBuoy(this);
@@ -514,6 +514,7 @@ public partial class PlayerShooting
 
     bool SpawnBullet(Vector2 direction, Vector3 spawnPos, int ownerId, bool pilotBreachProjectile = false)
     {
+        Vector2 projectileDirection = ResolveSafeAimDirection(direction);
         float projectileSpeedMultiplier = GetProjectileSpeedMultiplier();
         float adjustedBulletSpeed = Mathf.Max(0.1f, bulletSpeed * projectileSpeedMultiplier);
         float adjustedSimpleFlightTime = simpleFlightTime / Mathf.Max(0.1f, projectileSpeedMultiplier);
@@ -554,10 +555,10 @@ public partial class PlayerShooting
         GameObject bullet = ProjectileSpawner.SpawnNetworkBullet(
             bulletPrefab,
             spawnPos,
-            Quaternion.identity,
+            ResolveProjectileSpawnRotation(projectileDirection),
             data,
             ownerId,
-            direction * adjustedBulletSpeed,
+            projectileDirection * adjustedBulletSpeed,
             true,
             playerCollider);
 
@@ -578,8 +579,11 @@ public partial class PlayerShooting
 
     bool TryConsumePilotBreachSalvo()
     {
+        if (IsEnemyBotShip() || IsNeutralRiderShip())
+            return false;
+
         PilotActiveAbilityController pilotAbility = GetComponent<PilotActiveAbilityController>();
-        return pilotAbility != null && pilotAbility.TryConsumeSirNowitzkyBreachSalvo();
+        return pilotAbility != null && pilotAbility.enabled && pilotAbility.TryConsumeSirNowitzkyBreachSalvo();
     }
 
     bool IsGameStarted()

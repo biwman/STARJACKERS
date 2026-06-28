@@ -82,6 +82,7 @@ public partial class PlayerHealth : MonoBehaviourPun
             {
                 finalScore = RoundResultsTracker.RecordOutcome(photonView.Owner, finalScore, "dead");
             }
+            GameTimer.NotifyHumanAstronautEliminated(this);
             photonView.RPC(nameof(NotifyFinalDeathAndDestroySelf), photonView.Owner, finalScore);
             return;
         }
@@ -99,6 +100,7 @@ public partial class PlayerHealth : MonoBehaviourPun
         Vector3 astronautSpawnPosition = FindSafeAstronautSpawnPosition();
         RoundXpTracker.RecordPlayerShipDestroyed(photonView.Owner);
         string protectedEquipmentItemId = escapePodEquipped ? InventoryItemCatalog.EscapePodId : string.Empty;
+        GameTimer.BeginAstronautSpawnTransition(photonView.Owner);
         photonView.RPC(nameof(ApplyLocalShipLossForWreck), photonView.Owner, shipSkinIndex, true, equipmentLossEnabled, astronautCargo, protectedEquipmentItemId);
         photonView.RPC(nameof(SpawnAstronautAfterDestruction), photonView.Owner, astronautSpawnPosition.x, astronautSpawnPosition.y, transform.eulerAngles.z, emergencySuitBeaconEquipped, escapePodEquipped);
         photonView.RPC(nameof(BecomeWreck), RpcTarget.All, wreckLoot, shipSkinIndex);
@@ -871,6 +873,7 @@ public partial class PlayerHealth : MonoBehaviourPun
             return;
 
         astronautSpawnedAfterDestruction = true;
+        GameplayHudVisibility.ResetSuppression();
 
         PhotonNetwork.LocalPlayer.TagObject = null;
         GameObject astronaut = PhotonNetwork.Instantiate(
@@ -890,7 +893,14 @@ public partial class PlayerHealth : MonoBehaviourPun
 
             PlayerHealth astronautHealth = astronaut.GetComponent<PlayerHealth>();
             if (astronautHealth != null)
+            {
                 GameVisualTheme.ApplyPlayerVisual(astronautHealth);
+                GameTimer.NotifyHumanRoundActorAvailable(astronautHealth);
+            }
+            else
+            {
+                GameTimer.NotifyActivePlayerRosterChanged();
+            }
 
             PhotonNetwork.LocalPlayer.TagObject = astronaut;
         }
@@ -901,6 +911,7 @@ public partial class PlayerHealth : MonoBehaviourPun
     {
         IsWreck = true;
         ActorIdentity.Ensure(gameObject);
+        GameTimer.NotifyActivePlayerRosterChanged();
 
         if (photonView != null &&
             photonView.IsMine &&
@@ -1067,7 +1078,7 @@ public partial class PlayerHealth : MonoBehaviourPun
 
         int safeSkinIndex = Mathf.Clamp(shipSkinIndex, ShipCatalog.ExplorerBasicSkinIndex, ShipCatalog.MaxShipSkinIndex);
         wreck.InitializeFromLootJson(serializedLoot, safeSkinIndex);
-        wreck.SetBaseColor(new Color(0.82f, 0.96f, 1f, 0.96f));
+        wreck.SetBaseColor(new Color(0.82f, 0.96f, 1f, 1f));
 
         SpriteRenderer renderer = GetComponent<SpriteRenderer>();
         if (renderer != null)
@@ -1172,7 +1183,8 @@ public partial class PlayerHealth : MonoBehaviourPun
         wreck.InitializeFromLootJson(serializedLoot, -1, kindValue);
         wreck.SetDestroyWhenEmpty(wreckProfile == null || wreckProfile.DestroyWhenEmpty);
 
-        Color baseColor = wreckProfile != null ? wreckProfile.BaseColor : new Color(0.2f, 0.23f, 0.26f, 0.94f);
+        Color baseColor = wreckProfile != null ? wreckProfile.BaseColor : new Color(0.2f, 0.23f, 0.26f, 1f);
+        baseColor.a = 1f;
         wreck.SetBaseColor(baseColor);
         TryDropPirateCaseNearEnemyWreck(enemyKind, body);
 

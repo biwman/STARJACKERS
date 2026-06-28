@@ -12,6 +12,12 @@ public partial class PlayerProfileService : MonoBehaviour
     bool initialized;
     int deferredInventorySaveVersion;
     bool deferredInventorySavePending;
+    int deferredPilotAsteroidSalvageSaveVersion;
+    bool deferredPilotAsteroidSalvageSavePending;
+    bool pilotAsteroidSalvageSaveInProgress;
+    bool profileChangedPendingAfterGameplay;
+    string lastAppliedInventoryPhotonSignature;
+    int lastAppliedInventoryPhotonActorNumber = -1;
     string[] pendingAstronautCargoSlots;
     int pendingAstronautCargoShipSkinIndex = -1;
     bool hasPendingAstronautCargo;
@@ -49,6 +55,11 @@ public partial class PlayerProfileService : MonoBehaviour
     }
 
     public event Action<PlayerProfileData> ProfileChanged;
+
+    void Update()
+    {
+        FlushProfileChangedAfterGameplay();
+    }
 
     public async Task SaveProfileAsync(string nickname, int shipSkinIndex)
     {
@@ -269,7 +280,28 @@ public partial class PlayerProfileService : MonoBehaviour
 
     void NotifyProfileChanged()
     {
+        if (IsGameplaySessionActive())
+        {
+            profileChangedPendingAfterGameplay = true;
+            return;
+        }
+
+        profileChangedPendingAfterGameplay = false;
         ProfileChanged?.Invoke(CurrentProfile);
+    }
+
+    void FlushProfileChangedAfterGameplay()
+    {
+        if (!profileChangedPendingAfterGameplay || IsGameplaySessionActive())
+            return;
+
+        profileChangedPendingAfterGameplay = false;
+        ProfileChanged?.Invoke(CurrentProfile);
+    }
+
+    bool IsGameplaySessionActive()
+    {
+        return string.Equals(RoomSettings.GetSessionState(), RoomSettings.SessionStateInPlay, StringComparison.Ordinal);
     }
 
 }

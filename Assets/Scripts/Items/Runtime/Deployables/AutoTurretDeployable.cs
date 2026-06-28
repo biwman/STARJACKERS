@@ -27,6 +27,7 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
     int shotsSinceBreak;
     float breakUntil;
     bool containerShipAutoCannon;
+    bool neutralRiderAutoCannon;
     Transform cachedTarget;
     float nextTargetRefreshTime;
     Collider2D[] cachedOwnColliders;
@@ -56,7 +57,9 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
 
     public void InitializeFromPhotonData()
     {
-        containerShipAutoCannon = PlayerDeployableRuntime.IsContainerShipAutoCannonData(photonView != null ? photonView.InstantiationData : null);
+        object[] data = photonView != null ? photonView.InstantiationData : null;
+        containerShipAutoCannon = PlayerDeployableRuntime.IsContainerShipAutoCannonData(data);
+        neutralRiderAutoCannon = PlayerDeployableRuntime.IsNeutralRiderAutoTurretData(data);
         cachedTarget = null;
         cachedOwnColliders = null;
         cachedOwnerColliders = null;
@@ -163,7 +166,7 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
         if (candidate.photonView.ViewID == ownerShipViewId || candidate.GetComponent<LureBeaconDecoy>() != null)
             return false;
 
-        if (containerShipAutoCannon)
+        if (containerShipAutoCannon || neutralRiderAutoCannon)
             return IsPlayerShipTarget(candidate);
 
         EnemyBot enemyBot = candidate.GetComponent<EnemyBot>();
@@ -184,7 +187,7 @@ public sealed class AutoTurretDeployable : PlayerDeployableBase
         if (data != null &&
             data.Length > 2 &&
             data[0] is string marker &&
-            marker == PlayerDeployableRuntime.AutoTurretMarker)
+            (marker == PlayerDeployableRuntime.AutoTurretMarker || marker == PlayerDeployableRuntime.NeutralRiderAutoTurretMarker))
         {
             return Mathf.Max(0, ConvertToInt(data[2]));
         }

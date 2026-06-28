@@ -218,7 +218,7 @@ public sealed class NeutralRiderController : MonoBehaviourPun
                 return;
         }
 
-        AddCargo(itemId);
+        TryAddCargo(itemId);
     }
 
     bool CanLoseLootHookCargo()
@@ -499,6 +499,8 @@ public sealed class NeutralRiderController : MonoBehaviourPun
     {
         if (cargo.Count <= 0 && !fallbackJunkStolenByLootHook)
             cargo.Add(InventoryItemCatalog.SpaceJunkStandardId);
+
+        MaterializeCargoRandomLootWrecks();
 
         List<string> lootItems = new List<string>(cargo);
         if (TryResolveArrowRaceTokenDrop(out string arrowTokenItemId))
@@ -820,20 +822,18 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             {
                 InventoryItemCatalog.SpaceTorpedoId,
                 InventoryItemCatalog.GadgetMineId,
-                InventoryItemCatalog.SpaceBombId,
-                InventoryItemCatalog.AutoTurretId
+                InventoryItemCatalog.AutoTurretId,
+                InventoryItemCatalog.StasisBuoyId
             },
             NeutralRiderArchetype.Coward => new[]
             {
                 InventoryItemCatalog.StasisBuoyId,
-                InventoryItemCatalog.SpaceBombId,
                 InventoryItemCatalog.GadgetMineId
             },
             _ => new[]
             {
                 InventoryItemCatalog.StasisBuoyId,
                 InventoryItemCatalog.GadgetMineId,
-                InventoryItemCatalog.SpaceBombId,
                 InventoryItemCatalog.AutoTurretId
             }
         };
@@ -1513,8 +1513,10 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             return false;
 
         bool hasThreat = TryGetCurrentThreatPosition(out Vector2 threatPosition, out float threatDistance);
-        if (string.Equals(itemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal) ||
-            string.Equals(itemId, InventoryItemCatalog.SpaceBombId, StringComparison.Ordinal))
+        if (string.Equals(itemId, InventoryItemCatalog.SpaceBombId, StringComparison.Ordinal))
+            return false;
+
+        if (string.Equals(itemId, InventoryItemCatalog.GadgetMineId, StringComparison.Ordinal))
         {
             return hasThreat &&
                    threatDistance <= 7.8f &&
@@ -1891,7 +1893,9 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         Treasure treasure = targetView.GetComponent<Treasure>();
         if (treasure != null && !string.IsNullOrWhiteSpace(treasure.itemId))
         {
-            AddCargo(treasure.itemId);
+            if (!TryAddCargo(treasure.itemId))
+                return false;
+
             if (PhotonNetwork.IsMasterClient)
                 PhotonNetwork.Destroy(treasure.gameObject);
             return true;
@@ -1900,7 +1904,9 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         DroppedCargoCrate crate = targetView.GetComponent<DroppedCargoCrate>();
         if (crate != null && crate.HasLoot && !string.IsNullOrWhiteSpace(crate.StoredItemId))
         {
-            AddCargo(crate.StoredItemId);
+            if (!TryAddCargo(crate.StoredItemId))
+                return false;
+
             targetView.RPC(nameof(DroppedCargoCrate.ClearStoredItemRpc), RpcTarget.All);
             return true;
         }
@@ -1912,7 +1918,9 @@ public sealed class NeutralRiderController : MonoBehaviourPun
             string itemId = wreck.GetLootItemAt(lootIndex);
             if (!string.IsNullOrWhiteSpace(itemId))
             {
-                AddCargo(itemId);
+                if (!TryAddCargo(itemId))
+                    return false;
+
                 targetView.RPC(nameof(ShipWreck.RemoveLootAtIndexRpc), RpcTarget.All, lootIndex);
                 return true;
             }
@@ -1921,12 +1929,31 @@ public sealed class NeutralRiderController : MonoBehaviourPun
         return false;
     }
 
-    void AddCargo(string itemId)
+    bool TryAddCargo(string itemId)
     {
         if (string.IsNullOrWhiteSpace(itemId) || !HasCargoSpace)
-            return;
+            return false;
 
-        cargo.Add(itemId);
+        string cargoItemId = InventoryItemCatalog.ResolveRandomLootWreckItemId(itemId);
+        if (string.IsNullOrWhiteSpace(cargoItemId))
+            return false;
+
+        cargo.Add(cargoItemId);
+        return true;
+    }
+
+    void MaterializeCargoRandomLootWrecks()
+    {
+        for (int i = 0; i < cargo.Count; i++)
+        {
+            string itemId = cargo[i];
+            if (!InventoryItemCatalog.IsRandomLootWreckItem(itemId))
+                continue;
+
+            string cargoItemId = InventoryItemCatalog.ResolveRandomLootWreckItemId(itemId);
+            if (!string.IsNullOrWhiteSpace(cargoItemId))
+                cargo[i] = cargoItemId;
+        }
     }
 
     void ResetCollection()

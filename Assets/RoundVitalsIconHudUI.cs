@@ -17,6 +17,7 @@ public sealed class RoundVitalsIconHudUI : MonoBehaviourPun
     const float ScoreVerticalGap = 48f;
     const float DesktopScoreHorizontalOffset = -24f;
     const float MobileScoreHorizontalOffset = 72f;
+    const float PilotHudGap = 18f;
     const float IconWidth = 142f;
     const float IconHeight = 140f;
     const float IconGap = 8f;
@@ -46,6 +47,8 @@ public sealed class RoundVitalsIconHudUI : MonoBehaviourPun
     bool isVisible = true;
     float nextLegacyHideTime;
     float nextLayoutRefreshTime;
+    readonly Vector3[] pilotHudCorners = new Vector3[4];
+    readonly Vector3[] vitalsHudCorners = new Vector3[4];
 
     sealed class VitalIconView
     {
@@ -309,6 +312,7 @@ public sealed class RoundVitalsIconHudUI : MonoBehaviourPun
             rootSize.x = IconWidth;
 
         rootRect.sizeDelta = rootSize;
+        KeepRightOfPilotHud();
 
         if (hpView != null)
         {
@@ -321,6 +325,26 @@ public sealed class RoundVitalsIconHudUI : MonoBehaviourPun
             shieldView.Rect.anchoredPosition = new Vector2(IconWidth + IconGap, 0f);
             shieldView.Root.SetActive(health == null || health.MaxShield > 0);
         }
+    }
+
+    void KeepRightOfPilotHud()
+    {
+        RectTransform parentRect = rootRect != null ? rootRect.parent as RectTransform : null;
+        GameObject pilotHudObject = FindSceneObject(RoundPilotHudUI.RootName);
+        RectTransform pilotRect = pilotHudObject != null && pilotHudObject.activeInHierarchy
+            ? pilotHudObject.GetComponent<RectTransform>()
+            : null;
+        if (parentRect == null || pilotRect == null)
+            return;
+
+        pilotRect.GetWorldCorners(pilotHudCorners);
+        rootRect.GetWorldCorners(vitalsHudCorners);
+
+        float pilotRight = parentRect.InverseTransformPoint(pilotHudCorners[2]).x;
+        float vitalsLeft = parentRect.InverseTransformPoint(vitalsHudCorners[1]).x;
+        float minimumVitalsLeft = pilotRight + PilotHudGap;
+        if (vitalsLeft < minimumVitalsLeft)
+            rootRect.anchoredPosition += new Vector2(minimumVitalsLeft - vitalsLeft, 0f);
     }
 
     void RefreshValues()

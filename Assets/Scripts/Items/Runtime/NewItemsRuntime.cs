@@ -17,12 +17,13 @@ public static class NewItemsRuntime
 
         Vector3 spawnPosition = ResolveRearSpawnPosition(owner.transform, 0.95f, 0.42f);
         int ownerActorNumber = ResolveOwnerActorNumber(owner.photonView);
+        string marker = IsNeutralRiderOwner(owner) ? PlayerDeployableRuntime.NeutralRiderAutoTurretMarker : PlayerDeployableRuntime.AutoTurretMarker;
         GameObject turretObject = PhotonNetwork.InstantiateRoomObject(
             "Player",
             spawnPosition,
             owner.transform.rotation,
             0,
-            new object[] { PlayerDeployableRuntime.AutoTurretMarker, owner.photonView.ViewID, ownerActorNumber });
+            new object[] { marker, owner.photonView.ViewID, ownerActorNumber });
 
         if (turretObject == null)
             return false;
@@ -38,12 +39,13 @@ public static class NewItemsRuntime
 
         Vector3 spawnPosition = ResolveRearSpawnPosition(owner.transform, 1.05f, 0.46f);
         int ownerActorNumber = ResolveOwnerActorNumber(owner.photonView);
+        string marker = IsNeutralRiderOwner(owner) ? PlayerDeployableRuntime.NeutralRiderRocketAutoTurretMarker : PlayerDeployableRuntime.RocketAutoTurretMarker;
         GameObject turretObject = PhotonNetwork.InstantiateRoomObject(
             "Player",
             spawnPosition,
             owner.transform.rotation,
             0,
-            new object[] { PlayerDeployableRuntime.RocketAutoTurretMarker, owner.photonView.ViewID, ownerActorNumber });
+            new object[] { marker, owner.photonView.ViewID, ownerActorNumber });
 
         if (turretObject == null)
             return false;
@@ -61,6 +63,16 @@ public static class NewItemsRuntime
             return view.Owner.ActorNumber;
 
         return Mathf.Max(0, view.OwnerActorNr);
+    }
+
+    static bool IsNeutralRiderOwner(PlayerShooting owner)
+    {
+        if (owner == null)
+            return false;
+
+        PhotonView view = owner.photonView;
+        return NeutralRiderController.IsNeutralRider(owner.gameObject) ||
+               NeutralRiderController.IsNeutralRiderInstantiationData(view != null ? view.InstantiationData : null);
     }
 
     public static bool TryDeploySpaceBomb(PlayerShooting owner)

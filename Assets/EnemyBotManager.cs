@@ -6,6 +6,7 @@ public class EnemyBotManager : MonoBehaviour
 {
     const float ScanInterval = 0.2f;
     const float RuntimeComponentScanInterval = 1f;
+    const float EnemySpawnProtectionDuration = 1.35f;
     const int MilitaryVanEventConvoySize = 4;
     const double MilitaryVanRespawnDelaySeconds = 18d;
     const string SpawnStateStartTimeRoomKey = "enemyRuntime.spawnStateStartTime";
@@ -607,6 +608,13 @@ public class EnemyBotManager : MonoBehaviour
                 bot = botObject.AddComponent<EnemyBot>();
 
             bot.InitializeFromPhotonData();
+            if (ShouldBeginSpawnProtection(definition))
+            {
+                PlayerHealth health = botObject.GetComponent<PlayerHealth>();
+                if (health != null)
+                    health.BeginBotSpawnInvulnerability(EnemySpawnProtectionDuration);
+            }
+
             if (definition.Kind == EnemyBotKind.RescueShip)
             {
                 StartCoroutine(PlayRescueShipIncomingAfterBootstrap(bot.photonView.ViewID, spawn));
@@ -616,6 +624,11 @@ public class EnemyBotManager : MonoBehaviour
         }
 
         return botObject != null;
+    }
+
+    static bool ShouldBeginSpawnProtection(EnemyBotDefinition definition)
+    {
+        return definition != null && definition.Kind != EnemyBotKind.SpaceMine;
     }
 
     Vector2 GetMilitaryVanEntrySpawnPosition(EnemyBotDefinition definition, int spawnOrdinal, bool hasEntryFocus, Vector2 entryFocusPosition)

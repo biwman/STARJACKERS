@@ -8,7 +8,9 @@ using UnityEngine;
 public static class PlayerDeployableRuntime
 {
     public const string AutoTurretMarker = "player_auto_turret";
+    public const string NeutralRiderAutoTurretMarker = "neutral_rider_auto_turret";
     public const string RocketAutoTurretMarker = "player_rocket_auto_turret";
+    public const string NeutralRiderRocketAutoTurretMarker = "neutral_rider_rocket_auto_turret";
     public const string WarBaseRocketAutoTurretMarker = "war_base_rocket_auto_turret";
     public const string ViperContainerHaulerMarker = "viper_container_hauler";
     public const string BisonIndustrialPartsMarker = "bison_industrial_parts";
@@ -55,7 +57,7 @@ public static class PlayerDeployableRuntime
         return data != null &&
                data.Length > 0 &&
                data[0] is string marker &&
-               (marker == AutoTurretMarker || marker == RocketAutoTurretMarker || marker == WarBaseRocketAutoTurretMarker || marker == ViperContainerHaulerMarker || marker == BisonIndustrialPartsMarker || marker == ContainerShipAutoCannonMarker || marker == SpaceBombMarker || marker == StasisBuoyMarker || marker == SpaceTorpedoMarker || marker == AsteroidBreacherBombMarker || marker == MetalDriftWallMarker || marker == SpaceDrillMarker || marker == DropbotMarker);
+               (marker == AutoTurretMarker || marker == NeutralRiderAutoTurretMarker || marker == RocketAutoTurretMarker || marker == NeutralRiderRocketAutoTurretMarker || marker == WarBaseRocketAutoTurretMarker || marker == ViperContainerHaulerMarker || marker == BisonIndustrialPartsMarker || marker == ContainerShipAutoCannonMarker || marker == SpaceBombMarker || marker == StasisBuoyMarker || marker == SpaceTorpedoMarker || marker == AsteroidBreacherBombMarker || marker == MetalDriftWallMarker || marker == SpaceDrillMarker || marker == DropbotMarker);
     }
 
     public static bool IsContainerShipAutoCannonData(object[] data)
@@ -66,9 +68,30 @@ public static class PlayerDeployableRuntime
                marker == ContainerShipAutoCannonMarker;
     }
 
+    public static bool IsNeutralRiderAutoTurretData(object[] data)
+    {
+        return data != null &&
+               data.Length > 0 &&
+               data[0] is string marker &&
+               marker == NeutralRiderAutoTurretMarker;
+    }
+
+    public static bool IsNeutralRiderRocketAutoTurretData(object[] data)
+    {
+        return data != null &&
+               data.Length > 0 &&
+               data[0] is string marker &&
+               marker == NeutralRiderRocketAutoTurretMarker;
+    }
+
+    public static bool IsNeutralRiderOwnedDeployableData(object[] data)
+    {
+        return IsNeutralRiderAutoTurretData(data) || IsNeutralRiderRocketAutoTurretData(data);
+    }
+
     public static bool IsComputerOwnedDeployableData(object[] data)
     {
-        return IsContainerShipAutoCannonData(data) || IsWarBaseRocketAutoTurretData(data) || IsViperContainerHaulerData(data);
+        return IsContainerShipAutoCannonData(data) || IsWarBaseRocketAutoTurretData(data) || IsViperContainerHaulerData(data) || IsNeutralRiderOwnedDeployableData(data);
     }
 
     public static bool IsViperContainerHaulerData(object[] data)
@@ -105,7 +128,7 @@ public static class PlayerDeployableRuntime
         if (data == null || data.Length == 0 || !(data[0] is string marker))
             return null;
 
-        if (marker == AutoTurretMarker || marker == ContainerShipAutoCannonMarker)
+        if (marker == AutoTurretMarker || marker == NeutralRiderAutoTurretMarker || marker == ContainerShipAutoCannonMarker)
         {
             AutoTurretDeployable turret = target.GetComponent<AutoTurretDeployable>();
             if (turret == null)
@@ -115,7 +138,7 @@ public static class PlayerDeployableRuntime
             return turret;
         }
 
-        if (marker == RocketAutoTurretMarker || marker == WarBaseRocketAutoTurretMarker)
+        if (marker == RocketAutoTurretMarker || marker == NeutralRiderRocketAutoTurretMarker || marker == WarBaseRocketAutoTurretMarker)
         {
             RocketAutoTurretDeployable turret = target.GetComponent<RocketAutoTurretDeployable>();
             if (turret == null)

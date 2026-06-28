@@ -9,6 +9,10 @@ public partial class TreasureCollector : MonoBehaviourPun
     static TreasureCollector collectButtonBindingOwner;
 
     const float TreasureScanInterval = 0.08f;
+    const float MobileTreasureScanInterval = 0.12f;
+    const float UseActionRefreshInterval = 0.12f;
+    const float MobileUseActionRefreshInterval = 0.18f;
+    const float LoadoutCacheRefreshInterval = 0.25f;
     const float BeamWidth = 0.18f;
     const float BeamJitterAmplitude = 0.13f;
     const float BeamJitterFrequency = 22f;
@@ -68,6 +72,45 @@ public partial class TreasureCollector : MonoBehaviourPun
     float pendingActivatedExtractionUntil;
     int pendingTreasureReservationViewId;
     int activeTreasureReservationViewId;
+    float nextUseActionRefreshTime;
+    PlayerHealth cachedPlayerHealth;
+    PlayerRepairDocking cachedPlayerRepairDocking;
+    SpriteRenderer cachedSpriteRenderer;
+    int cachedLoadoutActorNumber = int.MinValue;
+    int cachedLoadoutInventoryRevision = -1;
+    float nextLoadoutRefreshTime;
+    int cachedLoadoutShipSkinIndex;
+    int cachedLoadoutShipCapacity;
+    string[] cachedLoadoutShipSlots;
+    string[] cachedLoadoutEquipmentSlots;
+    bool cachedHasAlienTransmitter;
+    bool cachedHasSalvageMagnetArray;
+    Gradient collectionBeamGradient;
+    Gradient artifactBeamGradient;
+    readonly GradientColorKey[] collectionBeamColorKeys =
+    {
+        new GradientColorKey(new Color(0.96f, 1f, 0.86f), 0f),
+        new GradientColorKey(new Color(0.28f, 1f, 0.66f), 0.38f),
+        new GradientColorKey(new Color(0.1f, 0.74f, 1f), 1f)
+    };
+    readonly GradientAlphaKey[] collectionBeamAlphaKeys =
+    {
+        new GradientAlphaKey(0.95f, 0f),
+        new GradientAlphaKey(0.72f, 0.55f),
+        new GradientAlphaKey(0.18f, 1f)
+    };
+    readonly GradientColorKey[] artifactBeamColorKeys =
+    {
+        new GradientColorKey(new Color(0.08f, 0.46f, 1f), 0f),
+        new GradientColorKey(new Color(0.48f, 0.92f, 1f), 0.46f),
+        new GradientColorKey(new Color(0.12f, 0.18f, 1f), 1f)
+    };
+    readonly GradientAlphaKey[] artifactBeamAlphaKeys =
+    {
+        new GradientAlphaKey(0.86f, 0f),
+        new GradientAlphaKey(1f, 0.5f),
+        new GradientAlphaKey(0.24f, 1f)
+    };
 
     public bool IsCollectingAny => isCollecting;
 
@@ -168,7 +211,7 @@ public partial class TreasureCollector : MonoBehaviourPun
                 currentArtifactAsteroid = null;
             }
 
-            UpdateUseButtonAvailability();
+            UpdateUseButtonAvailabilityThrottled();
             UpdateCollectionBeam();
             UpdateArtifactExamineBeam();
             return;
@@ -176,7 +219,7 @@ public partial class TreasureCollector : MonoBehaviourPun
 
         if (photonView.IsMine && Time.unscaledTime >= nextTreasureScanTime)
         {
-            nextTreasureScanTime = Time.unscaledTime + TreasureScanInterval;
+            nextTreasureScanTime = Time.unscaledTime + GetTreasureScanInterval();
             if (!HasLockedCollectibleTarget())
                 RefreshClosestCollectible();
         }
@@ -184,10 +227,101 @@ public partial class TreasureCollector : MonoBehaviourPun
         if (photonView.IsMine)
             EnsureActiveCollectibleTargetStillValid();
 
-        UpdateUseButtonAvailability();
+        UpdateUseButtonAvailabilityThrottled();
         UpdateHaulChargeUseProgress();
         UpdateCollectionBeam();
         UpdateArtifactExamineBeam();
+    }
+
+    float GetTreasureScanInterval()
+    {
+        if (!Application.isMobilePlatform)
+            return TreasureScanInterval;
+
+        return MobilePerformanceSettings.CurrentProfile == MobilePerformanceProfile.High
+            ? TreasureScanInterval
+            : MobileTreasureScanInterval;
+    }
+
+    float GetUseActionRefreshInterval()
+    {
+        if (!Application.isMobilePlatform)
+            return UseActionRefreshInterval;
+
+        return MobilePerformanceSettings.CurrentProfile == MobilePerformanceProfile.High
+            ? UseActionRefreshInterval
+            : MobileUseActionRefreshInterval;
+    }
+
+    void UpdateUseButtonAvailabilityThrottled()
+    {
+        if (Time.unscaledTime < nextUseActionRefreshTime)
+            return;
+
+        UpdateUseButtonAvailability();
+    }
+
+    PlayerHealth GetCachedPlayerHealth()
+    {
+        if (cachedPlayerHealth == null)
+            cachedPlayerHealth = GetComponent<PlayerHealth>();
+
+        return cachedPlayerHealth;
+    }
+
+    PlayerRepairDocking GetCachedPlayerRepairDocking()
+    {
+        if (cachedPlayerRepairDocking == null)
+            cachedPlayerRepairDocking = GetComponent<PlayerRepairDocking>();
+
+        return cachedPlayerRepairDocking;
+    }
+
+    SpriteRenderer GetCachedSpriteRenderer()
+    {
+        if (cachedSpriteRenderer == null)
+            cachedSpriteRenderer = GetComponent<SpriteRenderer>();
+
+        return cachedSpriteRenderer;
+    }
+
+    void RefreshLoadoutCacheIfNeeded(Photon.Realtime.Player player)
+    {
+        int actorNumber = player != null ? player.ActorNumber : -1;
+        int inventoryRevision = PlayerProfileService.HasInstance ? PlayerProfileService.Instance.InventoryRevision : -1;
+        float now = Time.unscaledTime;
+
+        if (cachedLoadoutShipSlots != null &&
+            cachedLoadoutActorNumber == actorNumber &&
+            cachedLoadoutInventoryRevision == inventoryRevision &&
+            now < nextLoadoutRefreshTime)
+        {
+            return;
+        }
+
+        cachedLoadoutActorNumber = actorNumber;
+        cachedLoadoutInventoryRevision = inventoryRevision;
+        nextLoadoutRefreshTime = now + LoadoutCacheRefreshInterval;
+        cachedLoadoutShipSkinIndex = RoomSettings.GetPlayerShipSkin(player, 0);
+        cachedLoadoutEquipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(player);
+        cachedLoadoutShipSlots = PlayerProfileService.GetPlayerShipInventorySlots(player);
+        cachedLoadoutShipCapacity = PlayerProfileService.GetPlayerShipInventoryCapacity(player);
+        cachedHasSalvageMagnetArray = InventoryItemCatalog.HasEquippedItem(
+            cachedLoadoutEquipmentSlots,
+            cachedLoadoutShipSkinIndex,
+            InventoryItemCatalog.SalvageMagnetArrayId);
+        cachedHasAlienTransmitter = false;
+
+        int slotCount = cachedLoadoutShipSlots != null ? cachedLoadoutShipSlots.Length : 0;
+        int limit = Mathf.Clamp(cachedLoadoutShipCapacity, 0, slotCount);
+        for (int i = 0; i < limit; i++)
+        {
+            if (string.Equals(cachedLoadoutShipSlots[i], InventoryItemCatalog.AlienTransmitterId, System.StringComparison.Ordinal))
+            {
+                cachedHasAlienTransmitter = true;
+                break;
+            }
+        }
     }
 
     void EnsureActiveCollectibleTargetStillValid()

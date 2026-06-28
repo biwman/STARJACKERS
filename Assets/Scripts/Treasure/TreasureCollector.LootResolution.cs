@@ -21,7 +21,7 @@ public partial class TreasureCollector
         if (ReservedRandomLootWrecks.TryGetValue(viewID, out int reservedActor) && reservedActor != photonView.OwnerActorNr)
             return;
 
-        string rewardItemId = RollRandomLootWreckReward();
+        string rewardItemId = InventoryItemCatalog.RollRandomLootWreckReward();
         if (string.IsNullOrWhiteSpace(rewardItemId))
             return;
 
@@ -94,51 +94,6 @@ public partial class TreasureCollector
         ReservedDroppedCargoLoot[viewID] = photonView.OwnerActorNr;
         photonView.RPC(nameof(ReceivePendingDroppedCargoLootRpc), photonView.Owner, viewID, itemId);
     }
-
-    string RollRandomLootWreckReward()
-    {
-        float roll = Random.value;
-        InventoryItemCategory category;
-        if (roll < 0.7f)
-            return RollRandomUtilityEquipmentReward();
-        else if (roll < 0.8f)
-            category = InventoryItemCategory.Shield;
-        else if (roll < 0.9f)
-            category = InventoryItemCategory.Weapon;
-        else
-            category = InventoryItemCategory.Engine;
-
-        string[] itemIds = InventoryItemCatalog.GetEquipmentItemIdsByCategory(category);
-        if (itemIds == null || itemIds.Length == 0)
-            return string.Empty;
-
-        return itemIds[Random.Range(0, itemIds.Length)];
-    }
-
-    string RollRandomUtilityEquipmentReward()
-    {
-        List<string> itemIds = new List<string>();
-        AddEquipmentItemIds(itemIds, InventoryItemCategory.Gadget);
-        AddEquipmentItemIds(itemIds, InventoryItemCategory.Support);
-        AddEquipmentItemIds(itemIds, InventoryItemCategory.Rescue);
-        if (itemIds.Count == 0)
-            return string.Empty;
-
-        return itemIds[Random.Range(0, itemIds.Count)];
-    }
-
-    void AddEquipmentItemIds(List<string> itemIds, InventoryItemCategory category)
-    {
-        if (itemIds == null)
-            return;
-
-        string[] categoryItemIds = InventoryItemCatalog.GetEquipmentItemIdsByCategory(category);
-        if (categoryItemIds == null)
-            return;
-
-        itemIds.AddRange(categoryItemIds);
-    }
-
 
     [PunRPC]
     async void ReceiveLootedItemRpc(string itemId)

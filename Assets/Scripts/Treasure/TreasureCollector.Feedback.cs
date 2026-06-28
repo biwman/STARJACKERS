@@ -57,7 +57,7 @@ public partial class TreasureCollector
         collectionBeam.widthCurve = BuildCollectionBeamWidthCurve();
         collectionBeam.textureMode = LineTextureMode.Stretch;
 
-        SpriteRenderer referenceRenderer = GetComponent<SpriteRenderer>();
+        SpriteRenderer referenceRenderer = GetCachedSpriteRenderer();
         if (referenceRenderer != null)
         {
             collectionBeam.sortingLayerID = referenceRenderer.sortingLayerID;
@@ -95,7 +95,7 @@ public partial class TreasureCollector
         artifactExamineBeam.widthCurve = BuildCollectionBeamWidthCurve();
         artifactExamineBeam.textureMode = LineTextureMode.Stretch;
 
-        SpriteRenderer referenceRenderer = GetComponent<SpriteRenderer>();
+        SpriteRenderer referenceRenderer = GetCachedSpriteRenderer();
         if (referenceRenderer != null)
         {
             artifactExamineBeam.sortingLayerID = referenceRenderer.sortingLayerID;
@@ -192,40 +192,26 @@ public partial class TreasureCollector
 
     Gradient BuildCollectionBeamGradient(float alpha)
     {
-        Gradient gradient = new Gradient();
-        gradient.SetKeys(
-            new[]
-            {
-                new GradientColorKey(new Color(0.96f, 1f, 0.86f), 0f),
-                new GradientColorKey(new Color(0.28f, 1f, 0.66f), 0.38f),
-                new GradientColorKey(new Color(0.1f, 0.74f, 1f), 1f)
-            },
-            new[]
-            {
-                new GradientAlphaKey(0.95f * alpha, 0f),
-                new GradientAlphaKey(0.72f * alpha, 0.55f),
-                new GradientAlphaKey(0.18f * alpha, 1f)
-            });
-        return gradient;
+        if (collectionBeamGradient == null)
+            collectionBeamGradient = new Gradient();
+
+        collectionBeamAlphaKeys[0].alpha = 0.95f * alpha;
+        collectionBeamAlphaKeys[1].alpha = 0.72f * alpha;
+        collectionBeamAlphaKeys[2].alpha = 0.18f * alpha;
+        collectionBeamGradient.SetKeys(collectionBeamColorKeys, collectionBeamAlphaKeys);
+        return collectionBeamGradient;
     }
 
     Gradient BuildArtifactBeamGradient(float alpha)
     {
-        Gradient gradient = new Gradient();
-        gradient.SetKeys(
-            new[]
-            {
-                new GradientColorKey(new Color(0.08f, 0.46f, 1f), 0f),
-                new GradientColorKey(new Color(0.48f, 0.92f, 1f), 0.46f),
-                new GradientColorKey(new Color(0.12f, 0.18f, 1f), 1f)
-            },
-            new[]
-            {
-                new GradientAlphaKey(0.86f * alpha, 0f),
-                new GradientAlphaKey(1f * alpha, 0.5f),
-                new GradientAlphaKey(0.24f * alpha, 1f)
-            });
-        return gradient;
+        if (artifactBeamGradient == null)
+            artifactBeamGradient = new Gradient();
+
+        artifactBeamAlphaKeys[0].alpha = 0.86f * alpha;
+        artifactBeamAlphaKeys[1].alpha = alpha;
+        artifactBeamAlphaKeys[2].alpha = 0.24f * alpha;
+        artifactBeamGradient.SetKeys(artifactBeamColorKeys, artifactBeamAlphaKeys);
+        return artifactBeamGradient;
     }
 
     AnimationCurve BuildCollectionBeamWidthCurve()

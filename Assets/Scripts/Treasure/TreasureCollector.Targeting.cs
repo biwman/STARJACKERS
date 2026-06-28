@@ -209,9 +209,8 @@ public partial class TreasureCollector
     bool HasSalvageMagnetArrayEquipped()
     {
         Photon.Realtime.Player owner = photonView != null ? photonView.Owner : PhotonNetwork.LocalPlayer;
-        int shipSkinIndex = RoomSettings.GetPlayerShipSkin(owner, 0);
-        string[] equipmentSlots = PlayerProfileService.GetPlayerEquipmentSlots(owner);
-        return InventoryItemCatalog.HasEquippedItem(equipmentSlots, shipSkinIndex, InventoryItemCatalog.SalvageMagnetArrayId);
+        RefreshLoadoutCacheIfNeeded(owner);
+        return cachedHasSalvageMagnetArray;
     }
 
     float GetDistanceFromTipToCollider(Collider2D collider, Vector2 fallbackPosition, Vector2 tipPosition)
@@ -228,7 +227,7 @@ public partial class TreasureCollector
     Vector2 GetShipTipPosition()
     {
         float forwardOffset = 0.55f;
-        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+        SpriteRenderer renderer = GetCachedSpriteRenderer();
         if (renderer != null)
         {
             forwardOffset = Mathf.Max(0.4f, renderer.bounds.extents.y * 0.9f);

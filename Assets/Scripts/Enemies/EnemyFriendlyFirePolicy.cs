@@ -29,6 +29,9 @@ public static class EnemyFriendlyFirePolicy
         if (EnemyBot.IsPlayerControlledDamageSource(attackerViewId))
             return true;
 
+        if (targetBot.Kind == EnemyBotKind.MilitaryVan && IsNeutralRiderDamageSource(attackerViewId))
+            return true;
+
         return !ShouldIgnoreDamageReaction(targetBot, attackerViewId) && IsExplicitHostileEnemyDamage(targetBot, attackerViewId);
     }
 
@@ -41,6 +44,38 @@ public static class EnemyFriendlyFirePolicy
     static bool IsExplicitHostileEnemyDamage(EnemyBot targetBot, int attackerViewId)
     {
         return false;
+    }
+
+    static bool IsNeutralRiderDamageSource(int attackerViewId)
+    {
+        if (attackerViewId <= 0)
+            return false;
+
+        PhotonView attackerView = PhotonView.Find(attackerViewId);
+        if (attackerView == null)
+            return false;
+
+        PlayerHealth attackerHealth = attackerView.GetComponent<PlayerHealth>();
+        if (IsActiveNeutralRider(attackerHealth))
+            return true;
+
+        if (PlayerDeployableRuntime.IsNeutralRiderOwnedDeployableData(attackerView.InstantiationData))
+            return true;
+
+        PlayerDeployableBase deployable = attackerView.GetComponent<PlayerDeployableBase>();
+        if (deployable == null)
+            return false;
+
+        return deployable.OwnerShipViewId != attackerViewId &&
+               IsNeutralRiderDamageSource(deployable.OwnerShipViewId);
+    }
+
+    static bool IsActiveNeutralRider(PlayerHealth attackerHealth)
+    {
+        return attackerHealth != null &&
+               attackerHealth.IsNeutralRiderControlled &&
+               !attackerHealth.IsWreck &&
+               !attackerHealth.IsAstronautControlled;
     }
 
     static bool AreFriendlyEnemies(EnemyBot targetBot, EnemyBot attackerBot)

@@ -66,6 +66,7 @@ public partial class PlayerShooting
         if (bulletPrefab == null || profile == null)
             return false;
 
+        Vector2 projectileDirection = ResolveSafeAimDirection(direction);
         float projectileSpeedMultiplier = GetProjectileSpeedMultiplier();
         float projectileSpeed = Mathf.Max(0.1f, profile.ProjectileSpeed * projectileSpeedMultiplier);
         float clampedFlightTime = Mathf.Clamp(profile.FlightTime / Mathf.Max(0.1f, projectileSpeedMultiplier), 0.2f, 30f);
@@ -74,7 +75,7 @@ public partial class PlayerShooting
         bool isRocketProjectile = IsRocketWeaponProfile(profile);
         Vector2 targetPoint = isArcProjectile
             ? explicitTargetPoint
-            : (Vector2)spawnPos + (direction.normalized * range);
+            : (Vector2)spawnPos + (projectileDirection * range);
         float arcHeight = ResolveArcHeight(range);
 
         object[] data = Bullet.AppendWeaponMetadata(
@@ -113,10 +114,10 @@ public partial class PlayerShooting
         GameObject bullet = ProjectileSpawner.SpawnNetworkBullet(
             bulletPrefab,
             spawnPos,
-            Quaternion.identity,
+            ResolveProjectileSpawnRotation(projectileDirection),
             data,
             ownerId,
-            direction.normalized * projectileSpeed,
+            projectileDirection * projectileSpeed,
             !isArcProjectile,
             playerCollider);
 
@@ -124,6 +125,13 @@ public partial class PlayerShooting
             return false;
 
         return true;
+    }
+
+    Quaternion ResolveProjectileSpawnRotation(Vector2 direction)
+    {
+        Vector2 safeDirection = ResolveSafeAimDirection(direction);
+        float angle = Mathf.Atan2(safeDirection.y, safeDirection.x) * Mathf.Rad2Deg - 90f;
+        return Quaternion.Euler(0f, 0f, angle);
     }
 
     bool TryStartPulseDisruptorWave(WeaponAttackProfile profile, int ownerId)

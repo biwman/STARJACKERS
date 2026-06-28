@@ -667,6 +667,63 @@ public static class InventoryItemCatalog
         return zeroBasedIndex >= 0 && zeroBasedIndex < RandomLootWreckVariantCount ? zeroBasedIndex : -1;
     }
 
+    public static string ResolveRandomLootWreckItemId(string itemId)
+    {
+        if (!IsRandomLootWreckItem(itemId))
+            return itemId;
+
+        return RollRandomLootWreckReward();
+    }
+
+    public static string RollRandomLootWreckReward()
+    {
+        float roll = UnityEngine.Random.value;
+        InventoryItemCategory category;
+        if (roll < 0.7f)
+            return RollRandomUtilityEquipmentReward();
+        else if (roll < 0.8f)
+            category = InventoryItemCategory.Shield;
+        else if (roll < 0.9f)
+            category = InventoryItemCategory.Weapon;
+        else
+            category = InventoryItemCategory.Engine;
+
+        return RollRandomEquipmentReward(category);
+    }
+
+    static string RollRandomUtilityEquipmentReward()
+    {
+        List<string> itemIds = new List<string>();
+        AddEquipmentItemIds(itemIds, InventoryItemCategory.Gadget);
+        AddEquipmentItemIds(itemIds, InventoryItemCategory.Support);
+        AddEquipmentItemIds(itemIds, InventoryItemCategory.Rescue);
+        if (itemIds.Count == 0)
+            return string.Empty;
+
+        return itemIds[UnityEngine.Random.Range(0, itemIds.Count)];
+    }
+
+    static string RollRandomEquipmentReward(InventoryItemCategory category)
+    {
+        string[] itemIds = GetEquipmentItemIdsByCategory(category);
+        if (itemIds == null || itemIds.Length == 0)
+            return string.Empty;
+
+        return itemIds[UnityEngine.Random.Range(0, itemIds.Length)];
+    }
+
+    static void AddEquipmentItemIds(List<string> itemIds, InventoryItemCategory category)
+    {
+        if (itemIds == null)
+            return;
+
+        string[] categoryItemIds = GetEquipmentItemIdsByCategory(category);
+        if (categoryItemIds == null)
+            return;
+
+        itemIds.AddRange(categoryItemIds);
+    }
+
     public static string[] GetEquipmentItemIdsByCategory(InventoryItemCategory category)
     {
         List<string> itemIds = new List<string>();

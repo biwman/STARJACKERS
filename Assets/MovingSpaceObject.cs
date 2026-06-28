@@ -40,6 +40,8 @@ public class MovingSpaceObject : MonoBehaviour
     const float TreasurePushMaxSpeed = 6.2f;
     const float ContainerPushMaxSpeed = 4.2f;
     const float ObstaclePushMaxSpeed = 4.2f;
+    const float SimulationModeRefreshInterval = 0.25f;
+    const float LowSimulationModeRefreshInterval = 0.35f;
 
     static readonly Dictionary<string, MovingSpaceObject> ObjectsById = new Dictionary<string, MovingSpaceObject>();
     static PhysicsMaterial2D sharedBouncyMaterial;
@@ -76,6 +78,9 @@ public class MovingSpaceObject : MonoBehaviour
     Collider2D[] cachedObjectColliders;
     float pushBoostUntil;
     float pushBoostMaxSpeed;
+    bool simulationModeApplied;
+    float nextSimulationModeRefreshTime;
+    float cachedMassFactor = 1f;
 
     public string StableId => stableId;
     public SpaceObjectType ObjectType => objectType;
@@ -131,7 +136,7 @@ public class MovingSpaceObject : MonoBehaviour
         objectType = type;
         EnsureRigidBody();
         ConfigureMotionFromId(id);
-        ApplySimulationMode();
+        ApplySimulationMode(true);
         ResetSnapshotTracking();
 
         ObjectsById[stableId] = this;
@@ -380,17 +385,14 @@ public class MovingSpaceObject : MonoBehaviour
     public void SetMotionState(Vector2 position, Vector2 velocity, float rotation, float angularVelocity, bool authorityState)
     {
         EnsureRigidBody();
-        ApplySimulationMode();
-
-        if (authorityState)
-            ApplySimulationMode();
+        ApplySimulationMode(true);
 
         rb.position = position;
         rb.rotation = rotation;
-        rb.linearVelocity = RoomSettings.ShouldMovingObjectsTranslate() ? velocity : Vector2.zero;
-        rb.angularVelocity = RoomSettings.ShouldMovingObjectsRotate() ? angularVelocity : 0f;
+        rb.linearVelocity = translateEnabled ? velocity : Vector2.zero;
+        rb.angularVelocity = rotateEnabled ? angularVelocity : 0f;
 
-        if (RoomSettings.ShouldMovingObjectsTranslate() && velocity.sqrMagnitude > 0.0001f)
+        if (translateEnabled && velocity.sqrMagnitude > 0.0001f)
             cruiseDirection = velocity.normalized;
 
         networkPosition = position;
@@ -418,10 +420,7 @@ public class MovingSpaceObject : MonoBehaviour
         rb.simulated = true;
         rb.gravityScale = 0f;
         rb.constraints = RigidbodyConstraints2D.None;
-        rb.interpolation = RigidbodyInterpolation2D.Interpolate;
-        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-        rb.sleepMode = RigidbodySleepMode2D.NeverSleep;
-        rb.useFullKinematicContacts = true;
+        ApplyRigidbodyRuntimeSettings();
 
         Collider2D[] colliders = GetComponents<Collider2D>();
         cachedObjectColliders = colliders;
@@ -457,21 +456,53 @@ public class MovingSpaceObject : MonoBehaviour
         }
     }
 
-    void ApplySimulationMode()
+    void ApplySimulationMode(bool force = false)
     {
-        movingEnabled = RoomSettings.AreMovingObjectsEnabled();
-        translateEnabled = RoomSettings.ShouldMovingObjectsTranslate();
-        rotateEnabled = RoomSettings.ShouldMovingObjectsRotate();
-        isAuthority = !PhotonNetwork.IsConnected || PhotonNetwork.IsMasterClient;
-
         if (rb == null)
             EnsureRigidBody();
 
-        bool ignoreWalls = objectType == SpaceObjectType.Obstacle && RoomSettings.AreObstaclesBorderless();
-        if (!boundaryCollisionIgnoreInitialized || ignoreWalls != lastBoundaryIgnoreSetting)
+        float now = Time.unscaledTime;
+        if (!force && simulationModeApplied && now < nextSimulationModeRefreshTime)
+            return;
+
+        nextSimulationModeRefreshTime = now + GetSimulationModeRefreshInterval();
+
+        string movingObjectsMode = RoomSettings.GetMovingObjectsMode();
+        bool nextMovingEnabled = movingObjectsMode != RoomSettings.MovingObjectsModeOff;
+        bool nextTranslateEnabled = movingObjectsMode == RoomSettings.MovingObjectsModeOn;
+        bool nextRotateEnabled = movingObjectsMode != RoomSettings.MovingObjectsModeOff;
+        bool nextAuthority = !PhotonNetwork.IsConnected || PhotonNetwork.IsMasterClient;
+        float nextMassFactor = cachedMassFactor;
+        if (nextAuthority && nextMovingEnabled)
+            nextMassFactor = Mathf.Max(1f, GetMassFactor());
+
+        bool bodySettingsChanged =
+            force ||
+            !simulationModeApplied ||
+            movingEnabled != nextMovingEnabled ||
+            translateEnabled != nextTranslateEnabled ||
+            rotateEnabled != nextRotateEnabled ||
+            isAuthority != nextAuthority ||
+            !Mathf.Approximately(cachedMassFactor, nextMassFactor);
+
+        movingEnabled = nextMovingEnabled;
+        translateEnabled = nextTranslateEnabled;
+        rotateEnabled = nextRotateEnabled;
+        isAuthority = nextAuthority;
+        cachedMassFactor = nextMassFactor;
+        simulationModeApplied = true;
+
+        ApplyRigidbodyRuntimeSettings();
+
+        if (objectType == SpaceObjectType.Obstacle)
         {
-            RefreshBoundaryCollisionIgnore(ignoreWalls);
+            bool ignoreWalls = RoomSettings.AreObstaclesBorderless();
+            if (!boundaryCollisionIgnoreInitialized || ignoreWalls != lastBoundaryIgnoreSetting)
+                RefreshBoundaryCollisionIgnore(ignoreWalls);
         }
+
+        if (!bodySettingsChanged)
+            return;
 
         if (isAuthority && movingEnabled)
         {
@@ -558,9 +589,79 @@ public class MovingSpaceObject : MonoBehaviour
     {
         rb.bodyType = RigidbodyType2D.Dynamic;
         rb.constraints = RigidbodyConstraints2D.None;
-        rb.mass = Mathf.Max(1f, GetMassFactor());
+        rb.mass = cachedMassFactor;
         rb.linearDamping = VelocityDamping;
         rb.angularDamping = 0.18f;
+    }
+
+    void ApplyRigidbodyRuntimeSettings()
+    {
+        if (rb == null)
+            return;
+
+        rb.simulated = true;
+        rb.gravityScale = 0f;
+
+        RigidbodyInterpolation2D preferredInterpolation = GetPreferredInterpolation();
+        if (rb.interpolation != preferredInterpolation)
+            rb.interpolation = preferredInterpolation;
+
+        CollisionDetectionMode2D preferredCollisionDetection = GetPreferredCollisionDetectionMode();
+        if (rb.collisionDetectionMode != preferredCollisionDetection)
+            rb.collisionDetectionMode = preferredCollisionDetection;
+
+        RigidbodySleepMode2D preferredSleepMode = GetPreferredSleepMode();
+        if (rb.sleepMode != preferredSleepMode)
+            rb.sleepMode = preferredSleepMode;
+
+        bool preferredFullKinematicContacts = GetPreferredFullKinematicContacts();
+        if (rb.useFullKinematicContacts != preferredFullKinematicContacts)
+            rb.useFullKinematicContacts = preferredFullKinematicContacts;
+    }
+
+    static float GetSimulationModeRefreshInterval()
+    {
+        if (!Application.isMobilePlatform)
+            return SimulationModeRefreshInterval;
+
+        return MobilePerformanceSettings.CurrentProfile == MobilePerformanceProfile.Low
+            ? LowSimulationModeRefreshInterval
+            : SimulationModeRefreshInterval;
+    }
+
+    static bool UseReducedMobileMovingBodyPhysics()
+    {
+        return Application.isMobilePlatform &&
+            MobilePerformanceSettings.CurrentProfile != MobilePerformanceProfile.High;
+    }
+
+    static RigidbodyInterpolation2D GetPreferredInterpolation()
+    {
+        if (!UseReducedMobileMovingBodyPhysics())
+            return RigidbodyInterpolation2D.Interpolate;
+
+        return MobilePerformanceSettings.CurrentProfile == MobilePerformanceProfile.Low
+            ? RigidbodyInterpolation2D.None
+            : RigidbodyInterpolation2D.Interpolate;
+    }
+
+    static CollisionDetectionMode2D GetPreferredCollisionDetectionMode()
+    {
+        return UseReducedMobileMovingBodyPhysics()
+            ? CollisionDetectionMode2D.Discrete
+            : CollisionDetectionMode2D.Continuous;
+    }
+
+    static RigidbodySleepMode2D GetPreferredSleepMode()
+    {
+        return UseReducedMobileMovingBodyPhysics()
+            ? RigidbodySleepMode2D.StartAwake
+            : RigidbodySleepMode2D.NeverSleep;
+    }
+
+    static bool GetPreferredFullKinematicContacts()
+    {
+        return !UseReducedMobileMovingBodyPhysics();
     }
 
     void SimulateAuthorityMotion()

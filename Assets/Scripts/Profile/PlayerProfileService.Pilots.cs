@@ -6,6 +6,8 @@ using UnityEngine;
 
 public partial class PlayerProfileService : MonoBehaviour
 {
+    const int DeferredPilotAsteroidSalvageSaveDelayMs = 5000;
+
     public bool IsPilotUnlocked(string pilotId)
     {
         EnsurePilotDefaults();
@@ -133,6 +135,76 @@ public partial class PlayerProfileService : MonoBehaviour
         long updatedCount = (long)previousCount + increment;
         CurrentProfile.PilotAsteroidSalvageCount = updatedCount > int.MaxValue ? int.MaxValue : (int)updatedCount;
 
+        if (IsGameplaySessionActive())
+        {
+            ScheduleDeferredPilotAsteroidSalvageSave();
+            NotifyProfileChanged();
+            return CurrentProfile.PilotAsteroidSalvageCount;
+        }
+
+        try
+        {
+            await SavePilotAsteroidSalvageCountOnlyAsync();
+        }
+        catch (Exception ex)
+        {
+            CurrentProfile.PilotAsteroidSalvageCount = previousCount;
+            Debug.LogError("PlayerProfileService pilot asteroid salvage save failed: " + ex);
+            throw;
+        }
+
+        return CurrentProfile.PilotAsteroidSalvageCount;
+    }
+
+    void ScheduleDeferredPilotAsteroidSalvageSave()
+    {
+        deferredPilotAsteroidSalvageSavePending = true;
+        int version = ++deferredPilotAsteroidSalvageSaveVersion;
+        _ = SavePilotAsteroidSalvageAfterDebounceAsync(version);
+    }
+
+    async Task SavePilotAsteroidSalvageAfterDebounceAsync(int version)
+    {
+        await Task.Delay(DeferredPilotAsteroidSalvageSaveDelayMs);
+        if (version != deferredPilotAsteroidSalvageSaveVersion ||
+            !deferredPilotAsteroidSalvageSavePending)
+        {
+            return;
+        }
+
+        await SaveDeferredPilotAsteroidSalvageAsync();
+    }
+
+    async Task SaveDeferredPilotAsteroidSalvageAsync()
+    {
+        if (!deferredPilotAsteroidSalvageSavePending)
+            return;
+
+        if (pilotAsteroidSalvageSaveInProgress)
+        {
+            ScheduleDeferredPilotAsteroidSalvageSave();
+            return;
+        }
+
+        deferredPilotAsteroidSalvageSavePending = false;
+        pilotAsteroidSalvageSaveInProgress = true;
+        try
+        {
+            await SavePilotAsteroidSalvageCountOnlyAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("PlayerProfileService deferred pilot asteroid salvage save failed: " + ex);
+            ScheduleDeferredPilotAsteroidSalvageSave();
+        }
+        finally
+        {
+            pilotAsteroidSalvageSaveInProgress = false;
+        }
+    }
+
+    async Task SavePilotAsteroidSalvageCountOnlyAsync()
+    {
         try
         {
             IsBusy = true;
@@ -146,18 +218,10 @@ public partial class PlayerProfileService : MonoBehaviour
                 "save pilot asteroid salvage");
             NotifyProfileChanged();
         }
-        catch (Exception ex)
-        {
-            CurrentProfile.PilotAsteroidSalvageCount = previousCount;
-            Debug.LogError("PlayerProfileService pilot asteroid salvage save failed: " + ex);
-            throw;
-        }
         finally
         {
             IsBusy = false;
         }
-
-        return CurrentProfile.PilotAsteroidSalvageCount;
     }
 
     public async Task<int> RecordPilotAshOverloadReturnAsync(int amount = 1)

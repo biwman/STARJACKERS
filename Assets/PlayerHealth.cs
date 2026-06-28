@@ -82,10 +82,8 @@ public partial class PlayerHealth : MonoBehaviourPun
     public bool IsHumanShipControlled => !IsBotControlled && !IsNeutralRiderControlled && !IsAstronautControlled;
     public bool IsEvacuationAnimating => isEvacuationAnimating;
     public bool IsSpawnInvulnerable => !IsWreck &&
-                                       !IsBotControlled &&
-                                       !IsNeutralRiderControlled &&
                                        ((!IsAstronautControlled && Time.time < spawnInvulnerableUntil) ||
-                                        Time.time < equipmentInvulnerableUntil);
+                                        (!IsBotControlled && !IsNeutralRiderControlled && Time.time < equipmentInvulnerableUntil));
 
     public bool CanActivateBatteryChargeLocally()
     {
@@ -214,6 +212,9 @@ public partial class PlayerHealth : MonoBehaviourPun
         }
 
         GameVisualTheme.ApplyPlayerVisual(this);
+
+        if (!IsBotControlled && !IsNeutralRiderControlled && !IsEnemyAstronautControlled && ActorIdentity.IsHumanPlayerActor(this))
+            GameTimer.NotifyHumanRoundActorAvailable(this);
     }
 
     void Update()
@@ -231,6 +232,7 @@ public partial class PlayerHealth : MonoBehaviourPun
     void OnDestroy()
     {
         RuntimeSceneQueryCache.InvalidateAll();
+        GameTimer.NotifyActivePlayerRosterChanged();
 
         if (photonView != null &&
             photonView.IsMine &&

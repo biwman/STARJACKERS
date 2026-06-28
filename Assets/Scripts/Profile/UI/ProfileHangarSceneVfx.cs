@@ -37,6 +37,8 @@ public sealed class ProfileHangarSceneVfx : MonoBehaviour
     const float SpaceWindowFarStarParallaxStrength = 0.10f;
     const float SpaceWindowNearStarParallaxStrength = 0.20f;
     const float DistantShipParallaxStrength = 0.16f;
+    const int DistantTrafficRouteCount = 2;
+    const int DistantTrafficMaxCraftPerRoute = 3;
     // Flip this to false to remove the foreground drone scan pass.
     static readonly bool HangarScanDroneEnabled = true;
     const float HangarScanDroneCycleDuration = 68f;
@@ -231,19 +233,43 @@ public sealed class ProfileHangarSceneVfx : MonoBehaviour
         public float Phase;
     }
 
+    sealed class DistantTrafficCraft
+    {
+        public RectTransform RootRect;
+        public RectTransform TrailRect;
+        public RectTransform CoreRect;
+        public Image TrailImage;
+        public Image CoreImage;
+        public Vector2 FormationOffset;
+        public float SizeScale = 1f;
+        public float AlphaScale = 1f;
+    }
+
+    sealed class DistantTrafficRoute
+    {
+        public RectTransform RootRect;
+        public readonly List<DistantTrafficCraft> Craft = new List<DistantTrafficCraft>();
+        public Vector2 StartPosition;
+        public Vector2 EndPosition;
+        public float TravelDuration = 64f;
+        public float CycleDuration = 64f;
+        public float Phase;
+        public float TrailBaseAlpha = 0.30f;
+        public int CraftCount = 1;
+        public bool Active;
+    }
+
     readonly List<SparkItem> sparks = new List<SparkItem>();
     readonly List<LandingLight> landingLights = new List<LandingLight>();
     readonly List<SpaceStar> farSpaceStars = new List<SpaceStar>();
     readonly List<SpaceStar> nearSpaceStars = new List<SpaceStar>();
+    readonly List<DistantTrafficRoute> distantTrafficRoutes = new List<DistantTrafficRoute>();
 
     RectTransform rootRect;
     RectTransform spaceWindowRect;
     RectTransform spaceBackgroundRect;
     RectTransform farSpaceStarsRect;
     RectTransform nearSpaceStarsRect;
-    RectTransform distantShipRootRect;
-    RectTransform distantShipTrailRect;
-    RectTransform distantShipCoreRect;
     RectTransform mapObjectRect;
     RectTransform hangarRect;
     RectTransform shipShadowRect;
@@ -257,8 +283,6 @@ public sealed class ProfileHangarSceneVfx : MonoBehaviour
     RectTransform shipImageRect;
     Image shipImageComponent;
     Image spaceBackgroundImage;
-    Image distantShipTrailImage;
-    Image distantShipCoreImage;
     Image mapObjectImage;
     Image hangarImage;
     Image shipShadowImage;
@@ -307,11 +331,6 @@ public sealed class ProfileHangarSceneVfx : MonoBehaviour
     Vector2 spaceBackgroundBasePosition;
     Vector2 mapObjectBasePosition;
     Vector2 smoothedSpaceWindowPointerParallax;
-    Vector2 distantShipStartPosition;
-    Vector2 distantShipEndPosition;
-    float distantShipDuration = 64f;
-    float distantShipPhase;
-    float distantShipTrailBaseAlpha = 0.30f;
     bool hasDistantShipRoute;
     float scanDroneCycleStartTime;
     bool hasScanDroneCycleStartTime;
@@ -470,26 +489,7 @@ public sealed class ProfileHangarSceneVfx : MonoBehaviour
         farSpaceStarsRect = BuildSpaceStarLayer(spaceWindowObject.transform, "FarSparseStars", farSpaceStars, SpaceWindowFarStarCount, 401);
         nearSpaceStarsRect = BuildSpaceStarLayer(spaceWindowObject.transform, "NearSparseStars", nearSpaceStars, SpaceWindowNearStarCount, 503);
 
-        GameObject distantShipObject = new GameObject("DistantTrafficShip", typeof(RectTransform));
-        distantShipObject.transform.SetParent(spaceWindowObject.transform, false);
-        distantShipRootRect = distantShipObject.GetComponent<RectTransform>();
-        distantShipRootRect.anchorMin = new Vector2(0.5f, 0.5f);
-        distantShipRootRect.anchorMax = new Vector2(0.5f, 0.5f);
-        distantShipRootRect.pivot = new Vector2(0.5f, 0.5f);
-
-        distantShipTrailImage = CreateImage(distantShipObject.transform, "DistantTrafficShipTrail", softDotSprite, new Color(0.36f, 0.82f, 1f, 0.30f));
-        distantShipTrailRect = distantShipTrailImage.rectTransform;
-        distantShipTrailRect.anchorMin = new Vector2(0.5f, 0.5f);
-        distantShipTrailRect.anchorMax = new Vector2(0.5f, 0.5f);
-        distantShipTrailRect.pivot = new Vector2(1f, 0.5f);
-        distantShipTrailRect.anchoredPosition = Vector2.zero;
-
-        distantShipCoreImage = CreateImage(distantShipObject.transform, "DistantTrafficShipCore", softDotSprite, new Color(0.92f, 0.98f, 1f, 0.96f));
-        distantShipCoreRect = distantShipCoreImage.rectTransform;
-        distantShipCoreRect.anchorMin = new Vector2(0.5f, 0.5f);
-        distantShipCoreRect.anchorMax = new Vector2(0.5f, 0.5f);
-        distantShipCoreRect.pivot = new Vector2(0.5f, 0.5f);
-        distantShipCoreRect.anchoredPosition = Vector2.zero;
+        BuildDistantTrafficRoutes(spaceWindowObject.transform);
 
         mapObjectImage = CreateImage(spaceWindowObject.transform, "MapSpaceObject", null, new Color(1f, 1f, 1f, 0.68f));
         mapObjectRect = mapObjectImage.rectTransform;
@@ -1475,6 +1475,64 @@ public sealed class ProfileHangarSceneVfx : MonoBehaviour
         return layerRect;
     }
 
+    void BuildDistantTrafficRoutes(Transform parent)
+    {
+        for (int routeIndex = 0; routeIndex < DistantTrafficRouteCount; routeIndex++)
+        {
+            GameObject routeObject = new GameObject("DistantTrafficRoute_" + routeIndex, typeof(RectTransform));
+            routeObject.transform.SetParent(parent, false);
+            RectTransform routeRect = routeObject.GetComponent<RectTransform>();
+            routeRect.anchorMin = new Vector2(0.5f, 0.5f);
+            routeRect.anchorMax = new Vector2(0.5f, 0.5f);
+            routeRect.pivot = new Vector2(0.5f, 0.5f);
+            routeRect.anchoredPosition = Vector2.zero;
+
+            DistantTrafficRoute route = new DistantTrafficRoute
+            {
+                RootRect = routeRect
+            };
+
+            for (int craftIndex = 0; craftIndex < DistantTrafficMaxCraftPerRoute; craftIndex++)
+                route.Craft.Add(BuildDistantTrafficCraft(routeObject.transform, routeIndex, craftIndex));
+
+            distantTrafficRoutes.Add(route);
+        }
+    }
+
+    DistantTrafficCraft BuildDistantTrafficCraft(Transform parent, int routeIndex, int craftIndex)
+    {
+        GameObject craftObject = new GameObject("DistantTrafficShip_" + routeIndex + "_" + craftIndex, typeof(RectTransform));
+        craftObject.transform.SetParent(parent, false);
+        RectTransform craftRect = craftObject.GetComponent<RectTransform>();
+        craftRect.anchorMin = new Vector2(0.5f, 0.5f);
+        craftRect.anchorMax = new Vector2(0.5f, 0.5f);
+        craftRect.pivot = new Vector2(0.5f, 0.5f);
+        craftRect.anchoredPosition = Vector2.zero;
+
+        Image trailImage = CreateImage(craftObject.transform, "DistantTrafficShipTrail", softDotSprite, new Color(0.36f, 0.82f, 1f, 0.30f));
+        RectTransform trailRect = trailImage.rectTransform;
+        trailRect.anchorMin = new Vector2(0.5f, 0.5f);
+        trailRect.anchorMax = new Vector2(0.5f, 0.5f);
+        trailRect.pivot = new Vector2(1f, 0.5f);
+        trailRect.anchoredPosition = Vector2.zero;
+
+        Image coreImage = CreateImage(craftObject.transform, "DistantTrafficShipCore", softDotSprite, new Color(0.92f, 0.98f, 1f, 0.96f));
+        RectTransform coreRect = coreImage.rectTransform;
+        coreRect.anchorMin = new Vector2(0.5f, 0.5f);
+        coreRect.anchorMax = new Vector2(0.5f, 0.5f);
+        coreRect.pivot = new Vector2(0.5f, 0.5f);
+        coreRect.anchoredPosition = Vector2.zero;
+
+        return new DistantTrafficCraft
+        {
+            RootRect = craftRect,
+            TrailRect = trailRect,
+            CoreRect = coreRect,
+            TrailImage = trailImage,
+            CoreImage = coreImage
+        };
+    }
+
     void ConfigureSpaceStarLayers(bool inventory)
     {
         bool active = SpaceWindowStarLayersEnabled;
@@ -1558,13 +1616,18 @@ public sealed class ProfileHangarSceneVfx : MonoBehaviour
 
     void ConfigureDistantShipLayout(bool inventory)
     {
-        if (distantShipRootRect == null)
+        if (distantTrafficRoutes.Count <= 0)
             return;
 
-        SetGameObjectActiveIfChanged(distantShipRootRect.gameObject, DistantShipTrafficEnabled);
         if (!DistantShipTrafficEnabled)
         {
             hasDistantShipRoute = false;
+            for (int i = 0; i < distantTrafficRoutes.Count; i++)
+            {
+                DistantTrafficRoute route = distantTrafficRoutes[i];
+                if (route != null && route.RootRect != null)
+                    SetGameObjectActiveIfChanged(route.RootRect.gameObject, false);
+            }
             return;
         }
 
@@ -1573,9 +1636,26 @@ public sealed class ProfileHangarSceneVfx : MonoBehaviour
         float halfHeight = Mathf.Max(260f, rootSize.y * 0.5f);
         int seedIndex = selectedSceneIndex >= 0 ? selectedSceneIndex : 0;
 
-        bool topLane = Seed01(seedIndex, 211) >= 0.42f;
+        for (int i = 0; i < distantTrafficRoutes.Count; i++)
+            ConfigureDistantTrafficRoute(distantTrafficRoutes[i], i, rootSize, halfWidth, halfHeight, seedIndex);
+
+        hasDistantShipRoute = true;
+    }
+
+    void ConfigureDistantTrafficRoute(DistantTrafficRoute route, int routeIndex, Vector2 rootSize, float halfWidth, float halfHeight, int seedIndex)
+    {
+        if (route == null || route.RootRect == null)
+            return;
+
+        int routeSeed = seedIndex * 173 + routeIndex * 997 + 31;
+        route.Active = routeIndex == 0 || Seed01(routeSeed, 239) > 0.38f;
+        SetGameObjectActiveIfChanged(route.RootRect.gameObject, route.Active);
+        if (!route.Active)
+            return;
+
+        bool topLane = Seed01(routeSeed, 211) >= (routeIndex == 0 ? 0.42f : 0.50f);
         float laneSign = topLane ? 1f : -1f;
-        float laneY = laneSign * Mathf.Lerp(halfHeight * 0.42f, halfHeight * 0.70f, Seed01(seedIndex, 213));
+        float laneY = laneSign * Mathf.Lerp(halfHeight * 0.42f, halfHeight * 0.70f, Seed01(routeSeed, 213));
 
         float objectSafeHalfHeight = Mathf.Max(420f * 0.5f + 78f, 180f);
         float objectSafeCenterY = Mathf.Lerp(-18f, -28f, 0.5f);
@@ -1583,41 +1663,76 @@ public sealed class ProfileHangarSceneVfx : MonoBehaviour
             laneY = objectSafeCenterY + laneSign * objectSafeHalfHeight;
         laneY = Mathf.Clamp(laneY, -halfHeight + 82f, halfHeight - 82f);
 
-        float laneDrift = Mathf.Lerp(-halfHeight * 0.11f, halfHeight * 0.11f, Seed01(seedIndex, 217));
+        float laneDrift = Mathf.Lerp(-halfHeight * 0.14f, halfHeight * 0.14f, Seed01(routeSeed, 217));
         float endY = Mathf.Clamp(laneY + laneDrift, -halfHeight + 82f, halfHeight - 82f);
         if (Mathf.Abs(endY - objectSafeCenterY) < objectSafeHalfHeight)
             endY = Mathf.Clamp(objectSafeCenterY + laneSign * objectSafeHalfHeight, -halfHeight + 82f, halfHeight - 82f);
 
-        bool leftToRight = Seed01(seedIndex, 219) > 0.5f;
-        float overscan = Mathf.Lerp(78f, 132f, Seed01(seedIndex, 221));
+        bool leftToRight = Seed01(routeSeed, 219) > 0.5f;
+        float overscan = Mathf.Lerp(78f, 132f, Seed01(routeSeed, 221));
         float visibleLeftX = -halfWidth;
         float visibleRightX = -halfWidth + rootSize.x * InventorySpaceWindowWidth;
         float startX = leftToRight ? visibleLeftX - overscan : visibleRightX + overscan;
         float endX = leftToRight ? visibleRightX + overscan : visibleLeftX - overscan;
-        distantShipStartPosition = new Vector2(startX, laneY);
-        distantShipEndPosition = new Vector2(endX, endY);
-        distantShipDuration = Mathf.Lerp(56f, 84f, Seed01(seedIndex, 223));
-        distantShipPhase = Seed01(seedIndex, 227);
-        distantShipTrailBaseAlpha = Mathf.Lerp(0.22f, 0.34f, Seed01(seedIndex, 229));
+        route.StartPosition = new Vector2(startX, laneY);
+        route.EndPosition = new Vector2(endX, endY);
+        route.TravelDuration = Mathf.Lerp(routeIndex == 0 ? 56f : 62f, routeIndex == 0 ? 84f : 98f, Seed01(routeSeed, 223));
+        route.CycleDuration = route.TravelDuration * (routeIndex == 0 ? 1f : Mathf.Lerp(1.35f, 1.85f, Seed01(routeSeed, 225)));
+        route.Phase = Seed01(routeSeed, 227);
+        route.TrailBaseAlpha = Mathf.Lerp(routeIndex == 0 ? 0.22f : 0.18f, routeIndex == 0 ? 0.34f : 0.29f, Seed01(routeSeed, 229));
 
-        if (distantShipTrailRect != null)
+        float formationRoll = Seed01(routeSeed, 237);
+        route.CraftCount = formationRoll > 0.73f ? 3 : formationRoll > 0.49f ? 2 : 1;
+        ConfigureDistantTrafficCraftLayout(route, routeIndex, routeSeed, rootSize);
+    }
+
+    void ConfigureDistantTrafficCraftLayout(DistantTrafficRoute route, int routeIndex, int routeSeed, Vector2 rootSize)
+    {
+        float trailLength = Mathf.Clamp(rootSize.x * Mathf.Lerp(0.18f, 0.32f, Seed01(routeSeed, 231)), 82f, 210f);
+        float trailThickness = Mathf.Lerp(3.4f, 6.0f, Seed01(routeSeed, 233));
+        float coreSize = Mathf.Lerp(4.1f, 6.8f, Seed01(routeSeed, 235));
+        float spacing = Mathf.Lerp(11f, 18f, Seed01(routeSeed, 241));
+        float sideOffset = Mathf.Lerp(7f, 13f, Seed01(routeSeed, 243));
+        float sideSign = Seed01(routeSeed, 245) > 0.5f ? 1f : -1f;
+
+        for (int i = 0; i < route.Craft.Count; i++)
         {
-            float trailLength = Mathf.Clamp(rootSize.x * Mathf.Lerp(0.20f, 0.34f, Seed01(seedIndex, 231)), 96f, 220f);
-            float trailThickness = Mathf.Lerp(4f, 6.4f, Seed01(seedIndex, 233));
-            distantShipTrailRect.sizeDelta = new Vector2(trailLength, trailThickness);
-            distantShipTrailRect.localRotation = Quaternion.identity;
-            distantShipTrailRect.localScale = Vector3.one;
-        }
+            DistantTrafficCraft craft = route.Craft[i];
+            if (craft == null || craft.RootRect == null)
+                continue;
 
-        if (distantShipCoreRect != null)
-        {
-            float coreSize = Mathf.Lerp(4.6f, 7.2f, Seed01(seedIndex, 235));
-            distantShipCoreRect.sizeDelta = new Vector2(coreSize, coreSize);
-            distantShipCoreRect.localRotation = Quaternion.identity;
-            distantShipCoreRect.localScale = Vector3.one;
-        }
+            bool active = i < route.CraftCount;
+            SetGameObjectActiveIfChanged(craft.RootRect.gameObject, active);
+            if (!active)
+                continue;
 
-        hasDistantShipRoute = true;
+            Vector2 offset = Vector2.zero;
+            if (i == 1)
+                offset = new Vector2(-spacing, sideOffset * sideSign);
+            else if (i == 2)
+                offset = new Vector2(-spacing * Mathf.Lerp(0.95f, 1.22f, Seed01(routeSeed, 247)), -sideOffset * sideSign);
+
+            craft.FormationOffset = offset;
+            craft.SizeScale = i == 0 ? 1f : Mathf.Lerp(0.82f, 0.94f, Seed01(routeSeed + i, 249));
+            craft.AlphaScale = i == 0 ? 1f : Mathf.Lerp(0.74f, 0.90f, Seed01(routeSeed + i, 251));
+            craft.RootRect.anchoredPosition = offset;
+            craft.RootRect.localRotation = Quaternion.identity;
+            craft.RootRect.localScale = Vector3.one;
+
+            if (craft.TrailRect != null)
+            {
+                craft.TrailRect.sizeDelta = new Vector2(trailLength * craft.SizeScale, trailThickness * craft.SizeScale);
+                craft.TrailRect.localRotation = Quaternion.identity;
+                craft.TrailRect.localScale = Vector3.one;
+            }
+
+            if (craft.CoreRect != null)
+            {
+                craft.CoreRect.sizeDelta = Vector2.one * coreSize * craft.SizeScale;
+                craft.CoreRect.localRotation = Quaternion.identity;
+                craft.CoreRect.localScale = Vector3.one;
+            }
+        }
     }
 
     void UpdateSpaceWindow(float time)
@@ -1688,7 +1803,7 @@ public sealed class ProfileHangarSceneVfx : MonoBehaviour
 
     void UpdateDistantShip(float time, Vector2 parallaxOffset)
     {
-        if (distantShipRootRect == null)
+        if (distantTrafficRoutes.Count <= 0)
             return;
 
         if (!DistantShipTrafficEnabled)
@@ -1697,30 +1812,64 @@ public sealed class ProfileHangarSceneVfx : MonoBehaviour
         if (!hasDistantShipRoute)
             ConfigureDistantShipLayout(currentMode == DisplayMode.Inventory);
 
-        float progress = Mathf.Repeat(time / Mathf.Max(1f, distantShipDuration) + distantShipPhase, 1f);
+        for (int i = 0; i < distantTrafficRoutes.Count; i++)
+            UpdateDistantTrafficRoute(distantTrafficRoutes[i], time, parallaxOffset);
+    }
+
+    void UpdateDistantTrafficRoute(DistantTrafficRoute route, float time, Vector2 parallaxOffset)
+    {
+        if (route == null || route.RootRect == null)
+            return;
+
+        if (!route.Active)
+        {
+            SetGameObjectActiveIfChanged(route.RootRect.gameObject, false);
+            return;
+        }
+
+        float travelDuration = Mathf.Max(1f, route.TravelDuration);
+        float cycleDuration = Mathf.Max(travelDuration, route.CycleDuration);
+        float cycleTime = Mathf.Repeat(time + route.Phase * cycleDuration, cycleDuration);
+        if (cycleTime > travelDuration)
+        {
+            SetGameObjectActiveIfChanged(route.RootRect.gameObject, false);
+            return;
+        }
+
+        SetGameObjectActiveIfChanged(route.RootRect.gameObject, true);
+        float progress = Mathf.Clamp01(cycleTime / travelDuration);
         float fadeIn = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(progress / 0.08f));
         float fadeOut = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((1f - progress) / 0.10f));
         float fade = fadeIn * fadeOut;
-        Vector2 position = Vector2.Lerp(distantShipStartPosition, distantShipEndPosition, progress);
-        distantShipRootRect.anchoredPosition = spaceBackgroundBasePosition + position + parallaxOffset * DistantShipParallaxStrength;
-        distantShipRootRect.sizeDelta = Vector2.zero;
-        distantShipRootRect.localScale = Vector3.one;
+        Vector2 position = Vector2.Lerp(route.StartPosition, route.EndPosition, progress);
+        route.RootRect.anchoredPosition = spaceBackgroundBasePosition + position + parallaxOffset * DistantShipParallaxStrength;
+        route.RootRect.sizeDelta = Vector2.zero;
+        route.RootRect.localScale = Vector3.one;
 
-        Vector2 direction = distantShipEndPosition - distantShipStartPosition;
+        Vector2 direction = route.EndPosition - route.StartPosition;
         if (direction.sqrMagnitude > 0.001f)
-            distantShipRootRect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg);
+            route.RootRect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg);
 
-        float shimmer = 0.84f + Mathf.PerlinNoise(19.7f, time * 0.85f) * 0.16f;
-        if (distantShipTrailImage != null)
+        float shimmer = 0.84f + Mathf.PerlinNoise(route.Phase * 31f + 19.7f, time * 0.85f) * 0.16f;
+        for (int i = 0; i < route.Craft.Count; i++)
         {
-            Color trailColor = new Color(0.36f, 0.82f, 1f, distantShipTrailBaseAlpha * fade * shimmer);
-            distantShipTrailImage.color = trailColor;
-        }
+            DistantTrafficCraft craft = route.Craft[i];
+            if (craft == null || craft.RootRect == null || i >= route.CraftCount)
+                continue;
 
-        if (distantShipCoreImage != null)
-        {
-            Color coreColor = new Color(0.92f, 0.98f, 1f, 0.95f * fade * shimmer);
-            distantShipCoreImage.color = coreColor;
+            craft.RootRect.anchoredPosition = craft.FormationOffset;
+            craft.RootRect.localRotation = Quaternion.identity;
+            if (craft.TrailImage != null)
+            {
+                Color trailColor = new Color(0.36f, 0.82f, 1f, route.TrailBaseAlpha * craft.AlphaScale * fade * shimmer);
+                craft.TrailImage.color = trailColor;
+            }
+
+            if (craft.CoreImage != null)
+            {
+                Color coreColor = new Color(0.92f, 0.98f, 1f, 0.95f * craft.AlphaScale * fade * shimmer);
+                craft.CoreImage.color = coreColor;
+            }
         }
     }
 

@@ -64,6 +64,36 @@ public sealed class CatalogIntegrityTests
     }
 
     [Test]
+    public void RandomLootWreckPlaceholdersMaterializeIntoKnownEquipmentItems()
+    {
+        Assert.That(InventoryItemCatalog.ResolveRandomLootWreckItemId(InventoryItemCatalog.SpaceJunkStandardId), Is.EqualTo(InventoryItemCatalog.SpaceJunkStandardId));
+        Assert.That(GetEquipmentItemCount(InventoryItemCategory.Gadget, InventoryItemCategory.Support, InventoryItemCategory.Rescue), Is.GreaterThan(0), "Random utility rewards need at least one equipment item.");
+        Assert.That(InventoryItemCatalog.GetEquipmentItemIdsByCategory(InventoryItemCategory.Shield), Is.Not.Empty, "Random shield rewards need at least one equipment item.");
+        Assert.That(InventoryItemCatalog.GetEquipmentItemIdsByCategory(InventoryItemCategory.Weapon), Is.Not.Empty, "Random weapon rewards need at least one equipment item.");
+        Assert.That(InventoryItemCatalog.GetEquipmentItemIdsByCategory(InventoryItemCategory.Engine), Is.Not.Empty, "Random engine rewards need at least one equipment item.");
+
+        UnityEngine.Random.State previousRandomState = UnityEngine.Random.state;
+        try
+        {
+            UnityEngine.Random.InitState(12345);
+            for (int i = 0; i < InventoryItemCatalog.RandomLootWreckVariantCount; i++)
+            {
+                string placeholderId = InventoryItemCatalog.GetRandomLootWreckItemId(i);
+                string rewardItemId = InventoryItemCatalog.ResolveRandomLootWreckItemId(placeholderId);
+
+                Assert.That(rewardItemId, Is.Not.Null.And.Not.Empty);
+                Assert.That(InventoryItemCatalog.IsRandomLootWreckItem(rewardItemId), Is.False, placeholderId + " should materialize before entering cargo.");
+                AssertKnownItemId(rewardItemId, "random loot wreck reward for " + placeholderId);
+                Assert.That(InventoryItemCatalog.GetItemType(rewardItemId), Is.EqualTo(InventoryItemType.Equipment), rewardItemId + " should be equipment.");
+            }
+        }
+        finally
+        {
+            UnityEngine.Random.state = previousRandomState;
+        }
+    }
+
+    [Test]
     public void BlueprintItemsPointToKnownEquipmentItems()
     {
         string[] blueprintIds = InventoryItemCatalog.GetAllBlueprintItemIds();
@@ -212,6 +242,11 @@ public sealed class CatalogIntegrityTests
     {
         Assert.That(itemId, Is.Not.Null.And.Not.Empty, "Missing item id for " + context);
         Assert.That(InventoryItemCatalog.GetDefinition(itemId), Is.Not.Null, "Unknown item id '" + itemId + "' in " + context);
+    }
+
+    static int GetEquipmentItemCount(params InventoryItemCategory[] categories)
+    {
+        return categories.Sum(category => InventoryItemCatalog.GetEquipmentItemIdsByCategory(category).Length);
     }
 
     static void AssertUnique(IEnumerable<string> ids, string label)

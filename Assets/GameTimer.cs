@@ -1,5 +1,6 @@
 using UnityEngine;
 using Photon.Pun;
+using Photon.Realtime;
 using TMPro;
 using ExitGames.Client.Photon;
 using System.Collections.Generic;
@@ -21,6 +22,10 @@ public class GameTimer : MonoBehaviourPun
     public const string EvacuationPauseUntilKey = "evacPauseUntil";
     public const string EvacuationPauseRemainingKey = "evacPauseRemaining";
     const float ActivePlayerScanInterval = 0.25f;
+    const float AstronautSpawnTransitionGraceSeconds = 2.75f;
+
+    static GameTimer instance;
+    static readonly Dictionary<int, float> pendingAstronautSpawnUntilByActor = new Dictionary<int, float>();
 
     public float roundTime = 180f;
 
@@ -31,6 +36,11 @@ public class GameTimer : MonoBehaviourPun
     float pausedTimeRemaining;
     int cachedActivePlayerCount = -1;
     float nextActivePlayerScanTime;
+
+    void Awake()
+    {
+        instance = this;
+    }
 
     void Start()
     {
@@ -65,6 +75,7 @@ public class GameTimer : MonoBehaviourPun
             hasSeenMultipleActivePlayers = false;
             pausedTimeRemaining = 0f;
             cachedActivePlayerCount = -1;
+            pendingAstronautSpawnUntilByActor.Clear();
             return;
         }
 
@@ -204,6 +215,40 @@ public class GameTimer : MonoBehaviourPun
         RoundWarmupService.BeginRoundStartPreparation();
     }
 
+    public static void BeginAstronautSpawnTransition(Player owner)
+    {
+        if (!PhotonNetwork.IsMasterClient || owner == null || owner.ActorNumber <= 0)
+            return;
+
+        pendingAstronautSpawnUntilByActor[owner.ActorNumber] = Time.unscaledTime + AstronautSpawnTransitionGraceSeconds;
+        NotifyActivePlayerRosterChanged();
+    }
+
+    public static void NotifyHumanRoundActorAvailable(PlayerHealth player)
+    {
+        if (player != null && player.IsAstronautControlled)
+            ClearAstronautSpawnTransition(player);
+
+        NotifyActivePlayerRosterChanged();
+    }
+
+    public static void NotifyHumanAstronautEliminated(PlayerHealth player)
+    {
+        ClearAstronautSpawnTransition(player);
+        NotifyActivePlayerRosterChanged();
+    }
+
+    public static void NotifyActivePlayerRosterChanged()
+    {
+        RuntimeSceneQueryCache.InvalidateAll();
+
+        if (instance == null)
+            return;
+
+        instance.cachedActivePlayerCount = -1;
+        instance.nextActivePlayerScanTime = 0f;
+    }
+
     void UpdateLoneShipTimerMode(int activePlayers)
     {
         if (PhotonNetwork.CurrentRoom == null)
@@ -266,10 +311,48 @@ public class GameTimer : MonoBehaviourPun
             if (!IsActiveRoundPlayer(players[i]))
                 continue;
 
+            if (players[i].IsAstronautControlled)
+                ClearAstronautSpawnTransition(players[i]);
+
             count++;
         }
 
+        if (count <= 0 && HasPendingAstronautSpawnTransition())
+            return 1;
+
         return count;
+    }
+
+    static bool HasPendingAstronautSpawnTransition()
+    {
+        if (pendingAstronautSpawnUntilByActor.Count == 0)
+            return false;
+
+        float now = Time.unscaledTime;
+        s_pruneActors.Clear();
+        foreach (KeyValuePair<int, float> entry in pendingAstronautSpawnUntilByActor)
+        {
+            if (entry.Value <= now)
+                s_pruneActors.Add(entry.Key);
+        }
+
+        for (int i = 0; i < s_pruneActors.Count; i++)
+            pendingAstronautSpawnUntilByActor.Remove(s_pruneActors[i]);
+
+        s_pruneActors.Clear();
+        return pendingAstronautSpawnUntilByActor.Count > 0;
+    }
+
+    static readonly List<int> s_pruneActors = new List<int>();
+
+    static void ClearAstronautSpawnTransition(PlayerHealth player)
+    {
+        PhotonView view = player != null ? player.photonView : null;
+        Player owner = view != null ? view.Owner : null;
+        if (owner == null || owner.ActorNumber <= 0)
+            return;
+
+        pendingAstronautSpawnUntilByActor.Remove(owner.ActorNumber);
     }
 
     bool HasActiveDropbotCargoInFlight()
@@ -310,6 +393,12 @@ public class GameTimer : MonoBehaviourPun
         }
 
         return ActorIdentity.IsHumanPlayerActor(player);
+    }
+
+    void OnDestroy()
+    {
+        if (instance == this)
+            instance = null;
     }
 
     bool IsGameStarted()

@@ -22,6 +22,7 @@ public sealed class RocketAutoTurretDeployable : PlayerDeployableBase
 
     float nextShotTime;
     bool warBaseDefenseTurret;
+    bool neutralRiderRocketTurret;
     PhotonView cachedTargetView;
     float nextTargetRefreshTime;
     Collider2D[] cachedOwnColliders;
@@ -52,7 +53,9 @@ public sealed class RocketAutoTurretDeployable : PlayerDeployableBase
 
     public void InitializeFromPhotonData()
     {
-        warBaseDefenseTurret = PlayerDeployableRuntime.IsWarBaseRocketAutoTurretData(photonView != null ? photonView.InstantiationData : null);
+        object[] data = photonView != null ? photonView.InstantiationData : null;
+        warBaseDefenseTurret = PlayerDeployableRuntime.IsWarBaseRocketAutoTurretData(data);
+        neutralRiderRocketTurret = PlayerDeployableRuntime.IsNeutralRiderRocketAutoTurretData(data);
         cachedTargetView = null;
         cachedOwnColliders = null;
         cachedOwnerColliders = null;
@@ -149,7 +152,7 @@ public sealed class RocketAutoTurretDeployable : PlayerDeployableBase
         if (candidate.photonView.ViewID == ownerShipViewId || candidate.GetComponent<LureBeaconDecoy>() != null)
             return false;
 
-        if (warBaseDefenseTurret)
+        if (warBaseDefenseTurret || neutralRiderRocketTurret)
             return IsPlayerShipTarget(candidate);
 
         EnemyBot enemyBot = candidate.GetComponent<EnemyBot>();
@@ -170,7 +173,7 @@ public sealed class RocketAutoTurretDeployable : PlayerDeployableBase
         if (data != null &&
             data.Length > 2 &&
             data[0] is string marker &&
-            marker == PlayerDeployableRuntime.RocketAutoTurretMarker)
+            (marker == PlayerDeployableRuntime.RocketAutoTurretMarker || marker == PlayerDeployableRuntime.NeutralRiderRocketAutoTurretMarker))
         {
             return Mathf.Max(0, ConvertToInt(data[2]));
         }

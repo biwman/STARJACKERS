@@ -1,3 +1,4 @@
+using System;
 using Photon.Pun;
 using UnityEngine;
 
@@ -46,22 +47,68 @@ public partial class PlayerProfileService
     void ApplyInventoryToPhoton()
     {
         if (CurrentProfile == null || PhotonNetwork.LocalPlayer == null)
+        {
+            lastAppliedInventoryPhotonSignature = null;
+            lastAppliedInventoryPhotonActorNumber = -1;
             return;
+        }
 
         EnsureInventory();
         EnsurePilotDefaults();
+        string shipInventoryState = SerializeShipInventorySlots(CurrentProfile.Inventory.ShipSlots);
+        string equipmentState = SerializeEquipmentSlots(BuildRuntimeEquipmentSlotsForProfile(CurrentProfile.ShipSkinIndex, CurrentProfile.Inventory.EquipmentSlots));
+        bool viperCargoUnlocked = IsCargoUnlockedForProfile(CurrentProfile.ShipSkinIndex);
+        int viperRecoveryStage = (int)GetViperRecoveryStage();
+        int arrowLicenseStage = (int)GetArrowLicenseStage();
+        bool arrowFinalRunReady = GetArrowLicenseProgress().FinalRunEntryAvailable;
+        int actorNumber = PhotonNetwork.LocalPlayer.ActorNumber;
+        string signature = BuildInventoryPhotonSignature(
+            CurrentProfile.SelectedPilotId,
+            shipInventoryState,
+            equipmentState,
+            viperCargoUnlocked,
+            viperRecoveryStage,
+            arrowLicenseStage,
+            arrowFinalRunReady);
+
+        if (actorNumber == lastAppliedInventoryPhotonActorNumber &&
+            string.Equals(signature, lastAppliedInventoryPhotonSignature, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         var props = new ExitGames.Client.Photon.Hashtable
         {
             [RoomSettings.PilotIdKey] = CurrentProfile.SelectedPilotId,
-            [RoomSettings.ShipInventoryStateKey] = SerializeShipInventorySlots(CurrentProfile.Inventory.ShipSlots),
-            [RoomSettings.EquipmentStateKey] = SerializeEquipmentSlots(BuildRuntimeEquipmentSlotsForProfile(CurrentProfile.ShipSkinIndex, CurrentProfile.Inventory.EquipmentSlots)),
-            [PlayerViperCargoUnlockedKey] = IsCargoUnlockedForProfile(CurrentProfile.ShipSkinIndex),
-            [PlayerViperRecoveryStageKey] = (int)GetViperRecoveryStage(),
-            [PlayerArrowLicenseStageKey] = (int)GetArrowLicenseStage(),
-            [PlayerArrowFinalRunReadyKey] = GetArrowLicenseProgress().FinalRunEntryAvailable
+            [RoomSettings.ShipInventoryStateKey] = shipInventoryState,
+            [RoomSettings.EquipmentStateKey] = equipmentState,
+            [PlayerViperCargoUnlockedKey] = viperCargoUnlocked,
+            [PlayerViperRecoveryStageKey] = viperRecoveryStage,
+            [PlayerArrowLicenseStageKey] = arrowLicenseStage,
+            [PlayerArrowFinalRunReadyKey] = arrowFinalRunReady
         };
 
         PhotonNetwork.LocalPlayer.SetCustomProperties(props);
+        lastAppliedInventoryPhotonActorNumber = actorNumber;
+        lastAppliedInventoryPhotonSignature = signature;
+    }
+
+    static string BuildInventoryPhotonSignature(
+        string pilotId,
+        string shipInventoryState,
+        string equipmentState,
+        bool viperCargoUnlocked,
+        int viperRecoveryStage,
+        int arrowLicenseStage,
+        bool arrowFinalRunReady)
+    {
+        return (pilotId ?? string.Empty) + "|" +
+               (shipInventoryState ?? string.Empty) + "|" +
+               (equipmentState ?? string.Empty) + "|" +
+               (viperCargoUnlocked ? "1" : "0") + "|" +
+               viperRecoveryStage + "|" +
+               arrowLicenseStage + "|" +
+               (arrowFinalRunReady ? "1" : "0");
     }
 
     public void SetActiveRoundShipSkin(int shipSkinIndex)

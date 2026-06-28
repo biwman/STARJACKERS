@@ -92,6 +92,7 @@ public class ShipWreck : MonoBehaviourPun
 
     public void SetBaseColor(Color color)
     {
+        color.a = 1f;
         baseColor = color;
         RefreshVisualState();
     }
@@ -123,7 +124,7 @@ public class ShipWreck : MonoBehaviourPun
 
         if (!HasLoot)
         {
-            spriteRenderer.color = new Color(0.28f, 0.29f, 0.32f, 0.78f);
+            spriteRenderer.color = new Color(0.28f, 0.29f, 0.32f, 1f);
             return;
         }
 
