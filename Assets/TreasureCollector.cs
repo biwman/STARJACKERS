@@ -22,6 +22,7 @@ public partial class TreasureCollector : MonoBehaviourPun
     const float ArtifactExamineKeepAliveDistance = 0.9f;
     const float ArtifactBeamWidth = 0.16f;
     static readonly Vector2 CollectButtonRoundPosition = new Vector2(230f, 490f);
+    static readonly Vector2 CollectButtonDesktopPosition = new Vector2(226f, 96f);
     const float ValuableCargoAnnouncementDuration = 4f;
 
     enum UseActionType
@@ -67,6 +68,12 @@ public partial class TreasureCollector : MonoBehaviourPun
     bool collectButtonHooked;
     bool isActivatingExtraction;
     RectTransform positionedCollectButtonRect;
+    Vector2 collectButtonDefaultAnchorMin;
+    Vector2 collectButtonDefaultAnchorMax;
+    Vector2 collectButtonDefaultPivot;
+    bool collectButtonDefaultLayoutCaptured;
+    bool collectButtonLayoutApplied;
+    bool collectButtonUsingDesktopLayout;
     UseButtonVisualController useButtonVisual;
     ExtractionZone pendingActivatedExtraction;
     float pendingActivatedExtractionUntil;
@@ -160,6 +167,9 @@ public partial class TreasureCollector : MonoBehaviourPun
             return;
         }
 
+        if (movement == null)
+            movement = GetComponent<PlayerMovement>();
+
         SetupDrillingAudio();
         SetupBeam();
         SetupArtifactExamineBeam();
@@ -190,6 +200,9 @@ public partial class TreasureCollector : MonoBehaviourPun
         {
             TryBindHudReferences();
         }
+
+        if (photonView.IsMine)
+            EnsureCollectButtonPositioned();
 
         HandleKeyboardUseShortcut();
 

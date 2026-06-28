@@ -61,7 +61,6 @@ public partial class TreasureCollector
 
     void HandleKeyboardUseShortcut()
     {
-#if UNITY_EDITOR || UNITY_STANDALONE
         if (!photonView.IsMine)
             return;
 
@@ -72,25 +71,11 @@ public partial class TreasureCollector
             return;
 
         StartHolding();
-#endif
     }
 
     static bool IsKeyboardUseShortcutPressedThisFrame()
     {
-#if UNITY_EDITOR || UNITY_STANDALONE
-#if ENABLE_INPUT_SYSTEM
-        UnityEngine.InputSystem.Keyboard keyboard = UnityEngine.InputSystem.Keyboard.current;
-        if (keyboard != null && keyboard.eKey.wasPressedThisFrame)
-            return true;
-#endif
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetKeyDown(KeyCode.E))
-            return true;
-#endif
-#endif
-
-        return false;
+        return StarjackersInputModeManager.WasUsePressedThisFrame();
     }
 
     static bool IsTypingInInputField()
@@ -361,11 +346,50 @@ public partial class TreasureCollector
             return;
 
         RectTransform rect = collectButton.GetComponent<RectTransform>();
-        if (rect == null || rect == positionedCollectButtonRect)
+        if (rect == null)
             return;
 
-        rect.anchoredPosition = CollectButtonRoundPosition;
-        positionedCollectButtonRect = rect;
+        if (rect != positionedCollectButtonRect)
+        {
+            positionedCollectButtonRect = rect;
+            collectButtonDefaultLayoutCaptured = false;
+            collectButtonLayoutApplied = false;
+        }
+
+        CaptureCollectButtonDefaultLayout(rect);
+
+        bool desktopLayout = StarjackersInputModeManager.DesktopHudLayoutActive;
+        if (collectButtonLayoutApplied && collectButtonUsingDesktopLayout == desktopLayout)
+            return;
+
+        if (desktopLayout)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.zero;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = CollectButtonDesktopPosition;
+        }
+        else
+        {
+            rect.anchorMin = collectButtonDefaultAnchorMin;
+            rect.anchorMax = collectButtonDefaultAnchorMax;
+            rect.pivot = collectButtonDefaultPivot;
+            rect.anchoredPosition = CollectButtonRoundPosition;
+        }
+
+        collectButtonUsingDesktopLayout = desktopLayout;
+        collectButtonLayoutApplied = true;
+    }
+
+    void CaptureCollectButtonDefaultLayout(RectTransform rect)
+    {
+        if (collectButtonDefaultLayoutCaptured || rect == null)
+            return;
+
+        collectButtonDefaultAnchorMin = rect.anchorMin;
+        collectButtonDefaultAnchorMax = rect.anchorMax;
+        collectButtonDefaultPivot = rect.pivot;
+        collectButtonDefaultLayoutCaptured = true;
     }
 
 }

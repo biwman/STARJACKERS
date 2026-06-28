@@ -133,6 +133,7 @@ public partial class TreasureCollector
 
         Vector2 start = GetShipTipPosition();
         Vector2 end = GetCollectibleBeamTarget(start);
+        FaceCollectionTarget(end);
         Vector2 delta = end - start;
         Vector2 direction = delta.sqrMagnitude > 0.0001f ? delta.normalized : (Vector2)transform.up;
         Vector2 perpendicular = new Vector2(-direction.y, direction.x);
@@ -169,6 +170,7 @@ public partial class TreasureCollector
 
         Vector2 start = GetShipTipPosition();
         Vector2 end = currentArtifactAsteroid != null ? (Vector2)currentArtifactAsteroid.BeamTarget : start;
+        FaceCollectionTarget(end);
         Vector2 delta = end - start;
         Vector2 direction = delta.sqrMagnitude > 0.0001f ? delta.normalized : (Vector2)transform.up;
         Vector2 perpendicular = new Vector2(-direction.y, direction.x);
@@ -239,6 +241,18 @@ public partial class TreasureCollector
         }
 
         return fallbackPosition;
+    }
+
+    void FaceCollectionTarget(Vector2 target)
+    {
+        if (!photonView.IsMine)
+            return;
+
+        if (movement == null)
+            movement = GetComponent<PlayerMovement>();
+
+        if (movement != null)
+            movement.FaceWorldPoint(target);
     }
 
     void SetBeamEnabled(bool enabled)

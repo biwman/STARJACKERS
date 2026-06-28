@@ -358,6 +358,7 @@ public partial class LobbyManager : MonoBehaviourPunCallbacks
     public TMP_Text dynamicUseSettingText;
     public TMP_Text collectKeepAliveRangeBonusSettingText;
     public TMP_Text hapticsSettingText;
+    public TMP_Text pcTouchJoystickTestModeSettingText;
     public TMP_Text fpsCounterSettingText;
     public TMP_Text diagnosticsGcSettingText;
     public TMP_Text diagnosticsSceneCountsSettingText;
@@ -443,6 +444,7 @@ public partial class LobbyManager : MonoBehaviourPunCallbacks
     public Button dynamicUseSettingButton;
     public Button collectKeepAliveRangeBonusSettingButton;
     public Button hapticsSettingButton;
+    public Button pcTouchJoystickTestModeSettingButton;
     public Button fpsCounterSettingButton;
     public Button diagnosticsGcSettingButton;
     public Button diagnosticsSceneCountsSettingButton;

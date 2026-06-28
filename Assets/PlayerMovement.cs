@@ -24,6 +24,8 @@ public class PlayerMovement : MonoBehaviourPun
     private Vector2 shootInput;
     private Vector2 effectiveMoveInput;
     private Vector2 lastFacingDirection = Vector2.up;
+    Vector2 externalFacingOverrideDirection;
+    float externalFacingOverrideUntil;
     private float boosterCharge = 1f;
     private bool boosterExhausted = false;
     private float targetRotationAngle = 0f;
@@ -305,8 +307,15 @@ public class PlayerMovement : MonoBehaviourPun
             keyboardBoosterRequested = false;
             moveInput = joystick != null && joystick.IsPressed ? joystick.inputVector : Vector2.zero;
             if (moveInput == Vector2.zero)
-                moveInput = GetKeyboardMoveInput();
+                moveInput = GetDirectMoveInput();
             shootInput = shootJoystick != null && shootJoystick.IsPressed ? shootJoystick.inputVector : Vector2.zero;
+            if (shootInput == Vector2.zero &&
+                StarjackersInputModeManager.DirectShootingInputActive &&
+                StarjackersInputModeManager.IsDirectAimHeld() &&
+                StarjackersInputModeManager.TryReadAimDirection(transform.position, out Vector2 directAimDirection, out _, out _))
+            {
+                shootInput = directAimDirection;
+            }
 
             if (moveInput.sqrMagnitude < 0.0004f)
                 moveInput = Vector2.zero;
@@ -991,6 +1000,9 @@ public class PlayerMovement : MonoBehaviourPun
 
     public bool CanUseAdvancedMoveJoystick()
     {
+        if (!StarjackersInputModeManager.TouchControlsActive)
+            return false;
+
         if (!enabled || photonView == null || !photonView.IsMine || GetComponent<EnemyBot>() != null || NeutralRiderController.IsNeutralRider(gameObject))
             return false;
 
@@ -1174,43 +1186,11 @@ public class PlayerMovement : MonoBehaviourPun
         return rawInput;
     }
 
-    Vector2 GetKeyboardMoveInput()
+    Vector2 GetDirectMoveInput()
     {
-#if UNITY_EDITOR || UNITY_STANDALONE
-        Vector2 keyboardInput = Vector2.zero;
-
-#if ENABLE_INPUT_SYSTEM
-        UnityEngine.InputSystem.Keyboard keyboard = UnityEngine.InputSystem.Keyboard.current;
-        if (keyboard == null)
-            return Vector2.zero;
-
-        if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed)
-            keyboardInput.x -= 1f;
-        if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed)
-            keyboardInput.x += 1f;
-        if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed)
-            keyboardInput.y -= 1f;
-        if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed)
-            keyboardInput.y += 1f;
-        keyboardBoosterRequested = keyboardInput.sqrMagnitude > 0.0001f &&
-                                   (keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed);
-#elif ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
-            keyboardInput.x -= 1f;
-        if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow))
-            keyboardInput.x += 1f;
-        if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow))
-            keyboardInput.y -= 1f;
-        if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow))
-            keyboardInput.y += 1f;
-        keyboardBoosterRequested = keyboardInput.sqrMagnitude > 0.0001f &&
-                                   (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
-#endif
-
-        return keyboardInput.sqrMagnitude > 1f ? keyboardInput.normalized : keyboardInput;
-#else
-        return Vector2.zero;
-#endif
+        Vector2 directInput = StarjackersInputModeManager.ReadMoveVector();
+        keyboardBoosterRequested = directInput.sqrMagnitude > 0.0001f && StarjackersInputModeManager.IsBoostHeld();
+        return directInput.sqrMagnitude > 1f ? directInput.normalized : directInput;
     }
 
     float GetCurrentBoostSpeedMultiplier()
@@ -1314,6 +1294,10 @@ public class PlayerMovement : MonoBehaviourPun
         {
             desiredDirection = shootInput.normalized;
         }
+        else if (Time.time <= externalFacingOverrideUntil && externalFacingOverrideDirection.sqrMagnitude > 0.09f)
+        {
+            desiredDirection = externalFacingOverrideDirection.normalized;
+        }
         else if (moveInput.sqrMagnitude > 0.09f)
         {
             desiredDirection = moveInput.normalized;
@@ -1328,6 +1312,34 @@ public class PlayerMovement : MonoBehaviourPun
         AstronautSurvivor astronaut = GetComponent<AstronautSurvivor>();
         if (astronaut != null && !astronaut.IsEscapePodMode)
             angle += 180f;
+        targetRotationAngle = angle - 90f;
+
+        if (rb == null)
+        {
+            float maxTurnDelta = BaseTurnDegreesPerSecond * Mathf.Max(0.1f, turnRateMultiplier) * Time.deltaTime;
+            float nextAngle = Mathf.MoveTowardsAngle(transform.eulerAngles.z, targetRotationAngle, maxTurnDelta);
+            transform.rotation = Quaternion.Euler(0f, 0f, nextAngle);
+        }
+    }
+
+    public void FaceWorldPoint(Vector2 worldPoint)
+    {
+        Vector2 direction = worldPoint - (Vector2)transform.position;
+        if (direction.sqrMagnitude <= 0.0001f)
+            return;
+
+        FaceDirection(direction.normalized);
+    }
+
+    public void FaceDirection(Vector2 direction)
+    {
+        if (direction.sqrMagnitude <= 0.0001f)
+            return;
+
+        lastFacingDirection = direction.normalized;
+        externalFacingOverrideDirection = lastFacingDirection;
+        externalFacingOverrideUntil = Time.time + 0.08f;
+        float angle = Mathf.Atan2(lastFacingDirection.y, lastFacingDirection.x) * Mathf.Rad2Deg;
         targetRotationAngle = angle - 90f;
 
         if (rb == null)

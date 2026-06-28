@@ -893,6 +893,12 @@ public partial class LobbyManager
         ToggleDiagnosticsSetting(RoomSettings.FpsCounterEnabledKey, RoomSettings.IsFpsCounterEnabled());
     }
 
+    void TogglePcTouchJoystickTestMode()
+    {
+        DeveloperInputSettings.PcTouchJoystickTestModeEnabled = !DeveloperInputSettings.PcTouchJoystickTestModeEnabled;
+        RefreshHostSettingsUi();
+    }
+
     void CycleDiagnosticsGcEnabled()
     {
         ToggleDiagnosticsSetting(RoomSettings.DiagnosticsGcEnabledKey, RoomSettings.IsDiagnosticsGcEnabled());

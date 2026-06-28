@@ -10,6 +10,8 @@ public sealed class SuperAttackUI : MonoBehaviourPun
     const float RootSize = 130f;
     const float FillSize = 98f;
     const float HandleSize = 43f;
+    static readonly Vector2 DesktopRootAnchor = new Vector2(1f, 0f);
+    static readonly Vector2 DesktopRootPosition = new Vector2(-96f, 96f);
 
     PlayerShooting shooting;
     GameObject rootObject;
@@ -112,6 +114,7 @@ public sealed class SuperAttackUI : MonoBehaviourPun
         joystick.background = rootRect;
         joystick.handle = handleRect;
         joystick.deadZone = 0.08f;
+        ApplyLayout();
     }
 
     void Refresh()
@@ -124,18 +127,7 @@ public sealed class SuperAttackUI : MonoBehaviourPun
         if (!visible)
             return;
 
-        if (rootRect != null)
-        {
-            ResolveShootJoystickReference();
-            if (shootJoystickRect != null)
-            {
-                rootRect.anchorMin = shootJoystickRect.anchorMin;
-                rootRect.anchorMax = shootJoystickRect.anchorMax;
-                Vector2 basePosition = shootJoystick != null ? shootJoystick.DefaultAnchoredPosition : shootJoystickRect.anchoredPosition;
-                rootRect.anchoredPosition = basePosition + new Vector2(OffsetFromShootJoystickX, 0f);
-                rootRect.sizeDelta = new Vector2(RootSize, RootSize);
-            }
-        }
+        ApplyLayout();
 
         bool ready = shooting.IsSuperAttackReady;
         if (fillImage != null)
@@ -156,8 +148,42 @@ public sealed class SuperAttackUI : MonoBehaviourPun
         if (handleRect != null)
             handleRect.gameObject.SetActive(ready);
 
+        bool touchControlsActive = StarjackersInputModeManager.TouchControlsActive;
+        if (backgroundImage != null)
+            backgroundImage.raycastTarget = touchControlsActive;
+
+        if (!touchControlsActive && joystick != null && joystick.IsPressed)
+            joystick.EndExternalControl(true);
+
         if (joystick != null)
-            joystick.enabled = ready;
+            joystick.enabled = ready && touchControlsActive;
+    }
+
+    void ApplyLayout()
+    {
+        if (rootRect == null)
+            return;
+
+        rootRect.sizeDelta = new Vector2(RootSize, RootSize);
+
+        if (StarjackersInputModeManager.DesktopHudLayoutActive)
+        {
+            rootRect.anchorMin = DesktopRootAnchor;
+            rootRect.anchorMax = DesktopRootAnchor;
+            rootRect.pivot = new Vector2(0.5f, 0.5f);
+            rootRect.anchoredPosition = DesktopRootPosition;
+            return;
+        }
+
+        ResolveShootJoystickReference();
+        if (shootJoystickRect == null)
+            return;
+
+        rootRect.anchorMin = shootJoystickRect.anchorMin;
+        rootRect.anchorMax = shootJoystickRect.anchorMax;
+        rootRect.pivot = new Vector2(0.5f, 0.5f);
+        Vector2 basePosition = shootJoystick != null ? shootJoystick.DefaultAnchoredPosition : shootJoystickRect.anchoredPosition;
+        rootRect.anchoredPosition = basePosition + new Vector2(OffsetFromShootJoystickX, 0f);
     }
 
     void ResolveShootJoystickReference()

@@ -63,6 +63,9 @@ public class ShipInventoryHudUI : MonoBehaviourPun
 
     void Update()
     {
+        if (StarjackersInputModeManager.WasCargoTogglePressedThisFrame())
+            TogglePanel();
+
         if (Time.unscaledTime >= nextLayoutRefresh)
         {
             nextLayoutRefresh = Time.unscaledTime + 0.25f;

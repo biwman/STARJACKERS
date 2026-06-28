@@ -604,6 +604,7 @@ public partial class PlayerShooting
         return photonView != null &&
                photonView.IsMine &&
                IsGameStarted() &&
+               StarjackersInputModeManager.TouchControlsActive &&
                IsComplexShootingActive &&
                !RoundChatCommandUI.IsLocalChatMenuOpen &&
                !AreShipControlsBlocked();
@@ -611,7 +612,7 @@ public partial class PlayerShooting
 
     public bool IsAdvancedShootJoystickEnabled()
     {
-        return IsComplexShootingActive;
+        return IsComplexShootingActive && StarjackersInputModeManager.TouchControlsActive;
     }
 
     public bool TriggerAdvancedAutoAimShot()

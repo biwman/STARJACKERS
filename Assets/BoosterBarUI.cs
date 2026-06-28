@@ -14,6 +14,9 @@ public class BoosterBarUI : MonoBehaviourPun
     const float FuelRingThickness = 0.78f;
     const float TrackRingThickness = 0.72f;
     const float HandleVisualDiameter = 116f;
+    const float DesktopFuelRingDiameter = 112f;
+    static readonly Vector2 DesktopFuelRingAnchor = new Vector2(0f, 0f);
+    static readonly Vector2 DesktopFuelRingPosition = new Vector2(82f, 96f);
 
     static readonly Color HighBoosterColor = new Color(1f, 0.9f, 0.18f, 0.98f);
     static readonly Color MidBoosterColor = new Color(1f, 0.68f, 0.18f, 0.98f);
@@ -30,6 +33,7 @@ public class BoosterBarUI : MonoBehaviourPun
     RectTransform handleRect;
     RectTransform handleVisualRect;
     Image handleVisualImage;
+    Transform canvasTransform;
     JoystickBoosterFuelRingGraphic trackGraphic;
     JoystickBoosterFuelRingGraphic fillGraphic;
     bool isVisible = true;
@@ -81,7 +85,13 @@ public class BoosterBarUI : MonoBehaviourPun
         handleRect = ResolveHandleRect(joystickObject);
         EnsureHandleVisual(joystickObject.transform);
 
-        Transform existingRoot = joystickObject.transform.Find(FuelRingRootName);
+        Transform existingRoot = ringRoot != null ? ringRoot.transform : joystickObject.transform.Find(FuelRingRootName);
+        if (existingRoot == null)
+        {
+            Transform canvas = ResolveCanvasTransform();
+            existingRoot = canvas != null ? canvas.Find(FuelRingRootName) : null;
+        }
+
         ringRoot = existingRoot != null
             ? existingRoot.gameObject
             : new GameObject(FuelRingRootName, typeof(RectTransform));
@@ -100,6 +110,7 @@ public class BoosterBarUI : MonoBehaviourPun
         if (fillGraphic != null)
             fillGraphic.transform.SetAsLastSibling();
 
+        RestoreRingRootCanvasGroup();
         SyncRingTransform();
         isVisible = IsGameplayHudVisible();
         ringRoot.SetActive(isVisible);
@@ -129,7 +140,7 @@ public class BoosterBarUI : MonoBehaviourPun
         isVisible = shouldBeVisible;
         ringRoot.SetActive(shouldBeVisible);
         if (handleVisualRect != null)
-            handleVisualRect.gameObject.SetActive(shouldBeVisible);
+            SetHandleVisualVisible(shouldBeVisible && !StarjackersInputModeManager.DesktopHudLayoutActive);
     }
 
     bool IsGameplayHudVisible()
@@ -159,6 +170,14 @@ public class BoosterBarUI : MonoBehaviourPun
 
         if (joystickRect == null)
             return;
+
+        RestoreRingRootCanvasGroup();
+
+        if (StarjackersInputModeManager.DesktopHudLayoutActive && TryApplyDesktopRingTransform())
+        {
+            SetHandleVisualVisible(false);
+            return;
+        }
 
         if (ringRect.parent != joystickRect)
             ringRect.SetParent(joystickRect, false);
@@ -231,8 +250,61 @@ public class BoosterBarUI : MonoBehaviourPun
         handleVisualImage.enabled = true;
         handleVisualImage.color = HandleVisualColor;
         handleVisualImage.canvasRenderer.SetAlpha(1f);
-        handleVisualRect.gameObject.SetActive(isVisible);
+        SetHandleVisualVisible(isVisible && !StarjackersInputModeManager.DesktopHudLayoutActive);
         ApplyHandleVisualStyle();
+    }
+
+    bool TryApplyDesktopRingTransform()
+    {
+        Transform canvas = ResolveCanvasTransform();
+        if (canvas == null)
+            return false;
+
+        if (ringRect.parent != canvas)
+            ringRect.SetParent(canvas, false);
+
+        ringRect.anchorMin = DesktopFuelRingAnchor;
+        ringRect.anchorMax = DesktopFuelRingAnchor;
+        ringRect.pivot = new Vector2(0.5f, 0.5f);
+        ringRect.anchoredPosition = DesktopFuelRingPosition;
+        ringRect.localRotation = Quaternion.identity;
+        ringRect.localScale = Vector3.one;
+        ringRect.sizeDelta = Vector2.one * DesktopFuelRingDiameter;
+
+        if (ringRoot != null)
+            ringRoot.transform.SetAsLastSibling();
+
+        return true;
+    }
+
+    Transform ResolveCanvasTransform()
+    {
+        if (canvasTransform != null)
+            return canvasTransform;
+
+        GameObject canvas = GameObject.Find("Canvas");
+        canvasTransform = canvas != null ? canvas.transform : null;
+        return canvasTransform;
+    }
+
+    void RestoreRingRootCanvasGroup()
+    {
+        if (ringRoot == null)
+            return;
+
+        CanvasGroup group = ringRoot.GetComponent<CanvasGroup>();
+        if (group == null)
+            return;
+
+        group.alpha = 1f;
+        group.interactable = false;
+        group.blocksRaycasts = false;
+    }
+
+    void SetHandleVisualVisible(bool visible)
+    {
+        if (handleVisualRect != null)
+            handleVisualRect.gameObject.SetActive(visible);
     }
 
     void ApplyHandleVisualStyle()

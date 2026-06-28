@@ -166,6 +166,9 @@ public partial class PlayerShooting
         RefreshAuthoritativeGadgetRuntimeStates();
         ClearExpiredInstantDeployLocks();
 
+        if (!RoundChatCommandUI.IsLocalChatMenuOpen)
+            HandleDirectUtilityInput();
+
         if (!HasMainGunSlotsForCurrentShip())
         {
             ClearMainGunRuntime();
@@ -197,6 +200,9 @@ public partial class PlayerShooting
         if (RoundChatCommandUI.IsLocalChatMenuOpen)
             return;
 
+        if (HandleDirectSimpleShooting())
+            return;
+
         EnsureShootJoystick();
 
         if (shootJoystick == null)
@@ -222,9 +228,6 @@ public partial class PlayerShooting
 
     void HandleComplexShootingInput()
     {
-        EnsureShootJoystick();
-        EnsureSuperJoystick();
-
         PlayerRepairDocking repairDocking = GetCachedRepairDocking();
         bool controlsLocked = repairDocking != null && repairDocking.IsBusy;
         if (controlsLocked)
@@ -233,6 +236,15 @@ public partial class PlayerShooting
             HideAimMarker();
             return;
         }
+
+        if (StarjackersInputModeManager.DirectShootingInputActive)
+        {
+            HandleDirectComplexShootingInput();
+            return;
+        }
+
+        EnsureShootJoystick();
+        EnsureSuperJoystick();
 
         bool handledSuper = HandleComplexSuperInput();
         if (!handledSuper)

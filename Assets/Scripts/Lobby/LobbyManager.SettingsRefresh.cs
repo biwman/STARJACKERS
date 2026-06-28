@@ -223,6 +223,9 @@ public partial class LobbyManager
         if (hapticsSettingText != null)
             hapticsSettingText.text = "HAPTICS: " + (RoomSettings.AreHapticsEnabled() ? "ON" : "OFF");
 
+        if (pcTouchJoystickTestModeSettingText != null)
+            pcTouchJoystickTestModeSettingText.text = "PC TOUCH JOYSTICKS: " + (DeveloperInputSettings.PcTouchJoystickTestModeEnabled ? "ON" : "OFF");
+
         if (fpsCounterSettingText != null)
             fpsCounterSettingText.text = "FPS METER: " + (RoomSettings.IsFpsCounterEnabled() ? "ON" : "OFF");
 
@@ -317,6 +320,7 @@ public partial class LobbyManager
         SetSettingButtonState(enemyAttackWindupMultiplierSettingButton, isHost);
         SetSettingButtonState(enemyAttackCooldownMultiplierSettingButton, isHost);
         SetSettingButtonState(hapticsSettingButton, isHost);
+        SetSettingButtonState(pcTouchJoystickTestModeSettingButton, true);
         SetSettingButtonState(fpsCounterSettingButton, isHost);
         SetSettingButtonState(diagnosticsGcSettingButton, isHost);
         SetSettingButtonState(diagnosticsSceneCountsSettingButton, isHost);

@@ -120,6 +120,7 @@ public partial class LobbyManager
         HideDeprecatedSettingButton("DynamicUseSettingButton", "DynamicUseSettingText");
         collectKeepAliveRangeBonusSettingButton = EnsureSettingButton(ref collectKeepAliveRangeBonusSettingText, collectKeepAliveRangeBonusSettingButton, "CollectKeepAliveRangeBonusSettingButton", "CollectKeepAliveRangeBonusSettingText", Vector2.zero, CycleCollectKeepAliveRangeBonus);
         hapticsSettingButton = EnsureSettingButton(ref hapticsSettingText, hapticsSettingButton, "HapticsSettingButton", "HapticsSettingText", Vector2.zero, CycleHapticsEnabled);
+        pcTouchJoystickTestModeSettingButton = EnsureSettingButton(ref pcTouchJoystickTestModeSettingText, pcTouchJoystickTestModeSettingButton, "PcTouchJoystickTestModeSettingButton", "PcTouchJoystickTestModeSettingText", Vector2.zero, TogglePcTouchJoystickTestMode);
         fpsCounterSettingButton = EnsureSettingButton(ref fpsCounterSettingText, fpsCounterSettingButton, "FpsCounterSettingButton", "FpsCounterSettingText", Vector2.zero, CycleFpsCounterEnabled);
         diagnosticsGcSettingButton = EnsureSettingButton(ref diagnosticsGcSettingText, diagnosticsGcSettingButton, "DiagnosticsGcSettingButton", "DiagnosticsGcSettingText", Vector2.zero, CycleDiagnosticsGcEnabled);
         diagnosticsSceneCountsSettingButton = EnsureSettingButton(ref diagnosticsSceneCountsSettingText, diagnosticsSceneCountsSettingButton, "DiagnosticsSceneCountsSettingButton", "DiagnosticsSceneCountsSettingText", Vector2.zero, CycleDiagnosticsSceneCountsEnabled);
@@ -207,6 +208,8 @@ public partial class LobbyManager
         AttachLeftSectionButton(advancedBoosterSettingButton, "SHIP FEEL");
         AttachLeftSectionButton(shipDriftSettingButton, "SHIP FEEL");
         AttachLeftSectionButton(hapticsSettingButton, "SHIP FEEL");
+
+        AttachLeftSectionButton(pcTouchJoystickTestModeSettingButton, "INPUT TESTS");
 
         AttachLeftSectionButton(bulletPushSettingButton, "COMBAT FEEL");
         AttachLeftSectionButton(batteringSettingButton, "COMBAT FEEL");
